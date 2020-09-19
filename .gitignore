@@ -6,6 +6,8 @@ __pycache__/
 #ipynb
 *.ipynb
 
+*.csv
+
 # C extensions
 *.so
 
