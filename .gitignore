@@ -7,6 +7,7 @@ __pycache__/
 *.ipynb
 
 *.csv
+CSVs/
 
 Backups/
 Archive/
