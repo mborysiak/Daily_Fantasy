@@ -23,7 +23,7 @@ from DataPull_Helper import *
 
 # +
 set_year = 2020
-set_week = 4
+set_week = 16
 
 root_path = '/Users/Mark/Documents/GitHub/Daily_Fantasy/Data/'
 # -
@@ -136,7 +136,7 @@ source = requests.get("https://www.bovada.lv/services/sports/event/v2/events/A/d
 
 data_list = []
 
-for i in range(0, 14):
+for i in range(0, 15):
     
     away_team = source[0]['events'][i]['description'].split('@')[0].strip(' ')
     home_team = source[0]['events'][i]['description'].split('@')[1].strip(' ')
@@ -190,6 +190,17 @@ data['week'] = set_week
 # -
 
 data
+
+teams = list(data.away_team)
+teams.extend(list(data.home_team))
+[t for t in name_map.values() if t not in teams]
+
+from collections import Counter
+cnter = Counter(teams)
+if len([c for c in cnter.values() if c > 1]) > 0:
+    print('Check counter for duplicate teams.')
+else:
+    print('No duplicate teams')
 
 append_to_db(data, db_name='Pre_TeamData.sqlite3', table_name='Gambling_Lines', 
              if_exist='append', set_week=set_week, set_year=set_year)
@@ -377,7 +388,7 @@ def pff_rank(label_pre, label_post, folder, rep=True):
 
 proj_pl, proj_tm = pff_proj('projections', 'projections', 'pff_proj', True)
 rank1_pl, rank1_tm = pff_rank('week-rankings-export', 'expert_ranks', 'pff_rank', True)
-rank2_pl, rank2_tm = pff_rank('week-rankings-export (1)', 'vor_ranks', 'pff_rank', True)
+rank2_pl, rank2_tm = pff_rank('week-rankings-export-2', 'vor_ranks', 'pff_rank', True)
 
 # +
 rank1_pl = rank1_pl.drop(f'w{set_week}', axis=1)
@@ -395,7 +406,6 @@ for t, d in zip(['Proj', 'Expert', 'VOR'], [proj_tm, rank1_tm, rank2_tm]):
     append_to_db(d, db_name='Pre_TeamData.sqlite3', table_name=f'PFF_{t}_Ranks', 
                  if_exist='append', set_week=set_week, set_year=set_year)
 # -
-
 # # Copy Database Backup for Week
 
 copy_db('Pre_PlayerData', root_path, set_week, set_year)

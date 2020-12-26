@@ -13,16 +13,23 @@
 #     name: python3
 # ---
 
+#%%
+
 import pandas as pd
 import sqlite3
 import numpy as np
 import matplotlib.pyplot as plt
 
-import my_package
+DATA_PATH = '/Users/Mark/Documents/Github/Daily_Fantasy/Data/Databases/'
 
-my_package.add_num(3, 5)
 
-conn = sqlite3.connect('/Users/Mark/Documents/Github/Daily_Fantasy/Data/Weekly_Stats.sqlite3')
+def sql_conn(db_name, data_path=DATA_PATH):
+    return sqlite3.connect(f'{data_path}/{db_name}')
+
+
+conn_pre_player = sql_conn('Pre_PlayerData.sqlite3')
+conn_pre_team = sql_conn('Pre_TeamData.sqlite3')
+conn_post_player = sql_conn('Post_PlayerData.sqlite3')
 
 
 def find_first_name(df1, df2):
