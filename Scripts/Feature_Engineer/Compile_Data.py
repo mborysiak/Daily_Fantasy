@@ -138,18 +138,153 @@ df = pd.merge(df, coach_stats, on=['week', 'season', 'team'], how='left')
 
 df = df.dropna()
 df = df[df.season >= 2020].reset_index(drop=True)
+df = df.rename(columns={'season': 'year'})
 df = name_cleanup(df)
-
 
 # %%
 
-pfr_matchup = dm.read(f'''SELECT player, rank, season,
+pfr_matchup = dm.read(f'''SELECT player, week, year,
                                  opp_rank, opp_fp_per_game,
                                  opp_dk_pt_per_game, opp_fd_pt_per_game,
                                  proj_fp_rank, proj_dk_rank, proj_fd_rank
                           FROM {pos}_PFR_Matchups
                           WHERE year >= 2020''', 'Pre_PlayerData')
 pfr_matchup = name_cleanup(pfr_matchup)
-            
-df = pd.merge(df, pfr_matchup, on=['player', 'week', 'season'])
+df = pd.merge(df, pfr_matchup, on=['player', 'week', 'year'])
+
+# %%
+
+experts = dm.read(f'''SELECT playerName player, week, a.year,
+                             fantasyPoints,  fantasyPointsRank,
+                             `Proj Pts` ProjPts,
+                             expertConsensus, expertNathanJahnke,
+                             expertKevinCole, expertAndrewErickson,
+                             expertIanHartitz,
+                             dk_salary, fd_salary, yahoo_salary
+                      FROM PFF_Proj_Ranks a
+                      JOIN (SELECT Name playerName, *
+                            FROM PFF_Expert_Ranks )
+                            USING (playerName, week, year)
+                      JOIN (SELECT player playerName, week, year, 
+                                   dk_salary, fd_salary, yahoo_salary
+                            FROM Daily_Salaries
+                            ) USING (playerName, week, year)
+                      WHERE a.position='{pos.lower()}' 
+                      ''', 'Pre_PlayerData')
+
+experts = name_cleanup(experts)
+df = pd.merge(df, experts, on=['player', 'week','year'])
+
+# fill in null expert rankings
+df = df.sort_values(by=['player', 'year', 'week'])
+df = df.groupby(['player'], as_index=False).apply(lambda group: group.ffill())
+df = df.fillna(df.max())
+
+#%%
+
+matchups = dm.read('''SELECT offPlayer player,
+                             offHeighInches, offWeight, offSpeed
+
+
+''')
+
+# %%
+
+from skmodel import SciKitModel 
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning) 
+warnings.filterwarnings("ignore", category=UserWarning) 
+
+#-----------------
+# Run Baseline Model
+#-----------------
+
+baseline_m = df.loc[: , ['player', 'week', 'year',
+                         'fantasyPoints',  'fantasyPointsRank', 'ProjPts',
+                         'expertConsensus', 'expertNathanJahnke',
+                         'expertKevinCole', 'expertAndrewErickson','expertIanHartitz',
+                         'dk_salary', 'fd_salary', 'yahoo_salary', 
+                         'y_act']].copy()
+
+baseline_m = baseline_m.sort_values(by='week')
+
+skm = SciKitModel(baseline_m)
+X_base, y_base = skm.Xy_split(y_metric='y_act', to_drop=['player'])
+cv_time_base = skm.cv_time_splits('week', X_base, 3)
+
+model_base = skm.model_pipe([skm.piece('std_scale'), 
+                             skm.piece('k_best'),
+                             skm.piece('ridge')])
+
+params = skm.default_params(model_base)
+params['k_best__k'] = range(1, X_base.shape[1])
+
+best_model_base = skm.random_search(model_base, X_base, y_base, params, cv=cv_time_base, n_iter=50)
+_, _ = skm.val_scores(best_model_base, X_base, y_base, cv_time_base)
+
+imp_cols = X_base.columns[best_model_base['k_best'].get_support()]
+skm.print_coef(best_model_base, imp_cols)
+
+base_predict = skm.cv_predict_time(best_model_base, X_base, y_base, cv_time_base)
+base_predict = pd.Series(base_predict, name='base_predict')
+
+pred_labels = skm.return_labels(['player', 'week'], 'time').reset_index(drop=True)
+pred_labels = pd.concat([pred_labels, base_predict], axis=1)
+
+pred_labels = pd.merge(pred_labels, baseline, on=['player', 'week'])
+
+
+#%%
+
+df_m = df.copy()
+df_m = df_m.sort_values(by='week')
+
+skm = SciKitModel(df_m)
+X, y = skm.Xy_split(y_metric='y_act', to_drop=['player', 'position', 'coach', 'team'])
+cv_time = skm.cv_time_splits('week', X, 3)
+
+model = skm.model_pipe([skm.piece('std_scale'), 
+                        skm.piece('select_perc'),
+                        skm.feature_union([
+                                           skm.piece('agglomeration'), 
+                                           skm.piece('k_best'), 
+                                           skm.piece('pca')
+                                           ]),
+                        skm.piece('k_best', label_rename='k_best2'),
+                        skm.piece('ridge')])
+
+params = skm.default_params(model)
+best_model = skm.random_search(model, X, y, params, cv=cv_time, n_iter=50)
+_, _ = skm.val_scores(best_model, X, y, cv_time)
+
+try:
+    imp_cols = X.columns[best_model['k_best2'].get_support()]
+    skm.print_coef(best_model, imp_cols)
+except:
+    pass
+
+#%%
+
+df_m = df.copy().sort_values(by='week')
+
+df_m['y_act'] = np.where(#(df_m.y_act > df_m.base_predict * 1.5) & \
+                             (df_m.y_act > 26), 1, 0)                 
+# df_m['y_act'] = np.where((df_m.y_act > df_m.ProjPts * 1.15) & (df_m.y_act > 15), 1, 0)                 
+
+skm = SciKitModel(df_m, 'class')
+X, y = skm.Xy_split(y_metric='y_act', to_drop=['player', 'position', 'coach', 'team'])
+cv_time = skm.cv_time_splits('week', X, 3)
+
+model = skm.model_pipe([skm.piece('std_scale'), 
+                        skm.piece('select_perc_c'),
+                        skm.feature_union([
+                                           skm.piece('agglomeration'), 
+                                           skm.piece('k_best_c')
+                                           ]),
+                        skm.piece('k_best_c', label_rename='k_best2'),
+                        skm.piece('lr_c')])
+
+params = skm.default_params(model)
+best_model = skm.random_search(model, X, y, params, cv=cv_time, n_iter=50)
+_, _ = skm.val_scores(best_model, X, y, cv_time)
 # %%
