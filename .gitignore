@@ -13,6 +13,8 @@ Backups/
 Archive/
 
 *.DS_Store
+*.parquet
+*.p
 
 # C extensions
 *.so

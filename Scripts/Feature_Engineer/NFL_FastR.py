@@ -210,7 +210,7 @@ all_stats = all_stats.fillna(0)
 
 fp_cols = ['rec_complete_pass_sum', 'rec_yards_gained_sum',
            'rush_yards_gained_sum',  'rec_pass_touchdown_sum', 'rush_rush_touchdown_sum']
-all_stats = calc_fp(all_stats, fp_cols, [1, 0.1, 0.1, 7, 7])
+all_stats = calc_fp(all_stats, fp_cols, [1, 0.1, 0.1, 6, 6])
 
 all_stats = all_stats.sort_values(by=['player', 'season', 'week']).reset_index(drop=True)
 all_stats['y_act'] = all_stats.groupby('player')['fantasy_pts'].shift(-1)
