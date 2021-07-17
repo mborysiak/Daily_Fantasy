@@ -15,6 +15,7 @@ Archive/
 *.DS_Store
 *.parquet
 *.p
+DB_Versioning/
 
 # C extensions
 *.so

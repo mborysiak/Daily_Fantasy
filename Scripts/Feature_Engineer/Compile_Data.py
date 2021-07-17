@@ -151,11 +151,13 @@ def add_experts(df, pos):
                                 dk_salary, fd_salary, yahoo_salary
                         FROM PFF_Proj_Ranks a
                         JOIN (SELECT Name playerName, *
-                                FROM PFF_Expert_Ranks )
+                                FROM PFF_Expert_Ranks 
+                                WHERE Position='{pos}' )
                                 USING (playerName, week, year)
                         LEFT JOIN (SELECT player playerName, week, year, 
-                                    dk_salary, fd_salary, yahoo_salary
-                                FROM Daily_Salaries
+                                          dk_salary, fd_salary, yahoo_salary
+                                   FROM Daily_Salaries
+                                   WHERE Position='{pos}'
                                 ) USING (playerName, week, year)
                         WHERE a.position='{pos.lower()}' 
                         ''', 'Pre_PlayerData')
@@ -328,29 +330,27 @@ def get_max_qb(df):
 #%%
 
 pos = 'QB'
-df = get_player_data(pos, YEAR)
-df = add_pfr_matchup(df)
-df = add_experts(df, pos)
-if pos == 'WR': df = cb_matchups(df)
-if pos == 'TE': df = te_matchups(df)
-df = add_team_matchups(df)
+df = get_player_data(pos, YEAR); print(df.shape[0])
+df = add_pfr_matchup(df); print(df.shape[0])
+df = add_experts(df, pos); print(df.shape[0])
+df = add_team_matchups(df); print(df.shape[0])
 
-dm.delete_from_db('Model_Features', 'QB_Data', f"year={YEAR} AND week={WEEK}")
-dm.write_to_db(df, 'Model_Features', 'QB_Data', if_exist='append')
+# dm.delete_from_db('Model_Features', 'QB_Data', f"year={YEAR} AND week={WEEK}")
+# dm.write_to_db(df, 'Model_Features', 'QB_Data', if_exist='append')
 
 team_qb = get_max_qb(df)
 
 
 
-for pos in ['RB', 'WR', 'TE']:
-    df = get_player_data(pos, YEAR)
-    df = add_pfr_matchup(df)
-    df = add_experts(df, pos)
-    if pos == 'WR': df = cb_matchups(df)
-    if pos == 'TE': df = te_matchups(df)
-    df = add_team_matchups(df)
+for pos in ['RB']:#, 'WR', 'TE']:
+    df = get_player_data(pos, YEAR); print(df.shape[0])
+    df = add_pfr_matchup(df); print(df.shape[0])
+    df = add_experts(df, pos); print(df.shape[0])
+    if pos == 'WR': df = cb_matchups(df); print(df.shape[0])
+    if pos == 'TE': df = te_matchups(df); print(df.shape[0])
+    df = add_team_matchups(df); print(df.shape[0])
 
-    df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left')
+    df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
 
     df = df.sort_values(by=['team', 'year', 'week'])
     df = df.groupby('player', as_index=False).fillna(method='ffill')
@@ -358,8 +358,11 @@ for pos in ['RB', 'WR', 'TE']:
 
     df = df.sort_values(by=['player', 'year', 'week'])
 
-    dm.delete_from_db('Model_Features', f'{pos}_Data', f"year={YEAR} AND week={WEEK}")
-    dm.write_to_db(df, 'Model_Features', f'{pos}_Data', if_exist='append')
+    # dm.delete_from_db('Model_Features', f'{pos}_Data', f"year={YEAR} AND week={WEEK}")
+    # dm.write_to_db(df, 'Model_Features', f'{pos}_Data', if_exist='append')
+
+
+
 # %%
 
 from skmodel import SciKitModel 
