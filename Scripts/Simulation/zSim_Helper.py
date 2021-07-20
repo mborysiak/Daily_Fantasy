@@ -23,10 +23,10 @@ class FootballSimulation():
     # Creating Player Distributions for Given Settings
     #==========
     
-    def __init__(self, pts_dict, conn_sim, set_year, week, iterations, pick_prob_df=None):
+    def __init__(self, conn_sim, set_year, week, iterations):
         
         # create empty dataframe to store player point distributions
-        pos_update = {'QB': 'aQB', 'RB': 'bRB', 'WR': 'cWR', 'TE': 'dTE'}
+        pos_update = {'QB': 'aQB', 'RB': 'bRB', 'WR': 'cWR', 'TE': 'dTE', 'Defense': 'fDEF'}
         self.data = pd.read_sql_query(f'''SELECT * FROM week{week}_year{set_year}''', conn_sim)
         self.data['pos'] = self.data['pos'].map(pos_update)
 
@@ -230,7 +230,7 @@ class FootballSimulation():
         to_add['points'] = -1.0*(add_data.drop(['pos', 'salary'],axis=1).mean(axis=1).values)
         
         # create list of letters to append to position for proper indexing
-        letters = ['a', 'b', 'c', 'd', 'e']
+        letters = ['a', 'b', 'c', 'd', 'e', 'f']
 
         # loop through each position in the pos_require dictionary
         for i, pos in enumerate(league_info['pos_require'].keys()):
@@ -556,54 +556,91 @@ class FootballSimulation():
         return avg_sal
 
 
-# # %%
+# %%
 
-# # connection for simulation and specific table
-# path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
-# conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
-# set_year = 2020
-# league=14
+# connection for simulation and specific table
+path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
+conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
+set_year = 2020
+league=14
 
-# # number of iteration to run
-# iterations = 1000
+# number of iteration to run
+iterations = 1000
 
-# # define point values for all statistical categories
-# pass_yd_per_pt = 0.04 
-# pass_td_pt = 4
-# int_pts = -2
-# sacks = -1
-# rush_yd_per_pt = 0.1 
-# rec_yd_per_pt = 0.1
-# rush_rec_td = 7
-# ppr = .5
+# define point values for all statistical categories
+pass_yd_per_pt = 0.04 
+pass_td_pt = 4
+int_pts = -2
+sacks = -1
+rush_yd_per_pt = 0.1 
+rec_yd_per_pt = 0.1
+rush_rec_td = 7
+ppr = .5
 
-# # creating dictionary containing point values for each position
-# pts_dict = {}
-# pts_dict['QB'] = [pass_yd_per_pt, pass_td_pt, rush_yd_per_pt, rush_rec_td, int_pts, sacks]
-# pts_dict['RB'] = [rush_yd_per_pt, rec_yd_per_pt, ppr, rush_rec_td]
-# pts_dict['WR'] = [rec_yd_per_pt, ppr, rush_rec_td]
-# pts_dict['TE'] = [rec_yd_per_pt, ppr, rush_rec_td]
+# creating dictionary containing point values for each position
+pts_dict = {}
+pts_dict['QB'] = [pass_yd_per_pt, pass_td_pt, rush_yd_per_pt, rush_rec_td, int_pts, sacks]
+pts_dict['RB'] = [rush_yd_per_pt, rec_yd_per_pt, ppr, rush_rec_td]
+pts_dict['WR'] = [rec_yd_per_pt, ppr, rush_rec_td]
+pts_dict['TE'] = [rec_yd_per_pt, ppr, rush_rec_td]
 
-# # instantiate simulation class and add salary information to data
-# sim =  FootballSimulation(pts_dict, conn_sim, set_year, league, iterations)
+# instantiate simulation class and add salary information to data
+sim =  FootballSimulation(conn_sim, set_year, league, iterations)
 
-# # set league information, included position requirements, number of teams, and salary cap
-# league_info = {}
-# league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 2, 'TE': 1, 'FLEX': 2}
-# league_info['num_teams'] = 12
-# league_info['initial_cap'] = 60
-# league_info['salary_cap'] = 60
+# set league information, included position requirements, number of teams, and salary cap
+league_info = {}
+league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DEF': 1}
+league_info['num_teams'] = 12
+league_info['initial_cap'] = 50000
+league_info['salary_cap'] = 50000
 
-# to_drop = {}
-# to_drop['players'] = []
+to_drop = {}
+to_drop['players'] = ['Ryan Finley', 'Terry Mclaurin', 'Todd Gurley',' Melvin Gordon']
 
-# to_drop['salaries'] = []
+to_drop['salaries'] = [3000, 6800, 4800, 5200]
 
-# # input information for players and their associated salaries selected by your team
-# to_add = {}
-# to_add['players'] = []
-# to_add['salaries'] = []
+# input information for players and their associated salaries selected by your team
+to_add = {}
+to_add['players'] = ['Darren Waller', 'Amari Cooper', 'Chris Carson', 'Cooper Kupp', 
+                     'Drew Lock', 'Kj Hamler', 'Alvin Kamara', 'Ty Hilton', 'SEA']
+to_add['salaries'] = [6800, 6500, 6900, 6500, 5100, 3000, 7100, 5100, 3000]
 
-# _, _ = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
-# sim.show_most_selected(to_add, iterations, num_show=30)
+_, _ = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
+sim.show_most_selected(to_add, iterations, num_show=30)
+# %%
+
+from ff.db_operations import DataManage
+from ff import general as ffgeneral
+
+# set the root path and database management object
+root_path = ffgeneral.get_main_path('Daily_Fantasy')
+db_path = f'{root_path}/Data/Databases/'
+dm = DataManage(db_path)
+
+set_year = 2020
+league=14
+
+to_add_tuple = tuple(['Darren Waller', 'Amari Cooper', 'Chris Carson', 'Cooper Kupp', 
+                     'Drew Lock', 'Kj Hamler', 'Alvin Kamara', 'Ty Hilton', 'SEA'])
+
+actuals = dm.read(f'''SELECT * FROM (
+                     SELECT player, y_act, week, year
+                     FROM QB_Data
+                     UNION
+                     SELECT player, y_act, week, year
+                     FROM RB_Data
+                     UNION
+                     SELECT player, y_act, week, year
+                     FROM WR_Data
+                     UNION
+                     SELECT player, y_act,  week, year
+                     FROM TE_Data
+                     UNION
+                     SELECT player, y_act,  week, year
+                     FROM Defense_Data)
+                     WHERE player in {to_add_tuple}
+                           AND week={league}
+                           AND year={set_year}
+                 ''', 'Model_Features')
+actuals
 # %%

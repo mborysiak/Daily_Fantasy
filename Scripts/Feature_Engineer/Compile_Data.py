@@ -239,14 +239,14 @@ def te_matchups(df):
     return df
 
 
-def add_team_matchups(df):
+def add_team_matchups():
 
     team_matchups = dm.read('''SELECT *
                             FROM PFF_Oline_Dline_Matchups''', 'Pre_PlayerData')
     team_matchups = team_matchups.drop(['gameTime', 'offTeam'], axis=1)
 
-    dst = dm.read(f'''SELECT offTeam defTeam, week, a.year,
-                            fantasyPoints fantasyPoints_dst,  
+    dst = dm.read(f'''SELECT offTeam defTeam, a.defTeam AS offTeam, week, a.year,
+                             fantasyPoints fantasyPoints_dst,  
                             fantasyPointsRank fantasyPointsRank_dst,
                             `Proj Pts` ProjPts_dst,
                             dstSacks, dstSafeties, dstInt,
@@ -279,9 +279,7 @@ def add_team_matchups(df):
 
     dst = dst.fillna(dst.mean())
 
-    df = pd.merge(df, dst, on=['defTeam', 'year', 'week'])
-
-    return df
+    return dst
 
 
 def get_player_data(pos, YEAR):
@@ -333,23 +331,24 @@ pos = 'QB'
 df = get_player_data(pos, YEAR); print(df.shape[0])
 df = add_pfr_matchup(df); print(df.shape[0])
 df = add_experts(df, pos); print(df.shape[0])
-df = add_team_matchups(df); print(df.shape[0])
+dst = add_team_matchups().drop('offTeam', axis=1)
+df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
 # dm.delete_from_db('Model_Features', 'QB_Data', f"year={YEAR} AND week={WEEK}")
-# dm.write_to_db(df, 'Model_Features', 'QB_Data', if_exist='append')
+dm.write_to_db(df, 'Model_Features', 'QB_Data', if_exist='replace')
 
 team_qb = get_max_qb(df)
 
 
-
-for pos in ['RB']:#, 'WR', 'TE']:
+for pos in ['RB', 'WR', 'TE']:
     df = get_player_data(pos, YEAR); print(df.shape[0])
     df = add_pfr_matchup(df); print(df.shape[0])
     df = add_experts(df, pos); print(df.shape[0])
     if pos == 'WR': df = cb_matchups(df); print(df.shape[0])
     if pos == 'TE': df = te_matchups(df); print(df.shape[0])
-    df = add_team_matchups(df); print(df.shape[0])
+    dst = add_team_matchups().drop('offTeam', axis=1)
 
+    df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
     df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
 
     df = df.sort_values(by=['team', 'year', 'week'])
@@ -359,9 +358,43 @@ for pos in ['RB']:#, 'WR', 'TE']:
     df = df.sort_values(by=['player', 'year', 'week'])
 
     # dm.delete_from_db('Model_Features', f'{pos}_Data', f"year={YEAR} AND week={WEEK}")
-    # dm.write_to_db(df, 'Model_Features', f'{pos}_Data', if_exist='append')
+    dm.write_to_db(df, 'Model_Features', f'{pos}_Data', if_exist='replace')
 
+#%%
 
+defense = dm.read(f'''SELECT * 
+                      FROM Defense_Stats 
+                      WHERE season>={YEAR-4}
+                            AND week != 17''', 'FastR').rename(columns={'defteam': 'defTeam'})
+defense['week'] = defense['week'] + 1
+
+cur_abb = ['LV', 'JAX', 'LA']
+new_abb = ['LVR', 'JAC', 'LAR']
+for c, n in zip(cur_abb, new_abb):
+    defense.loc[defense.defTeam==c, 'defTeam'] = n
+
+rcols_def = [c for c in defense.columns if c not in ('defTeam', 'week', 'season', 'y_act')]
+defense = defense.rename(columns={'season': 'year'})
+defense = add_rolling_stats(defense, gcols=['defTeam'], rcols=rcols_def)
+defense = defense.dropna()
+defense = defense[defense.year >= 2020].reset_index(drop=True)
+
+dst = add_team_matchups()
+defense = pd.merge(defense, dst, on=['defTeam', 'year', 'week'])
+team_qb = team_qb.rename(columns={'team': 'offTeam'})
+
+defense = pd.merge(defense, team_qb, on=['offTeam', 'week', 'year'], how='left')
+defense = defense.sort_values(by=['offTeam', 'year', 'week'])
+defense = defense.groupby('offTeam', as_index=False).fillna(method='ffill')
+defense = defense.fillna(defense.mean())
+
+defense = defense.sort_values(by=['defTeam', 'year', 'week'])
+defense = defense.copy().rename(columns={'defTeam': 'player'})
+defense.columns = [c.replace('_dst', '') for c in defense.columns]
+
+dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
+
+df = defense.copy()
 
 # %%
 
@@ -369,6 +402,9 @@ from skmodel import SciKitModel
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning) 
 warnings.filterwarnings("ignore", category=UserWarning) 
+
+drop_cols = list(df.dtypes[df.dtypes=='object'].index)
+# drop_cols.append('y_act')
 
 #-----------------
 # Run Baseline Model
@@ -384,7 +420,7 @@ baseline_m = df.loc[: , ['player', 'week', 'year',
 baseline_m = baseline_m.sort_values(by='week')
 
 skm = SciKitModel(baseline_m)
-X_base, y_base = skm.Xy_split(y_metric='y_act', to_drop=['player'])
+X_base, y_base = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 cv_time_base = skm.cv_time_splits('week', X_base, 3)
 
 model_base = skm.model_pipe([skm.piece('std_scale'), 
@@ -402,11 +438,11 @@ skm.print_coef(best_model_base, imp_cols)
 
 print('------------------')
 
-baseline_m['y_act'] = np.where((baseline_m.y_act > 21), 1, 0)                 
+baseline_m['y_act'] = np.where((baseline_m.y_act > np.percentile(df.y_act, 90)), 1, 0)                 
 
 skm = SciKitModel(baseline_m, 'class')
 X_base_class, y_base_class = skm.Xy_split(y_metric='y_act', 
-                                          to_drop=['player'])
+                                          to_drop=drop_cols)
 cv_time = skm.cv_time_splits('week', X_base_class, 3)
 
 model_base_class = skm.model_pipe([skm.piece('std_scale'), 
@@ -428,7 +464,7 @@ df_m = df_m.sort_values(by='week')
 
 skm = SciKitModel(df_m)
 X_all_reg, y_all_reg = skm.Xy_split(y_metric='y_act', 
-                                    to_drop=['player', 'position', 'coach', 'team', 'defTeam'])
+                                    to_drop=list(df.dtypes[df.dtypes=='object'].index))
 cv_time = skm.cv_time_splits('week', X_all_reg, 3)
 
 model_all_reg = skm.model_pipe([skm.piece('std_scale'), 
@@ -455,11 +491,11 @@ except:
 #%%
 
 df_m = df.copy().sort_values(by='week')
-df_m['y_act'] = np.where((df_m.y_act > 21), 1, 0)                 
+df_m['y_act'] = np.where((df_m.y_act > np.percentile(df.y_act, 90)), 1, 0)                 
 
 skm = SciKitModel(df_m, 'class')
 X_all_class, y_all_class = skm.Xy_split(y_metric='y_act', 
-                                        to_drop=['player', 'position', 'coach', 'team', 'defTeam'])
+                                        to_drop=list(df.dtypes[df.dtypes=='object'].index))
 cv_time = skm.cv_time_splits('week', X_all_class, 3)
 
 model_all_class = skm.model_pipe([skm.piece('std_scale'), 
@@ -469,7 +505,7 @@ model_all_class = skm.model_pipe([skm.piece('std_scale'),
                                            skm.piece('k_best_c')
                                            ]),
                         skm.piece('k_best_c', label_rename='k_best2'),
-                        skm.piece('rf_c')])
+                        skm.piece('lr_c')])
 
 params = skm.default_params(model_all_class)
 

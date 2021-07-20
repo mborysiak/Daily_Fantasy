@@ -36,17 +36,15 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE'
-set_pos = 'TE'
+set_pos = 'RB'
 
 # set year to analyze
 set_year = 2020
-set_week = 14
+set_week = 15
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
 val_week_min = 6
-
-drop_cols = ['player', 'position', 'coach', 'team', 'defTeam']
 
 met = 'y_act'
 
@@ -81,6 +79,8 @@ def load_pickle(path, fname):
 
 # load data and filter down
 df = dm.read(f'''SELECT * FROM {set_pos}_Data''', 'Model_Features')
+drop_cols = list(df.dtypes[df.dtypes=='object'].index)
+print(drop_cols)
 
 # set up the date column for sorting
 def year_week_to_date(x):
@@ -117,7 +117,7 @@ print(f'\nRunning Metric {met}\n=========================\n')
 print('ADP only\n============\n')
 
 skm = SciKitModel(df_train)
-X, y = skm.Xy_split(y_metric='y_act', to_drop=['player', 'position', 'coach', 'team', 'defTeam'])
+X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
 # set up the ADP model pipe
 pipe = skm.model_pipe([skm.piece('feature_select'), skm.piece('std_scale'), skm.piece('lr')])
@@ -196,7 +196,7 @@ pred = {}; actual = {}; scores = {}; models = {}
 
 skm_class = SciKitModel(df_train_class, model_obj='class')
 X_class, y_class = skm_class.Xy_split(y_metric='y_act', 
-                                      to_drop=['player', 'position', 'coach', 'team', 'defTeam'])
+                                      to_drop=drop_cols)
 
 # loop through each potential model
 model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
@@ -294,8 +294,9 @@ for final_m in final_models:
                                                         run_adp=True, print_coef=True)
     best_models.append(best_model)
 
+
 # get the final output:
-X_fp, y_fp = skm_stack.Xy_split(y_metric='y_act', to_drop=['player', 'position', 'coach', 'team', 'defTeam'])
+X_fp, y_fp = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
 # create the full stack pipe with meta estimators followed by stacked model
 X_predict = pd.DataFrame()
@@ -320,12 +321,12 @@ output = output.sort_values(by='dk_salary', ascending=False)
 output['dk_rank'] = range(len(output))
 output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
 
-chk = dm.read(f'''SELECT player, y_act 
-                  FROM {set_pos}_Data 
-                  WHERE year={set_year} 
-                        AND week={set_week}''', 'Model_Features')
-output = pd.merge(output, chk, on='player')
-output.iloc[:50]
+# chk = dm.read(f'''SELECT player, y_act 
+#                   FROM {set_pos}_Data 
+#                   WHERE year={set_year} 
+#                         AND week={set_week}''', 'Model_Features')
+# output = pd.merge(output, chk, on='player')
+# output.iloc[:50]
 # %%
 
 def plot_distribution(estimates):
@@ -362,7 +363,7 @@ def create_distribution(player_data, num_samples=1000):
     import scipy.stats as stats
 
     # create truncated distribution
-    lower, upper = 0,  np.percentile(df_train.y_act, 99.5) * 1.1
+    lower, upper = np.percentile(df_train.y_act, 0.5),  np.percentile(df_train.y_act, 99.5) * 1.1
     lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
     upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
     trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
@@ -403,7 +404,7 @@ dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_ye
 dm.write_to_db(salaries, 'Simulation', 'Salaries', 'append')
 
 #%%
-plyr = 'Aaron Rodgers'
+plyr = 'DAL'
 
 plt_chk = dm.read(f'''SELECT * FROM week{set_week}_year{set_year} WHERE player='{plyr}' ''', 'Simulation')
 plt_chk = plt_chk.drop(['player', 'pos'], axis=1).values

@@ -57,7 +57,9 @@ def window_max(df, w_col, gcols, agg_met, agg_type):
     return pd.merge(agg_df, max_df, on=gcols) 
 
 
-def calc_fp(df, cols, pts):
+def calc_fp(df, pts_dict):
+    cols = list(pts_dict.keys())
+    pts = list(pts_dict.values())
     df['fantasy_pts'] = (df[cols] * pts).sum(axis=1)
     return df
 
@@ -71,6 +73,11 @@ def calc_fp(df, cols, pts):
 # read in the data, filter to real players, and sort by value
 data = pq.read_table(f'{DATA_PATH}/{FNAME}').to_pandas()
 data = data.sort_values(by='epa', ascending=False).reset_index(drop=True)
+
+defense = data.copy()
+defense = defense.loc[defense.season_type=='REG'].reset_index(drop=True)
+data = data[(data.play_type.isin(['run', 'pass'])) & \
+            (data.season_type=='REG')].reset_index(drop=True)
 
 #---------------
 # CLean Data
@@ -135,19 +142,6 @@ data = data.drop('temp', axis=1)
 
 #%%
 
-
-
-# #-------------
-# # QB Stats
-# #-------------
-
-# # find who the QB was on a given week
-# data['yards_gained_random'] = data.yards_gained.apply(lambda x: x + np.random.random(1))
-# w_grp = ['season', 'week', 'posteam']
-# (w_col, w_met, w_agg) = ('passer_player_name', 'yards_gained_random', 'sum')
-# qbs = window_max(data[data.sack==0], w_col, w_grp, w_met, w_agg).drop('yards_gained_random', axis=1)
-
-
 #--------------
 # Receiving Stats
 #--------------
@@ -203,14 +197,25 @@ rush = pd.merge(rush_sum, rush_mean, on=gcols)
 
 rush = rush.rename(columns={'rusher_player_name': 'player', 'posteam': 'team'})
 
+
 #%%
 
-all_stats = pd.merge(rush, rec, on=['player', 'posteam', 'week', 'season'], how='outer')
+all_stats = pd.merge(rush, rec, on=['player', 'team', 'week', 'season'], how='outer')
 all_stats = all_stats.fillna(0)
 
-fp_cols = ['rec_complete_pass_sum', 'rec_yards_gained_sum',
-           'rush_yards_gained_sum',  'rec_pass_touchdown_sum', 'rush_rush_touchdown_sum']
-all_stats = calc_fp(all_stats, fp_cols, [1, 0.1, 0.1, 6, 6])
+# add in the 100 yd bonsuses
+all_stats['rec_yd_100_bonus'] = np.where(all_stats.rec_yards_gained_sum >= 100, 1, 0)
+all_stats['rush_yd_100_bonus'] = np.where(all_stats.rush_yards_gained_sum >= 100, 1, 0)
+
+fp_cols = {'rec_complete_pass_sum': 1, 
+           'rec_yards_gained_sum': 0.1,
+           'rush_yards_gained_sum': 0.1,  
+           'rec_pass_touchdown_sum': 6, 
+           'rush_rush_touchdown_sum': 6,
+           'rec_yd_100_bonus': 3, 
+           'rush_yd_100_bonus': 3,
+           'fumble_lost': -1}
+all_stats = calc_fp(all_stats, fp_cols)
 
 all_stats = all_stats.sort_values(by=['player', 'season', 'week']).reset_index(drop=True)
 all_stats['y_act'] = all_stats.groupby('player')['fantasy_pts'].shift(-1)
@@ -287,9 +292,19 @@ qb = pd.merge(qb_names, qb, on=['player', 'season', 'team'])
 qb = pd.merge(qb, rush, on=['player', 'season', 'week', 'team'], how='left')
 qb = qb.fillna(0)
 
-fp_cols = ['pass_yards_gained_sum', 'pass_pass_touchdown_sum', 'pass_interception_sum',
-           'rush_yards_gained_sum', 'rush_rush_touchdown_sum']
-qb = calc_fp(qb, fp_cols, [0.04, 4, -1, 0.1, 6])
+qb['rush_yd_100_bonus'] = np.where(qb.rush_yards_gained_sum >= 100, 1, 0)
+qb['pass_yd_300_bonus'] = np.where(qb.pass_yards_gained_sum >= 300, 1, 0)
+
+
+fp_cols = {'pass_yards_gained_sum': 0.04, 
+           'pass_pass_touchdown_sum': 4, 
+           'pass_interception_sum': -1,
+           'fumble_lost': -1,
+           'rush_yards_gained_sum': 0.1, 
+           'rush_rush_touchdown_sum': 6,
+           'rush_yd_100_bonus': 3,
+           'pass_yd_300_bonus': 3}
+qb = calc_fp(qb, fp_cols)
 
 qb = qb.sort_values(by=['player', 'season', 'week']).reset_index(drop=True)
 qb['y_act'] = qb.groupby('player')['fantasy_pts'].shift(-1)
@@ -383,6 +398,111 @@ for _, sw in season_week.iterrows():
     wk = sw[1]
     dm.delete_from_db('FastR', 'Coach_Stats', f"season={seas} AND week={wk}")
     dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='append')
+
+#%%
+
+# calculate the pts scored for pts allowed on defense
+def_allowed = defense.groupby(['defteam', 'week', 'season'], as_index=False).agg({'posteam_score_post': 'max'})
+def_allowed = def_allowed.rename(columns={'posteam_score_post': 'def_pts_allowed'})
+def_allowed['def_pts_allowed_score'] =  np.select(
+    [
+        def_allowed['def_pts_allowed']==0,
+        def_allowed['def_pts_allowed'].between(1, 6, inclusive=True),
+        def_allowed['def_pts_allowed'].between(7, 13, inclusive=True),
+        def_allowed['def_pts_allowed'].between(14, 20, inclusive=True),
+        def_allowed['def_pts_allowed'].between(21, 27, inclusive=True),
+        def_allowed['def_pts_allowed'].between(28, 34, inclusive=True),
+    ], 
+    [10, 7, 4, 1,0, -1], 
+    default=-4
+)
+
+# find touchdowns that aren't categorized as return touchdowns
+defense['def_td'] = np.where((defense.touchdown==1) & \
+                             (defense.rush_touchdown==0) & \
+                             (defense.pass_touchdown==0) & \
+                             (defense.return_touchdown==0), 1, 0)
+
+# find all blocked kicks
+defense['block_kick'] = np.where((defense.field_goal_result=='blocked') | \
+                                 (defense.extra_point_result=='blocked') | \
+                                 (defense.punt_blocked==1), 1, 0)
+
+#
+sum_pt_cols = ['sack', 'interception', 'fumble_lost','return_touchdown','def_td', 'block_kick', 'safety']
+def_scoring = defense.groupby(['defteam','week', 'season'], as_index=False)[sum_pt_cols].sum()
+def_scoring = pd.merge(def_scoring, def_allowed, on=['defteam', 'week', 'season'])
+
+def_scoring_dict = {
+    'sack': 1,
+    'interception': 2,
+    'fumble_lost': 2,
+    'safety': 2,
+    'return_touchdown': 6,
+    'def_td': 6,
+    'block_kick': 2,
+    'def_pts_allowed_score': 1
+}
+def_scoring = calc_fp(def_scoring, def_scoring_dict)
+def_scoring = def_scoring.sort_values(by='fantasy_pts', ascending=False)
+
+
+def_sum_cols = ['pass_attempt', 'rush_attempt','first_down', 'first_down_pass',
+                'first_down_rush', 'fourth_down_converted', 'fourth_down_failed',
+                'third_down_converted', 'rush_touchdown', 'tackled_for_loss', 'pass_touchdown',
+                'qb_hit', 'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
+                'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
+                'comp_yac_wpa', 'complete_pass', 'incomplete_pass',
+                'ep', 'epa', 'touchdown', 'fumble_forced', 'fumble', 'xyac_epa',
+                'xyac_fd', 'xyac_mean_yardage', 'xyac_median_yardage', 'xyac_success',
+                'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
+                'yards_gained', 'ydstogo', 'def_td', 'return_yards']
+
+def_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
+                 'td_prob', 'qb_epa', 'wp', 'wpa',
+                 'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
+                 'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
+                 'comp_yac_wpa',  'ep', 'epa', 'xyac_epa',
+                 'xyac_fd', 'xyac_mean_yardage', 'xyac_median_yardage', 'xyac_success',
+                 'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
+                 'yards_gained', 'ydstogo', 'return_yards'
+                ]
+
+gcols = ['defteam', 'season', 'week']
+defense_sum = get_agg_stats(defense, gcols, def_sum_cols, 'sum', prefix='def')
+defense_mean = get_agg_stats(defense, gcols, def_mean_cols, 'mean', prefix='def')
+
+def_scoring = pd.merge(def_scoring, defense_sum, on=['defteam', 'season', 'week'])
+def_scoring = pd.merge(def_scoring, defense_mean, on=['defteam', 'season', 'week'])
+
+def_scoring = def_scoring.sort_values(by=['defteam', 'season', 'week']).reset_index(drop=True)
+def_scoring['y_act'] = def_scoring.groupby('defteam')['fantasy_pts'].shift(-1)
+
+# season_week = def_scoring[['season', 'week']].drop_duplicates()
+# for _, sw in season_week.iterrows():
+#     seas = sw[0]
+#     wk = sw[1]
+#     dm.delete_from_db('FastR', 'Defense_Stats', f"season={seas} AND week={wk}")
+# dm.write_to_db(def_scoring, 'FastR', 'Defense_Stats', if_exist='append')
+
+
+#%%
+
+def get_temp(w):
+    try: temper = int(w.split(' F,')[0][-3:-1])
+    except: temper = 75
+    return temper
+
+def get_wind(w):
+    try: wind = int(w.split(' mph')[-2][-2:]) 
+    except: wind = 7
+    return wind
+
+defense['snow'] = defense.weather.apply(lambda w: 1 if 'snow' in w.lower() else 0)
+defense['rain'] = defense.weather.apply(lambda w: 1 if 'rain' in w.lower() else 0)
+defense['temperature'] = defense.weather.apply(get_temp)
+defense['wind_speed'] = defense.weather.apply(get_wind)
+
 
 
 #%%
