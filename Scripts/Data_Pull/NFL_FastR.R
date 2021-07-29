@@ -1,13 +1,16 @@
 library(nflfastR)
 library(arrow)
 library(data.table)
+library(future)
+
+future::plan("multisession")
 
 #------------------
 # Pull in the Play-by-Play Data
 #------------------
 
 # define which seasons shall be loaded
-seasons <- 2019:2020
+seasons <- 2000:2020
 pbp <- data.table(nflfastR::load_pbp(seasons))
 
 # pull in the roster data
@@ -64,8 +67,8 @@ pbp[, rusher_player_age:=as.numeric((as.Date(paste0(season, '-09-01'))-as.Date(r
 pbp[, passer_player_age:=as.numeric((as.Date(paste0(season, '-09-01'))-as.Date(passer_player_birthdate, format='%m/%d/%Y')) / 365)]
 
 # filter down the dataset to only rushing and receiving plays
-pbp <- pbp[play_type %in% c('run', 'pass')]
+pbp <- pbp[play_type %in% c('run', 'pass', 'kickoff', 'punt', 'field_goal', 'extra_point')]
 
 # save out parquets of the data
-arrow::write_parquet(pbp, '/Users/mborysia/Documents/Github/Daily_Fantasy/Data/OtherData/NFL_FastR/raw_data20210708.parquet')
-arrow::write_parquet(rosters, '/Users/mborysia/Documents/Github/Daily_Fantasy/Data/OtherData/NFL_FastR/rosters20210708.parquet')
+arrow::write_parquet(pbp, '/Users/mborysia/Documents/Github/Daily_Fantasy/Data/OtherData/NFL_FastR/raw_data_2000_2020.parquet')
+arrow::write_parquet(rosters, '/Users/mborysia/Documents/Github/Daily_Fantasy/Data/OtherData/NFL_FastR/rosters_2000_2020.parquet')

@@ -36,7 +36,7 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE'
-set_pos = 'RB'
+set_pos = 'Defense'
 
 # set year to analyze
 set_year = 2020
@@ -326,7 +326,7 @@ output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(
 #                   WHERE year={set_year} 
 #                         AND week={set_week}''', 'Model_Features')
 # output = pd.merge(output, chk, on='player')
-# output.iloc[:50]
+output.iloc[:50]
 # %%
 
 def plot_distribution(estimates):
@@ -395,10 +395,17 @@ dm.write_to_db(sim_out, 'Simulation', f'week{set_week}_year{set_year}', 'append'
 #%%
 
 salaries = dm.read(f'''SELECT player, dk_salary salary, year, week league 
-                       FROM Daily_Salaries
-                       WHERE week={set_week}
-                             AND year = {set_year}''', 'Pre_PlayerData')
+                    FROM Daily_Salaries
+                    WHERE week={set_week}
+                            AND year = {set_year}''', 'Pre_PlayerData')
 salaries['player'] = salaries.player.apply(dc.name_clean)
+
+team_salaries = dm.read(f'''SELECT team player, dk_salary salary, year, week league 
+                            FROM Daily_Salaries
+                            WHERE week={set_week}
+                                  AND year = {set_year}''', 'Pre_TeamData')
+                                  
+salaries = pd.concat([salaries, team_salaries], axis=0)
 
 dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
 dm.write_to_db(salaries, 'Simulation', 'Salaries', 'append')

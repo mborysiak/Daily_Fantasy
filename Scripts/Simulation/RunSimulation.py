@@ -20,43 +20,26 @@ np.random.seed(1234)
 path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
 set_year = 2020
-league=14
+league=15
 
 # number of iteration to run
 iterations = 1000
 
-# define point values for all statistical categories
-pass_yd_per_pt = 0.04 
-pass_td_pt = 4
-int_pts = -2
-sacks = 0
-rush_yd_per_pt = 0.1 
-rec_yd_per_pt = 0.1
-rush_rec_td = 6
-ppr = 1
-
 # set league information, included position requirements, number of teams, and salary cap
 league_info = {}
-league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 2, 'TE': 1, 'FLEX': 2}
+league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'Defense': 1}
 league_info['num_teams'] = 12
-league_info['initial_cap'] = 293
-league_info['salary_cap'] = 293
+league_info['initial_cap'] = 50000
+league_info['salary_cap'] = 50000
 
 flex_pos = ['RB', 'WR', 'TE']
-
-# creating dictionary containing point values for each position
-pts_dict = {}
-pts_dict['QB'] = [pass_yd_per_pt, pass_td_pt, rush_yd_per_pt, rush_rec_td, int_pts, sacks]
-pts_dict['RB'] = [rush_yd_per_pt, rec_yd_per_pt, ppr, rush_rec_td]
-pts_dict['WR'] = [rec_yd_per_pt, ppr, rush_rec_td]
-pts_dict['TE'] = [rec_yd_per_pt, ppr, rush_rec_td]
 
 #==================
 # Initialize the Simluation Class
 #==================
 
 # instantiate simulation class and add salary information to data
-sim = FootballSimulation(pts_dict, conn_sim, set_year, league, iterations)
+sim = FootballSimulation(conn_sim, set_year, league, iterations)
 
 # return the data and set up dataframe for proportion of salary across position
 d = sim.return_data()
@@ -583,7 +566,7 @@ def update_output(n_clicks, drafted_data, drafted_columns):
     avg_sal = pd.merge(avg_sal, avail_pts, on='Player')
 
     # Creating two subplots and merging into single figure
-    (pl, pc_dr, av_sl, pt) = avg_sal.Player, avg_sal.PercentDrafted, avg_sal.AverageSalary, avg_sal['Points Added']
+    (pl, pc_dr, av_sl, pt) = avg_sal.Player, avg_sal.PercentDrafted, avg_sal.AverageSalary/1000, avg_sal['Points Added']
     pick_bar = create_bar(pc_dr, pl, text=pc_dr)
     sal_bar = create_bar(av_sl, pl, color_str='rgba(250, 190, 88, 1)', text=av_sl)
     pt_bar = create_bar(pt, pl, color_str='rgba(250, 128, 114, 1)', text=pt)
@@ -618,6 +601,6 @@ def update_output(n_clicks, drafted_data, drafted_columns):
 
 #%%
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=False)
 
 # %%
