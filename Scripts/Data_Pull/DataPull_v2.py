@@ -1,18 +1,4 @@
-# ---
-# jupyter:
-#   jupytext:
-#     formats: ipynb,py:light
-#     text_representation:
-#       extension: .py
-#       format_name: light
-#       format_version: '1.5'
-#       jupytext_version: 1.5.0
-#   kernelspec:
-#     display_name: Python 3
-#     language: python
-#     name: python3
-# ---
-
+#%%
 import pandas as pd
 import os
 import numpy as np
@@ -23,71 +9,89 @@ from DataPull_Helper import *
 
 # +
 set_year = 2020
-set_week = 16
+set_week = 6
 
-root_path = '/Users/Mark/Documents/GitHub/Daily_Fantasy/Data/'
-# -
+from ff.db_operations import DataManage
+from ff import general as ffgeneral
+import ff.data_clean as dc
 
-# # Fantasy Pros
+# set the root path and database management object
+root_path = ffgeneral.get_main_path('Daily_Fantasy')
+db_path = f'{root_path}/Data/Databases/'
+dm = DataManage(db_path)
 
-# ## Rankings
+#%%
 
-qb_url = 'https://www.fantasypros.com/nfl/rankings/qb.php'
-rb_url = 'https://www.fantasypros.com/nfl/rankings/half-point-ppr-rb.php'
-wr_url = 'https://www.fantasypros.com/nfl/rankings/half-point-ppr-wr.php'
-te_url = 'https://www.fantasypros.com/nfl/rankings/half-point-ppr-te.php'
-d_url = 'https://www.fantasypros.com/nfl/rankings/dst.php'
-k_url = 'https://www.fantasypros.com/nfl/rankings/k.php'
+#=============
+# Fantasy Pros
+#=============
 
-# +
-positions = ['QB', 'RB', 'WR', 'TE', 'K']
+set_pos = 'RB'
 
-data = pd.DataFrame()
-for i, _url in enumerate([qb_url, rb_url, wr_url, te_url, k_url]):
-    df = pd.read_html(_url)[0]
-    df = df.dropna(axis=1, thresh=10).dropna(axis=0, how='all')
-    df = df.drop('Proj. Pts', axis=1)
-    df.columns = ['Rank', 'Player_Team', 'Opponent', 'Best', 'Worst', 'Avg', 'Std Dev']
-    df['player'] = df.Player_Team.apply(lambda x: x.split(' ')[0] + ' ' + x.split(' ')[1][:-2])
-    df['team'] = df.Player_Team.apply(lambda x: x.split(' ')[-1])
-    df['position'] = positions[i]
-    df['year'] = set_year
-    df['week'] = set_week
-    cols = ['player', 'position', 'team', 'year', 'week', 'Rank', 'Opponent', 'Best', 'Worst', 'Avg', 'Std Dev']
-    df = df[cols].rename(columns={'Std Dev': 'StdDev'})
-    data = pd.concat([data, df], axis=0)
-    
-df = pd.read_html(d_url)[0]
-df = df.dropna(axis=1, thresh=10).dropna(axis=0, how='all')
-df = df.drop('Proj. Pts', axis=1)
-df.columns = ['Rank', 'Player_Team', 'Opponent', 'Best', 'Worst', 'Avg', 'Std Dev']
-df['player'] = df.Player_Team.apply(lambda x: x.split('(')[0].replace(' ', ''))
-df['team'] = df.Player_Team.apply(lambda x: x.split(')')[1].split(' ')[0])
-df['position'] = 'DST'
-df['year'] = set_year
-df['week'] = set_week
-cols = ['player', 'position', 'team', 'year', 'week', 'Rank', 'Opponent', 'Best', 'Worst', 'Avg', 'Std Dev']
-df = df[cols].rename(columns={'Std Dev': 'StdDev'})
-data = pd.concat([data, df], axis=0)
-    
-data = data[~data.player.str.contains('google')]
-data = data.dropna(axis=0)
+for set_pos in ['DST']:
+    for set_week in range(10, 17):
 
-data['HomeTeam'] = data.Opponent.apply(lambda x: np.where(x.split(' ')[0] == 'at', 0, 1))
-data['Opponent'] = data.Opponent.apply(lambda x: x.split(' ')[1])
+        try:
+            os.replace(f"/Users/mborysia/Downloads/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv", 
+                    f'{root_path}/Data/OtherData/Fantasy_Pros/{set_year}/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv')
+        except:
+            pass
 
-data = data.reset_index(drop=True)
-player_data = data[data.position!='DST']
-team_data = data[data.position=='DST']
-# -
+        df = pd.read_csv(f'{root_path}/Data/OtherData/Fantasy_Pros/{set_year}/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv')
 
-append_to_db(player_data, db_name='Pre_PlayerData.sqlite3', table_name='FantasyPros_Rankings', 
-             if_exist='append', set_week=set_week, set_year=set_year)
+        df.columns = [c.lstrip().rstrip() for c in df.columns]
+        df = df.rename(columns={
+            'RK': 'fp_rank',
+            'PLAYER NAME': 'player',
+            'TEAM': 'team',
+            'PROJ. FPTS': 'projected_points',
+        })
 
-append_to_db(team_data, db_name='Pre_TeamData.sqlite3', table_name='FantasyPros_Rankings', 
-             if_exist='append', set_week=set_week, set_year=set_year)
+        if '(' in df.player[0]:
+            df['team'] = df.player.apply(lambda x: x.split('(')[1].replace(')', ''))
+            df.player = df.player.apply(lambda x: x.split('(')[0].rstrip().lstrip())
 
-# ## DK Salary
+        df['week'] = set_week
+        df['year'] = set_year
+        df['pos'] = set_pos
+
+        df = df[['player', 'team', 'pos', 'week', 'year', 'fp_rank', 'projected_points']]
+        df.player = df.player.apply(dc.name_clean)
+
+        dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros_Ranks', if_exist='append')
+
+#%%
+
+from skmodel import SciKitModel
+
+train = dm.read('''SELECT * FROM FantasyPros_Ranks''', 'Pre_PlayerData')
+train.loc[train.projected_points=='-', 'projected_points'] = train.loc[train.projected_points!='-', 'projected_points'].min()
+train = train.sample(frac=1, random_state=1234).reset_index(drop=True)
+skm = SciKitModel(train)
+X, y = skm.Xy_split_list('projected_points', ['pos', 'fp_rank'])
+pipe = skm.model_pipe([skm.column_transform(num_pipe=[skm.piece('std_scale')], 
+                                            cat_pipe=[skm.piece('one_hot')]), 
+                                            skm.piece('lgbm')])
+params = skm.default_params(pipe)
+best_model = skm.random_search(pipe, X, y, params)
+skm.cv_score(best_model, X, y)
+
+predict = dm.read('''SELECT position pos, Best fp_rank FROM FantasyPros_Rankings
+                     WHERE position!='K' ''', 'Pre_PlayerData')
+predict = pd.concat([predict,
+ dm.read('''SELECT position pos, Best fp_rank FROM FantasyPros_Rankings''', 'Pre_TeamData')], axis=0)
+to_add = dm.read('''SELECT player, team, position pos, week, year, rank fp_rank
+                    FROM FantasyPros_Rankings
+                    WHERE position!='K' ''', 'Pre_PlayerData')
+to_add = pd.concat([to_add,
+dm.read('''SELECT player, team, position pos, week, year, rank fp_rank
+                    FROM FantasyPros_Rankings ''', 'Pre_TeamData')], axis=0)
+to_add['projected_points'] = best_model.predict(predict)
+
+train = pd.concat([train, to_add], axis=0).sort_values(by=['year', 'week', 'pos', 'fp_rank'])
+train.projected_points = train.projected_points.apply(lambda x: np.round(x, 2))
+dm.write_to_db(train, 'Pre_PlayerData', 'FantasyPros', if_exist='replace')
+#%%
 
 dk_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/draftkings-salary-changes.php')[0]
 fd_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/fanduel-salary-changes.php')[0]

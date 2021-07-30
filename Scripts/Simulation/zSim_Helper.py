@@ -607,53 +607,56 @@ class FootballSimulation():
 
 # _, _ = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
 # sim.show_most_selected(to_add, iterations, num_show=30)
-# # %%
+# %%
 
-# from ff.db_operations import DataManage
-# from ff import general as ffgeneral
+from ff.db_operations import DataManage
+from ff import general as ffgeneral
 
-# # set the root path and database management object
-# root_path = ffgeneral.get_main_path('Daily_Fantasy')
-# db_path = f'{root_path}/Data/Databases/'
-# dm = DataManage(db_path)
+# set the root path and database management object
+root_path = ffgeneral.get_main_path('Daily_Fantasy')
+db_path = f'{root_path}/Data/Databases/'
+dm = DataManage(db_path)
 
-# set_year = 2020
-# league=15
+set_year = 2020
+league=15
 
-# to_add_tuple = tuple(['Davante Adams', 'Mark Andrews', 'Aaron Jones', 'Ceedee Lamb',
-#                       'Kj Hamler', 'Kareem Hunt', 'Josh Allen', 'Darius Slayton', 'CLE'])
+to_add_tuple = tuple(['Matt Ryan', 'Alvin Kamara', 'Aaron Jones','Deandre Hopkins',
+                        'Jamison Crowder', 'Zach Pascal', 'Mark Andrews',
+                        'Ceedee Lamb', 'ARI'])
 
-# # to_add_tuple = tuple(['Aaron Jones', 'Rob Gronkowski', 'Mike Evans', 'PIT', 'Aj Brown',
-# #                       'Michael Gallup', 'Alvin Kamara', 'Matt Ryan', 'Russell Gage'])
 
-# # to_add_tuple = tuple(['Mark Andrews', 'Derrick Henry', 'Michael Gallup', 'Alvin Kamara',
-# #                      'Jamison Crowder', 'Ty Hilton', 'Josh Allen', 'Darius Slayton', 'LAR'])
 
-# # to_add_tuple = tuple(['Aaron Jones', 'Rob Gronkowski', 'Deandre Hopkins',
-# #                       'PIT', 'Emmanuel Sanders', 'Melvin Gordon', 'Deshaun Watson',
-# #                       'Corey Davis', 'Mark Andrews'])
+# to_add_tuple = tuple(['Aaron Jones', 'Rob Gronkowski', 'Mike Evans', 'PIT', 'Aj Brown',
+#                       'Michael Gallup', 'Alvin Kamara', 'Matt Ryan', 'Russell Gage'])
 
-# # to_add_tuple = tuple(['Darren Waller', 'Amari Cooper', 'Chris Carson', 'Cooper Kupp', 
-# #                      'Drew Lock', 'Kj Hamler', 'Alvin Kamara', 'Ty Hilton', 'SEA'])
+# to_add_tuple = tuple(['Mark Andrews', 'Derrick Henry', 'Michael Gallup', 'Alvin Kamara',
+#                      'Jamison Crowder', 'Ty Hilton', 'Josh Allen', 'Darius Slayton', 'LAR'])
 
-# actuals = dm.read(f'''SELECT * FROM (
-#                      SELECT player, y_act, week, year
-#                      FROM QB_Data
-#                      UNION
-#                      SELECT player, y_act, week, year
-#                      FROM RB_Data
-#                      UNION
-#                      SELECT player, y_act, week, year
-#                      FROM WR_Data
-#                      UNION
-#                      SELECT player, y_act,  week, year
-#                      FROM TE_Data
-#                      UNION
-#                      SELECT player, y_act,  week, year
-#                      FROM Defense_Data)
-#                      WHERE player in {to_add_tuple}
-#                            AND week={league}
-#                            AND year={set_year}
-#                  ''', 'Model_Features')
-# actuals
-# # %%
+# to_add_tuple = tuple(['Aaron Jones', 'Rob Gronkowski', 'Deandre Hopkins',
+#                       'PIT', 'Emmanuel Sanders', 'Melvin Gordon', 'Deshaun Watson',
+#                       'Corey Davis', 'Mark Andrews'])
+
+# to_add_tuple = tuple(['Darren Waller', 'Amari Cooper', 'Chris Carson', 'Cooper Kupp', 
+#                      'Drew Lock', 'Kj Hamler', 'Alvin Kamara', 'Ty Hilton', 'SEA'])
+
+actuals = dm.read(f'''SELECT * FROM (
+                     SELECT player, y_act, week, year
+                     FROM QB_Data
+                     UNION
+                     SELECT player, y_act, week, year
+                     FROM RB_Data
+                     UNION
+                     SELECT player, y_act, week, year
+                     FROM WR_Data
+                     UNION
+                     SELECT player, y_act,  week, year
+                     FROM TE_Data
+                     UNION
+                     SELECT player, y_act,  week, year
+                     FROM Defense_Data)
+                     WHERE player in {to_add_tuple}
+                           AND week={league}
+                           AND year={set_year}
+                 ''', 'Model_Features')
+actuals
+# %%

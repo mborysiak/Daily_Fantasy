@@ -27,7 +27,7 @@ iterations = 1000
 
 # set league information, included position requirements, number of teams, and salary cap
 league_info = {}
-league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'Defense': 1}
+league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DEF': 1}
 league_info['num_teams'] = 12
 league_info['initial_cap'] = 50000
 league_info['salary_cap'] = 50000
