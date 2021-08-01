@@ -36,15 +36,15 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE'
-set_pos = 'Defense'
+set_pos = 'TE'
 
 # set year to analyze
 set_year = 2020
-set_week = 15
+set_week = 16
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 6
+val_week_min = 5
 
 met = 'y_act'
 
@@ -404,17 +404,19 @@ team_salaries = dm.read(f'''SELECT team player, dk_salary salary, year, week lea
                             FROM Daily_Salaries
                             WHERE week={set_week}
                                   AND year = {set_year}''', 'Pre_TeamData')
-                                  
+
 salaries = pd.concat([salaries, team_salaries], axis=0)
 
 dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
 dm.write_to_db(salaries, 'Simulation', 'Salaries', 'append')
 
-#%%
-plyr = 'DAL'
+# #%%
+# plyr = 'DAL'
 
-plt_chk = dm.read(f'''SELECT * FROM week{set_week}_year{set_year} WHERE player='{plyr}' ''', 'Simulation')
-plt_chk = plt_chk.drop(['player', 'pos'], axis=1).values
-plot_distribution(plt_chk)
+# plt_chk = dm.read(f'''SELECT * FROM week{set_week}_year{set_year} WHERE player='{plyr}' ''', 'Simulation')
+# plt_chk = plt_chk.drop(['player', 'pos'], axis=1).values
+# plot_distribution(plt_chk)
+
+# # %%
 
 # %%

@@ -175,7 +175,32 @@ def add_experts(df, pos):
     # fill in null expert rankings
     df = df.sort_values(by=['player', 'year', 'week'])
     df = df.groupby(['player'], as_index=False).apply(lambda group: group.ffill())
+    for c in ['dk_salary', 'fd_salary', 'yahoo_salary', 
+              'ProjPts', 'rushAtt', 'rushYds', 'rushTd', 'recvTargets',
+              'recvReceptions', 'recvYds', 'recvTd']:
+        df[c] = df[c].fillna(df[c].min())
     df = df.fillna(df.max())
+
+    return df
+
+
+def fantasy_pros(df, pos):
+
+    fp = dm.read(f'''SELECT * 
+                    FROM FantasyPros 
+                    WHERE pos='{pos}' ''', 'Pre_PlayerData')
+    fp = name_cleanup(fp)
+    if pos == 'DST':
+        fp = fp.drop('player', axis=1).rename(columns={'team': 'player'})
+    else:
+        fp = fp.drop('team', axis=1)
+    fp_cols = ['fp_rank', 'projected_points']
+    fp = add_rolling_stats(fp, ['player'], fp_cols)
+
+    df = pd.merge(df, fp, on=['player', 'week','year'])
+
+    # fill in null expert rankings
+    df = df.sort_values(by=['player', 'year', 'week'])
 
     return df
 
@@ -314,6 +339,7 @@ def get_max_qb(df):
                 'fantasyPoints',  'fantasyPointsRank', 'ProjPts',
                 'expertConsensus', 'expertNathanJahnke',
                 'expertKevinCole', 'expertAndrewErickson','expertIanHartitz',
+                'fp_rank', 'projected_points',
                 'dk_salary', 'fd_salary', 'yahoo_salary', 'pass_qb_epa_sum',
                 'pass_air_yards_sum', 'pass_xyac_epa_sum',  'rush_first_down_sum',
                 'rush_rush_touchdown_sum', 'rush_epa_mean', 'rush_epa_sum']
@@ -325,12 +351,60 @@ def get_max_qb(df):
 
     return max_qb
 
+
+def add_rz_stats(df):
+
+    rz = dm.read('''SELECT * FROM PFR_Redzone_Rush
+                    JOIN (SELECT * FROM PFR_Redzone_Rec)
+                          USING (player, week, team, year)''', 'Post_PlayerData')
+    rz.player = rz.player.apply(dc.name_clean)
+    rz = rz.drop('team', axis=1)
+    
+    for c in rz:
+        if 'pct' not in c and 'rz' in c:
+            rz[c] = rz[c] / rz.week
+
+    df = pd.merge(df, rz, on=['player', 'week', 'year'], how='left')
+    df = df.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
+    df = df.groupby('player', as_index=False).fillna(method='ffill')
+
+    rz_cols = [c for c in rz.columns if 'rz' in c]
+    df = add_rolling_stats(df, gcols=['player'], rcols=rz_cols)
+    df = df.fillna(0)
+
+    return df
+
+def add_rz_stats_qb(df):
+
+    rz = dm.read('''SELECT * FROM PFR_Redzone_Rush
+                    JOIN (SELECT * FROM PFR_Redzone_Pass)
+                          USING (player, week, team, year)''', 'Post_PlayerData')
+    rz.player = rz.player.apply(dc.name_clean)
+    rz = rz.drop('team', axis=1)
+    
+    for c in rz:
+        if 'pct' not in c and 'rz' in c:
+            rz[c] = rz[c] / rz.week
+
+    df = pd.merge(df, rz, on=['player', 'week', 'year'], how='left')
+    df = df.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
+    df = df.groupby('player', as_index=False).fillna(method='ffill')
+
+    rz_cols = [c for c in rz.columns if 'rz' in c]
+    df = add_rolling_stats(df, gcols=['player'], rcols=rz_cols)
+    df = df.fillna(0)
+
+    return df
+
+
 #%%
 
 pos = 'QB'
 df = get_player_data(pos, YEAR); print(df.shape[0])
 df = add_pfr_matchup(df); print(df.shape[0])
 df = add_experts(df, pos); print(df.shape[0])
+df = fantasy_pros(df, pos); print(df.shape[0])
+df = add_rz_stats_qb(df); print(df.shape[0])
 dst = add_team_matchups().drop('offTeam', axis=1)
 df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
@@ -344,6 +418,8 @@ for pos in ['RB', 'WR', 'TE']:
     df = get_player_data(pos, YEAR); print(df.shape[0])
     df = add_pfr_matchup(df); print(df.shape[0])
     df = add_experts(df, pos); print(df.shape[0])
+    df = fantasy_pros(df, pos); print(df.shape[0])
+    df = add_rz_stats(df); print(df.shape[0])
     if pos == 'WR': df = cb_matchups(df); print(df.shape[0])
     if pos == 'TE': df = te_matchups(df); print(df.shape[0])
     dst = add_team_matchups().drop('offTeam', axis=1)
@@ -391,6 +467,8 @@ defense = defense.fillna(defense.mean())
 defense = defense.sort_values(by=['defTeam', 'year', 'week'])
 defense = defense.copy().rename(columns={'defTeam': 'player'})
 defense.columns = [c.replace('_dst', '') for c in defense.columns]
+
+# defense = fantasy_pros(defense, 'DST')
 
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 
@@ -517,4 +595,5 @@ try:
     skm.print_coef(best_model_all_class, imp_cols)
 except:
     pass
+
 # %%

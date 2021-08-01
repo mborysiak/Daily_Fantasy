@@ -28,69 +28,39 @@ dm = DataManage(db_path)
 
 set_pos = 'RB'
 
-for set_pos in ['DST']:
-    for set_week in range(10, 17):
+for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
 
-        try:
-            os.replace(f"/Users/mborysia/Downloads/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv", 
-                    f'{root_path}/Data/OtherData/Fantasy_Pros/{set_year}/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv')
-        except:
-            pass
+    try:
+        os.replace(f"/Users/mborysia/Downloads/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv", 
+                f'{root_path}/Data/OtherData/Fantasy_Pros/{set_year}/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv')
+    except:
+        pass
 
-        df = pd.read_csv(f'{root_path}/Data/OtherData/Fantasy_Pros/{set_year}/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv')
+    df = pd.read_csv(f'{root_path}/Data/OtherData/Fantasy_Pros/{set_year}/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv')
 
-        df.columns = [c.lstrip().rstrip() for c in df.columns]
-        df = df.rename(columns={
-            'RK': 'fp_rank',
-            'PLAYER NAME': 'player',
-            'TEAM': 'team',
-            'PROJ. FPTS': 'projected_points',
-        })
+    df.columns = [c.lstrip().rstrip() for c in df.columns]
+    df = df.rename(columns={
+        'RK': 'fp_rank',
+        'PLAYER NAME': 'player',
+        'TEAM': 'team',
+        'PROJ. FPTS': 'projected_points',
+    })
 
-        if '(' in df.player[0]:
-            df['team'] = df.player.apply(lambda x: x.split('(')[1].replace(')', ''))
-            df.player = df.player.apply(lambda x: x.split('(')[0].rstrip().lstrip())
+    if '(' in df.player[0]:
+        df['team'] = df.player.apply(lambda x: x.split('(')[1].replace(')', ''))
+        df.player = df.player.apply(lambda x: x.split('(')[0].rstrip().lstrip())
 
-        df['week'] = set_week
-        df['year'] = set_year
-        df['pos'] = set_pos
+    df['week'] = set_week
+    df['year'] = set_year
+    df['pos'] = set_pos
 
-        df = df[['player', 'team', 'pos', 'week', 'year', 'fp_rank', 'projected_points']]
-        df.player = df.player.apply(dc.name_clean)
+    df = df[['player', 'team', 'pos', 'week', 'year', 'fp_rank', 'projected_points']]
+    df.player = df.player.apply(dc.name_clean)
+    df.team = df.team.apply(lambda x: x.lstrip().rstrip())
 
-        dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros_Ranks', if_exist='append')
+    dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros', if_exist='append')
 
-#%%
 
-from skmodel import SciKitModel
-
-train = dm.read('''SELECT * FROM FantasyPros_Ranks''', 'Pre_PlayerData')
-train.loc[train.projected_points=='-', 'projected_points'] = train.loc[train.projected_points!='-', 'projected_points'].min()
-train = train.sample(frac=1, random_state=1234).reset_index(drop=True)
-skm = SciKitModel(train)
-X, y = skm.Xy_split_list('projected_points', ['pos', 'fp_rank'])
-pipe = skm.model_pipe([skm.column_transform(num_pipe=[skm.piece('std_scale')], 
-                                            cat_pipe=[skm.piece('one_hot')]), 
-                                            skm.piece('lgbm')])
-params = skm.default_params(pipe)
-best_model = skm.random_search(pipe, X, y, params)
-skm.cv_score(best_model, X, y)
-
-predict = dm.read('''SELECT position pos, Best fp_rank FROM FantasyPros_Rankings
-                     WHERE position!='K' ''', 'Pre_PlayerData')
-predict = pd.concat([predict,
- dm.read('''SELECT position pos, Best fp_rank FROM FantasyPros_Rankings''', 'Pre_TeamData')], axis=0)
-to_add = dm.read('''SELECT player, team, position pos, week, year, rank fp_rank
-                    FROM FantasyPros_Rankings
-                    WHERE position!='K' ''', 'Pre_PlayerData')
-to_add = pd.concat([to_add,
-dm.read('''SELECT player, team, position pos, week, year, rank fp_rank
-                    FROM FantasyPros_Rankings ''', 'Pre_TeamData')], axis=0)
-to_add['projected_points'] = best_model.predict(predict)
-
-train = pd.concat([train, to_add], axis=0).sort_values(by=['year', 'week', 'pos', 'fp_rank'])
-train.projected_points = train.projected_points.apply(lambda x: np.round(x, 2))
-dm.write_to_db(train, 'Pre_PlayerData', 'FantasyPros', if_exist='replace')
 #%%
 
 dk_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/draftkings-salary-changes.php')[0]
@@ -133,6 +103,7 @@ append_to_db(player_salary, db_name='Pre_PlayerData.sqlite3', table_name='Daily_
 append_to_db(team_salary, db_name='Pre_TeamData.sqlite3', table_name='Daily_Salaries', 
              if_exist='append', set_week=set_week, set_year=set_year)
 
+#%%
 # # Betting Lines
 
 # +
@@ -191,10 +162,9 @@ data.away_team = data.away_team.map(name_map)
 data.home_team = data.home_team.map(name_map)
 data['year'] = set_year
 data['week'] = set_week
-# -
-
 data
 
+#%%
 teams = list(data.away_team)
 teams.extend(list(data.home_team))
 [t for t in name_map.values() if t not in teams]
@@ -209,6 +179,7 @@ else:
 append_to_db(data, db_name='Pre_TeamData.sqlite3', table_name='Gambling_Lines', 
              if_exist='append', set_week=set_week, set_year=set_year)
 
+#%%
 # # Weather
 
 conn = sqlite3.connect(f'{root_path}/Databases/Pre_TeamData.sqlite3')
@@ -277,6 +248,7 @@ weather
 append_to_db(data, db_name='Pre_TeamData.sqlite3', table_name='Game_Weather', 
              if_exist='append', set_week=set_week, set_year=set_year)
 
+#%%
 # # PFR Position Matchups
 
 rb_match = 'https://www.pro-football-reference.com/fantasy/RB-fantasy-matchups.htm'
@@ -317,7 +289,7 @@ for t, d in zip(['RB', 'WR', 'TE', 'QB'], [rb, wr, te, qb]):
     append_to_db(d, db_name='Pre_PlayerData.sqlite3', table_name=f'{t}_PFR_Matchups', 
                  if_exist='append', set_week=set_week, set_year=set_year)
 
-
+#%%
 # ## PFF Matchups
 
 def pff_matchups(label):
@@ -345,7 +317,7 @@ for t, d in zip(['WR_CB', 'TE', 'Oline_Dline'], [wr_cb, te, ol_dl]):
     append_to_db(d, db_name='Pre_PlayerData.sqlite3', table_name=f'PFF_{t}_Matchups', 
                  if_exist='append', set_week=set_week, set_year=set_year)
 
-
+#%%
 # # PFF Rankings + Projections
 
 def pff_proj(label_pre, label_post, folder, rep=True):
@@ -393,7 +365,7 @@ def pff_rank(label_pre, label_post, folder, rep=True):
 proj_pl, proj_tm = pff_proj('projections', 'projections', 'pff_proj', True)
 rank1_pl, rank1_tm = pff_rank('week-rankings-export', 'expert_ranks', 'pff_rank', True)
 rank2_pl, rank2_tm = pff_rank('week-rankings-export-2', 'vor_ranks', 'pff_rank', True)
-
+#%%
 # +
 rank1_pl = rank1_pl.drop(f'w{set_week}', axis=1)
 rank1_tm = rank1_tm.drop(f'w{set_week}', axis=1)
@@ -415,6 +387,7 @@ for t, d in zip(['Proj', 'Expert', 'VOR'], [proj_tm, rank1_tm, rank2_tm]):
 copy_db('Pre_PlayerData', root_path, set_week, set_year)
 copy_db('Pre_TeamData', root_path, set_week, set_year)
 
+#%%
 # # #============
 # # #    Post Game       
 # # #============
@@ -470,7 +443,7 @@ for df in [rush_rz_df, rec_rz_df, pass_rz_df]:
         except:
             pass
         df[c] = df[c].fillna(0)
-# -
+#%%
 
 append_to_db(rush_rz_df, db_name='Post_PlayerData.sqlite3', table_name='PFR_Redzone_Rush', 
              if_exist='append', set_week=set_week, set_year=set_year)
@@ -479,6 +452,7 @@ append_to_db(rec_rz_df, db_name='Post_PlayerData.sqlite3', table_name='PFR_Redzo
 append_to_db(pass_rz_df, db_name='Post_PlayerData.sqlite3', table_name='PFR_Redzone_Pass', 
              if_exist='append', set_week=set_week, set_year=set_year)
 
+#%%
 # # Def Vs Position
 
 def_vs_map = {'Arizona Cardinals': 'ARI',
@@ -521,7 +495,7 @@ def_vs_te = pd.read_html(f'https://www.pro-football-reference.com/years/{set_yea
 def_vs_qb = pd.read_html(f'https://www.pro-football-reference.com/years/{set_year}/fantasy-points-against-QB.htm')
 def_vs_wr = pd.read_html(f'https://www.pro-football-reference.com/years/{set_year}/fantasy-points-against-WR.htm')
 
-# +
+#%%
 def_vs_rb_df_cols = ['team', 'games', 'rush_att_allowed', 'rush_yds_allowed', 'rush_td_allowed',
                      'tgts_allowed', 'rec_allowed', 'rec_yds_allowed', 'rec_td_allowed', 'rb_fp_allowed', 
                      'rb_dk_pts_allowed', 'rb_fd_pts_allowed', 'rb_fp_allowed_per_game', 'rb_dk_pts_allowed_per_game',
@@ -564,13 +538,14 @@ def_vs_rb_df['year'] = set_year
 def_vs_wr_df['year'] = set_year
 def_vs_te_df['year'] = set_year
 def_vs_qb_df['year'] = set_year
-# -
+#%%
 
 for d, t in zip([def_vs_rb_df, def_vs_wr_df, def_vs_te_df, def_vs_qb_df],
                 ['RB', 'WR', 'TE', 'QB']):
     append_to_db(d, db_name='Post_PlayerData.sqlite3', table_name=f'Def_Allowed_{t}', 
                  if_exist='append', set_week=set_week, set_year=set_year)
 
+#%%
 # # Advanced PFR Stats
 
 ADV_URL = f'https://www.pro-football-reference.com/years/{set_year}'
@@ -591,7 +566,7 @@ def qb_adv_clean(df):
     return df
 
 
-# +
+#%%
 #------------
 # Advanced QB stats cleanup
 #------------
@@ -663,6 +638,7 @@ for df, t in zip([qb, qb_ay, qb_acc, qb_pres, qb_pt, rb, rec],
     append_to_db(df, db_name='Post_PlayerData.sqlite3', table_name=f'PFR_Advanced_{t}', 
                  if_exist='append', set_week=set_week, set_year=set_year)
 
+#%%
 # # Snap Counts
 
 # +
@@ -685,7 +661,7 @@ snaps = convert_float(snaps)
 
 append_to_db(snaps, db_name='Post_PlayerData.sqlite3', table_name='Snap_Counts', 
                  if_exist='append', set_week=set_week, set_year=set_year)
-
+#%%
 # # QBR
 
 espn_map = {'ARI': 'ARI',
@@ -734,24 +710,26 @@ append_to_db(qbr, db_name='Post_PlayerData.sqlite3', table_name='ESPN_QBR',
 
 copy_db('Post_PlayerData', root_path, set_week, set_year)
 
+
+#%%
 # # Rework Air Yards
 
-# +
-df_air_json = requests.get(f'http://api.airyards.com/{set_year}/weeks')
+# # +
+# df_air_json = requests.get(f'http://api.airyards.com/{set_year}/weeks')
 
-df_air_json
+# df_air_json
 
-# +
-import requests
+# # +
+# import requests
 
-df_air_json = requests.get(f'http://api.airyards.com/{set_year}/weeks')
-df_air = pd.DataFrame(df_air_json.json())
+# df_air_json = requests.get(f'http://api.airyards.com/{set_year}/weeks')
+# df_air = pd.DataFrame(df_air_json.json())
 
-df_air = df_air[df_air.position.isin(['WR', 'RB', 'TE'])].reset_index(drop=True)
-df_air = df_air[['full_name', 'position', 'team', 'week', 'air_yards', 'tar', 'rec', 'rec_yards', 'tm_att', 
-                   'team_air', 'aypt', 'racr', 'ms_air_yards', 'target_share', 'wopr', 'yac']]
-df_air['year'] = set_year
-df_air = df_air.rename(columns={'full_name': 'player'})
+# df_air = df_air[df_air.position.isin(['WR', 'RB', 'TE'])].reset_index(drop=True)
+# df_air = df_air[['full_name', 'position', 'team', 'week', 'air_yards', 'tar', 'rec', 'rec_yards', 'tm_att', 
+#                    'team_air', 'aypt', 'racr', 'ms_air_yards', 'target_share', 'wopr', 'yac']]
+# df_air['year'] = set_year
+# df_air = df_air.rename(columns={'full_name': 'player'})
 
 # col_agg = {'air_yards': 'sum',
 #            'rec_yards': 'sum',
