@@ -72,7 +72,7 @@ df = dm.read(f'''SELECT playerName player, week, a.year,
 
 fp = dm.read('''SELECT player, week, year, fp_rank, projected_points
                 FROM FantasyPros''', 'Pre_PlayerData')
-y_acts = dm.read(f'''SELECT player, week, season year, y_act FROM {pos}_Stats''', 'FastR')
+y_acts = dm.read(f'''SELECT player, week, season year, y_act FROM {set_pos}_Stats''', 'FastR')
 
 fp.player = fp.player.apply(dc.name_clean)
 y_acts.player = y_acts.player.apply(dc.name_clean)

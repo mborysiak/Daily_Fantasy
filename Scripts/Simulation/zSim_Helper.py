@@ -5,17 +5,12 @@ import pandas as pd
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-import pandas.io.formats.style
+import seaborn as sns
 import copy
-import os 
-
-# sql packages
-import sqlite3
 
 # linear optimization
 from cvxopt import matrix
 from cvxopt.glpk import ilp
-from scipy.stats import skewnorm
 
 class FootballSimulation():
 
@@ -23,7 +18,7 @@ class FootballSimulation():
     # Creating Player Distributions for Given Settings
     #==========
     
-    def __init__(self, conn_sim, set_year, week, iterations):
+    def __init__(self, conn_sim, set_year, week):
         
         # create empty dataframe to store player point distributions
         pos_update = {'QB': 'aQB', 'RB': 'bRB', 'WR': 'cWR', 'TE': 'dTE', 'Defense': 'fDEF'}
@@ -55,8 +50,7 @@ class FootballSimulation():
         Returns self.data if necessary.
         '''
         return self.data
-    
-    
+
     #==========
     # Running the Simulation for Given League Settings and Keepers
     #==========
@@ -559,6 +553,8 @@ class FootballSimulation():
 # %%
 
 # # connection for simulation and specific table
+# import os
+# import sqlite3
 # path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 # conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
 # set_year = 2020
@@ -600,10 +596,8 @@ class FootballSimulation():
 
 # # input information for players and their associated salaries selected by your team
 # to_add = {}
-# to_add['players'] = ['Davante Adams', 'Mark Andrews', 'Aaron Jones', 'Ceedee Lamb',
-#                      'Kj Hamler', 'Kareem Hunt', 'Josh Allen', 'Darius Slayton', 
-#                      'CLE']
-# to_add['salaries'] = [9400, 5500, 7300, 4500, 3500, 5600, 7200, 4000, 3000]
+# to_add['players'] = []
+# to_add['salaries'] = []
 
 # _, _ = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
 # sim.show_most_selected(to_add, iterations, num_show=30)
@@ -618,26 +612,11 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2020
-league=15
+league=16
 
-to_add_tuple = tuple(['Matt Ryan', 'Alvin Kamara', 'Aaron Jones','Deandre Hopkins',
-                        'Jamison Crowder', 'Zach Pascal', 'Mark Andrews',
-                        'Ceedee Lamb', 'ARI'])
+to_add_tuple = tuple(['Baker Mayfield', 'Giovani Bernard', "D'Andre Swift", 'Davante Adams', 'Dj Chark', 
+                        'Michael Gallup', 'Darren Waller', 'Jamison Crowder', 'WAS'])
 
-
-
-# to_add_tuple = tuple(['Aaron Jones', 'Rob Gronkowski', 'Mike Evans', 'PIT', 'Aj Brown',
-#                       'Michael Gallup', 'Alvin Kamara', 'Matt Ryan', 'Russell Gage'])
-
-# to_add_tuple = tuple(['Mark Andrews', 'Derrick Henry', 'Michael Gallup', 'Alvin Kamara',
-#                      'Jamison Crowder', 'Ty Hilton', 'Josh Allen', 'Darius Slayton', 'LAR'])
-
-# to_add_tuple = tuple(['Aaron Jones', 'Rob Gronkowski', 'Deandre Hopkins',
-#                       'PIT', 'Emmanuel Sanders', 'Melvin Gordon', 'Deshaun Watson',
-#                       'Corey Davis', 'Mark Andrews'])
-
-# to_add_tuple = tuple(['Darren Waller', 'Amari Cooper', 'Chris Carson', 'Cooper Kupp', 
-#                      'Drew Lock', 'Kj Hamler', 'Alvin Kamara', 'Ty Hilton', 'SEA'])
 
 actuals = dm.read(f'''SELECT * FROM (
                      SELECT player, y_act, week, year

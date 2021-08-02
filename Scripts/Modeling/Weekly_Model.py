@@ -36,7 +36,7 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE'
-set_pos = 'TE'
+set_pos = 'Defense'
 
 # set year to analyze
 set_year = 2020
@@ -395,10 +395,22 @@ dm.write_to_db(sim_out, 'Simulation', f'week{set_week}_year{set_year}', 'append'
 #%%
 
 salaries = dm.read(f'''SELECT player, dk_salary salary, year, week league 
-                    FROM Daily_Salaries
-                    WHERE week={set_week}
-                            AND year = {set_year}''', 'Pre_PlayerData')
+                       FROM Daily_Salaries
+                       WHERE week={set_week}
+                             AND year = {set_year}''', 'Pre_PlayerData')
 salaries['player'] = salaries.player.apply(dc.name_clean)
+
+salaries_pff = dm.read(f'''SELECT playerName player, salary salary_pff
+                            FROM PFF_Proj_Ranks
+                            WHERE week={set_week}
+                                    AND year = {set_year}''', 'Pre_PlayerData')
+salaries_pff['player'] = salaries_pff.player.apply(dc.name_clean)
+
+salaries = pd.merge(salaries, salaries_pff, on='player', how='outer')
+salaries.loc[(salaries.salary.isnull()), 'league'] = set_week
+salaries.loc[(salaries.salary.isnull()), 'year'] = set_year
+salaries.loc[(salaries.salary.isnull()), 'salary'] = salaries.loc[(salaries.salary.isnull()), 'salary_pff']
+salaries = salaries.drop('salary_pff', axis=1)
 
 team_salaries = dm.read(f'''SELECT team player, dk_salary salary, year, week league 
                             FROM Daily_Salaries
