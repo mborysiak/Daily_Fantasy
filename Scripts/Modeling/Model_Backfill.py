@@ -169,3 +169,33 @@ output = create_sim_output(output)
 
 # %%
 dm.write_to_db(output, 'Simulation', f'week{set_week}_year{set_year}', 'append')
+
+#%%
+
+#--------------
+# Pull in DK Salaries & Id's
+#--------------
+
+set_week=15
+
+salary_id = pd.read_csv('c:/Users/mborysia/Downloads/DKSalaries.csv', skiprows=7).dropna(axis=1)
+salary_id = salary_id.rename(columns={'Name': 'player', 'Salary': 'salary', 'ID': 'player_id'})
+salary_id.player = salary_id.player.apply(dc.name_clean)
+
+defense = salary_id.loc[salary_id.Position=='DST', ['TeamAbbrev', 'salary', 'player_id']]
+salary_id = salary_id.loc[salary_id.Position != 'DST']
+salary_id = salary_id[['player', 'salary', 'player_id']]
+salary_id = pd.concat([salary_id, defense.rename(columns={'TeamAbbrev': 'player'})], axis=0)
+
+salary = salary_id[['player', 'salary']]
+salary = salary.assign(year=set_year).assign(league=set_week)
+
+ids = salary_id[['player', 'player_id']]
+ids = ids.assign(year=set_year).assign(league=set_week)
+
+dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
+dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
+
+dm.delete_from_db('Simulation', 'Player_Ids', f"league={set_week} AND year={set_year}")
+dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
+# %%

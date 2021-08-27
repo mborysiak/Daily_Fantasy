@@ -21,7 +21,7 @@ class FootballSimulation():
     def __init__(self, conn_sim, set_year, week):
         
         # create empty dataframe to store player point distributions
-        pos_update = {'QB': 'aQB', 'RB': 'bRB', 'WR': 'cWR', 'TE': 'dTE', 'Defense': 'fDEF'}
+        pos_update = {'QB': 'aQB', 'RB': 'bRB', 'WR': 'cWR', 'TE': 'dTE', 'Defense': 'fDST'}
         self.data = pd.read_sql_query(f'''SELECT * FROM week{week}_year{set_year}''', conn_sim)
         self.data['pos'] = self.data['pos'].map(pos_update)
 
@@ -603,39 +603,57 @@ class FootballSimulation():
 # sim.show_most_selected(to_add, iterations, num_show=30)
 # %%
 
-from ff.db_operations import DataManage
-from ff import general as ffgeneral
+# from ff.db_operations import DataManage
+# from ff import general as ffgeneral
 
-# set the root path and database management object
-root_path = ffgeneral.get_main_path('Daily_Fantasy')
-db_path = f'{root_path}/Data/Databases/'
-dm = DataManage(db_path)
+# # set the root path and database management object
+# root_path = ffgeneral.get_main_path('Daily_Fantasy')
+# db_path = f'{root_path}/Data/Databases/'
+# dm = DataManage(db_path)
 
-set_year = 2020
-league=16
+# set_year = 2020
+# league=15
 
-to_add_tuple = tuple(['Baker Mayfield', 'Giovani Bernard', "D'Andre Swift", 'Davante Adams', 'Dj Chark', 
-                        'Michael Gallup', 'Darren Waller', 'Jamison Crowder', 'WAS'])
+# to_add_tuple = tuple(['Matt Ryan', 'Derrick Henry', 'Alvin Kamara', 'Robert Woods',
+#                       'Mike Evans', 'Demarcus Robinson', 'Larry Fitzgerald', 'Mark Andrews', 'CIN' ])
 
 
-actuals = dm.read(f'''SELECT * FROM (
-                     SELECT player, y_act, week, year
-                     FROM QB_Data
-                     UNION
-                     SELECT player, y_act, week, year
-                     FROM RB_Data
-                     UNION
-                     SELECT player, y_act, week, year
-                     FROM WR_Data
-                     UNION
-                     SELECT player, y_act,  week, year
-                     FROM TE_Data
-                     UNION
-                     SELECT player, y_act,  week, year
-                     FROM Defense_Data)
-                     WHERE player in {to_add_tuple}
-                           AND week={league}
-                           AND year={set_year}
-                 ''', 'Model_Features')
-actuals
+# actuals = dm.read(f'''SELECT * FROM (
+#                      SELECT player, y_act, week, year
+#                      FROM QB_Data
+#                      UNION
+#                      SELECT player, y_act, week, year
+#                      FROM RB_Data
+#                      UNION
+#                      SELECT player, y_act, week, year
+#                      FROM WR_Data
+#                      UNION
+#                      SELECT player, y_act,  week, year
+#                      FROM TE_Data
+#                      UNION
+#                      SELECT player, y_act,  week, year
+#                      FROM Defense_Data)
+#                      WHERE player in {to_add_tuple}
+#                            AND week={league}
+#                            AND year={set_year}
+#                  ''', 'Model_Features')
+# print(actuals.sum())
+# actuals
+# %%
+
+# league = 16
+# ids = dm.read(f"SELECT * FROM Player_Ids WHERE year={set_year} AND league={league}", "Simulation")
+
+# my_team_select = pd.read_csv('c:/Users/mborysia/Downloads/my_team (6).csv').iloc[:, 1:]
+# dk_output = my_team_select.rename(columns={'Player': 'player'})
+
+# dk_output = pd.merge(dk_output, ids, on='player')
+# dk_output_ids = dk_output[['Position', 'player_id']].T.reset_index(drop=True)
+# dk_output_players = dk_output[['Position', 'player']].T.reset_index(drop=True)
+# dk_output = pd.concat([dk_output_ids, dk_output_players], axis=1)
+
+# dk_output
+
+# %%
+
 # %%

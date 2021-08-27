@@ -36,15 +36,15 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE'
-set_pos = 'Defense'
+set_pos = 'WR'
 
 # set year to analyze
 set_year = 2020
-set_week = 16
+set_week = 15
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 5
+val_week_min = 4
 
 met = 'y_act'
 
@@ -290,7 +290,7 @@ for final_m in final_models:
                             skm_stack.piece(final_m)
                         ])
     best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, X_stack, 
-                                                        y_stack, n_iter=25, 
+                                                        y_stack, n_iter=50, 
                                                         run_adp=True, print_coef=True)
     best_models.append(best_model)
 
@@ -316,7 +316,7 @@ for bm, fm in zip(best_models, final_m):
 output['pred_fp_per_game'] = predictions.mean(axis=1)
 std_models = predictions.std(axis=1)
 std_bridge = bm.predict(X_predict, return_std=True)[1]
-output['std_dev'] = std_models + std_bridge
+output['std_dev'] = std_bridge
 output = output.sort_values(by='dk_salary', ascending=False)
 output['dk_rank'] = range(len(output))
 output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
@@ -326,6 +326,7 @@ output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(
 #                   WHERE year={set_year} 
 #                         AND week={set_week}''', 'Model_Features')
 # output = pd.merge(output, chk, on='player')
+
 output.iloc[:50]
 # %%
 
@@ -392,43 +393,12 @@ try: dm.delete_from_db('Simulation', f'week{set_week}_year{set_year}', f"pos='{s
 except: pass
 dm.write_to_db(sim_out, 'Simulation', f'week{set_week}_year{set_year}', 'append')
 
+
+
 #%%
+plyr = 'Davante Adams'
 
-salaries = dm.read(f'''SELECT player, dk_salary salary, year, week league 
-                       FROM Daily_Salaries
-                       WHERE week={set_week}
-                             AND year = {set_year}''', 'Pre_PlayerData')
-salaries['player'] = salaries.player.apply(dc.name_clean)
-
-salaries_pff = dm.read(f'''SELECT playerName player, salary salary_pff
-                            FROM PFF_Proj_Ranks
-                            WHERE week={set_week}
-                                    AND year = {set_year}''', 'Pre_PlayerData')
-salaries_pff['player'] = salaries_pff.player.apply(dc.name_clean)
-
-salaries = pd.merge(salaries, salaries_pff, on='player', how='outer')
-salaries.loc[(salaries.salary.isnull()), 'league'] = set_week
-salaries.loc[(salaries.salary.isnull()), 'year'] = set_year
-salaries.loc[(salaries.salary.isnull()), 'salary'] = salaries.loc[(salaries.salary.isnull()), 'salary_pff']
-salaries = salaries.drop('salary_pff', axis=1)
-
-team_salaries = dm.read(f'''SELECT team player, dk_salary salary, year, week league 
-                            FROM Daily_Salaries
-                            WHERE week={set_week}
-                                  AND year = {set_year}''', 'Pre_TeamData')
-
-salaries = pd.concat([salaries, team_salaries], axis=0)
-
-dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
-dm.write_to_db(salaries, 'Simulation', 'Salaries', 'append')
-
-# #%%
-# plyr = 'DAL'
-
-# plt_chk = dm.read(f'''SELECT * FROM week{set_week}_year{set_year} WHERE player='{plyr}' ''', 'Simulation')
-# plt_chk = plt_chk.drop(['player', 'pos'], axis=1).values
-# plot_distribution(plt_chk)
-
-# # %%
-
+plt_chk = dm.read(f'''SELECT * FROM week{set_week}_year{set_year} WHERE player='{plyr}' ''', 'Simulation')
+plt_chk = plt_chk.drop(['player', 'pos'], axis=1).values
+plot_distribution(plt_chk)
 # %%

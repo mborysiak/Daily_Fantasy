@@ -8,6 +8,14 @@ from IPython.core.pylabtools import figsize
 import os
 import sqlite3
 
+# set the root path and database management object
+from ff.db_operations import DataManage
+from ff import general as ffgeneral
+
+root_path = ffgeneral.get_main_path('Daily_Fantasy')
+db_path = f'{root_path}/Data/Databases/'
+dm = DataManage(db_path)
+
 #===============
 # Settings and User Inputs
 #===============
@@ -22,14 +30,14 @@ np.random.seed(1234)
 path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
 set_year = 2020
-league=16
+league=15
 
 # number of iteration to run
 iterations = 2000
 
 # set league information, included position requirements, number of teams, and salary cap
 league_info = {}
-league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DEF': 1}
+league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DST': 1}
 league_info['num_teams'] = 12
 league_info['initial_cap'] = 50000
 league_info['salary_cap'] = 50000
@@ -256,7 +264,7 @@ blue_button_style = {'background-color': 'blue',
                     'width': '100%',
                     'fontSize': 16}
 
-download_button = html.Button("Download csv", id="download-button", style=blue_button_style)
+download_button = html.Button("Push to Database", id="download-button", style=blue_button_style)
 file_download = dcc.Download(id="download")
 
 #============================
@@ -396,7 +404,8 @@ def update_output(n_clicks, n_clicks_csv, drafted_data, drafted_columns):
     remain_sal = league_info['salary_cap'] - np.sum(to_add['salaries'])
 
     # run the simulation
-    _, _ = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
+    if my_team_select.shape[0] < 9:
+        _, _ = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
     
     # get the results dataframe structured
     avg_sal = sim.show_most_selected(to_add, iterations, num_show=30)
@@ -437,8 +446,43 @@ def update_output(n_clicks, n_clicks_csv, drafted_data, drafted_columns):
     # drafted_df.to_csv('c:/Users/mborysia/Desktop/Status_Save.csv', index=False)
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
     if 'download-button' in changed_id:
-        out_csv = dcc.send_data_frame(my_team_select.to_csv, filename="my_team.csv")
-        return gr_fig, my_team_update.to_dict('records'), team_info_update.to_dict('records'), out_csv
+
+        ids = dm.read(f"SELECT * FROM Player_Ids WHERE year={set_year} AND league={league}", "Simulation")
+        my_team_ids = my_team_select.rename(columns={'Player': 'player'}).copy()
+        dk_output = pd.merge(my_team_ids, ids, on='player')
+
+        for pstn, num_req in zip(['WR', 'RB', 'TE'], [4, 3, 2]):
+            if len(dk_output[dk_output.Position == pstn]) == num_req:
+                idx_last = dk_output[dk_output.Position == pstn].index[-1]
+                dk_output.loc[dk_output.index==idx_last, 'Position'] = 'FLEX'
+
+        pos_map = {
+            'QB': 'aQB', 
+            'RB': 'bRB',
+            'WR': 'cWR',
+            'TE': 'dTE',
+            'FLEX': 'eFLEX',
+            'DST': 'fDST'
+        }
+        dk_output.Position = dk_output.Position.map(pos_map)
+        dk_output = dk_output.sort_values(by='Position').reset_index(drop=True)
+        pos_map_rev = {v: k for k,v in pos_map.items()}
+        dk_output.Position = dk_output.Position.map(pos_map_rev)
+
+        dk_output_ids = dk_output[['Position', 'player_id']].T.reset_index(drop=True)
+        dk_output_players = dk_output[['Position', 'player']].T.reset_index(drop=True)
+        dk_output = pd.concat([dk_output_players, dk_output_ids], axis=1)
+
+        dk_output.columns = range(dk_output.shape[1])
+        dk_output = pd.DataFrame(dk_output.iloc[1,:]).T
+
+        dk_output['year'] = set_year
+        dk_output['week'] = league
+        
+
+        dm.write_to_db(dk_output, 'Results', 'Best_Lineups', 'append')
+
+        return gr_fig, my_team_update.to_dict('records'), team_info_update.to_dict('records'), None
 
     else:
         return gr_fig, my_team_update.to_dict('records'), team_info_update.to_dict('records'), None
