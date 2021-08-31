@@ -8,8 +8,8 @@ import sqlite3
 from DataPull_Helper import *
 
 # +
-set_year = 2020
-set_week = 6
+set_year = 2021
+set_week = 1
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -20,6 +20,8 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
+# %%
+rb
 #%%
 
 #=============
@@ -58,6 +60,7 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
     df.player = df.player.apply(dc.name_clean)
     df.team = df.team.apply(lambda x: x.lstrip().rstrip())
 
+    dm.delete_from_db('Pre_PlayerData', 'FantasyPros', f"week={set_week} and year={set_year}")
     dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros', if_exist='append')
 
 
@@ -67,8 +70,6 @@ dk_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/draftkings-
 fd_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/fanduel-salary-changes.php')[0]
 yahoo_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/yahoo-salary-changes.php')[0]
 
-
-# +
 def cleanup_sal(df, name):
     df['player'] = df.Player.apply(lambda x: x.split('(')[0].strip(' '))
     df['team'] = df.Player.apply(lambda x: x.split('(')[1].split('-')[0].strip(' '))
@@ -95,76 +96,59 @@ salaries['week'] = set_week
 salaries['year'] = set_year
 player_salary = salaries[salaries.position!='DST']
 team_salary = salaries[salaries.position=='DST']
-# -
 
-append_to_db(player_salary, db_name='Pre_PlayerData.sqlite3', table_name='Daily_Salaries', 
-             if_exist='append', set_week=set_week, set_year=set_year)
+dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} and year={set_year}")
+dm.write_to_db(player_salary, 'Pre_PlayerData', 'Daily_Salaries', if_exist='append')
 
-append_to_db(team_salary, db_name='Pre_TeamData.sqlite3', table_name='Daily_Salaries', 
-             if_exist='append', set_week=set_week, set_year=set_year)
+dm.delete_from_db('Pre_TeamData', 'Daily_Salaries', f"week={set_week} and year={set_year}")
+dm.write_to_db(team_salary, 'Pre_TeamData', 'Daily_Salaries', if_exist='append')
 
 #%%
-# # Betting Lines
+# Betting Lines
+# Paste text into csv with no headers using classic view from here: https://bettingdata.com/nfl/odds
 
-# +
-source = requests.get("https://www.bovada.lv/services/sports/event/v2/events/A/description/football/nfl").json()
+df = pd.read_csv(f'{root_path}/Data/OtherData/Betting_Lines/{set_year}/week{set_week}.csv', header=None)
 
-data_list = []
+i = 0
+good_data = {
+    'away_team': [],
+    'home_team': [],
+    'away_line': [],
+    'home_line': [],
+    'away_moneyline': [],
+    'home_moneyline': [],
+    'over_under': [],
+    'gametime': [],
+    'gametime_unix': []
+}
 
-for i in range(0, 15):
+for _, row in df.iterrows():
     
-    away_team = source[0]['events'][i]['description'].split('@')[0].strip(' ')
-    home_team = source[0]['events'][i]['description'].split('@')[1].strip(' ')
+    if 'at' in row[1]: 
+        good_data['home_team'].append(row[1].replace('at ', ''))
+        good_data['home_line'].append(row[2])
+        good_data['away_team'].append(row[3])
+        good_data['away_line'].append(-row[2])
     
-    for j in range(3):
-        try:
-            metric = source[0]['events'][i]['displayGroups'][0]['markets'][j]['description']
+    else: 
+        good_data['home_team'].append(row[3].replace('at ', ''))
+        good_data['home_line'].append(-row[2])
+        good_data['away_team'].append(row[1])
+        good_data['away_line'].append(row[2])
 
-            if metric == 'Moneyline':
-                away_moneyline=source[0]['events'][i]['displayGroups'][0]['markets'][j]['outcomes'][0]['price']['american']
-                home_moneyline=source[0]['events'][i]['displayGroups'][0]['markets'][j]['outcomes'][1]['price']['american']
+    good_data['away_moneyline'].append(row[5])
+    good_data['home_moneyline'].append(row[6])
+    good_data['over_under'].append(row[4])
+    good_data['gametime'].append(pd.to_datetime(row[0]))
+    good_data['gametime_unix'].append(pd.to_datetime(row[0]).timestamp())
 
-            elif metric == 'Total':
-                over_under = source[0]['events'][i]['displayGroups'][0]['markets'][j]['outcomes'][0]['price']['handicap']
-
-            elif metric == 'Point Spread':
-                away_line = source[0]['events'][i]['displayGroups'][0]['markets'][j]['outcomes'][0]['price']['handicap']
-                home_line = source[0]['events'][i]['displayGroups'][0]['markets'][j]['outcomes'][1]['price']['handicap']
-        except:
-            print('Failed:', home_team, away_team)
-        
-    gametime = dt.datetime.utcfromtimestamp(int(source[0]['events'][i]['startTime']) / 1000).strftime('%Y-%m-%d %H:%M:%S:%ms')
-    gametime_unix = int(source[0]['events'][i]['startTime']) / 1000
-
-    data_exp = [away_team, home_team, away_line, home_line, away_moneyline, home_moneyline, 
-                over_under, gametime, gametime_unix]
-    data_list.append(data_exp)
-    
-    
-data = pd.DataFrame(data_list, columns=['away_team', 'home_team', 'away_line', 'home_line',
-                                        'away_moneyline', 'home_moneyline',
-                                        'over_under', 'gametime', 'gametime_unix'])
-
-def clean_ml(x):
-    if x == 'EVEN':
-        return -110
-    if x is not None:
-        return float(x.replace('+', ''))
-    else:
-        return x
-data.away_moneyline = data.away_moneyline.apply(clean_ml)
-data.home_moneyline = data.home_moneyline.apply(clean_ml)
-
-data.away_team = data.away_team.apply(lambda x: ' '.join([w.capitalize() for w in x.split(' ')]))
-data.home_team = data.home_team.apply(lambda x: ' '.join([w.capitalize() for w in x.split(' ')]))
+data = pd.DataFrame(good_data)   
 
 data.away_team = data.away_team.map(name_map)
 data.home_team = data.home_team.map(name_map)
 data['year'] = set_year
 data['week'] = set_week
-data
 
-#%%
 teams = list(data.away_team)
 teams.extend(list(data.home_team))
 [t for t in name_map.values() if t not in teams]
@@ -176,20 +160,26 @@ if len([c for c in cnter.values() if c > 1]) > 0:
 else:
     print('No duplicate teams')
 
-append_to_db(data, db_name='Pre_TeamData.sqlite3', table_name='Gambling_Lines', 
-             if_exist='append', set_week=set_week, set_year=set_year)
+print('Missing Teams:', [t for t in teams if t not in name_map.values()])
+
+#%%
+
+dm.delete_from_db('Pre_TeamData', 'Gambling_Lines', f"week={set_week} and year={set_year}")
+dm.write_to_db(data, 'Pre_TeamData', 'Gambling_Lines', if_exist='append')
 
 #%%
 # # Weather
 
-conn = sqlite3.connect(f'{root_path}/Databases/Pre_TeamData.sqlite3')
-cities = pd.read_sql_query('''SELECT * FROM City_LatLon''', conn)
-city_data  = pd.read_sql_query(f'''SELECT a.home_team, b.latitude, b.longitude, a.gametime_unix
+set_week = 16
+set_year=2020
+
+cities = dm.read('''SELECT * FROM City_LatLon''', 'Pre_TeamData')
+city_data  = dm.read(f'''SELECT a.home_team, b.latitude, b.longitude, a.gametime_unix
                                      FROM Gambling_Lines a
                                      JOIN (SELECT * FROM City_LatLon) b
                                           ON a.home_team = b.team
                                      WHERE week={set_week} 
-                                           AND year={set_year}''', conn)
+                                           AND year={set_year}''', 'Pre_TeamData')
 
 # +
 KEY = '6c500b03257f351161dbe1fea1aa6558'
@@ -245,8 +235,9 @@ weather['week'] = set_week
 
 weather
 
-append_to_db(data, db_name='Pre_TeamData.sqlite3', table_name='Game_Weather', 
-             if_exist='append', set_week=set_week, set_year=set_year)
+#%%
+dm.delete_from_db('Pre_TeamData', 'Game_Weather', f"week={set_week} and year={set_year}")
+dm.write_to_db(weather, 'Pre_TeamData', 'Game_Weather', if_exist='append')
 
 #%%
 # # PFR Position Matchups
@@ -286,8 +277,8 @@ for df in [rb, wr, te, qb]:
 
 for t, d in zip(['RB', 'WR', 'TE', 'QB'], [rb, wr, te, qb]):
     print('Appending ', t)
-    append_to_db(d, db_name='Pre_PlayerData.sqlite3', table_name=f'{t}_PFR_Matchups', 
-                 if_exist='append', set_week=set_week, set_year=set_year)
+    dm.delete_from_db('Pre_PlayerData', f'{t}_PFR_Matchups', f"week={set_week} and year={set_year}")
+    dm.write_to_db(d, 'Pre_PlayerData', f'{t}_PFR_Matchups', if_exist='append')
 
 #%%
 # ## PFF Matchups
@@ -314,8 +305,8 @@ te = pff_matchups('te')
 ol_dl = pff_matchups('oline_dline')
 
 for t, d in zip(['WR_CB', 'TE', 'Oline_Dline'], [wr_cb, te, ol_dl]):
-    append_to_db(d, db_name='Pre_PlayerData.sqlite3', table_name=f'PFF_{t}_Matchups', 
-                 if_exist='append', set_week=set_week, set_year=set_year)
+    dm.delete_from_db('Pre_PlayerData', f'PFF_{t}_Matchups', f"week={set_week} and year={set_year}")
+    dm.write_to_db(d, 'Pre_PlayerData', f'PFF_{t}_Matchups', if_exist='append')
 
 #%%
 # # PFF Rankings + Projections
@@ -323,7 +314,7 @@ for t, d in zip(['WR_CB', 'TE', 'Oline_Dline'], [wr_cb, te, ol_dl]):
 def pff_proj(label_pre, label_post, folder, rep=True):
     
     if rep:
-        os.replace(f"/Users/Mark/Downloads/{label_pre}.csv", 
+        os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
                    f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
 
     df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
@@ -344,7 +335,7 @@ def pff_proj(label_pre, label_post, folder, rep=True):
 def pff_rank(label_pre, label_post, folder, rep=True):
     
     if rep:
-        os.replace(f"/Users/Mark/Downloads/{label_pre}.csv", 
+        os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
                    f'{root_path}CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
 
     df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
