@@ -36,15 +36,15 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE'
-set_pos = 'WR'
+set_pos = 'QB'
 
 # set year to analyze
-set_year = 2020
-set_week = 15
+set_year = 2021
+set_week = 1
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 4
+val_week_min = 5
 
 met = 'y_act'
 
@@ -88,10 +88,12 @@ def year_week_to_date(x):
 
 df['game_date'] = df[['year', 'week']].apply(year_week_to_date, axis=1)
 cv_time_input = int(dt.datetime(val_year_min, 1, val_week_min).strftime('%Y%m%d'))
+train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
 
 # get the train / predict dataframes and output dataframe
-df_train = df[(df.week < set_week) & (df.year <= set_year)].reset_index(drop=True)
-df_predict = df[(df.week == set_week) & (df.year == set_year)].reset_index(drop=True)
+df_train = df[df.game_date < train_time_split].reset_index(drop=True)
+df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
+df_predict = df[df.game_date == train_time_split].reset_index(drop=True)
 output_start = df_predict[['player', 'dk_salary']].copy()
 
 # get the minimum number of training samples for the initial datasets
@@ -104,8 +106,8 @@ cut_perc = np.percentile(df_class.y_act, 90)
 df_class['y_act'] = np.where(df_class.y_act >= cut_perc, 1, 0)
 
 # set up the training and prediction datasets for the classification 
-df_train_class = df_class[(df_class.week < set_week) & (df_class.year <= set_year)].reset_index(drop=True)
-df_predict_class = df_class[(df_class.week == set_week) & (df_class.year == set_year)].reset_index(drop=True)
+df_train_class = df_class[df_class.game_date < train_time_split].reset_index(drop=True)
+df_predict_class = df_class[df_class.game_date == train_time_split].reset_index(drop=True)
 
 #%%
 
@@ -279,7 +281,7 @@ X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
 X_stack = pd.concat([X_stack, X_stack_class], axis=1)
 
 best_models = []
-final_models = ['ridge', 'lgbm', 'xgb', 'rf', 'bridge']
+final_models = ['lasso', 'lgbm', 'xgb', 'rf', 'bridge']
 for final_m in final_models:
 
     print(f'\n{final_m}')
@@ -317,16 +319,10 @@ output['pred_fp_per_game'] = predictions.mean(axis=1)
 std_models = predictions.std(axis=1)
 std_bridge = bm.predict(X_predict, return_std=True)[1]
 output['std_dev'] = std_bridge
+
 output = output.sort_values(by='dk_salary', ascending=False)
 output['dk_rank'] = range(len(output))
 output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
-
-# chk = dm.read(f'''SELECT player, y_act 
-#                   FROM {set_pos}_Data 
-#                   WHERE year={set_year} 
-#                         AND week={set_week}''', 'Model_Features')
-# output = pd.merge(output, chk, on='player')
-
 output.iloc[:50]
 # %%
 
@@ -401,4 +397,3 @@ plyr = 'Davante Adams'
 plt_chk = dm.read(f'''SELECT * FROM week{set_week}_year{set_year} WHERE player='{plyr}' ''', 'Simulation')
 plt_chk = plt_chk.drop(['player', 'pos'], axis=1).values
 plot_distribution(plt_chk)
-# %%

@@ -20,21 +20,17 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
-# %%
-rb
 #%%
 
 #=============
 # Fantasy Pros
 #=============
 
-set_pos = 'RB'
-
 for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
 
     try:
         os.replace(f"/Users/mborysia/Downloads/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv", 
-                f'{root_path}/Data/OtherData/Fantasy_Pros/{set_year}/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv')
+                   f'{root_path}/Data/OtherData/Fantasy_Pros/{set_year}/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv')
     except:
         pass
 
@@ -60,7 +56,7 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
     df.player = df.player.apply(dc.name_clean)
     df.team = df.team.apply(lambda x: x.lstrip().rstrip())
 
-    dm.delete_from_db('Pre_PlayerData', 'FantasyPros', f"week={set_week} and year={set_year}")
+    dm.delete_from_db('Pre_PlayerData', 'FantasyPros', f"week={set_week} and year={set_year} and pos='{set_pos}'")
     dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros', if_exist='append')
 
 
@@ -96,6 +92,8 @@ salaries['week'] = set_week
 salaries['year'] = set_year
 player_salary = salaries[salaries.position!='DST']
 team_salary = salaries[salaries.position=='DST']
+
+player_salary.player = player_salary.player.apply(dc.name_clean)
 
 dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} and year={set_year}")
 dm.write_to_db(player_salary, 'Pre_PlayerData', 'Daily_Salaries', if_exist='append')
@@ -171,7 +169,7 @@ dm.write_to_db(data, 'Pre_TeamData', 'Gambling_Lines', if_exist='append')
 # # Weather
 
 set_week = 16
-set_year=2020
+set_year = 2020
 
 cities = dm.read('''SELECT * FROM City_LatLon''', 'Pre_TeamData')
 city_data  = dm.read(f'''SELECT a.home_team, b.latitude, b.longitude, a.gametime_unix
@@ -277,6 +275,7 @@ for df in [rb, wr, te, qb]:
 
 for t, d in zip(['RB', 'WR', 'TE', 'QB'], [rb, wr, te, qb]):
     print('Appending ', t)
+    d.player = d.player.apply(dc.name_clean)
     dm.delete_from_db('Pre_PlayerData', f'{t}_PFR_Matchups', f"week={set_week} and year={set_year}")
     dm.write_to_db(d, 'Pre_PlayerData', f'{t}_PFR_Matchups', if_exist='append')
 
@@ -299,10 +298,11 @@ def pff_matchups(label):
 
 
 wr_cb = pff_matchups('wr_cb')
-
 te = pff_matchups('te')
-
 ol_dl = pff_matchups('oline_dline')
+
+wr_cb.offPlayer = wr_cb.offPlayer.apply(dc.name_clean)
+te.offPlayer = te.offPlayer.apply(dc.name_clean)
 
 for t, d in zip(['WR_CB', 'TE', 'Oline_Dline'], [wr_cb, te, ol_dl]):
     dm.delete_from_db('Pre_PlayerData', f'PFF_{t}_Matchups', f"week={set_week} and year={set_year}")
@@ -356,6 +356,7 @@ def pff_rank(label_pre, label_post, folder, rep=True):
 proj_pl, proj_tm = pff_proj('projections', 'projections', 'pff_proj', True)
 rank1_pl, rank1_tm = pff_rank('week-rankings-export', 'expert_ranks', 'pff_rank', True)
 rank2_pl, rank2_tm = pff_rank('week-rankings-export-2', 'vor_ranks', 'pff_rank', True)
+
 #%%
 # +
 rank1_pl = rank1_pl.drop(f'w{set_week}', axis=1)
@@ -363,6 +364,10 @@ rank1_tm = rank1_tm.drop(f'w{set_week}', axis=1)
 
 rank2_pl = rank2_pl.drop(f'w{set_week}', axis=1)
 rank2_tm = rank2_tm.drop(f'w{set_week}', axis=1)
+
+proj_pl.Name = proj_pl.Name.apply(dc.name_clean)
+rank1_pl.Name = rank1_pl.Name.apply(dc.name_clean)
+rank2_pl.Name = rank2_pl.Name.apply(dc.name_clean)
 
 # +
 for t, d in zip(['Proj', 'Expert', 'VOR'], [proj_pl, rank1_pl, rank2_pl]):
@@ -377,6 +382,50 @@ for t, d in zip(['Proj', 'Expert', 'VOR'], [proj_tm, rank1_tm, rank2_tm]):
 
 copy_db('Pre_PlayerData', root_path, set_week, set_year)
 copy_db('Pre_TeamData', root_path, set_week, set_year)
+
+
+#%%
+
+#--------------
+# Pull in DK Salaries & Id's
+#--------------
+
+try:
+    os.replace(f"/Users/mborysia/Downloads/DKSalaries.csv", 
+            f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv')
+except:
+    salary_id = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv',
+                            skiprows=7).dropna(axis=1)
+
+salary_id = salary_id.rename(columns={'Name': 'player', 'Salary': 'salary', 'ID': 'player_id'})
+salary_id.player = salary_id.player.apply(dc.name_clean)
+
+defense = salary_id.loc[salary_id.Position=='DST', ['TeamAbbrev', 'salary', 'player_id']]
+salary_id = salary_id.loc[salary_id.Position != 'DST']
+salary_id = salary_id[['player', 'salary', 'player_id']]
+salary_id = pd.concat([salary_id, defense.rename(columns={'TeamAbbrev': 'player'})], axis=0)
+
+salary = salary_id[['player', 'salary']]
+salary = salary.assign(year=set_year).assign(league=set_week)
+
+ids = salary_id[['player', 'player_id']]
+ids = ids.assign(year=set_year).assign(league=set_week)
+
+# dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
+# dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
+
+# dm.delete_from_db('Simulation', 'Player_Ids', f"league={set_week} AND year={set_year}")
+# dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
+
+# update the salaries with actual DK salaries from the website
+other_sal = dm.read(f'''SELECT * 
+                        FROM Daily_Salaries
+                        WHERE week={set_week} AND year={set_year}''', 'Pre_PlayerData')
+other_sal = pd.merge(other_sal, salary[['player', 'salary']], on=['player'])
+other_sal['dk_salary'] = other_sal.salary
+other_sal = other_sal.drop('salary', axis=1)
+dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
+dm.write_to_db(other_sal, 'Pre_PlayerData', 'Daily_Salaries', 'append')
 
 #%%
 # # #============
@@ -435,6 +484,9 @@ for df in [rush_rz_df, rec_rz_df, pass_rz_df]:
             pass
         df[c] = df[c].fillna(0)
 #%%
+rush_rz_df.player = rush_rz_df.player.apply(dc.name_clean)
+rec_rz_df.player = rec_rz_df.player.apply(dc.name_clean)
+pass_rz_df.player = pass_rz_df.player.apply(dc.name_clean)
 
 append_to_db(rush_rz_df, db_name='Post_PlayerData.sqlite3', table_name='PFR_Redzone_Rush', 
              if_exist='append', set_week=set_week, set_year=set_year)

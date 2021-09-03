@@ -184,7 +184,7 @@ sum_cols = ['shotgun', 'no_huddle', 'rush_attempt', 'first_down',
             'first_down_rush', 'fourth_down_converted', 'fourth_down_failed',
             'third_down_converted', 'goal_to_go', 'run_middle', 'run_outside',
              'rush_touchdown', 'tackled_for_loss',
-            'ep', 'epa', 'touchdown', 'fumble','yardline_100', 'yards_after_catch',
+            'ep', 'epa', 'touchdown', 'fumble', 'fumble_lost','yardline_100', 'yards_after_catch',
             'yards_gained', 'ydstogo']
 
 mean_cols = ['td_prob', 'wp', 'wpa', 'ep', 'epa', 'yardline_100',
@@ -206,6 +206,7 @@ all_stats = all_stats.fillna(0)
 # add in the 100 yd bonsuses
 all_stats['rec_yd_100_bonus'] = np.where(all_stats.rec_yards_gained_sum >= 100, 1, 0)
 all_stats['rush_yd_100_bonus'] = np.where(all_stats.rush_yards_gained_sum >= 100, 1, 0)
+all_stats['fumble_lost'] = all_stats.rush_fumble_lost_sum + all_stats.rec_fumble_lost_sum
 
 fp_cols = {'rec_complete_pass_sum': 1, 
            'rec_yards_gained_sum': 0.1,
@@ -241,11 +242,12 @@ te = pd.merge(te, all_stats, on=['player', 'season', 'team'])
 
 for df, t_name in zip([wr, rb, te], ['WR_Stats', 'RB_Stats', 'TE_Stats']):
     season_week = df[['season', 'week']].drop_duplicates()
-    for _, sw in season_week.iterrows():
-     seas = sw[0]
-     wk = sw[1]
-     dm.delete_from_db('FastR', t_name, f"season={seas} AND week={wk}")
-     dm.write_to_db(df, 'FastR', t_name, if_exist='append')
+    df.player = df.player.apply(dc.name_clean)
+    # for _, sw in season_week.iterrows():
+    #  seas = sw[0]
+    #  wk = sw[1]
+    #  dm.delete_from_db('FastR', t_name, f"season={seas} AND week={wk}")
+    dm.write_to_db(df, 'FastR', t_name, if_exist='replace')
 
 
 #%%
@@ -294,7 +296,7 @@ qb = qb.fillna(0)
 
 qb['rush_yd_100_bonus'] = np.where(qb.rush_yards_gained_sum >= 100, 1, 0)
 qb['pass_yd_300_bonus'] = np.where(qb.pass_yards_gained_sum >= 300, 1, 0)
-
+qb['fumble_lost'] = qb.pass_fumble_lost_sum + qb.rush_fumble_lost_sum
 
 fp_cols = {'pass_yards_gained_sum': 0.04, 
            'pass_pass_touchdown_sum': 4, 
@@ -309,13 +311,13 @@ qb = calc_fp(qb, fp_cols)
 qb = qb.sort_values(by=['player', 'season', 'week']).reset_index(drop=True)
 qb['y_act'] = qb.groupby('player')['fantasy_pts'].shift(-1)
 
-
+qb.player = qb.player.apply(dc.name_clean)
 season_week = qb[['season', 'week']].drop_duplicates()
-for _, sw in season_week.iterrows():
-    seas = sw[0]
-    wk = sw[1]
-    dm.delete_from_db('FastR', 'QB_Stats', f"season={seas} AND week={wk}")
-    dm.write_to_db(qb, 'FastR', 'QB_Stats', if_exist='append')
+# for _, sw in season_week.iterrows():
+#     seas = sw[0]
+#     wk = sw[1]
+    # dm.delete_from_db('FastR', 'QB_Stats', f"season={seas} AND week={wk}")
+dm.write_to_db(qb, 'FastR', 'QB_Stats', if_exist='replace')
 
 #%%
 
@@ -368,11 +370,11 @@ team = team.sort_values(by=['season', 'team', 'week'])
 team = team[team.team!=''].reset_index(drop=True)
 
 season_week = team[['season', 'week']].drop_duplicates()
-for _, sw in season_week.iterrows():
-    seas = sw[0]
-    wk = sw[1]
-    dm.delete_from_db('FastR', 'Team_Stats', f"season={seas} AND week={wk}")
-    dm.write_to_db(team, 'FastR', 'Team_Stats', if_exist='append')
+# for _, sw in season_week.iterrows():
+#     seas = sw[0]
+#     wk = sw[1]
+#     dm.delete_from_db('FastR', 'Team_Stats', f"season={seas} AND week={wk}")
+dm.write_to_db(team, 'FastR', 'Team_Stats', if_exist='replace')
 
 #--------------
 # Coach Stats
@@ -393,11 +395,11 @@ coaches = coaches.sort_values(by=['season', 'coach', 'week'])
 coaches = coaches.rename(columns={'posteam': 'team'})
 
 season_week = coaches[['season', 'week']].drop_duplicates()
-for _, sw in season_week.iterrows():
-    seas = sw[0]
-    wk = sw[1]
-    dm.delete_from_db('FastR', 'Coach_Stats', f"season={seas} AND week={wk}")
-    dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='append')
+# for _, sw in season_week.iterrows():
+#     seas = sw[0]
+#     wk = sw[1]
+#     dm.delete_from_db('FastR', 'Coach_Stats', f"season={seas} AND week={wk}")
+dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='replace')
 
 #%%
 

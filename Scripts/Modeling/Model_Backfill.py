@@ -13,6 +13,7 @@ import ff.data_clean as dc
 from skmodel import SciKitModel
 
 import pandas_bokeh
+from xgboost.sklearn import XGBModel, XGBRegressor
 pandas_bokeh.output_notebook()
 
 import warnings
@@ -35,12 +36,12 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set year to analyze
-set_year = 2020
-set_week = 16
+set_year = 2021
+set_week = 1
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 5
+val_week_min = 4
 
 met = 'y_act'
 
@@ -48,38 +49,38 @@ met = 'y_act'
 # Run Baseline Model
 #-----------------
 
-set_pos = 'TE'
+set_pos = 'WR'
 
-df = dm.read(f'''SELECT playerName player, week, a.year,
-                             fantasyPoints,  fantasyPointsRank,
-                             `Proj Pts` ProjPts,
-                             expertConsensus, expertNathanJahnke,
-                             expertKevinCole, expertAndrewErickson,
-                             expertIanHartitz,
-                             dk_salary, fd_salary, yahoo_salary
-                    FROM PFF_Proj_Ranks a
-                    JOIN (SELECT Name playerName, *
-                            FROM PFF_Expert_Ranks 
-                            WHERE Position='{set_pos}' )
-                            USING (playerName, week, year)
-                    LEFT JOIN (SELECT player playerName, week, year, 
-                                        dk_salary, fd_salary, yahoo_salary
-                                FROM Daily_Salaries
-                                WHERE Position='{set_pos}'
-                            ) USING (playerName, week, year)
-                    WHERE a.position='{set_pos.lower()}' 
+# df = dm.read(f'''SELECT playerName player, week, a.year,
+#                              fantasyPoints,  fantasyPointsRank,
+#                              `Proj Pts` ProjPts,
+#                              expertConsensus, expertNathanJahnke,
+#                              expertKevinCole, expertAndrewErickson,
+#                              expertIanHartitz,
+#                              dk_salary, fd_salary, yahoo_salary
+#                     FROM PFF_Proj_Ranks a
+#                     JOIN (SELECT Name playerName, *
+#                             FROM PFF_Expert_Ranks 
+#                             WHERE Position='{set_pos}' )
+#                             USING (playerName, week, year)
+#                     LEFT JOIN (SELECT player playerName, week, year, 
+#                                         dk_salary, fd_salary, yahoo_salary
+#                                 FROM Daily_Salaries
+#                                 WHERE Position='{set_pos}'
+#                             ) USING (playerName, week, year)
+#                     WHERE a.position='{set_pos.lower()}' 
+#                     ''', 'Pre_PlayerData')
+
+df = dm.read(f'''SELECT player, week, year, fp_rank, projected_points,
+                        dk_salary, fd_salary, yahoo_salary
+                 FROM FantasyPros
+                 JOIN (SELECT *
+                       FROM Daily_Salaries
+                       WHERE Position='{set_pos}'
+                            ) USING (player, week, year)
+                    WHERE pos='{set_pos}' 
                     ''', 'Pre_PlayerData')
-
-fp = dm.read('''SELECT player, week, year, fp_rank, projected_points
-                FROM FantasyPros''', 'Pre_PlayerData')
-y_acts = dm.read(f'''SELECT player, week, season year, y_act FROM {set_pos}_Stats''', 'FastR')
-
-fp.player = fp.player.apply(dc.name_clean)
-y_acts.player = y_acts.player.apply(dc.name_clean)
 df.player = df.player.apply(dc.name_clean)
-
-df = pd.merge(df, fp, on=['player', 'week', 'year'])
-df = pd.merge(df, y_acts, on=['player', 'week', 'year'])
 
 # fill in null expert rankings
 df = df.sort_values(by=['player', 'year', 'week'])
@@ -97,10 +98,16 @@ def year_week_to_date(x):
 
 df['game_date'] = df[['year', 'week']].apply(year_week_to_date, axis=1)
 cv_time_input = int(dt.datetime(val_year_min, 1, val_week_min).strftime('%Y%m%d'))
+train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
 
 # get the train / predict dataframes and output dataframe
-df_train = df[(df.week < set_week) & (df.year <= set_year)].reset_index(drop=True)
-df_predict = df[(df.week == set_week) & (df.year == set_year)].reset_index(drop=True)
+df_train = df[df.game_date < train_time_split].reset_index(drop=True)
+df_predict = df[df.game_date == train_time_split].reset_index(drop=True)
+
+y_acts = dm.read(f'''SELECT player, week, season year, y_act 
+                     FROM {set_pos}_Stats''', 'FastR').dropna(subset=['y_act'])
+y_acts.player = y_acts.player.apply(dc.name_clean)
+df_train = pd.merge(df_train, y_acts, on=['player', 'week', 'year'])
 
 to_fill = dm.read(f'''SELECT DISTINCT player FROM week{set_week}_year{set_year}''', 'Simulation')
 df_predict = df_predict[~df_predict.player.isin(list(to_fill.player))].reset_index(drop=True)
@@ -111,25 +118,87 @@ min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])
 print('Shape of Train Set', df_train.shape)
 
 #%%
+# set up blank dictionaries for all metrics
+pred = {}; actual = {}; scores = {}; models = {}
+met = 'y_act'
 
-df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
+skm = SciKitModel(df_train)
+X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
-skm = SciKitModel(df)
-X_base, y_base = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
-cv_time_base = skm.cv_time_splits('game_date', X_base, cv_time_input)
+predictions = pd.DataFrame()
+for m in ['lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']:
+    
+    print('\n============\n')
+    print(m)
+    
+    pipe = skm.model_pipe([skm.piece('std_scale'), 
+                            skm.piece('k_best'),
+                            skm.piece(m)])
 
-model_base = skm.model_pipe([skm.piece('std_scale'), 
-                             skm.piece('k_best'),
-                             skm.piece('bridge')])
+    params = skm.default_params(pipe)
+    params['k_best__k'] = range(1, X.shape[1])
 
-params = skm.default_params(model_base)
-params['k_best__k'] = range(1, X_base.shape[1])
+    # run the model with parameter search
+    best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, 
+                                                   params, n_iter=25,
+                                                   col_split='game_date',
+                                                   time_split=cv_time_input)
 
-best_model_base = skm.random_search(model_base, X_base, y_base, params, cv=cv_time_base, n_iter=25)
-_, _ = skm.val_scores(best_model_base, X_base, y_base, cv_time_base)
+    # append the results and the best models for each fold
+    pred[f'{met}_{m}'] = oof_data['combined']; actual[f'{met}_{m}'] = oof_data['actual']
+    scores[f'{met}_{m}'] = r2; models[f'{met}_{m}'] = best_models
 
-imp_cols = X_base.columns[best_model_base['k_best'].get_support()]
-skm.print_coef(best_model_base, imp_cols)
+#%%
+output = output_start[['player', 'dk_salary']].copy()
+
+df_predict_stack = df_predict.copy()
+df_predict_stack = df_predict_stack
+skm_stack = SciKitModel(df_train)
+
+# get the X and y values for stack trainin for the current metric
+X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
+
+best_models = []
+final_models = ['lasso', 'lgbm', 'xgb', 'rf', 'bridge']
+for final_m in final_models:
+
+    print(f'\n{final_m}')
+    # get the model pipe for stacking setup and train it on meta features
+    stack_pipe = skm_stack.model_pipe([
+                          #  skm_stack.piece('std_scale'), 
+                            skm_stack.piece('k_best'), 
+                            skm_stack.piece(final_m)
+                        ])
+    best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, X_stack, 
+                                                        y_stack, n_iter=50, 
+                                                        run_adp=False, print_coef=True)
+    best_models.append(best_model)
+
+
+# get the final output:
+X_fp, y_fp = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
+
+# create the full stack pipe with meta estimators followed by stacked model
+X_predict = pd.DataFrame()
+for k, v in models.items():
+    m = skm_stack.ensemble_pipe(v)
+    m.fit(X_fp, y_fp)
+    X_predict = pd.concat([X_predict, pd.Series(m.predict(df_predict[X_fp.columns]), name=k)], axis=1)
+
+predictions = pd.DataFrame()
+for bm, fm in zip(best_models, final_models):
+    prediction = pd.Series(np.round(bm.predict(X_predict), 2), name=f'pred_{met}_{fm}')
+    predictions = pd.concat([predictions, prediction], axis=1)
+
+output['pred_fp_per_game'] = predictions.mean(axis=1)
+std_models = predictions.std(axis=1)
+std_bridge = bm.predict(X_predict, return_std=True)[1]
+output['std_dev'] = std_bridge
+output = output.sort_values(by='dk_salary', ascending=False)
+output['dk_rank'] = range(len(output))
+output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
+output.iloc[:50]
+
 # %%
 
 def create_distribution(player_data, num_samples=1000):
@@ -159,43 +228,9 @@ def create_sim_output(output, num_samples=1000):
     
     return sim_out
 
-X_predict = df_predict[X_base.columns]
-pred, pred_std = best_model_base.predict(X_predict, return_std=True)
-output = output_start.copy()
-output['pred_fp_per_game'] = pred
-output['std_dev'] = pred_std
-
-output = create_sim_output(output)
-
 # %%
+output = create_sim_output(output)
 dm.write_to_db(output, 'Simulation', f'week{set_week}_year{set_year}', 'append')
 
-#%%
 
-#--------------
-# Pull in DK Salaries & Id's
-#--------------
-
-set_week=15
-
-salary_id = pd.read_csv('c:/Users/mborysia/Downloads/DKSalaries.csv', skiprows=7).dropna(axis=1)
-salary_id = salary_id.rename(columns={'Name': 'player', 'Salary': 'salary', 'ID': 'player_id'})
-salary_id.player = salary_id.player.apply(dc.name_clean)
-
-defense = salary_id.loc[salary_id.Position=='DST', ['TeamAbbrev', 'salary', 'player_id']]
-salary_id = salary_id.loc[salary_id.Position != 'DST']
-salary_id = salary_id[['player', 'salary', 'player_id']]
-salary_id = pd.concat([salary_id, defense.rename(columns={'TeamAbbrev': 'player'})], axis=0)
-
-salary = salary_id[['player', 'salary']]
-salary = salary.assign(year=set_year).assign(league=set_week)
-
-ids = salary_id[['player', 'player_id']]
-ids = ids.assign(year=set_year).assign(league=set_week)
-
-dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
-dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
-
-dm.delete_from_db('Simulation', 'Player_Ids', f"league={set_week} AND year={set_year}")
-dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
 # %%
