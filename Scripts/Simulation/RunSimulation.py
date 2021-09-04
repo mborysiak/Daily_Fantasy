@@ -29,18 +29,18 @@ np.random.seed(1234)
 # connection for simulation and specific table
 path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
-set_year = 2020
-league=15
+set_year = 2021
+league=1
 
 # number of iteration to run
 iterations = 2000
 
 # set league information, included position requirements, number of teams, and salary cap
 league_info = {}
-league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DST': 1}
+league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1}#, 'DST': 1}
 league_info['num_teams'] = 12
-league_info['initial_cap'] = 50000
-league_info['salary_cap'] = 50000
+league_info['initial_cap'] = 47000
+league_info['salary_cap'] = 47000
 
 flex_pos = ['RB', 'WR', 'TE']
 

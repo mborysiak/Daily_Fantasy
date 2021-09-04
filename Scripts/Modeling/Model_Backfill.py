@@ -41,7 +41,7 @@ set_week = 1
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 4
+val_week_min = 6
 
 met = 'y_act'
 
@@ -110,7 +110,7 @@ y_acts.player = y_acts.player.apply(dc.name_clean)
 df_train = pd.merge(df_train, y_acts, on=['player', 'week', 'year'])
 
 to_fill = dm.read(f'''SELECT DISTINCT player FROM week{set_week}_year{set_year}''', 'Simulation')
-df_predict = df_predict[~df_predict.player.isin(list(to_fill.player))].reset_index(drop=True)
+# df_predict = df_predict[~df_predict.player.isin(list(to_fill.player))].reset_index(drop=True)
 output_start = df_predict[['player', 'dk_salary']].copy()
 
 # get the minimum number of training samples for the initial datasets
@@ -159,19 +159,20 @@ skm_stack = SciKitModel(df_train)
 X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
 
 best_models = []
-final_models = ['lasso', 'lgbm', 'xgb', 'rf', 'bridge']
+final_models = ['enet', 'lgbm', 'xgb', 'rf']#, 'bridge']
 for final_m in final_models:
 
     print(f'\n{final_m}')
     # get the model pipe for stacking setup and train it on meta features
     stack_pipe = skm_stack.model_pipe([
-                          #  skm_stack.piece('std_scale'), 
+                           skm_stack.piece('std_scale'), 
                             skm_stack.piece('k_best'), 
                             skm_stack.piece(final_m)
                         ])
+    
     best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, X_stack, 
-                                                        y_stack, n_iter=50, 
-                                                        run_adp=False, print_coef=True)
+                                                              y_stack, n_iter=25, 
+                                                              run_adp=False, print_coef=True)
     best_models.append(best_model)
 
 
@@ -191,14 +192,55 @@ for bm, fm in zip(best_models, final_models):
     predictions = pd.concat([predictions, prediction], axis=1)
 
 output['pred_fp_per_game'] = predictions.mean(axis=1)
-std_models = predictions.std(axis=1)
-std_bridge = bm.predict(X_predict, return_std=True)[1]
-output['std_dev'] = std_bridge
+output['std_dev'] = None
 output = output.sort_values(by='dk_salary', ascending=False)
 output['dk_rank'] = range(len(output))
 output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
 output.iloc[:50]
 
+#%%
+
+vers = 'v1'
+
+output['pos'] = set_pos
+output['version'] = vers
+output['model_type'] = 'backfill'
+output['max_score'] = 0.99*np.percentile(df_train.y_act.max(), 99)
+output['week'] = set_week
+output['year'] = set_year
+
+std_dev = dm.read(f'''SELECT AVG(std_dev)
+                      FROM Model_Predictions
+                      WHERE week={set_week}
+                            AND year={set_year}
+                            AND model_type='full_model'
+                            AND version='{vers}'
+                            AND pos = '{set_pos}'
+                        ''', 'Simulation').values[0][0]
+output['std_dev'] = std_dev
+
+del_str = f'''pos='{set_pos}'
+              AND version='{vers}' 
+              AND model_type='backfill'
+              AND week={set_week} 
+              AND year={set_year}'''
+
+dm.delete_from_db('Simulation', 'Model_Predictions', del_str)
+dm.write_to_db(output, 'Simulation', f'Model_Predictions', 'append')
+
+# %%
+
+preds = dm.read(f'''SELECT * 
+                    FROM Model_Predictions 
+                    WHERE version='{vers}'
+                          AND week = '{set_week}'
+                          AND year = '{set_year}' ''', 'Simulation')
+
+preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game': 'mean', 
+                                                              'std_dev': 'mean',
+                                                              'max_score': 'mean'})
+
+preds.sort_values(by='pred_fp_per_game', ascending=False)
 # %%
 
 def create_distribution(player_data, num_samples=1000):
@@ -220,7 +262,7 @@ def create_distribution(player_data, num_samples=1000):
 def create_sim_output(output, num_samples=1000):
     sim_out = pd.DataFrame()
     for _, row in output.iterrows():
-        cur_out = pd.DataFrame([row.player, set_pos]).T
+        cur_out = pd.DataFrame([row.player, row.pos]).T
         cur_out.columns=['player', 'pos']
         dists = pd.DataFrame(create_distribution(row, num_samples)).T
         cur_out = pd.concat([cur_out, dists], axis=1)
@@ -228,9 +270,8 @@ def create_sim_output(output, num_samples=1000):
     
     return sim_out
 
+output = create_sim_output(preds)
 # %%
-output = create_sim_output(output)
-dm.write_to_db(output, 'Simulation', f'week{set_week}_year{set_year}', 'append')
 
-
+dm.write_to_db(output, 'Simulation', f'week{set_week}_year{set_year}', 'replace')
 # %%

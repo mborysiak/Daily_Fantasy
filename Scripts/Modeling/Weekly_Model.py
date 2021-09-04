@@ -36,7 +36,7 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE'
-set_pos = 'QB'
+set_pos = 'TE'
 
 # set year to analyze
 set_year = 2021
@@ -281,7 +281,7 @@ X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
 X_stack = pd.concat([X_stack, X_stack_class], axis=1)
 
 best_models = []
-final_models = ['lasso', 'lgbm', 'xgb', 'rf', 'bridge']
+final_models = ['enet', 'lgbm', 'xgb', 'rf', 'bridge']
 for final_m in final_models:
 
     print(f'\n{final_m}')
@@ -324,76 +324,23 @@ output = output.sort_values(by='dk_salary', ascending=False)
 output['dk_rank'] = range(len(output))
 output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
 output.iloc[:50]
+
+#%%
+vers = 'v1'
+
+output['pos'] = set_pos
+output['version'] = vers
+output['model_type'] = 'full_model'
+output['max_score'] = 1.05*np.percentile(df_train.y_act.max(), 99)
+output['week'] = set_week
+output['year'] = set_year
+
+del_str = f'''pos='{set_pos}' 
+             AND version='{vers}' 
+             AND week={set_week} 
+             AND year={set_year}
+             AND model_type='full_model'
+             '''
+dm.delete_from_db('Simulation', 'Model_Predictions', del_str)
+dm.write_to_db(output, 'Simulation', f'Model_Predictions', 'append')
 # %%
-
-def plot_distribution(estimates):
-
-    from IPython.core.pylabtools import figsize
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-
-    # Plot all the estimates
-    plt.figure(figsize(8, 8))
-    sns.distplot(estimates, hist = True, kde = True, bins = 19,
-                 hist_kws = {'edgecolor': 'k', 'color': 'darkblue'},
-                 kde_kws = {'linewidth' : 4},
-                 label = 'Estimated Dist.')
-
-    # Plot the mean estimate
-    plt.vlines(x = estimates.mean(), ymin = 0, ymax = 0.01, 
-                linestyles = '--', colors = 'red',
-                label = 'Pred Estimate',
-                linewidth = 2.5)
-
-    plt.legend(loc = 1)
-    plt.title('Density Plot for Test Observation');
-    plt.xlabel('Grade'); plt.ylabel('Density');
-
-    # Prediction information
-    sum_stats = (np.percentile(estimates, 5), np.percentile(estimates, 95), estimates.std() /estimates.mean())
-    print('Average Estimate = %0.4f' % estimates.mean())
-    print('5%% Estimate = %0.4f    95%% Estimate = %0.4f    Std Error = %0.4f' % sum_stats)  
-
-def create_distribution(player_data, num_samples=1000):
-    
-    print(player_data.player)
-    import scipy.stats as stats
-
-    # create truncated distribution
-    lower, upper = np.percentile(df_train.y_act, 0.5),  np.percentile(df_train.y_act, 99.5) * 1.1
-    lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
-    upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
-    trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
-    
-    estimates = trunc_dist.rvs(num_samples)
-
-    return estimates
-
-
-def create_sim_output(output, num_samples=1000):
-    sim_out = pd.DataFrame()
-    for _, row in output.iterrows():
-        cur_out = pd.DataFrame([row.player, set_pos]).T
-        cur_out.columns=['player', 'pos']
-        dists = pd.DataFrame(create_distribution(row, num_samples)).T
-        cur_out = pd.concat([cur_out, dists], axis=1)
-        sim_out = pd.concat([sim_out, cur_out], axis=0)
-    
-    return sim_out
-
-#%%
-
-sim_out = create_sim_output(output)
-
-try: dm.delete_from_db('Simulation', f'week{set_week}_year{set_year}', f"pos='{set_pos}'")
-except: pass
-dm.write_to_db(sim_out, 'Simulation', f'week{set_week}_year{set_year}', 'append')
-
-
-
-#%%
-plyr = 'Davante Adams'
-
-plt_chk = dm.read(f'''SELECT * FROM week{set_week}_year{set_year} WHERE player='{plyr}' ''', 'Simulation')
-plt_chk = plt_chk.drop(['player', 'pos'], axis=1).values
-plot_distribution(plt_chk)

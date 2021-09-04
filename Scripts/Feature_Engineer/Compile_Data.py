@@ -84,6 +84,15 @@ def switch_seasons(df):
     df.loc[df.week==17, 'week'] = 1 
     return df
 
+def forward_fill(df, cols=None):
+    
+    if cols is None: cols = df.columns
+    df = df.sort_values(by=['player', 'year', 'week'])
+    df = df.groupby('player', as_index=False)[cols].fillna(method='ffill')
+    df = df.sort_values(by=['player', 'year', 'week'])
+
+    return df
+
 #%%
 
 
@@ -101,7 +110,7 @@ def fantasy_pros(pos):
     fp = add_rolling_stats(fp, ['player'], fp_cols)
 
     # fill in null expert rankings
-    fp = fp.sort_values(by=['player', 'year', 'week'])
+    fp = forward_fill(fp)
 
     return fp
 
@@ -145,8 +154,7 @@ def get_experts(df, pos):
     experts = add_rolling_stats(experts, ['player'], expert_cols)
 
     # fill in null expert rankings
-    experts = experts.sort_values(by=['player', 'year', 'week'])
-    experts = experts.groupby(['player'], as_index=False).apply(lambda group: group.ffill())
+    experts = forward_fill(experts)
     
     for c in ['dk_salary', 'fd_salary', 'yahoo_salary', 
               'ProjPts', 'rushAtt', 'rushYds', 'rushTd', 'recvTargets',
@@ -178,12 +186,11 @@ def get_player_data(df, pos, YEAR):
     player_data = add_rolling_stats(player_data, gcols=['player'], rcols=rcols_player)
 
     y_acts = player_data.y_act
-    player_data = player_data.sort_values(by=['player', 'year', 'week'])
     all_cols = [c for c in player_data.columns if c != 'y_act']
-    player_data = player_data.groupby(['player'], as_index=False)[all_cols].apply(lambda x: x.ffill())
+    player_data = forward_fill(player_data, all_cols)
     player_data = pd.concat([player_data, y_acts], axis=1)
 
-    player_data = player_data.dropna(subset=[c for c in player_data.columns if c != 'y_act'])
+    # player_data = player_data.dropna(subset=[c for c in player_data.columns if c != 'y_act'])
     player_data = player_data[player_data.year >= 2020].reset_index(drop=True)
     player_data = name_cleanup(player_data)
 
@@ -276,8 +283,7 @@ def cb_matchups(df):
                         FROM PFF_WR_CB_Matchups
     ''', 'Pre_PlayerData')
     matchups = name_cleanup(matchups)
-    matchups = matchups.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
-    matchups = matchups.groupby('player', as_index=False).fillna(method='ffill')
+    matchups = forward_fill(matchups)
 
     mean_speed = matchups.offSpeed.dropna().mean()
     mean_def_speed = matchups.defSpeed.dropna().mean()
@@ -386,25 +392,32 @@ def get_max_qb(df):
 
 def add_rz_stats(df):
 
-    rz = dm.read('''SELECT * FROM PFR_Redzone_Rush
-                    JOIN (SELECT * FROM PFR_Redzone_Rec)
-                          USING (player, week, team, year)''', 'Post_PlayerData')
-    rz.player = rz.player.apply(dc.name_clean)
+    rush_rz = dm.read('''SELECT * FROM PFR_Redzone_Rush''', 'Post_PlayerData')
+    rec_rz = dm.read('''SELECT * FROM PFR_Redzone_Rec''', 'Post_PlayerData')
+
+    rush_rz.player = rush_rz.player.apply(dc.name_clean)
+    rec_rz.player = rec_rz.player.apply(dc.name_clean)
+
+    rz = pd.merge(rush_rz, rec_rz, how='outer', on=['player', 'week', 'year', 'team'])
     rz = rz.drop('team', axis=1)
+    rz = rz.drop_duplicates(subset=['player','week', 'year'])
     
     for c in rz:
         if 'pct' not in c and 'rz' in c:
             rz[c] = rz[c] / rz.week
 
+    rz = rz.fillna(0)
+    rz.week = rz.week + 1
     rz = switch_seasons(rz)
 
-    df = pd.merge(df, rz, on=['player', 'week', 'year'], how='left')
-    df = df.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
-    df = df.groupby('player', as_index=False).fillna(method='ffill')
-
     rz_cols = [c for c in rz.columns if 'rz' in c]
-    df = add_rolling_stats(df, gcols=['player'], rcols=rz_cols)
-    df = df.fillna(0)
+    rz = add_rolling_stats(rz, gcols=['player'], rcols=rz_cols)
+
+    df = pd.merge(df, rz, on=['player', 'week', 'year'], how='left')
+    df = forward_fill(df)
+
+    rz_cols = [c for c in df.columns if 'rz' in c]
+    df[rz_cols] = df[rz_cols].fillna(0)
 
     return df
 
@@ -412,7 +425,8 @@ def add_rz_stats_qb(df):
 
     rz = dm.read('''SELECT * FROM PFR_Redzone_Rush
                     JOIN (SELECT * FROM PFR_Redzone_Pass)
-                          USING (player, week, team, year)''', 'Post_PlayerData')
+                          USING (player, week, team, year)
+                    ''', 'Post_PlayerData')
     rz.player = rz.player.apply(dc.name_clean)
     rz = rz.drop('team', axis=1)
     
@@ -421,8 +435,7 @@ def add_rz_stats_qb(df):
             rz[c] = rz[c] / rz.week
 
     df = pd.merge(df, rz, on=['player', 'week', 'year'], how='left')
-    df = df.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
-    df = df.groupby('player', as_index=False).fillna(method='ffill')
+    df = forward_fill(df)
 
     rz_cols = [c for c in rz.columns if 'rz' in c]
     df = add_rolling_stats(df, gcols=['player'], rcols=rz_cols)
@@ -453,10 +466,9 @@ df = add_pfr_matchup(df); print(df.shape[0])
 # dst = add_team_matchups().drop('offTeam', axis=1)
 # df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
-df = df.sort_values(by=['team', 'year', 'week'])
-df = df.groupby('player', as_index=False).fillna(method='ffill')
-df = df.dropna(); print(df.shape[0])
-df = df.sort_values(by=['player', 'year', 'week'])
+df = forward_fill(df)
+df = df.dropna().reset_index(drop=True); print(df.shape[0])
+
 
 # dm.delete_from_db('Model_Features', 'QB_Data', f"year={YEAR} AND week={WEEK}")
 dm.write_to_db(df, 'Model_Features', 'QB_Data', if_exist='replace')
@@ -472,7 +484,7 @@ for pos in ['RB', 'WR', 'TE']:
     df = get_team_stats(df, YEAR); print(df.shape[0])
     df = get_coach_stats(df, YEAR); print(df.shape[0])
     df = add_pfr_matchup(df); print(df.shape[0])
-    # df = add_rz_stats_qb(df); print(df.shape[0])
+    df = add_rz_stats(df); print(df.shape[0])
 #     if pos == 'WR': df = cb_matchups(df); print(df.shape[0])
 #     if pos == 'TE': df = te_matchups(df); print(df.shape[0])
 #     dst = add_team_matchups().drop('offTeam', axis=1)
@@ -480,10 +492,8 @@ for pos in ['RB', 'WR', 'TE']:
 #     df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
     # df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
 
-    df = df.sort_values(by=['team', 'year', 'week'])
-    df = df.groupby('player', as_index=False).fillna(method='ffill')
-    df = df.dropna(); print(df.shape[0])
-    df = df.sort_values(by=['player', 'year', 'week'])
+    df = forward_fill(df)
+    df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
     # dm.delete_from_db('Model_Features', f'{pos}_Data', f"year={YEAR} AND week={WEEK}")
     dm.write_to_db(df, 'Model_Features', f'{pos}_Data', if_exist='replace')
