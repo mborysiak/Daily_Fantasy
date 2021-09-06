@@ -54,7 +54,8 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
 
     df = df[['player', 'team', 'pos', 'week', 'year', 'fp_rank', 'projected_points']]
     df.player = df.player.apply(dc.name_clean)
-    df.team = df.team.apply(lambda x: x.lstrip().rstrip())
+    df.team = df.team.apply(lambda x: x.replace('COV_IR', '').lstrip().rstrip())
+    df.team = df.team.map(team_map)
 
     dm.delete_from_db('Pre_PlayerData', 'FantasyPros', f"week={set_week} and year={set_year} and pos='{set_pos}'")
     dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros', if_exist='append')
@@ -91,9 +92,10 @@ salaries = pd.merge(salaries, yahoo, how='inner',
 salaries['week'] = set_week
 salaries['year'] = set_year
 player_salary = salaries[salaries.position!='DST']
-team_salary = salaries[salaries.position=='DST']
-
 player_salary.player = player_salary.player.apply(dc.name_clean)
+
+team_salary = salaries[salaries.position=='DST']
+team_salary.team = team_salary.team.map(team_map)
 
 dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} and year={set_year}")
 dm.write_to_db(player_salary, 'Pre_PlayerData', 'Daily_Salaries', if_exist='append')
@@ -142,14 +144,14 @@ for _, row in df.iterrows():
 
 data = pd.DataFrame(good_data)   
 
-data.away_team = data.away_team.map(name_map)
-data.home_team = data.home_team.map(name_map)
+data.away_team = data.away_team.map(team_map)
+data.home_team = data.home_team.map(team_map)
 data['year'] = set_year
 data['week'] = set_week
 
 teams = list(data.away_team)
 teams.extend(list(data.home_team))
-[t for t in name_map.values() if t not in teams]
+[t for t in team_map.values() if t not in teams]
 
 from collections import Counter
 cnter = Counter(teams)
@@ -158,7 +160,7 @@ if len([c for c in cnter.values() if c > 1]) > 0:
 else:
     print('No duplicate teams')
 
-print('Missing Teams:', [t for t in teams if t not in name_map.values()])
+print('Missing Teams:', [t for t in teams if t not in team_map.values()])
 
 #%%
 
@@ -288,8 +290,8 @@ def pff_matchups(label):
            f'{root_path}/CSVs/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
 
     df = pd.read_csv(f'{root_path}/CSVs/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
-    df.offTeam = df.offTeam.map(pff_fp_map)
-    df.defTeam = df.defTeam.map(pff_fp_map)
+    df.offTeam = df.offTeam.map(team_map)
+    df.defTeam = df.defTeam.map(team_map)
 
     df['week'] = set_week
     df['year'] = set_year
@@ -304,7 +306,10 @@ ol_dl = pff_matchups('oline_dline')
 wr_cb.offPlayer = wr_cb.offPlayer.apply(dc.name_clean)
 te.offPlayer = te.offPlayer.apply(dc.name_clean)
 
+
+
 for t, d in zip(['WR_CB', 'TE', 'Oline_Dline'], [wr_cb, te, ol_dl]):
+
     dm.delete_from_db('Pre_PlayerData', f'PFF_{t}_Matchups', f"week={set_week} and year={set_year}")
     dm.write_to_db(d, 'Pre_PlayerData', f'PFF_{t}_Matchups', if_exist='append')
 
@@ -320,8 +325,8 @@ def pff_proj(label_pre, label_post, folder, rep=True):
     df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
     df = df.rename(columns={'teamName': 'offTeam', 'games': 'defTeam'})
     df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
-    df.offTeam = df.offTeam.map(pff_fp_map)
-    df.defTeam = df.defTeam.map(pff_fp_map)
+    df.offTeam = df.offTeam.map(team_map)
+    df.defTeam = df.defTeam.map(team_map)
 
     df['week'] = set_week
     df['year'] = set_year
@@ -341,8 +346,8 @@ def pff_rank(label_pre, label_post, folder, rep=True):
     df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
     df = df.rename(columns={'Team': 'offTeam', 'Opponent': 'defTeam'})
     df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
-    df.offTeam = df.offTeam.map(pff_fp_map)
-    df.defTeam = df.defTeam.map(pff_fp_map)
+    df.offTeam = df.offTeam.map(team_map)
+    df.defTeam = df.defTeam.map(team_map)
 
     df['week'] = set_week
     df['year'] = set_year
@@ -464,9 +469,9 @@ rush_rz_df = rush_rz_df.drop(['link'], axis=1)
 rec_rz_df = rec_rz_df.drop(['link'], axis=1)
 pass_rz_df = pass_rz_df.drop(['link'], axis=1)
 
-rush_rz_df.team = rush_rz_df.team.map(pfr_fp_map)
-rec_rz_df.team = rec_rz_df.team.map(pfr_fp_map)
-pass_rz_df.team = pass_rz_df.team.map(pfr_fp_map)
+rush_rz_df.team = rush_rz_df.team.map(team_map)
+rec_rz_df.team = rec_rz_df.team.map(team_map)
+pass_rz_df.team = pass_rz_df.team.map(team_map)
 
 rush_rz_df['week'] = set_week
 rec_rz_df['week'] = set_week

@@ -93,6 +93,31 @@ def forward_fill(df, cols=None):
 
     return df
 
+def find_bye_weeks():
+    bye_week = dm.read(f'''SELECT DISTINCT team, week, year 
+                           FROM FantasyPros 
+                           WHERE week != 17
+                           ORDER BY team, year, week''', 'Pre_PlayerData')
+
+    bye_week = switch_seasons(bye_week)
+    bye_week['next_week'] = bye_week.groupby(['team','year'])['week'].shift(-1)
+    bye_week['week_gap'] = bye_week.next_week - bye_week.week
+    bye_week = bye_week.loc[bye_week.week_gap==2, ['team', 'week', 'year', 'next_week']]
+    bye_week['week'] = bye_week.week+1
+
+    return bye_week.reset_index(drop=True)
+
+
+def fix_bye_week(df):
+    # shift forward the week before the bye week so that it lines up with
+    # the week after the bye week
+    bye_weeks = find_bye_weeks()
+    df = pd.merge(df, bye_weeks, on=['team', 'week', 'year'], how='left')
+    df.loc[~df.next_week.isnull(), 'week'] = df.loc[~df.next_week.isnull(), 'next_week']
+    df = df.drop('next_week', axis=1)
+
+    return df
+
 #%%
 
 
@@ -115,6 +140,7 @@ def fantasy_pros(pos):
     return fp
 
 
+
 def get_salaries(df, pos):
     sal = dm.read(f'''SELECT player, week, year, 
                              dk_salary, fd_salary, yahoo_salary
@@ -124,6 +150,23 @@ def get_salaries(df, pos):
     df = pd.merge(df, sal, on=['player', 'week', 'year'])
 
     return df
+
+
+
+def add_pfr_matchup(df):
+
+    pfr_matchup = dm.read(f'''SELECT player, week, year,
+                                    opp_rank, opp_fp_per_game,
+                                    opp_dk_pt_per_game, opp_fd_pt_per_game,
+                                    proj_fp_rank, proj_dk_rank, proj_fd_rank
+                            FROM {pos}_PFR_Matchups
+                            WHERE year >= 2020''', 'Pre_PlayerData')
+    pfr_matchup = name_cleanup(pfr_matchup)
+    df = pd.merge(df, pfr_matchup, on=['player', 'week', 'year'])
+
+    return df
+
+
 
 def get_experts(df, pos):
 
@@ -190,13 +233,15 @@ def get_player_data(df, pos, YEAR):
     player_data = forward_fill(player_data, all_cols)
     player_data = pd.concat([player_data, y_acts], axis=1)
 
-    # player_data = player_data.dropna(subset=[c for c in player_data.columns if c != 'y_act'])
     player_data = player_data[player_data.year >= 2020].reset_index(drop=True)
     player_data = name_cleanup(player_data)
 
     player_data['week'] = player_data['week'] + 1
     player_data = switch_seasons(player_data)
+    player_data = fix_bye_week(player_data)
+
     df = pd.merge(df, player_data, on=['player', 'week', 'year'])
+    df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
 
     return df
 
@@ -222,6 +267,8 @@ def get_team_stats(df, YEAR):
     team_stats = team_stats[team_stats.year >= 2020].reset_index(drop=True)
     team_stats['week'] = team_stats.week + 1
     team_stats = switch_seasons(team_stats)
+    team_stats = fix_bye_week(team_stats)
+
     df = pd.merge(df, team_stats, on=['team', 'week', 'year'])
 
     return df
@@ -251,24 +298,12 @@ def get_coach_stats(df, YEAR):
     coach_stats = coach_stats[coach_stats.year >= 2020].reset_index(drop=True)
     coach_stats['week'] = coach_stats.week + 1
     coach_stats = switch_seasons(coach_stats)
+    coach_stats = fix_bye_week(coach_stats)
+
     df = pd.merge(df, coach_stats, on=['team', 'week', 'year'])
 
     return df
 
-
-
-def add_pfr_matchup(df):
-
-    pfr_matchup = dm.read(f'''SELECT player, week, year,
-                                    opp_rank, opp_fp_per_game,
-                                    opp_dk_pt_per_game, opp_fd_pt_per_game,
-                                    proj_fp_rank, proj_dk_rank, proj_fd_rank
-                            FROM {pos}_PFR_Matchups
-                            WHERE year >= 2020''', 'Pre_PlayerData')
-    pfr_matchup = name_cleanup(pfr_matchup)
-    df = pd.merge(df, pfr_matchup, on=['player', 'week', 'year'])
-
-    return df
 
 
 def cb_matchups(df):
@@ -374,16 +409,16 @@ def add_team_matchups():
 
 def get_max_qb(df):
     qb_cols = ['team', 'week', 'year',
-                'fantasyPoints',  'fantasyPointsRank', 'ProjPts',
-                'expertConsensus', 'expertNathanJahnke',
-                'expertKevinCole', 'expertAndrewErickson','expertIanHartitz',
+                # 'fantasyPoints',  'fantasyPointsRank', 'ProjPts',
+                # 'expertConsensus', 'expertNathanJahnke',
+                # 'expertKevinCole', 'expertAndrewErickson','expertIanHartitz',
                 'fp_rank', 'projected_points',
                 'dk_salary', 'fd_salary', 'yahoo_salary', 'pass_qb_epa_sum',
                 'pass_air_yards_sum', 'pass_xyac_epa_sum',  'rush_first_down_sum',
                 'rush_rush_touchdown_sum', 'rush_epa_mean', 'rush_epa_sum']
 
-    max_qb = df.groupby(['team', 'year', 'week'], as_index=False).agg({'ProjPts': 'max'})
-    max_qb = pd.merge(max_qb, df, on=['team', 'year', 'week', 'ProjPts'])
+    max_qb = df.groupby(['team', 'year', 'week'], as_index=False).agg({'projected_points': 'max'})
+    max_qb = pd.merge(max_qb, df, on=['team', 'year', 'week', 'projected_points'])
     max_qb = max_qb[qb_cols]
     max_qb.columns = ['qb_'+c if c not in ('team', 'week', 'year') else c for c in max_qb.columns]
 
@@ -399,20 +434,24 @@ def add_rz_stats(df):
     rec_rz.player = rec_rz.player.apply(dc.name_clean)
 
     rz = pd.merge(rush_rz, rec_rz, how='outer', on=['player', 'week', 'year', 'team'])
-    rz = rz.drop('team', axis=1)
     rz = rz.drop_duplicates(subset=['player','week', 'year'])
-    
+    bye_weeks = find_bye_weeks().rename(columns={'next_week': 'bye_week'})
+    bye_weeks.bye_week = bye_weeks.bye_week - 1
+    rz = pd.merge(rz, bye_weeks, on=['team', 'week', 'year'], how='left')
+    rz = rz[rz.week!=rz.bye_week].reset_index(drop=True).drop('bye_week', axis=1)
+
     for c in rz:
         if 'pct' not in c and 'rz' in c:
             rz[c] = rz[c] / rz.week
 
     rz = rz.fillna(0)
     rz.week = rz.week + 1
+    rz = fix_bye_week(rz).drop('team', axis=1)
     rz = switch_seasons(rz)
 
     rz_cols = [c for c in rz.columns if 'rz' in c]
     rz = add_rolling_stats(rz, gcols=['player'], rcols=rz_cols)
-
+    
     df = pd.merge(df, rz, on=['player', 'week', 'year'], how='left')
     df = forward_fill(df)
 
@@ -469,28 +508,30 @@ df = add_pfr_matchup(df); print(df.shape[0])
 df = forward_fill(df)
 df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
-
 # dm.delete_from_db('Model_Features', 'QB_Data', f"year={YEAR} AND week={WEEK}")
 dm.write_to_db(df, 'Model_Features', 'QB_Data', if_exist='replace')
-# team_qb = get_max_qb(df)
 
+team_qb = get_max_qb(df)
 
 for pos in ['RB', 'WR', 'TE']:
+    
+    # pre-game data
     df = fantasy_pros(pos); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
-
-    # df = get_experts(df, pos); print(df.shape[0])
-    df = get_player_data(df, pos, YEAR); print(df.shape[0])
-    df = get_team_stats(df, YEAR); print(df.shape[0])
-    df = get_coach_stats(df, YEAR); print(df.shape[0])
     df = add_pfr_matchup(df); print(df.shape[0])
-    df = add_rz_stats(df); print(df.shape[0])
+    # df = get_experts(df, pos); print(df.shape[0])
 #     if pos == 'WR': df = cb_matchups(df); print(df.shape[0])
 #     if pos == 'TE': df = te_matchups(df); print(df.shape[0])
 #     dst = add_team_matchups().drop('offTeam', axis=1)
-
 #     df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
-    # df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
+
+    # post-game data
+    df = get_player_data(df, pos, YEAR); print(df.shape[0])
+    df = get_team_stats(df, YEAR); print(df.shape[0])
+    df = get_coach_stats(df, YEAR); print(df.shape[0])
+    df = add_rz_stats(df); print(df.shape[0])
+
+    df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
 
     df = forward_fill(df)
     df = df.dropna().reset_index(drop=True); print(df.shape[0])
@@ -506,11 +547,6 @@ defense = dm.read(f'''SELECT *
                       WHERE season>={YEAR-4}
                             AND week != 17''', 'FastR').rename(columns={'defteam': 'defTeam'})
 defense['week'] = defense['week'] + 1
-
-cur_abb = ['LV', 'JAX', 'LA']
-new_abb = ['LVR', 'JAC', 'LAR']
-for c, n in zip(cur_abb, new_abb):
-    defense.loc[defense.defTeam==c, 'defTeam'] = n
 
 rcols_def = [c for c in defense.columns if c not in ('defTeam', 'week', 'season', 'y_act')]
 defense = defense.rename(columns={'season': 'year'})
@@ -536,127 +572,3 @@ defense.columns = [c.replace('_dst', '') for c in defense.columns]
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 
 df = defense.copy()
-
-# %%
-
-from skmodel import SciKitModel 
-import warnings
-warnings.filterwarnings("ignore", category=RuntimeWarning) 
-warnings.filterwarnings("ignore", category=UserWarning) 
-
-drop_cols = list(df.dtypes[df.dtypes=='object'].index)
-# drop_cols.append('y_act')
-
-#-----------------
-# Run Baseline Model
-#-----------------
-
-baseline_m = df.loc[: , ['player', 'week', 'year',
-                         'fantasyPoints',  'fantasyPointsRank', 'ProjPts',
-                         'expertConsensus', 'expertNathanJahnke',
-                         'expertKevinCole', 'expertAndrewErickson','expertIanHartitz',
-                         'dk_salary', 'fd_salary', 'yahoo_salary', 
-                         'y_act']].copy()
-
-baseline_m = baseline_m.sort_values(by='week')
-
-skm = SciKitModel(baseline_m)
-X_base, y_base = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
-cv_time_base = skm.cv_time_splits('week', X_base, 3)
-
-model_base = skm.model_pipe([skm.piece('std_scale'), 
-                             skm.piece('k_best'),
-                             skm.piece('lr')])
-
-params = skm.default_params(model_base)
-params['k_best__k'] = range(1, X_base.shape[1])
-
-best_model_base = skm.random_search(model_base, X_base, y_base, params, cv=cv_time_base, n_iter=50)
-_, _ = skm.val_scores(best_model_base, X_base, y_base, cv_time_base)
-
-imp_cols = X_base.columns[best_model_base['k_best'].get_support()]
-skm.print_coef(best_model_base, imp_cols)
-
-print('------------------')
-
-baseline_m['y_act'] = np.where((baseline_m.y_act > np.percentile(df.y_act, 90)), 1, 0)                 
-
-skm = SciKitModel(baseline_m, 'class')
-X_base_class, y_base_class = skm.Xy_split(y_metric='y_act', 
-                                          to_drop=drop_cols)
-cv_time = skm.cv_time_splits('week', X_base_class, 3)
-
-model_base_class = skm.model_pipe([skm.piece('std_scale'), 
-                        skm.piece('k_best_c'),
-                        skm.piece('lr_c')])
-
-params = skm.default_params(model_base_class)
-best_model_base_class = skm.random_search(model_base_class, X_base_class, y_base_class, params, cv=cv_time, n_iter=50)
-_, _ = skm.val_scores(best_model_base_class, X_base_class, y_base_class, cv_time)
-
-imp_cols = X_base_class.columns[best_model_base_class['k_best_c'].get_support()]
-skm.print_coef(best_model_base_class, imp_cols)
-
-
-#%%
-
-df_m = df.copy()
-df_m = df_m.sort_values(by='week')
-
-skm = SciKitModel(df_m)
-X_all_reg, y_all_reg = skm.Xy_split(y_metric='y_act', 
-                                    to_drop=list(df.dtypes[df.dtypes=='object'].index))
-cv_time = skm.cv_time_splits('week', X_all_reg, 3)
-
-model_all_reg = skm.model_pipe([skm.piece('std_scale'), 
-                        skm.piece('select_perc'),
-                        skm.feature_union([
-                                           skm.piece('agglomeration'), 
-                                           skm.piece('k_best'), 
-                                           skm.piece('pca')
-                                           ]),
-                        skm.piece('k_best', label_rename='k_best2'),
-                        skm.piece('ridge')])
-
-params = skm.default_params(model_all_reg)
-
-best_model_all_reg = skm.random_search(model_all_reg, X_all_reg, y_all_reg, params, cv=cv_time, n_iter=50)
-_, _ = skm.val_scores(best_model_all_reg, X_all_reg, y_all_reg, cv_time)
-
-try:
-    imp_cols = X_all_reg.columns[best_model_all_reg['k_best2'].get_support()]
-    skm.print_coef(best_model_all_reg, imp_cols)
-except:
-    pass
-
-#%%
-
-df_m = df.copy().sort_values(by='week')
-df_m['y_act'] = np.where((df_m.y_act > np.percentile(df.y_act, 90)), 1, 0)                 
-
-skm = SciKitModel(df_m, 'class')
-X_all_class, y_all_class = skm.Xy_split(y_metric='y_act', 
-                                        to_drop=list(df.dtypes[df.dtypes=='object'].index))
-cv_time = skm.cv_time_splits('week', X_all_class, 3)
-
-model_all_class = skm.model_pipe([skm.piece('std_scale'), 
-                        skm.piece('select_perc_c'),
-                        skm.feature_union([
-                                           skm.piece('agglomeration'), 
-                                           skm.piece('k_best_c')
-                                           ]),
-                        skm.piece('k_best_c', label_rename='k_best2'),
-                        skm.piece('lr_c')])
-
-params = skm.default_params(model_all_class)
-
-best_model_all_class = skm.random_search(model_all_class, X_all_class, y_all_class, params, cv=cv_time, n_iter=50)
-_, _ = skm.val_scores(best_model_all_class, X_all_class, y_all_class, cv_time)
-
-try:
-    imp_cols = X_all_class.columns[best_model_all_class['k_best2'].get_support()]
-    skm.print_coef(best_model_all_class, imp_cols)
-except:
-    pass
-
-# %%

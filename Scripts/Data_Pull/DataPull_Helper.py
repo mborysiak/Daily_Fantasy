@@ -102,6 +102,58 @@ def copy_db(db_name, root_path, week=set_week, year=set_year):
     db2.close()
 
 
+team_map = {
+    'ARI': 'ARI',
+    'ARZ': 'ARI',
+    'ATL': 'ATL',
+    'BAL': 'BAL',
+    'BLT': 'BAL',
+    'BUF': 'BUF',
+    'CAR': 'CAR',
+    'CHI': 'CHI',
+    'CIN': 'CIN',
+    'CLE': 'CLE',
+    'CLV': 'CLE',
+    'DAL': 'DAL',
+    'DEN': 'DEN',
+    'DET': 'DET',
+    'GB': 'GB',
+    'GNB': 'GB',
+    'HOU': 'HOU',
+    'HST': 'HOU',
+    'IND': 'IND',
+    'JAC': 'JAC',
+    'JAX': 'JAC',
+    'KC': 'KC',
+    'KAN': 'KC',
+    'LA': 'LAR',
+    'LAR': 'LAR',
+    'LAC': 'LAC',
+    'MIA': 'MIA',
+    'MIN': 'MIN',
+    'NE': 'NE',
+    'NWE': 'NE',
+    'NO': 'NO',
+    'NOR': 'NO',
+    'NYG': 'NYG',
+    'NYJ': 'NYJ',
+    'OAK': 'LVR',
+    'LVR': 'LVR',
+    'LV': 'LVR',
+    'PHI': 'PHI',
+    'PIT': 'PIT',
+    'SEA': 'SEA',
+    'SF': 'SF',
+    'SFO': 'SF',
+    'TB': 'TB',
+    'TAM': 'TB',
+    'TEN': 'TEN',
+    'WAS': 'WAS',
+    'WFT': 'WAS'
+}
+
+
+
 # +
 pfr_fp_map = {'ARI': 'ARI',
              'ATL': 'ATL',

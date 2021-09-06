@@ -44,7 +44,7 @@ set_week = 1
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 5
+val_week_min = 6
 
 met = 'y_act'
 
@@ -102,7 +102,7 @@ print('Shape of Train Set', df_train.shape)
 
 # set up the target variable to be categorical based on Xth percentile
 df_class = df.copy()
-cut_perc = np.percentile(df_class.y_act, 90)
+cut_perc = np.percentile(df_class.y_act, 95)
 df_class['y_act'] = np.where(df_class.y_act >= cut_perc, 1, 0)
 
 # set up the training and prediction datasets for the classification 

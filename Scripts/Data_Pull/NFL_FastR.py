@@ -5,6 +5,7 @@ import numpy as np
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
 import ff.data_clean as dc
+from DataPull_Helper import *
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -15,6 +16,8 @@ DATA_PATH = f'{root_path}/Data/OtherData/NFL_FastR/'
 FNAME = 'raw_data_2000_2020.parquet'
 
 pd.set_option('display.max_columns', 999)
+
+cur_season = 2021
 
 #---------------
 # Functions
@@ -241,13 +244,11 @@ te = pd.merge(te, all_stats, on=['player', 'season', 'team'])
 #%%
 
 for df, t_name in zip([wr, rb, te], ['WR_Stats', 'RB_Stats', 'TE_Stats']):
-    season_week = df[['season', 'week']].drop_duplicates()
     df.player = df.player.apply(dc.name_clean)
-    # for _, sw in season_week.iterrows():
-    #  seas = sw[0]
-    #  wk = sw[1]
-    #  dm.delete_from_db('FastR', t_name, f"season={seas} AND week={wk}")
-    dm.write_to_db(df, 'FastR', t_name, if_exist='replace')
+    df.team = df.team.map(team_map)
+
+    dm.delete_from_db('FastR', t_name, f"season={cur_season}")
+    dm.write_to_db(df, 'FastR', t_name, if_exist='append')
 
 
 #%%
@@ -311,13 +312,11 @@ qb = calc_fp(qb, fp_cols)
 qb = qb.sort_values(by=['player', 'season', 'week']).reset_index(drop=True)
 qb['y_act'] = qb.groupby('player')['fantasy_pts'].shift(-1)
 
+#%%
 qb.player = qb.player.apply(dc.name_clean)
-season_week = qb[['season', 'week']].drop_duplicates()
-# for _, sw in season_week.iterrows():
-#     seas = sw[0]
-#     wk = sw[1]
-    # dm.delete_from_db('FastR', 'QB_Stats', f"season={seas} AND week={wk}")
-dm.write_to_db(qb, 'FastR', 'QB_Stats', if_exist='replace')
+qb.team = qb.team.map(team_map)
+dm.delete_from_db('FastR', 'QB_Stats', f"season={cur_season}")
+dm.write_to_db(qb, 'FastR', 'QB_Stats', if_exist='append')
 
 #%%
 
@@ -369,13 +368,13 @@ team = team.sort_values(by=['season', 'team', 'week'])
 
 team = team[team.team!=''].reset_index(drop=True)
 
-season_week = team[['season', 'week']].drop_duplicates()
-# for _, sw in season_week.iterrows():
-#     seas = sw[0]
-#     wk = sw[1]
-#     dm.delete_from_db('FastR', 'Team_Stats', f"season={seas} AND week={wk}")
-dm.write_to_db(team, 'FastR', 'Team_Stats', if_exist='replace')
+#%%
 
+team['team'] = team['team'].map(team_map)
+dm.delete_from_db('FastR', 'Team_Stats', f"season={cur_season}")
+dm.write_to_db(team, 'FastR', 'Team_Stats', if_exist='append')
+
+#%%
 #--------------
 # Coach Stats
 #--------------
@@ -394,12 +393,9 @@ coaches = pd.merge(coaches, coach_mean, on=gcols)
 coaches = coaches.sort_values(by=['season', 'coach', 'week'])
 coaches = coaches.rename(columns={'posteam': 'team'})
 
-season_week = coaches[['season', 'week']].drop_duplicates()
-# for _, sw in season_week.iterrows():
-#     seas = sw[0]
-#     wk = sw[1]
-#     dm.delete_from_db('FastR', 'Coach_Stats', f"season={seas} AND week={wk}")
-dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='replace')
+coaches.team = coaches.team.map(team_map)
+dm.delete_from_db('FastR', 'Coach_Stats', f"season={cur_season}")
+dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='append')
 
 #%%
 
@@ -480,12 +476,9 @@ def_scoring = pd.merge(def_scoring, defense_mean, on=['defteam', 'season', 'week
 def_scoring = def_scoring.sort_values(by=['defteam', 'season', 'week']).reset_index(drop=True)
 def_scoring['y_act'] = def_scoring.groupby('defteam')['fantasy_pts'].shift(-1)
 
-# season_week = def_scoring[['season', 'week']].drop_duplicates()
-# for _, sw in season_week.iterrows():
-#     seas = sw[0]
-#     wk = sw[1]
-#     dm.delete_from_db('FastR', 'Defense_Stats', f"season={seas} AND week={wk}")
-# dm.write_to_db(def_scoring, 'FastR', 'Defense_Stats', if_exist='append')
+def_scoring.defteam = def_scoring.defteam.map(team_map)
+dm.delete_from_db('FastR', 'Defense_Stats', f"season={cur_season}")
+dm.write_to_db(def_scoring, 'FastR', 'Defense_Stats', if_exist='append')
 
 
 #%%
