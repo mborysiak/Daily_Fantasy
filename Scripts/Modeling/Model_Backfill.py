@@ -41,7 +41,7 @@ set_week = 1
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 6
+val_week_min = 9
 
 met = 'y_act'
 
@@ -49,7 +49,7 @@ met = 'y_act'
 # Run Baseline Model
 #-----------------
 
-set_pos = 'WR'
+set_pos = 'TE'
 
 # df = dm.read(f'''SELECT playerName player, week, a.year,
 #                              fantasyPoints,  fantasyPointsRank,
@@ -81,6 +81,20 @@ df = dm.read(f'''SELECT player, week, year, fp_rank, projected_points,
                     WHERE pos='{set_pos}' 
                     ''', 'Pre_PlayerData')
 df.player = df.player.apply(dc.name_clean)
+
+experts = dm.read(f'''SELECT player, week, year,
+                             fantasyPoints,  fantasyPointsRank,
+                             `Proj Pts` ProjPts,
+                             expertConsensus
+                    FROM PFF_Proj_Ranks a
+                    JOIN (SELECT *
+                            FROM PFF_Expert_Ranks )
+                            USING (player, week, year)
+                    WHERE a.position='{set_pos.lower()}' 
+                          AND expertConsensus IS NOT NULL
+                    ''', 'Pre_PlayerData')
+
+df = pd.merge(df, experts, on=['player','week','year'])
 
 # fill in null expert rankings
 df = df.sort_values(by=['player', 'year', 'week'])
@@ -126,7 +140,13 @@ skm = SciKitModel(df_train)
 X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
 predictions = pd.DataFrame()
-for m in ['lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']:
+models = ['lasso',
+        # 'rf',
+         # 'lgbm', 
+        #  'xgb', 
+          'bridge'
+          ]
+for m in models:
     
     print('\n============\n')
     print(m)
@@ -139,60 +159,22 @@ for m in ['lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']:
     params['k_best__k'] = range(1, X.shape[1])
 
     # run the model with parameter search
-    best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, 
-                                                   params, n_iter=25,
-                                                   col_split='game_date',
-                                                   time_split=cv_time_input)
-
-    # append the results and the best models for each fold
-    pred[f'{met}_{m}'] = oof_data['combined']; actual[f'{met}_{m}'] = oof_data['actual']
-    scores[f'{met}_{m}'] = r2; models[f'{met}_{m}'] = best_models
-
-#%%
-output = output_start[['player', 'dk_salary']].copy()
-
-df_predict_stack = df_predict.copy()
-df_predict_stack = df_predict_stack
-skm_stack = SciKitModel(df_train)
-
-# get the X and y values for stack trainin for the current metric
-X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
-
-best_models = []
-final_models = ['enet', 'lgbm', 'xgb', 'rf']#, 'bridge']
-for final_m in final_models:
-
-    print(f'\n{final_m}')
-    # get the model pipe for stacking setup and train it on meta features
-    stack_pipe = skm_stack.model_pipe([
-                           skm_stack.piece('std_scale'), 
-                            skm_stack.piece('k_best'), 
-                            skm_stack.piece(final_m)
-                        ])
+    cv_time = skm.cv_time_splits('game_date', X, cv_time_input)
+    best_model = skm.random_search(pipe, X, y, params, cv=cv_time)
+    preds = skm.cv_predict_time(best_model, X, y, cv_time)
     
-    best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, X_stack, 
-                                                              y_stack, n_iter=25, 
-                                                              run_adp=False, print_coef=True)
-    best_models.append(best_model)
+    from sklearn.metrics import r2_score
+    print(round(r2_score(y[cv_time[0][1][0]:], preds), 3))
 
+    pipe.fit(X, y)
+    predictions = pd.concat([predictions, pd.Series(np.round(pipe.predict(df_predict[X.columns]),1), name=m)], axis=1)
 
-# get the final output:
-X_fp, y_fp = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
+(_, std) = pipe.predict(df_predict[X.columns], return_std=True)
 
-# create the full stack pipe with meta estimators followed by stacked model
-X_predict = pd.DataFrame()
-for k, v in models.items():
-    m = skm_stack.ensemble_pipe(v)
-    m.fit(X_fp, y_fp)
-    X_predict = pd.concat([X_predict, pd.Series(m.predict(df_predict[X_fp.columns]), name=k)], axis=1)
-
-predictions = pd.DataFrame()
-for bm, fm in zip(best_models, final_models):
-    prediction = pd.Series(np.round(bm.predict(X_predict), 2), name=f'pred_{met}_{fm}')
-    predictions = pd.concat([predictions, prediction], axis=1)
-
+output = output_start[['player', 'dk_salary']].copy()
+output = pd.concat([output, predictions], axis=1)
 output['pred_fp_per_game'] = predictions.mean(axis=1)
-output['std_dev'] = None
+output['std_dev'] = std
 output = output.sort_values(by='dk_salary', ascending=False)
 output['dk_rank'] = range(len(output))
 output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
@@ -202,22 +184,35 @@ output.iloc[:50]
 
 vers = 'v1'
 
-output['pos'] = set_pos
-output['version'] = vers
-output['model_type'] = 'backfill'
-output['max_score'] = 0.99*np.percentile(df_train.y_act.max(), 99)
-output['week'] = set_week
-output['year'] = set_year
 
-std_dev = dm.read(f'''SELECT AVG(std_dev)
+full = dm.read(f'''SELECT player, pred_fp_per_game full_pred, std_dev full_std
                       FROM Model_Predictions
                       WHERE week={set_week}
                             AND year={set_year}
                             AND model_type='full_model'
                             AND version='{vers}'
                             AND pos = '{set_pos}'
-                        ''', 'Simulation').values[0][0]
-output['std_dev'] = std_dev
+                            AND dk_rank < 5
+                        ''', 'Simulation')
+
+full = pd.merge(full, output, on=['player'])
+full['ratio'] = (full.full_pred / full.pred_fp_per_game) 
+full['std_ratio'] = (full.full_std / full.std_dev) 
+
+ratio = full.ratio.mean()
+std_ratio = full.std_ratio.mean()
+output['pred_fp_per_game'] = output['pred_fp_per_game'] * ratio
+output['std_dev'] = output['std_dev'] * std_ratio
+output = output.drop(models, axis=1)
+output.iloc[:50]
+
+#%%
+output['pos'] = set_pos
+output['version'] = vers
+output['model_type'] = 'backfill'
+output['max_score'] = 1.05*np.percentile(df_train.y_act.max(), 99)
+output['week'] = set_week
+output['year'] = set_year
 
 del_str = f'''pos='{set_pos}'
               AND version='{vers}' 
@@ -239,8 +234,7 @@ preds = dm.read(f'''SELECT *
 preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game': 'mean', 
                                                               'std_dev': 'mean',
                                                               'max_score': 'mean'})
-
-preds.sort_values(by='pred_fp_per_game', ascending=False)
+preds.sort_values(by='pred_fp_per_game', ascending=False).iloc[:50]
 # %%
 
 def create_distribution(player_data, num_samples=1000):

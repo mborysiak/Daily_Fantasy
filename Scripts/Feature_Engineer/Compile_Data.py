@@ -121,6 +121,10 @@ def fix_bye_week(df):
 #%%
 
 
+#---------------
+# Pre Game Data
+#---------------
+
 def fantasy_pros(pos):
 
     fp = dm.read(f'''SELECT * 
@@ -170,140 +174,49 @@ def add_pfr_matchup(df):
 
 def get_experts(df, pos):
 
-    experts = dm.read(f'''SELECT playerName player, week, a.year, a.defTeam,
-                                fantasyPoints,  fantasyPointsRank,
-                                `Proj Pts` ProjPts,
-                                rushAtt, rushYds, rushTd, recvTargets,
-                                recvReceptions, recvYds, recvTd,
-                                fumbles, fumblesLost, twoPt, returnYds, returnTd,
-                                expertConsensus, expertNathanJahnke,
-                                expertKevinCole, expertAndrewErickson,
-                                expertIanHartitz,
-                                dk_salary, fd_salary, yahoo_salary
-                        FROM PFF_Proj_Ranks a
-                        JOIN (SELECT Name playerName, *
-                                FROM PFF_Expert_Ranks 
-                                WHERE Position='{pos}' )
-                                USING (playerName, week, year)
-                        WHERE a.position='{pos.lower()}' 
-                        ''', 'Pre_PlayerData')
+    experts = dm.read(f'''SELECT player, week, year, a.defTeam,
+                            fantasyPoints,  fantasyPointsRank,
+                            `Proj Pts` ProjPts,
+                            passComp, passAtt, passYds, passTd, passInt, passSacked,
+                            rushAtt, rushYds, rushTd, recvTargets,
+                            recvReceptions, recvYds, recvTd,
+                            fumbles, fumblesLost, twoPt, returnYds, returnTd,
+                            expertConsensus, expertNathanJahnke,
+                            expertKevinCole, expertAndrewErickson,
+                            expertIanHartitz,expertDwainMcFarland, 
+                            expertBenBrown, expertJaradEvans
+                    FROM PFF_Proj_Ranks a
+                    JOIN (SELECT *
+                            FROM PFF_Expert_Ranks 
+                            WHERE Position='{pos}' )
+                            USING (player, week, year)
+                    ''', 'Pre_PlayerData')
+
+    
 
     experts = name_cleanup(experts)
-    expert_cols = ['ProjPts', 'rushAtt', 'rushYds', 'rushTd', 'recvTargets',
-                'recvReceptions', 'recvYds', 'recvTd',
-                'expertConsensus', 'expertNathanJahnke',
-                'expertKevinCole', 'expertAndrewErickson',
-                'expertIanHartitz', 'dk_salary', 'fd_salary', 'yahoo_salary']
-    experts = add_rolling_stats(experts, ['player'], expert_cols)
+    expert_cols = ['ProjPts','passYds', 'passTd', 'rushAtt', 
+                    'rushYds', 'rushTd', 'recvTargets',
+                    'recvReceptions', 'recvYds', 'recvTd',
+                    'expertConsensus', 'expertNathanJahnke',
+                    'expertKevinCole', 'expertAndrewErickson',
+                    'expertIanHartitz', 'expertDwainMcFarland', 
+                    'expertBenBrown', 'expertJaradEvans']
 
     # fill in null expert rankings
     experts = forward_fill(experts)
-    
-    for c in ['dk_salary', 'fd_salary', 'yahoo_salary', 
-              'ProjPts', 'rushAtt', 'rushYds', 'rushTd', 'recvTargets',
-              'recvReceptions', 'recvYds', 'recvTd']:
+
+    experts = add_rolling_stats(experts, ['player'], expert_cols)
+
+    for c in ['ProjPts', 'rushAtt', 'rushYds', 'rushTd', 'recvTargets',
+                'recvReceptions', 'recvYds', 'recvTd']:
         experts[c] = experts[c].fillna(experts[c].min())
-    
+
     experts = experts.fillna(experts.max())
 
     df = pd.merge(df, experts, on=['player', 'week', 'year'])
 
     return df
-
-
-def get_player_data(df, pos, YEAR):
-
-    player_data = dm.read(f'''SELECT * 
-                FROM {pos}_Stats 
-                WHERE season >= {YEAR-4}
-                    AND week != 17''', 'FastR')
-    if pos=='QB':
-        rcols_player = [c for c in player_data.columns if 'pass_' in c]
-    else:
-        rcols_player = [c for c in player_data.columns if 'rec_' in c]
-
-    rcols_player.extend([c for c in player_data.columns if 'rush_' in c])
-    rcols_player = list(set(rcols_player))
-
-    player_data = player_data.rename(columns={'season': 'year'})
-    player_data = add_rolling_stats(player_data, gcols=['player'], rcols=rcols_player)
-
-    y_acts = player_data.y_act
-    all_cols = [c for c in player_data.columns if c != 'y_act']
-    player_data = forward_fill(player_data, all_cols)
-    player_data = pd.concat([player_data, y_acts], axis=1)
-
-    player_data = player_data[player_data.year >= 2020].reset_index(drop=True)
-    player_data = name_cleanup(player_data)
-
-    player_data['week'] = player_data['week'] + 1
-    player_data = switch_seasons(player_data)
-    player_data = fix_bye_week(player_data)
-
-    df = pd.merge(df, player_data, on=['player', 'week', 'year'])
-    df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
-
-    return df
-
-
-def get_team_stats(df, YEAR):
-    
-    team_stats = dm.read(f'''SELECT * FROM Team_Stats WHERE season>={YEAR-4}''', 'FastR')
-
-    rcols_team = ['team_rush_touchdown_sum', 'team_tackled_for_loss_sum',
-            'team_pass_touchdown_sum', 'team_qb_hit_sum', 'team_sack_sum',
-            'team_qb_epa_sum', 'team_cp_sum', 'team_cpoe_sum', 'team_air_epa_sum',
-            'team_air_wpa_sum', 'team_air_yards_sum', 'team_comp_air_epa_sum',
-            'team_comp_air_wpa_sum', 'team_comp_yac_epa_sum',
-            'team_comp_yac_wpa_sum', 'team_complete_pass_sum',
-            'team_incomplete_pass_sum', 'team_interception_sum', 'team_ep_sum',
-            'team_epa_sum', 'team_touchdown_sum', 'team_fumble_sum',
-            'team_fumble_lost_sum', 'team_xyac_epa_sum',
-    ]
-
-    team_stats = team_stats.rename(columns={'season': 'year'})
-    team_stats = add_rolling_stats(team_stats, ['team'], rcols_team)
-
-    team_stats = team_stats[team_stats.year >= 2020].reset_index(drop=True)
-    team_stats['week'] = team_stats.week + 1
-    team_stats = switch_seasons(team_stats)
-    team_stats = fix_bye_week(team_stats)
-
-    df = pd.merge(df, team_stats, on=['team', 'week', 'year'])
-
-    return df
-
-
-def get_coach_stats(df, YEAR):
-
-    coach_stats = dm.read(f'''SELECT * FROM Coach_Stats WHERE season>={YEAR-4}''', 'FastR')
-
-    rcols_coach = ['coach_shotgun_sum',
-        'coach_no_huddle_sum', 'coach_rush_attempt_sum', 'coach_first_down_sum',
-        'coach_first_down_rush_sum', 'coach_fourth_down_converted_sum',
-        'coach_fourth_down_failed_sum', 'coach_third_down_converted_sum',
-        'coach_goal_to_go_sum', 'coach_run_middle_sum', 'coach_run_outside_sum',
-        'coach_rush_touchdown_sum', 'coach_tackled_for_loss_sum',
-        'coach_ep_sum', 'coach_epa_sum', 'coach_touchdown_sum',
-        'coach_fumble_sum', 'coach_yardline_100_sum',
-        'coach_yards_after_catch_sum', 'coach_yards_gained_sum',
-        'coach_ydstogo_sum', 'coach_td_prob_mean', 'coach_wp_mean',
-        'coach_wpa_mean', 'coach_ep_mean', 'coach_epa_mean',
-        'coach_yardline_100_mean', 'coach_yards_gained_mean',
-        'coach_ydstogo_mean']
-
-    coach_stats = coach_stats.rename(columns={'season': 'year'})
-    coach_stats = add_rolling_stats(coach_stats, ['coach'], rcols_coach)
-
-    coach_stats = coach_stats[coach_stats.year >= 2020].reset_index(drop=True)
-    coach_stats['week'] = coach_stats.week + 1
-    coach_stats = switch_seasons(coach_stats)
-    coach_stats = fix_bye_week(coach_stats)
-
-    df = pd.merge(df, coach_stats, on=['team', 'week', 'year'])
-
-    return df
-
 
 
 def cb_matchups(df):
@@ -407,6 +320,105 @@ def add_team_matchups():
     return dst
 
 
+#---------------
+# Post Game Data
+#---------------
+
+def get_player_data(df, pos, YEAR):
+
+    player_data = dm.read(f'''SELECT * 
+                FROM {pos}_Stats 
+                WHERE season >= {YEAR-4}
+                    AND week != 17''', 'FastR')
+    if pos=='QB':
+        rcols_player = [c for c in player_data.columns if 'pass_' in c]
+    else:
+        rcols_player = [c for c in player_data.columns if 'rec_' in c]
+
+    rcols_player.extend([c for c in player_data.columns if 'rush_' in c])
+    rcols_player = list(set(rcols_player))
+
+    player_data = player_data.rename(columns={'season': 'year'})
+    player_data = add_rolling_stats(player_data, gcols=['player'], rcols=rcols_player)
+
+    y_acts = player_data.y_act
+    all_cols = [c for c in player_data.columns if c != 'y_act']
+    player_data = forward_fill(player_data, all_cols)
+    player_data = pd.concat([player_data, y_acts], axis=1)
+
+    player_data = player_data[player_data.year >= 2020].reset_index(drop=True)
+    player_data = name_cleanup(player_data)
+
+    player_data['week'] = player_data['week'] + 1
+    player_data = switch_seasons(player_data)
+    player_data = fix_bye_week(player_data)
+
+    df = pd.merge(df, player_data, on=['player', 'week', 'year'])
+    df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
+
+    return df
+
+
+def get_team_stats(df, YEAR):
+    
+    team_stats = dm.read(f'''SELECT * FROM Team_Stats WHERE season>={YEAR-4}''', 'FastR')
+
+    rcols_team = ['team_rush_touchdown_sum', 'team_tackled_for_loss_sum',
+            'team_pass_touchdown_sum', 'team_qb_hit_sum', 'team_sack_sum',
+            'team_qb_epa_sum', 'team_cp_sum', 'team_cpoe_sum', 'team_air_epa_sum',
+            'team_air_wpa_sum', 'team_air_yards_sum', 'team_comp_air_epa_sum',
+            'team_comp_air_wpa_sum', 'team_comp_yac_epa_sum',
+            'team_comp_yac_wpa_sum', 'team_complete_pass_sum',
+            'team_incomplete_pass_sum', 'team_interception_sum', 'team_ep_sum',
+            'team_epa_sum', 'team_touchdown_sum', 'team_fumble_sum',
+            'team_fumble_lost_sum', 'team_xyac_epa_sum',
+    ]
+
+    team_stats = team_stats.rename(columns={'season': 'year'})
+    team_stats = add_rolling_stats(team_stats, ['team'], rcols_team)
+
+    team_stats = team_stats[team_stats.year >= 2020].reset_index(drop=True)
+    team_stats['week'] = team_stats.week + 1
+    team_stats = switch_seasons(team_stats)
+    team_stats = fix_bye_week(team_stats)
+
+    df = pd.merge(df, team_stats, on=['team', 'week', 'year'])
+
+    return df
+
+
+def get_coach_stats(df, YEAR):
+
+    coach_stats = dm.read(f'''SELECT * FROM Coach_Stats WHERE season>={YEAR-4}''', 'FastR')
+
+    rcols_coach = ['coach_shotgun_sum',
+        'coach_no_huddle_sum', 'coach_rush_attempt_sum', 'coach_first_down_sum',
+        'coach_first_down_rush_sum', 'coach_fourth_down_converted_sum',
+        'coach_fourth_down_failed_sum', 'coach_third_down_converted_sum',
+        'coach_goal_to_go_sum', 'coach_run_middle_sum', 'coach_run_outside_sum',
+        'coach_rush_touchdown_sum', 'coach_tackled_for_loss_sum',
+        'coach_ep_sum', 'coach_epa_sum', 'coach_touchdown_sum',
+        'coach_fumble_sum', 'coach_yardline_100_sum',
+        'coach_yards_after_catch_sum', 'coach_yards_gained_sum',
+        'coach_ydstogo_sum', 'coach_td_prob_mean', 'coach_wp_mean',
+        'coach_wpa_mean', 'coach_ep_mean', 'coach_epa_mean',
+        'coach_yardline_100_mean', 'coach_yards_gained_mean',
+        'coach_ydstogo_mean']
+
+    coach_stats = coach_stats.rename(columns={'season': 'year'})
+    coach_stats = add_rolling_stats(coach_stats, ['coach'], rcols_coach)
+
+    coach_stats = coach_stats[coach_stats.year >= 2020].reset_index(drop=True)
+    coach_stats['week'] = coach_stats.week + 1
+    coach_stats = switch_seasons(coach_stats)
+    coach_stats = fix_bye_week(coach_stats)
+
+    df = pd.merge(df, coach_stats, on=['team', 'week', 'year'])
+
+    return df
+
+
+
 def get_max_qb(df):
     qb_cols = ['team', 'week', 'year',
                 # 'fantasyPoints',  'fantasyPointsRank', 'ProjPts',
@@ -492,14 +504,16 @@ def add_rz_stats_qb(df):
 
 pos = 'QB'
 
+# pre-game data
 df = fantasy_pros(pos); print(df.shape[0])
 df = get_salaries(df, pos); print(df.shape[0])
+df = get_experts(df, pos); print(df.shape[0])
+df = add_pfr_matchup(df); print(df.shape[0])
 
-# df = get_experts(df, pos); print(df.shape[0])
+# post-game data
 df = get_player_data(df, pos, YEAR); print(df.shape[0])
 df = get_team_stats(df, YEAR); print(df.shape[0])
 df = get_coach_stats(df, YEAR); print(df.shape[0])
-df = add_pfr_matchup(df); print(df.shape[0])
 # df = add_rz_stats_qb(df); print(df.shape[0])
 
 # dst = add_team_matchups().drop('offTeam', axis=1)
@@ -519,10 +533,10 @@ for pos in ['RB', 'WR', 'TE']:
     df = fantasy_pros(pos); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
     df = add_pfr_matchup(df); print(df.shape[0])
-    # df = get_experts(df, pos); print(df.shape[0])
-#     if pos == 'WR': df = cb_matchups(df); print(df.shape[0])
-#     if pos == 'TE': df = te_matchups(df); print(df.shape[0])
-#     dst = add_team_matchups().drop('offTeam', axis=1)
+    df = get_experts(df, pos); print(df.shape[0])
+    if pos == 'WR': df = cb_matchups(df); print(df.shape[0])
+    if pos == 'TE': df = te_matchups(df); print(df.shape[0])
+    # dst = add_team_matchups().drop('offTeam', axis=1)
 #     df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
     # post-game data
@@ -542,33 +556,40 @@ for pos in ['RB', 'WR', 'TE']:
 
 #%%
 
-defense = dm.read(f'''SELECT * 
+defense = fantasy_pros('DST').rename(columns={'player': 'team'})
+
+d_stats = dm.read(f'''SELECT * 
                       FROM Defense_Stats 
                       WHERE season>={YEAR-4}
                             AND week != 17''', 'FastR').rename(columns={'defteam': 'defTeam'})
-defense['week'] = defense['week'] + 1
+d_stats = d_stats.rename(columns={'season': 'year', 'defTeam': 'team' })
 
-rcols_def = [c for c in defense.columns if c not in ('defTeam', 'week', 'season', 'y_act')]
-defense = defense.rename(columns={'season': 'year'})
-defense = add_rolling_stats(defense, gcols=['defTeam'], rcols=rcols_def)
+d_stats['week'] = d_stats['week'] + 1
+d_stats = switch_seasons(d_stats)
+d_stats = fix_bye_week(d_stats)
+
+rcols_def = [c for c in d_stats.columns if c not in ('team', 'week', 'season', 'y_act')]
+d_stats = add_rolling_stats(d_stats, gcols=['team'], rcols=rcols_def)
+d_stats = d_stats[d_stats.year >= 2020].reset_index(drop=True)
+
+defense = pd.merge(defense, d_stats, on=['team', 'week', 'year'], how='inner')
 defense = defense.dropna()
-defense = defense[defense.year >= 2020].reset_index(drop=True)
 
-dst = add_team_matchups()
-defense = pd.merge(defense, dst, on=['defTeam', 'year', 'week'])
+dst = add_team_matchups().rename(columns={'defTeam': 'team'})
+dst = add_rolling_stats(dst, gcols=['team'], rcols=[c for c in dst.columns if 'expert' in c])
+
+defense = pd.merge(defense, dst, on=['team', 'year', 'week'])
+
 team_qb = team_qb.rename(columns={'team': 'offTeam'})
-
 defense = pd.merge(defense, team_qb, on=['offTeam', 'week', 'year'], how='left')
 defense = defense.sort_values(by=['offTeam', 'year', 'week'])
 defense = defense.groupby('offTeam', as_index=False).fillna(method='ffill')
 defense = defense.fillna(defense.mean())
 
-defense = defense.sort_values(by=['defTeam', 'year', 'week'])
-defense = defense.copy().rename(columns={'defTeam': 'player'})
+defense = defense.sort_values(by=['team', 'year', 'week'])
+defense = defense.copy().rename(columns={'team': 'player'})
 defense.columns = [c.replace('_dst', '') for c in defense.columns]
-
-# defense = fantasy_pros(defense, 'DST')
 
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 
-df = defense.copy()
+# %%

@@ -6,6 +6,7 @@ import requests
 import datetime as dt
 import sqlite3
 from DataPull_Helper import *
+pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
@@ -286,27 +287,38 @@ for t, d in zip(['RB', 'WR', 'TE', 'QB'], [rb, wr, te, qb]):
 
 def pff_matchups(label):
     
-    os.replace(f"/Users/Mark/Downloads/{label}_matchup_chart.csv", 
-           f'{root_path}/CSVs/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
-
-    df = pd.read_csv(f'{root_path}/CSVs/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
-    df.offTeam = df.offTeam.map(team_map)
-    df.defTeam = df.defTeam.map(team_map)
+    try:
+        os.replace(f"/Users/mborysia/Downloads/{label}_matchup_chart.csv", 
+            f'{root_path}/CSVs/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
+    except:
+        df = pd.read_csv(f'{root_path}/CSVs/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
+    
+    if label != 'te':
+        df.offTeam = df.offTeam.map(team_map)
+        df.defTeam = df.defTeam.map(team_map)
 
     df['week'] = set_week
     df['year'] = set_year
     
     return df
 
-
+# wrangle the WR-CB matchups into a table
 wr_cb = pff_matchups('wr_cb')
-te = pff_matchups('te')
-ol_dl = pff_matchups('oline_dline')
-
+wr_cb = wr_cb.rename(columns={'advantage': 'adv'}).drop('expectedSnaps', axis=1)
+wr_cb = wr_cb[wr_cb.defPlayer=='All Defenders'].reset_index(drop=True)
 wr_cb.offPlayer = wr_cb.offPlayer.apply(dc.name_clean)
+
+# wrangle the TE matchups into a table
+te = pff_matchups('te')
 te.offPlayer = te.offPlayer.apply(dc.name_clean)
+te['offTeam'] = None
+te['defTeam'] = None
+te['defPosition'] = None
+te_cols = dm.read("SELECT * FROM PFF_TE_Matchups", "Pre_PlayerData").columns
+te = te[te_cols]
 
-
+# wrangle the oline-dline matchups into a table
+ol_dl = pff_matchups('oline_dline')
 
 for t, d in zip(['WR_CB', 'TE', 'Oline_Dline'], [wr_cb, te, ol_dl]):
 
@@ -318,11 +330,14 @@ for t, d in zip(['WR_CB', 'TE', 'Oline_Dline'], [wr_cb, te, ol_dl]):
 
 def pff_proj(label_pre, label_post, folder, rep=True):
     
-    if rep:
+    try:
         os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
                    f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+        df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
 
-    df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+    except:
+        df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+
     df = df.rename(columns={'teamName': 'offTeam', 'games': 'defTeam'})
     df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
     df.offTeam = df.offTeam.map(team_map)
@@ -337,13 +352,16 @@ def pff_proj(label_pre, label_post, folder, rep=True):
     return players, teams
 
 
-def pff_rank(label_pre, label_post, folder, rep=True):
+def pff_rank(label_pre, label_post, folder):
     
-    if rep:
+    try:
         os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
                    f'{root_path}CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+        df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
 
-    df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+    except:
+        df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+
     df = df.rename(columns={'Team': 'offTeam', 'Opponent': 'defTeam'})
     df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
     df.offTeam = df.offTeam.map(team_map)
@@ -358,36 +376,32 @@ def pff_rank(label_pre, label_post, folder, rep=True):
     return players, teams
 
 
-proj_pl, proj_tm = pff_proj('projections', 'projections', 'pff_proj', True)
-rank1_pl, rank1_tm = pff_rank('week-rankings-export', 'expert_ranks', 'pff_rank', True)
-rank2_pl, rank2_tm = pff_rank('week-rankings-export-2', 'vor_ranks', 'pff_rank', True)
+proj_pl, proj_tm = pff_proj('projections', 'projections', 'pff_proj')
+rank1_pl, rank1_tm = pff_rank('week-rankings-export', 'expert_ranks', 'pff_rank')
+# rank2_pl, rank2_tm = pff_rank('week-rankings-export-2', 'vor_ranks', 'pff_rank', True)
 
-#%%
-# +
 rank1_pl = rank1_pl.drop(f'w{set_week}', axis=1)
 rank1_tm = rank1_tm.drop(f'w{set_week}', axis=1)
 
-rank2_pl = rank2_pl.drop(f'w{set_week}', axis=1)
-rank2_tm = rank2_tm.drop(f'w{set_week}', axis=1)
+# rank2_pl = rank2_pl.drop(f'w{set_week}', axis=1)
+# rank2_tm = rank2_tm.drop(f'w{set_week}', axis=1)
 
-proj_pl.Name = proj_pl.Name.apply(dc.name_clean)
+proj_pl.playerName = proj_pl.playerName.apply(dc.name_clean)
 rank1_pl.Name = rank1_pl.Name.apply(dc.name_clean)
-rank2_pl.Name = rank2_pl.Name.apply(dc.name_clean)
+# rank2_pl.Name = rank2_pl.Name.apply(dc.name_clean)
 
-# +
-for t, d in zip(['Proj', 'Expert', 'VOR'], [proj_pl, rank1_pl, rank2_pl]):
-    append_to_db(d, db_name='Pre_PlayerData.sqlite3', table_name=f'PFF_{t}_Ranks', 
-                 if_exist='append', set_week=set_week, set_year=set_year)
-    
-for t, d in zip(['Proj', 'Expert', 'VOR'], [proj_tm, rank1_tm, rank2_tm]):
-    append_to_db(d, db_name='Pre_TeamData.sqlite3', table_name=f'PFF_{t}_Ranks', 
-                 if_exist='append', set_week=set_week, set_year=set_year)
-# -
-# # Copy Database Backup for Week
+proj_pl = proj_pl.rename(columns={'playerName': 'player'})
+rank1_pl = rank1_pl.rename(columns={'Name': 'player'})
 
-copy_db('Pre_PlayerData', root_path, set_week, set_year)
-copy_db('Pre_TeamData', root_path, set_week, set_year)
+#%%
 
+tables = ['Proj', 'Proj', 'Expert', 'Expert']#, 'VOR']
+dfs = [proj_pl, proj_tm, rank1_pl, rank1_tm]#, rank2_pl]
+dbs = ['Pre_PlayerData', 'Pre_TeamData', 'Pre_PlayerData', 'Pre_TeamData']
+
+for t, d, db in zip(tables, dfs, dbs):
+    dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}")
+    dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
 
 #%%
 
@@ -416,11 +430,11 @@ salary = salary.assign(year=set_year).assign(league=set_week)
 ids = salary_id[['player', 'player_id']]
 ids = ids.assign(year=set_year).assign(league=set_week)
 
-# dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
-# dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
+dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
+dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
 
-# dm.delete_from_db('Simulation', 'Player_Ids', f"league={set_week} AND year={set_year}")
-# dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
+dm.delete_from_db('Simulation', 'Player_Ids', f"league={set_week} AND year={set_year}")
+dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
 
 # update the salaries with actual DK salaries from the website
 other_sal = dm.read(f'''SELECT * 

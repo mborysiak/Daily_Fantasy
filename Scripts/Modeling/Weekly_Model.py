@@ -35,8 +35,8 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 np.random.seed(1234)
 
-# set to position to analyze: 'RB', 'WR', 'QB', or 'TE'
-set_pos = 'TE'
+# set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
+set_pos = 'Defense'
 
 # set year to analyze
 set_year = 2021
@@ -44,7 +44,7 @@ set_week = 1
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 6
+val_week_min = 9
 
 met = 'y_act'
 
@@ -102,7 +102,10 @@ print('Shape of Train Set', df_train.shape)
 
 # set up the target variable to be categorical based on Xth percentile
 df_class = df.copy()
-cut_perc = np.percentile(df_class.y_act, 95)
+if set_pos == 'Defense':
+    cut_perc = np.percentile(df_class.y_act, 80)
+else:
+    cut_perc = np.percentile(df_class.y_act, 95)
 df_class['y_act'] = np.where(df_class.y_act >= cut_perc, 1, 0)
 
 # set up the training and prediction datasets for the classification 
@@ -188,7 +191,6 @@ save_pickle(pred, model_output_path, 'reg_pred')
 save_pickle(actual, model_output_path, 'reg_actual')
 save_pickle(models, model_output_path, 'reg_models')
 save_pickle(scores, model_output_path, 'reg_scores')
-# %%
 
 # print the value-counts
 print('Training Value Counts:', df_train_class.y_act.value_counts()[0], '|', df_train_class.y_act.value_counts()[1])
@@ -236,9 +238,7 @@ save_pickle(actual, model_output_path, 'class_actual')
 save_pickle(models, model_output_path, 'class_models')
 save_pickle(scores, model_output_path, 'class_scores')
 
-
 #%%
-
 #------------
 # Make the Class Predictions
 #------------
@@ -281,7 +281,12 @@ X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
 X_stack = pd.concat([X_stack, X_stack_class], axis=1)
 
 best_models = []
-final_models = ['enet', 'lgbm', 'xgb', 'rf', 'bridge']
+final_models = ['gbm', 
+                'lgbm', 
+                'xgb', 
+                'rf', 
+                'bridge'
+                ]
 for final_m in final_models:
 
     print(f'\n{final_m}')
