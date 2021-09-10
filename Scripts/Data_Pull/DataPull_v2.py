@@ -145,8 +145,8 @@ for _, row in df.iterrows():
 
 data = pd.DataFrame(good_data)   
 
-data.away_team = data.away_team.map(team_map)
-data.home_team = data.home_team.map(team_map)
+data.away_team = data.away_team.map(name_map).map(team_map)
+data.home_team = data.home_team.map(name_map).map(team_map)
 data['year'] = set_year
 data['week'] = set_week
 
@@ -170,9 +170,6 @@ dm.write_to_db(data, 'Pre_TeamData', 'Gambling_Lines', if_exist='append')
 
 #%%
 # # Weather
-
-set_week = 16
-set_year = 2020
 
 cities = dm.read('''SELECT * FROM City_LatLon''', 'Pre_TeamData')
 city_data  = dm.read(f'''SELECT a.home_team, b.latitude, b.longitude, a.gametime_unix
@@ -419,8 +416,8 @@ except:
 salary_id = salary_id.rename(columns={'Name': 'player', 'Salary': 'salary', 'ID': 'player_id'})
 salary_id.player = salary_id.player.apply(dc.name_clean)
 
-defense = salary_id.loc[salary_id.Position=='DST', ['TeamAbbrev', 'salary', 'player_id']]
-salary_id = salary_id.loc[salary_id.Position != 'DST']
+defense = salary_id.loc[salary_id['Roster Position']=='DST', ['TeamAbbrev', 'salary', 'player_id']]
+salary_id = salary_id.loc[salary_id['Roster Position'] != 'DST']
 salary_id = salary_id[['player', 'salary', 'player_id']]
 salary_id = pd.concat([salary_id, defense.rename(columns={'TeamAbbrev': 'player'})], axis=0)
 
@@ -447,12 +444,11 @@ dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year
 dm.write_to_db(other_sal, 'Pre_PlayerData', 'Daily_Salaries', 'append')
 
 #%%
-# # #============
+# # #=========================
 # # #    Post Game       
-# # #============
+# # #=========================
 
-# # Pro Football Reference
-
+# Pro Football Reference
 rush_rz = pd.read_html(f'https://www.pro-football-reference.com/years/{set_year}/redzone-rushing.htm')
 rec_rz = pd.read_html(f'https://www.pro-football-reference.com/years/{set_year}/redzone-receiving.htm')
 pass_rz = pd.read_html(f'https://www.pro-football-reference.com/years/{set_year}/redzone-passing.htm')

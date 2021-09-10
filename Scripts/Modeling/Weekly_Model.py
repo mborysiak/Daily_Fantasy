@@ -103,7 +103,7 @@ print('Shape of Train Set', df_train.shape)
 # set up the target variable to be categorical based on Xth percentile
 df_class = df.copy()
 if set_pos == 'Defense':
-    cut_perc = np.percentile(df_class.y_act, 80)
+    cut_perc = np.percentile(df_class.y_act, 75)
 else:
     cut_perc = np.percentile(df_class.y_act, 95)
 df_class['y_act'] = np.where(df_class.y_act >= cut_perc, 1, 0)
@@ -192,51 +192,67 @@ save_pickle(actual, model_output_path, 'reg_actual')
 save_pickle(models, model_output_path, 'reg_models')
 save_pickle(scores, model_output_path, 'reg_scores')
 
-# print the value-counts
-print('Training Value Counts:', df_train_class.y_act.value_counts()[0], '|', df_train_class.y_act.value_counts()[1])
 
 # set up blank dictionaries for all metrics
 pred = {}; actual = {}; scores = {}; models = {}
 
-skm_class = SciKitModel(df_train_class, model_obj='class')
-X_class, y_class = skm_class.Xy_split(y_metric='y_act', 
-                                      to_drop=drop_cols)
+for cut in [75, 95]:
 
-# loop through each potential model
-model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
-for m in model_list:
+    print(f"\n--------------\nPercentile {cut}\n--------------\n")
 
-    print('\n============\n')
-    print(m)
+    # set up the target variable to be categorical based on Xth percentile
+    df_class = df.copy()
+    cut_perc = np.percentile(df_class.y_act, cut)
+    df_class['y_act'] = np.where(df_class.y_act >= cut_perc, 1, 0)
 
-     # set up the model pipe and get the default search parameters
-    pipe = skm_class.model_pipe([skm_class.piece('std_scale'), 
-                                 skm_class.piece('select_perc_c'),
-                                 skm_class.feature_union([
-                                                      skm_class.piece('agglomeration'), 
-                                                      skm_class.piece('k_best_c'), 
-                                                      ]),
-                                 skm_class.piece('k_best_c'),
-                                 skm_class.piece(m)])
-    
-    params = skm_class.default_params(pipe, 'rand')
-    params['select_perc_c__percentile'] = range(5, 30, 5)
-    if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
+    # set up the training and prediction datasets for the classification 
+    df_train_class = df_class[df_class.game_date < train_time_split].reset_index(drop=True)
+    df_predict_class = df_class[df_class.game_date == train_time_split].reset_index(drop=True)
 
-    # run the model with parameter search
-    best_models, score_results, oof_data = skm_class.time_series_cv(pipe, X_class, y_class, 
-                                                                    params, n_iter=25,
-                                                                    col_split='game_date',
-                                                                    time_split=cv_time_input)
+    skm_class = SciKitModel(df_train_class, model_obj='class')
+    X_class, y_class = skm_class.Xy_split(y_metric='y_act', 
+                                        to_drop=drop_cols)
 
-    # append the results and the best models for each fold
-    pred[f'class_{m}'] = oof_data['combined']; actual[f'class_{m}'] = oof_data['actual']
-    scores[f'class_{m}'] = score_results; models[f'class_{m}'] = best_models
+    # print the value-counts
+    print('Training Value Counts:', y_class.value_counts()[0], '|', y_class.value_counts()[1])
 
-save_pickle(pred, model_output_path, 'class_pred')
-save_pickle(actual, model_output_path, 'class_actual')
-save_pickle(models, model_output_path, 'class_models')
-save_pickle(scores, model_output_path, 'class_scores')
+    # loop through each potential model
+    model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
+    for m in model_list:
+
+        print('\n============\n')
+        print(m)
+
+        # set up the model pipe and get the default search parameters
+        pipe = skm_class.model_pipe([skm_class.piece('std_scale'), 
+                                    skm_class.piece('select_perc_c'),
+                                    skm_class.feature_union([
+                                                        skm_class.piece('agglomeration'), 
+                                                        skm_class.piece('k_best_c'), 
+                                                        ]),
+                                    skm_class.piece('k_best_c'),
+                                    skm_class.piece(m)])
+        
+        params = skm_class.default_params(pipe, 'rand')
+        params['select_perc_c__percentile'] = range(5, 30, 5)
+        if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
+
+        # run the model with parameter search
+        best_models, score_results, oof_data = skm_class.time_series_cv(pipe, X_class, y_class, 
+                                                                        params, n_iter=25,
+                                                                        col_split='game_date',
+                                                                        time_split=cv_time_input)
+
+        # append the results and the best models for each fold
+        pred[f'class_{m}_{cut}'] = oof_data['combined']
+        actual[f'class_{m}_{cut}'] = oof_data['actual']
+        scores[f'class_{m}_{cut}'] = score_results 
+        models[f'class_{m}_{cut}'] = best_models
+
+    save_pickle(pred, model_output_path, 'class_pred')
+    save_pickle(actual, model_output_path, 'class_actual')
+    save_pickle(models, model_output_path, 'class_models')
+    save_pickle(scores, model_output_path, 'class_scores')
 
 #%%
 #------------
@@ -281,8 +297,10 @@ X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
 X_stack = pd.concat([X_stack, X_stack_class], axis=1)
 
 best_models = []
-final_models = ['gbm', 
-                'lgbm', 
+final_models = ['ridge',
+                'lasso',
+            #    'gbm', 
+            #    'lgbm', 
                 'xgb', 
                 'rf', 
                 'bridge'
@@ -297,8 +315,8 @@ for final_m in final_models:
                             skm_stack.piece(final_m)
                         ])
     best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, X_stack, 
-                                                        y_stack, n_iter=50, 
-                                                        run_adp=True, print_coef=True)
+                                                              y_stack, n_iter=25, 
+                                                              run_adp=True, print_coef=True)
     best_models.append(best_model)
 
 
@@ -315,12 +333,13 @@ for k, v in models.items():
 X_predict = pd.concat([X_predict, X_predict_class], axis=1)
 
 predictions = pd.DataFrame()
-for bm, fm in zip(best_models, final_m):
+for bm, fm in zip(best_models, final_models):
     prediction = pd.Series(np.round(bm.predict(X_predict), 2), name=f'pred_{met}_{fm}')
     predictions = pd.concat([predictions, prediction], axis=1)
 
 
 output['pred_fp_per_game'] = predictions.mean(axis=1)
+
 std_models = predictions.std(axis=1)
 std_bridge = bm.predict(X_predict, return_std=True)[1]
 output['std_dev'] = std_bridge
@@ -328,6 +347,11 @@ output['std_dev'] = std_bridge
 output = output.sort_values(by='dk_salary', ascending=False)
 output['dk_rank'] = range(len(output))
 output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
+
+mean_act = df_train.loc[df_train.fp_rank.isin(df_predict.fp_rank.sort_values().unique()[:12]), 'y_act'].mean() 
+ratio = mean_act / output.pred_fp_per_game[:12].mean()
+
+output['pred_fp_per_game'] = output['pred_fp_per_game'] * ratio
 output.iloc[:50]
 
 #%%

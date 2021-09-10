@@ -422,7 +422,7 @@ def update_output(n_clicks, n_clicks_csv, drafted_data, drafted_columns):
 
     if my_team_select.shape[0] > 0:
         selected = list(my_team_select.Player)
-        my_player_pts = sim.data[(sim.data.index.isin(selected)) & (sim.data.pos!='eFLEX')].drop('pos', axis=1)
+        my_player_pts = sim.data[(sim.data.index.isin(selected)) & (sim.data.pos!='eFLEX')].drop(['pos', 'salary'], axis=1)
         
         my_player_mean = my_player_pts.copy().mean(axis=1).reset_index()
         my_player_mean.columns = ['Player', 'Points Added']
@@ -491,3 +491,5 @@ def update_output(n_clicks, n_clicks_csv, drafted_data, drafted_columns):
 #%%
 if __name__ == '__main__':
     app.run_server(debug=True)
+
+# %%

@@ -495,9 +495,25 @@ def add_rz_stats_qb(df):
     return df
 
 
-# def add_gambling_lines(df):
+def add_gambling_lines(df):
 
-#     lines = 
+    lines = dm.read("SELECT * FROM Gambling_Lines", 'Pre_TeamData')
+
+    away = lines[['away_team', 'away_line', 'away_moneyline', 'over_under', 'week', 'year']]
+    home = lines[['home_team', 'home_line', 'home_moneyline', 'over_under', 'week', 'year']]
+    home = home.assign(is_home=1)
+    away = away.assign(is_home=1)
+    away.columns = ['team', 'line', 'moneyline', 'over_under', 'week', 'year', 'is_home']
+    home.columns = ['team', 'line', 'moneyline', 'over_under', 'week', 'year', 'is_home']
+
+    lines = pd.concat([home, away], axis=0)
+    lines = dc.convert_to_float(lines)
+    lines['implied_points_for'] = (lines.over_under / 2) + (lines.line / 2) 
+    lines['implied_points_against'] = (lines.over_under / 2) - (lines.line / 2) 
+
+    df = pd.merge(df, lines, on=['team', 'week', 'year'], how='left')
+
+    return df
 
 
 #%%
@@ -509,6 +525,9 @@ df = fantasy_pros(pos); print(df.shape[0])
 df = get_salaries(df, pos); print(df.shape[0])
 df = get_experts(df, pos); print(df.shape[0])
 df = add_pfr_matchup(df); print(df.shape[0])
+df = add_gambling_lines(df); print(df.shape[0])
+dst = add_team_matchups().drop('offTeam', axis=1)
+df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
 # post-game data
 df = get_player_data(df, pos, YEAR); print(df.shape[0])
@@ -516,9 +535,7 @@ df = get_team_stats(df, YEAR); print(df.shape[0])
 df = get_coach_stats(df, YEAR); print(df.shape[0])
 # df = add_rz_stats_qb(df); print(df.shape[0])
 
-# dst = add_team_matchups().drop('offTeam', axis=1)
-# df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
-
+# fill in the missing data and drop anything remaining
 df = forward_fill(df)
 df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
@@ -526,7 +543,6 @@ df = df.dropna().reset_index(drop=True); print(df.shape[0])
 dm.write_to_db(df, 'Model_Features', 'QB_Data', if_exist='replace')
 
 team_qb = get_max_qb(df)
-
 for pos in ['RB', 'WR', 'TE']:
     
     # pre-game data
@@ -536,17 +552,18 @@ for pos in ['RB', 'WR', 'TE']:
     df = get_experts(df, pos); print(df.shape[0])
     if pos == 'WR': df = cb_matchups(df); print(df.shape[0])
     if pos == 'TE': df = te_matchups(df); print(df.shape[0])
-    # dst = add_team_matchups().drop('offTeam', axis=1)
-#     df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
+    df = add_gambling_lines(df); print(df.shape[0])
+    dst = add_team_matchups().drop('offTeam', axis=1)
+    df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
     # post-game data
     df = get_player_data(df, pos, YEAR); print(df.shape[0])
     df = get_team_stats(df, YEAR); print(df.shape[0])
     df = get_coach_stats(df, YEAR); print(df.shape[0])
     df = add_rz_stats(df); print(df.shape[0])
-
     df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
 
+    # fill in missing data and drop any remaining rows
     df = forward_fill(df)
     df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
@@ -586,9 +603,13 @@ defense = defense.sort_values(by=['offTeam', 'year', 'week'])
 defense = defense.groupby('offTeam', as_index=False).fillna(method='ffill')
 defense = defense.fillna(defense.mean())
 
+defense = add_gambling_lines(defense); print(defense.shape[0])
+
 defense = defense.sort_values(by=['team', 'year', 'week'])
+
 defense = defense.copy().rename(columns={'team': 'player'})
 defense.columns = [c.replace('_dst', '') for c in defense.columns]
+
 
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 

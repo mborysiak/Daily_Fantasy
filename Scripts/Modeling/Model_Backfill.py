@@ -50,26 +50,7 @@ met = 'y_act'
 #-----------------
 
 set_pos = 'TE'
-
-# df = dm.read(f'''SELECT playerName player, week, a.year,
-#                              fantasyPoints,  fantasyPointsRank,
-#                              `Proj Pts` ProjPts,
-#                              expertConsensus, expertNathanJahnke,
-#                              expertKevinCole, expertAndrewErickson,
-#                              expertIanHartitz,
-#                              dk_salary, fd_salary, yahoo_salary
-#                     FROM PFF_Proj_Ranks a
-#                     JOIN (SELECT Name playerName, *
-#                             FROM PFF_Expert_Ranks 
-#                             WHERE Position='{set_pos}' )
-#                             USING (playerName, week, year)
-#                     LEFT JOIN (SELECT player playerName, week, year, 
-#                                         dk_salary, fd_salary, yahoo_salary
-#                                 FROM Daily_Salaries
-#                                 WHERE Position='{set_pos}'
-#                             ) USING (playerName, week, year)
-#                     WHERE a.position='{set_pos.lower()}' 
-#                     ''', 'Pre_PlayerData')
+vers = 'v1'
 
 df = dm.read(f'''SELECT player, week, year, fp_rank, projected_points,
                         dk_salary, fd_salary, yahoo_salary
@@ -141,10 +122,10 @@ X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
 predictions = pd.DataFrame()
 models = ['lasso',
-        # 'rf',
-         # 'lgbm', 
-        #  'xgb', 
-          'bridge'
+       'ridge',
+      #   'lgbm', 
+      #   'xgb', 
+         'bridge'
           ]
 for m in models:
     
@@ -160,7 +141,7 @@ for m in models:
 
     # run the model with parameter search
     cv_time = skm.cv_time_splits('game_date', X, cv_time_input)
-    best_model = skm.random_search(pipe, X, y, params, cv=cv_time)
+    best_model = skm.random_search(pipe, X, y, params, cv=cv_time, n_iter=25)
     preds = skm.cv_predict_time(best_model, X, y, cv_time)
     
     from sklearn.metrics import r2_score
@@ -169,44 +150,33 @@ for m in models:
     pipe.fit(X, y)
     predictions = pd.concat([predictions, pd.Series(np.round(pipe.predict(df_predict[X.columns]),1), name=m)], axis=1)
 
-(_, std) = pipe.predict(df_predict[X.columns], return_std=True)
 
 output = output_start[['player', 'dk_salary']].copy()
 output = pd.concat([output, predictions], axis=1)
+
 output['pred_fp_per_game'] = predictions.mean(axis=1)
-output['std_dev'] = std
+output['std_dev'] = dm.read(f'''SELECT avg(std_dev) 
+                                FROM Model_Predictions 
+                                WHERE pos='{set_pos}'
+                                    AND version='{vers}'
+                                    AND week={set_week}
+                                    AND year={set_year}
+                                    AND model_type != 'backfill' ''', 'Simulation').values[0][0]
+
 output = output.sort_values(by='dk_salary', ascending=False)
 output['dk_rank'] = range(len(output))
 output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
-output.iloc[:50]
 
-#%%
-
-vers = 'v1'
-
-
-full = dm.read(f'''SELECT player, pred_fp_per_game full_pred, std_dev full_std
-                      FROM Model_Predictions
-                      WHERE week={set_week}
-                            AND year={set_year}
-                            AND model_type='full_model'
-                            AND version='{vers}'
-                            AND pos = '{set_pos}'
-                            AND dk_rank < 5
-                        ''', 'Simulation')
-
-full = pd.merge(full, output, on=['player'])
-full['ratio'] = (full.full_pred / full.pred_fp_per_game) 
-full['std_ratio'] = (full.full_std / full.std_dev) 
-
-ratio = full.ratio.mean()
-std_ratio = full.std_ratio.mean()
+mean_act = df_train.loc[df_train.fp_rank.isin(df_predict.fp_rank.sort_values().unique()[:12]), 'y_act'].mean() 
+ratio = mean_act / output.pred_fp_per_game[:12].mean()
 output['pred_fp_per_game'] = output['pred_fp_per_game'] * ratio
-output['std_dev'] = output['std_dev'] * std_ratio
-output = output.drop(models, axis=1)
+
 output.iloc[:50]
 
 #%%
+
+output = output.drop(models, axis=1)
+
 output['pos'] = set_pos
 output['version'] = vers
 output['model_type'] = 'backfill'
@@ -238,12 +208,11 @@ preds.sort_values(by='pred_fp_per_game', ascending=False).iloc[:50]
 # %%
 
 def create_distribution(player_data, num_samples=1000):
-    
-    print(player_data.player)
+
     import scipy.stats as stats
 
     # create truncated distribution
-    lower, upper = np.percentile(df_train.y_act, 0.5),  np.percentile(df_train.y_act, 99.5) * 1.1
+    lower, upper = 0,  player_data.max_score
     lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
     upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
     trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
@@ -264,7 +233,44 @@ def create_sim_output(output, num_samples=1000):
     
     return sim_out
 
-output = create_sim_output(preds)
+
+def plot_distribution(estimates):
+
+    from IPython.core.pylabtools import figsize
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    print('\n', estimates.player)
+    estimates = estimates.iloc[2:]
+
+    # Plot all the estimates
+    plt.figure(figsize(8, 8))
+    sns.distplot(estimates, hist = True, kde = True, bins = 19,
+                 hist_kws = {'edgecolor': 'k', 'color': 'darkblue'},
+                 kde_kws = {'linewidth' : 4},
+                 label = 'Estimated Dist.')
+
+    # Plot the mean estimate
+    plt.vlines(x = estimates.mean(), ymin = 0, ymax = 0.01, 
+                linestyles = '--', colors = 'red',
+                label = 'Pred Estimate',
+                linewidth = 2.5)
+
+    plt.legend(loc = 1)
+    plt.title('Density Plot for Test Observation');
+    plt.xlabel('Grade'); plt.ylabel('Density');
+
+    # Prediction information
+    sum_stats = (np.percentile(estimates, 5), np.percentile(estimates, 95), estimates.std() /estimates.mean())
+    print('Average Estimate = %0.4f' % estimates.mean())
+    print('5%% Estimate = %0.4f    95%% Estimate = %0.4f    Std Error = %0.4f' % sum_stats) 
+
+output = create_sim_output(preds).reset_index(drop=True)
+
+#%%
+
+idx = output[output.player=="Dalvin Cook"].index[0]
+plot_distribution(output.iloc[idx])
 # %%
 
 dm.write_to_db(output, 'Simulation', f'week{set_week}_year{set_year}', 'replace')
