@@ -13,7 +13,7 @@ dm = DataManage(db_path)
 
 # set the filepath and name for NFL Fast R data saved from R script
 DATA_PATH = f'{root_path}/Data/OtherData/NFL_FastR/'
-FNAME = 'raw_data_2000_2020.parquet'
+FNAME = 'raw_data_2021.parquet'
 
 pd.set_option('display.max_columns', 999)
 
@@ -493,10 +493,16 @@ def get_wind(w):
     except: wind = 7
     return wind
 
-defense['snow'] = defense.weather.apply(lambda w: 1 if 'snow' in w.lower() else 0)
-defense['rain'] = defense.weather.apply(lambda w: 1 if 'rain' in w.lower() else 0)
-defense['temperature'] = defense.weather.apply(get_temp)
-defense['wind_speed'] = defense.weather.apply(get_wind)
+# read in the data, filter to real players, and sort by value
+data = pq.read_table(f'{DATA_PATH}/{FNAME}').to_pandas()
+data = data[~(data.weather.isnull()) & (data.season_type=='REG')].reset_index(drop=True)
+data = data[['season', 'home_team', 'away_team', 'week', 'weather']].drop_duplicates()
+
+data['snow'] = data.weather.apply(lambda w: 1 if 'snow' in w.lower() else 0)
+data['rain'] = data.weather.apply(lambda w: 1 if 'rain' in w.lower() else 0)
+data['temperature'] = data.weather.apply(get_temp)
+data['wind_speed'] = data.weather.apply(get_wind)
+
 
 
 

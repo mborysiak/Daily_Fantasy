@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 1
+WEEK = 2
 
 #%%
 import pandas as pd 
@@ -359,6 +359,32 @@ def get_player_data(df, pos, YEAR):
     return df
 
 
+def add_player_comparison(df, cols):
+    
+    to_agg = {c: [np.mean, np.max, np.min] for c in cols}
+    team_stats = df.groupby(['team', 'week', 'year']).agg(to_agg)
+
+    diff_df = df[['player', 'team', 'week', 'year']].drop_duplicates()
+    for c in cols:
+        tmp_df = team_stats[c].reset_index()
+        tmp_df = pd.merge(tmp_df, df[['player', 'team', 'week', 'year', c]], on=['team', 'week', 'year'])
+
+        for a in ['mean', 'amin', 'amax']:
+            tmp_df[f'{c}_{a}_diff'] = tmp_df[c] - tmp_df[a]
+    
+        tmp_df = tmp_df[['player', 'team', 'week', 'year', f'{c}_mean_diff', f'{c}_amax_diff', f'{c}_amin_diff']]
+        diff_df = pd.merge(diff_df, tmp_df, on=['player', 'team', 'week', 'year'])
+        
+    diff_df = diff_df.drop_duplicates()
+    team_stats.columns = [f'{c[0]}_{c[1]}' for c in team_stats.columns]
+    team_stats = team_stats.reset_index().drop_duplicates()
+
+    df = pd.merge(df, team_stats, on=['team', 'week', 'year'])
+    df = pd.merge(df, diff_df, on=['player', 'team', 'week', 'year'])
+
+    return df
+
+
 def get_team_stats(df, YEAR):
     
     team_stats = dm.read(f'''SELECT * FROM Team_Stats WHERE season>={YEAR-4}''', 'FastR')
@@ -418,14 +444,12 @@ def get_coach_stats(df, YEAR):
     return df
 
 
-
 def get_max_qb(df):
+
     qb_cols = ['team', 'week', 'year',
-                # 'fantasyPoints',  'fantasyPointsRank', 'ProjPts',
-                # 'expertConsensus', 'expertNathanJahnke',
-                # 'expertKevinCole', 'expertAndrewErickson','expertIanHartitz',
-                'fp_rank', 'projected_points',
-                'dk_salary', 'fd_salary', 'yahoo_salary', 'pass_qb_epa_sum',
+                'fantasyPoints',  'fantasyPointsRank', 'ProjPts',
+                'expertConsensus', 'dk_salary', 'fd_salary', 
+                'yahoo_salary', 'pass_qb_epa_sum',
                 'pass_air_yards_sum', 'pass_xyac_epa_sum',  'rush_first_down_sum',
                 'rush_rush_touchdown_sum', 'rush_epa_mean', 'rush_epa_sum']
 
@@ -525,7 +549,6 @@ df = fantasy_pros(pos); print(df.shape[0])
 df = get_salaries(df, pos); print(df.shape[0])
 df = get_experts(df, pos); print(df.shape[0])
 df = add_pfr_matchup(df); print(df.shape[0])
-df = add_gambling_lines(df); print(df.shape[0])
 dst = add_team_matchups().drop('offTeam', axis=1)
 df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
@@ -552,7 +575,6 @@ for pos in ['RB', 'WR', 'TE']:
     df = get_experts(df, pos); print(df.shape[0])
     if pos == 'WR': df = cb_matchups(df); print(df.shape[0])
     if pos == 'TE': df = te_matchups(df); print(df.shape[0])
-    df = add_gambling_lines(df); print(df.shape[0])
     dst = add_team_matchups().drop('offTeam', axis=1)
     df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
@@ -562,6 +584,11 @@ for pos in ['RB', 'WR', 'TE']:
     df = get_coach_stats(df, YEAR); print(df.shape[0])
     df = add_rz_stats(df); print(df.shape[0])
     df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
+
+    # pre game data reliant on team information
+    df = add_gambling_lines(df); print(df.shape[0])
+    compare_cols = ['fp_rank', 'dk_salary', 'expertConsensus', 'projected_points', 'fantasyPoints', 'ProjPts']
+    df = add_player_comparison(df, compare_cols); print(df.shape[0])
 
     # fill in missing data and drop any remaining rows
     df = forward_fill(df)
@@ -577,7 +604,7 @@ defense = fantasy_pros('DST').rename(columns={'player': 'team'})
 
 d_stats = dm.read(f'''SELECT * 
                       FROM Defense_Stats 
-                      WHERE season>={YEAR-4}
+                      WHERE season>={YEAR-2}
                             AND week != 17''', 'FastR').rename(columns={'defteam': 'defTeam'})
 d_stats = d_stats.rename(columns={'season': 'year', 'defTeam': 'team' })
 
@@ -590,7 +617,9 @@ d_stats = add_rolling_stats(d_stats, gcols=['team'], rcols=rcols_def)
 d_stats = d_stats[d_stats.year >= 2020].reset_index(drop=True)
 
 defense = pd.merge(defense, d_stats, on=['team', 'week', 'year'], how='inner')
-defense = defense.dropna()
+
+all_cols = [c for c in defense.columns if c != 'y_act']
+defense = defense.dropna(subset=all_cols)
 
 dst = add_team_matchups().rename(columns={'defTeam': 'team'})
 dst = add_rolling_stats(dst, gcols=['team'], rcols=[c for c in dst.columns if 'expert' in c])
@@ -610,7 +639,56 @@ defense = defense.sort_values(by=['team', 'year', 'week'])
 defense = defense.copy().rename(columns={'team': 'player'})
 defense.columns = [c.replace('_dst', '') for c in defense.columns]
 
-
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
+
+# %%
+
+df = dm.read(f'''SELECT player, a.team, a.pos, week, year, fp_rank, projected_points,
+                        dk_salary, fd_salary, yahoo_salary
+                 FROM FantasyPros a
+                 JOIN (SELECT *
+                       FROM Daily_Salaries) USING (player, week, year)
+                    ''', 'Pre_PlayerData')
+df.player = df.player.apply(dc.name_clean)
+
+experts = dm.read(f'''SELECT player, week, year, a.position pos,
+                             fantasyPoints,  fantasyPointsRank,
+                             `Proj Pts` ProjPts,
+                             expertConsensus
+                    FROM PFF_Proj_Ranks a
+                    JOIN (SELECT *
+                            FROM PFF_Expert_Ranks )
+                            USING (player, week, year)
+                          WHERE expertConsensus IS NOT NULL
+                    ''', 'Pre_PlayerData')
+experts.pos = experts.pos.apply(lambda x: x.upper())
+
+df = pd.merge(df, experts, on=['player','pos', 'week','year'])
+df = forward_fill(df)
+
+
+y_acts = pd.DataFrame()
+for pos in ['QB', 'RB', 'WR', 'TE']:
+    y_acts = pd.concat([y_acts, 
+                        dm.read(f'''SELECT player, team, week, season year, y_act 
+                                    FROM {pos}_Stats
+                                    WHERE year >= 2020''', 'FastR').dropna(subset=['y_act'])
+    ], axis=0)
+
+y_acts.week = y_acts.week + 1
+y_acts = switch_seasons(y_acts)
+y_acts = fix_bye_week(y_acts)
+
+df = pd.merge(df, y_acts, on=['player', 'team', 'week', 'year'], how='left')
+df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
+
+compare_cols = ['fp_rank', 'projected_points',
+            'dk_salary', 'fd_salary', 'yahoo_salary', 'fantasyPoints',
+            'fantasyPointsRank', 'ProjPts', 'expertConsensus']
+output = pd.DataFrame()
+for cur_pos in ['QB', 'RB', 'WR', 'TE']:
+    output = pd.concat([output, add_player_comparison(df[df.pos==cur_pos], compare_cols)], axis=0)
+
+dm.write_to_db(df, 'Model_Features', 'Backfill', 'replace')
 
 # %%

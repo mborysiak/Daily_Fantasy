@@ -40,7 +40,7 @@ set_pos = 'Defense'
 
 # set year to analyze
 set_year = 2021
-set_week = 1
+set_week = 2
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -90,7 +90,7 @@ df['game_date'] = df[['year', 'week']].apply(year_week_to_date, axis=1)
 cv_time_input = int(dt.datetime(val_year_min, 1, val_week_min).strftime('%Y%m%d'))
 train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
 
-# get the train / predict dataframes and output dataframe
+# # get the train / predict dataframes and output dataframe
 df_train = df[df.game_date < train_time_split].reset_index(drop=True)
 df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 df_predict = df[df.game_date == train_time_split].reset_index(drop=True)
@@ -192,18 +192,21 @@ save_pickle(actual, model_output_path, 'reg_actual')
 save_pickle(models, model_output_path, 'reg_models')
 save_pickle(scores, model_output_path, 'reg_scores')
 
-
+#%%
 # set up blank dictionaries for all metrics
 pred = {}; actual = {}; scores = {}; models = {}
 
-for cut in [75, 95]:
+for cut in [25, 75, 95]:
 
     print(f"\n--------------\nPercentile {cut}\n--------------\n")
 
     # set up the target variable to be categorical based on Xth percentile
     df_class = df.copy()
     cut_perc = np.percentile(df_class.y_act, cut)
-    df_class['y_act'] = np.where(df_class.y_act >= cut_perc, 1, 0)
+    if cut > 25:
+        df_class['y_act'] = np.where(df_class.y_act >= cut_perc, 1, 0)
+    else:
+        df_class['y_act'] = np.where(df_class.y_act < cut_perc, 1, 0)
 
     # set up the training and prediction datasets for the classification 
     df_train_class = df_class[df_class.game_date < train_time_split].reset_index(drop=True)
@@ -299,8 +302,8 @@ X_stack = pd.concat([X_stack, X_stack_class], axis=1)
 best_models = []
 final_models = ['ridge',
                 'lasso',
-            #    'gbm', 
-            #    'lgbm', 
+                'gbm', 
+                'lgbm', 
                 'xgb', 
                 'rf', 
                 'bridge'

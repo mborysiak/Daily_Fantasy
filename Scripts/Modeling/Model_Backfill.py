@@ -37,7 +37,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 1
+set_week = 2
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -52,37 +52,8 @@ met = 'y_act'
 set_pos = 'TE'
 vers = 'v1'
 
-df = dm.read(f'''SELECT player, week, year, fp_rank, projected_points,
-                        dk_salary, fd_salary, yahoo_salary
-                 FROM FantasyPros
-                 JOIN (SELECT *
-                       FROM Daily_Salaries
-                       WHERE Position='{set_pos}'
-                            ) USING (player, week, year)
-                    WHERE pos='{set_pos}' 
-                    ''', 'Pre_PlayerData')
-df.player = df.player.apply(dc.name_clean)
 
-experts = dm.read(f'''SELECT player, week, year,
-                             fantasyPoints,  fantasyPointsRank,
-                             `Proj Pts` ProjPts,
-                             expertConsensus
-                    FROM PFF_Proj_Ranks a
-                    JOIN (SELECT *
-                            FROM PFF_Expert_Ranks )
-                            USING (player, week, year)
-                    WHERE a.position='{set_pos.lower()}' 
-                          AND expertConsensus IS NOT NULL
-                    ''', 'Pre_PlayerData')
-
-df = pd.merge(df, experts, on=['player','week','year'])
-
-# fill in null expert rankings
-df = df.sort_values(by=['player', 'year', 'week'])
-df = df.groupby(['player'], as_index=False).apply(lambda group: group.ffill())
-for c in ['dk_salary', 'fd_salary', 'yahoo_salary']:
-    df[c] = df[c].fillna(df[c].min())
-df = df.fillna(df.max())
+df = dm.read(f'''SELECT * FROM Backfill WHERE pos='{set_pos}' ''', 'Model_Features')
 
 drop_cols = list(df.dtypes[df.dtypes=='object'].index)
 print(drop_cols)
@@ -99,12 +70,12 @@ train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
 df_train = df[df.game_date < train_time_split].reset_index(drop=True)
 df_predict = df[df.game_date == train_time_split].reset_index(drop=True)
 
-y_acts = dm.read(f'''SELECT player, week, season year, y_act 
-                     FROM {set_pos}_Stats''', 'FastR').dropna(subset=['y_act'])
-y_acts.player = y_acts.player.apply(dc.name_clean)
-df_train = pd.merge(df_train, y_acts, on=['player', 'week', 'year'])
-
-to_fill = dm.read(f'''SELECT DISTINCT player FROM week{set_week}_year{set_year}''', 'Simulation')
+# to_fill = dm.read(f'''SELECT DISTINCT player FROM Model_Predictions 
+#                                 WHERE pos='{set_pos}'
+#                                     AND version='{vers}'
+#                                     AND week={set_week}
+#                                     AND year={set_year}
+#                                     AND model_type != 'backfill' ''', 'Simulation')
 # df_predict = df_predict[~df_predict.player.isin(list(to_fill.player))].reset_index(drop=True)
 output_start = df_predict[['player', 'dk_salary']].copy()
 
@@ -123,8 +94,8 @@ X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 predictions = pd.DataFrame()
 models = ['lasso',
        'ridge',
-      #   'lgbm', 
-      #   'xgb', 
+        # 'lgbm', 
+        # 'xgb', 
          'bridge'
           ]
 for m in models:
@@ -195,6 +166,8 @@ dm.write_to_db(output, 'Simulation', f'Model_Predictions', 'append')
 
 # %%
 
+
+
 preds = dm.read(f'''SELECT * 
                     FROM Model_Predictions 
                     WHERE version='{vers}'
@@ -204,6 +177,16 @@ preds = dm.read(f'''SELECT *
 preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game': 'mean', 
                                                               'std_dev': 'mean',
                                                               'max_score': 'mean'})
+
+drop_teams = ['WAS', 'NYG', 'BAL', 'KC', 'DET', 'GB']
+
+teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
+                    FROM FantasyPros
+                    WHERE week={set_week} AND year={set_year}''', 'Pre_PlayerData')
+
+preds = pd.merge(preds, teams, on=['player'])
+preds = preds[~preds.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)
+
 preds.sort_values(by='pred_fp_per_game', ascending=False).iloc[:50]
 # %%
 

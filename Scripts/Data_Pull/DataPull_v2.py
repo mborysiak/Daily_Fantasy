@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 1
+set_week = 2
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -98,6 +98,7 @@ player_salary.player = player_salary.player.apply(dc.name_clean)
 team_salary = salaries[salaries.position=='DST']
 team_salary.team = team_salary.team.map(team_map)
 
+#%%
 dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} and year={set_year}")
 dm.write_to_db(player_salary, 'Pre_PlayerData', 'Daily_Salaries', if_exist='append')
 
@@ -288,7 +289,8 @@ def pff_matchups(label):
         os.replace(f"/Users/mborysia/Downloads/{label}_matchup_chart.csv", 
             f'{root_path}/CSVs/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
     except:
-        df = pd.read_csv(f'{root_path}/CSVs/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
+        print('No file to pull')
+    df = pd.read_csv(f'{root_path}/CSVs/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
     
     if label != 'te':
         df.offTeam = df.offTeam.map(team_map)
@@ -408,9 +410,11 @@ for t, d, db in zip(tables, dfs, dbs):
 
 try:
     os.replace(f"/Users/mborysia/Downloads/DKSalaries.csv", 
-            f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv')
+            f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv')       
 except:
-    salary_id = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv',
+    print('No file to move')
+
+salary_id = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv',
                             skiprows=7).dropna(axis=1)
 
 salary_id = salary_id.rename(columns={'Name': 'player', 'Salary': 'salary', 'ID': 'player_id'})
@@ -498,17 +502,15 @@ for df in [rush_rz_df, rec_rz_df, pass_rz_df]:
         except:
             pass
         df[c] = df[c].fillna(0)
+        
 #%%
 rush_rz_df.player = rush_rz_df.player.apply(dc.name_clean)
 rec_rz_df.player = rec_rz_df.player.apply(dc.name_clean)
 pass_rz_df.player = pass_rz_df.player.apply(dc.name_clean)
 
-append_to_db(rush_rz_df, db_name='Post_PlayerData.sqlite3', table_name='PFR_Redzone_Rush', 
-             if_exist='append', set_week=set_week, set_year=set_year)
-append_to_db(rec_rz_df, db_name='Post_PlayerData.sqlite3', table_name='PFR_Redzone_Rec', 
-             if_exist='append', set_week=set_week, set_year=set_year)
-append_to_db(pass_rz_df, db_name='Post_PlayerData.sqlite3', table_name='PFR_Redzone_Pass', 
-             if_exist='append', set_week=set_week, set_year=set_year)
+for df, t in zip([rush_rz_df, rec_rz_df, pass_rz_df], ['Rush', 'Rec', 'Pass']):
+    dm.delete_from_db('Post_PlayerData', f'PFR_Redzone_{t}', f"week={set_week} AND year-{set_year}")
+    dm.write_to_db(df, 'Post_PlayerData', f'PFR_Redzone_{t}', 'append')
 
 #%%
 # # Def Vs Position
@@ -582,11 +584,6 @@ def_vs_qb_df.columns = def_vs_qb_df_cols
 def_vs_te_df = def_vs_te_df.fillna(0)
 def_vs_qb_df = def_vs_qb_df.fillna(0)
 
-def_vs_rb_df.team = def_vs_rb_df.team.map(def_vs_map)
-def_vs_wr_df.team = def_vs_wr_df.team.map(def_vs_map)
-def_vs_te_df.team = def_vs_te_df.team.map(def_vs_map)
-def_vs_qb_df.team = def_vs_qb_df.team.map(def_vs_map)
-
 def_vs_rb_df['week']= set_week
 def_vs_wr_df['week'] = set_week
 def_vs_te_df['week'] = set_week
@@ -596,12 +593,15 @@ def_vs_rb_df['year'] = set_year
 def_vs_wr_df['year'] = set_year
 def_vs_te_df['year'] = set_year
 def_vs_qb_df['year'] = set_year
+
 #%%
 
 for d, t in zip([def_vs_rb_df, def_vs_wr_df, def_vs_te_df, def_vs_qb_df],
                 ['RB', 'WR', 'TE', 'QB']):
-    append_to_db(d, db_name='Post_PlayerData.sqlite3', table_name=f'Def_Allowed_{t}', 
-                 if_exist='append', set_week=set_week, set_year=set_year)
+
+    d.team = d.team.map(def_vs_map).map(team_map)
+    dm.delete_from_db('Post_PlayerData', f'Def_Allowed_{t}', f"week={set_week} AND year={set_year}")
+    dm.write_to_db(d, 'Post_PlayerData', f'Def_Allowed_{t}', 'append')
 
 #%%
 # # Advanced PFR Stats
@@ -623,8 +623,6 @@ def qb_adv_clean(df):
     df = df[df.Rk!='Rk'].reset_index(drop=True)
     return df
 
-
-#%%
 #------------
 # Advanced QB stats cleanup
 #------------
@@ -656,17 +654,19 @@ qb['ties'] = qb.QBrec.apply(lambda x: float(x.split('-')[2]))
 qb = qb.drop('QBrec', axis=1)
 qb = qb.fillna(0)
 
-# +
 #------------
 # Save Adv RB/WR stats as CSV in Downloads
 #------------
 
 for pos in ['rb', 'wr']:
-    os.replace(f"/Users/Mark/Downloads/{pos}_week{set_week}.csv", 
-               f'{root_path}CSVs/pfr_adv_stats/{set_year}/{pos}_week{set_week}.csv')
+    try:
+        os.replace(f"/Users/mborysia/Downloads/{pos}_week{set_week}.csv", 
+                f'{root_path}CSVs/pfr_adv_stats/{set_year}/{pos}_week{set_week}.csv')
+    except: 
+        pass
 
-rb = pd.read_csv(f'/Users/Mark/Documents/GitHub/Daily_Fantasy/Data/CSVs/pfr_adv_stats/{set_year}/rb_week{set_week}.csv')
-rec = pd.read_csv(f'/Users/Mark/Documents/GitHub/Daily_Fantasy/Data/CSVs/pfr_adv_stats/{set_year}/wr_week{set_week}.csv')
+rb = pd.read_csv(f'{root_path}/CSVs/pfr_adv_stats/{set_year}/rb_week{set_week}.csv')
+rec = pd.read_csv(f'{root_path}/CSVs/pfr_adv_stats/{set_year}/wr_week{set_week}.csv')
 
 rb_cols = ['rank', 'player', 'team', 'age', 'position', 'games', 'games_started', 'rush_att', 'rush_yds',
            'first_downs', 'yds_before_contact', 'yds_before_contact_att', 'yds_after_contact', 'yac_att', 
@@ -686,15 +686,18 @@ rec.columns = rec_cols
 
 # drop columns that were added in 2020 (td, adot, int, rating)
 rec = rec.drop(['position', 'rec_td', 'adot', 'targ_int', 'targ_rating'], axis=1).fillna(0)
-# -
+
+#%%
 
 for df, t in zip([qb, qb_ay, qb_acc, qb_pres, qb_pt, rb, rec],
                  ['QB', 'QB_AirYards', 'QB_Accuracy', 'QB_Pressure', 'QB_PlayType', 'RB', 'WR']):
     df['week'] = set_week
     df['year'] = set_year
-    df.team = df.team.map(pfr_fp_map)
-    append_to_db(df, db_name='Post_PlayerData.sqlite3', table_name=f'PFR_Advanced_{t}', 
-                 if_exist='append', set_week=set_week, set_year=set_year)
+    df.team = df.team.map(team_map)
+    df.player = df.player.apply(dc.name_clean)
+
+    dm.delete_from_db('Post_PlayerData', f'PFR_Advanced_{t}', f"year={set_year} AND week={set_week}")
+    dm.write_to_db(df, 'Post_PlayerData', f'PFR_Advanced_{t}', 'append')
 
 #%%
 # # Snap Counts
@@ -715,10 +718,12 @@ snaps['week'] = set_week
 snaps.snap_pct = snaps.snap_pct.apply(lambda x: x.replace('%', ''))
 snaps.avg_snap_pct = snaps.avg_snap_pct.apply(lambda x: x.replace('%', ''))
 snaps = convert_float(snaps)
-# -
 
-append_to_db(snaps, db_name='Post_PlayerData.sqlite3', table_name='Snap_Counts', 
-                 if_exist='append', set_week=set_week, set_year=set_year)
+#%%
+
+dm.delete_from_db('Post_PlayerData', f'Snap_Counts', f"year={set_year} AND week={set_week}")
+dm.write_to_db(snaps, 'Post_PlayerData', f'Snap_Counts', 'append')
+
 #%%
 # # QBR
 
@@ -761,86 +766,10 @@ qbr = pd.concat([qbr[0], qbr[1]], axis=1)
 qbr['week'] = set_week
 qbr['year'] = set_year
 
-append_to_db(qbr, db_name='Post_PlayerData.sqlite3', table_name='ESPN_QBR', 
-                 if_exist='append', set_week=set_week, set_year=set_year)
-
-# # Backup Database
-
-copy_db('Post_PlayerData', root_path, set_week, set_year)
-
-
 #%%
-# # Rework Air Yards
 
-# # +
-# df_air_json = requests.get(f'http://api.airyards.com/{set_year}/weeks')
-
-# df_air_json
-
-# # +
-# import requests
-
-# df_air_json = requests.get(f'http://api.airyards.com/{set_year}/weeks')
-# df_air = pd.DataFrame(df_air_json.json())
-
-# df_air = df_air[df_air.position.isin(['WR', 'RB', 'TE'])].reset_index(drop=True)
-# df_air = df_air[['full_name', 'position', 'team', 'week', 'air_yards', 'tar', 'rec', 'rec_yards', 'tm_att', 
-#                    'team_air', 'aypt', 'racr', 'ms_air_yards', 'target_share', 'wopr', 'yac']]
-# df_air['year'] = set_year
-# df_air = df_air.rename(columns={'full_name': 'player'})
-
-# col_agg = {'air_yards': 'sum',
-#            'rec_yards': 'sum',
-#            'rec': 'sum',
-#            'tar': 'sum',
-#            'tm_att': 'sum',
-#            'team_air': 'sum',
-#            'yac': 'sum',
-#            'games': 'count'}
-
-# df_air_player = df_air.groupby(['player', 'team', 'year', 'position']).agg(col_agg).reset_index()
-
-# dup_players = df_air_player.groupby('player').agg({'tar': 'max'}).reset_index()
-# dup_teams = pd.merge(df_air_player[['player', 'team', 'tar']], dup_players, on=['player', 'tar']).drop('tar', axis=1)
-
-# col_agg['games'] = 'sum'
-# df_air_player = df_air_player.groupby(['player', 'year', 'position']).agg(col_agg).reset_index()
-# df_air_player = pd.merge(df_air_player, dup_teams, on='player')
-
-# df_air_player['ay_per_game'] = df_air_player.air_yards / df_air_player.games
-# df_air_player['yac_per_game'] = df_air_player.yac / df_air_player.games
-# df_air_player['racr'] = df_air_player.rec_yards / (df_air_player.air_yards + 1.5)
-# df_air_player['ay_per_tar'] = df_air_player.air_yards / (df_air_player.tar + 1.5)
-# df_air_player['ay_per_rec'] = df_air_player.air_yards / (df_air_player.rec + 1.5)
-# df_air_player['tgt_mkt_share'] = df_air_player.tar / df_air_player.tm_att
-# df_air_player['ay_converted'] = (df_air_player.rec_yards - df_air_player.yac) / (df_air_player.air_yards+1.5)
-# df_air_player['yac_per_ay'] = df_air_player.yac / (df_air_player.air_yards+1.5)
-# df_air_player['air_yd_mkt_share'] = df_air_player.air_yards / df_air_player.team_air
-# df_air_player['wopr'] = 1.5*df_air_player.tgt_mkt_share + 0.7*df_air_player.air_yd_mkt_share
-# df_air_player['rec_yds_per_ay'] = df_air_player.rec_yards / (df_air_player.air_yards + 1)
-# df_air_player['yac_plus_ay'] = df_air_player.yac + df_air_player.air_yards
-
-# team_agg = {'tm_att': 'max',
-#             'team_air': 'max',
-#             'rec_yards': 'sum',
-#             'yac': 'sum'}
-
-# df_air_team = df_air.groupby(['team', 'games']).agg(team_agg)
-# df_air_team = df_air_team.groupby('team').agg({'tm_att': 'sum', 'team_air': 'sum', 'rec_yards': 'sum', 'yac': 'sum'})
-# df_air_team = df_air_team.rename(columns={'yac': 'team_yac'})
-# df_air_team['tm_air_per_att'] = df_air_team.team_air / df_air_team.tm_att
-# df_air_team['tm_ay_converted'] = (df_air_team.rec_yards - df_air_team.team_yac) / df_air_team.team_air
-# df_air_team['tm_rec_yds_per_ay'] = df_air_team.rec_yards / df_air_team.team_air
-# df_air_team['tm_yac_per_ay'] = df_air_team.team_yac / df_air_team.team_air
-# df_air_team = df_air_team.drop('rec_yards', axis=1)
-
-# df_air_player = df_air_player.drop(['tm_att', 'team_air', 'rec_yards', 'rec'], axis=1)
-# df_air_player = pd.merge(df_air_player, df_air_team, on=['team'])
-# df_air_player['tm_ay_per_game'] = df_air_player.team_air / df_air_player.games
-# df_air_player['total_tgt_mkt_share'] = df_air_player.tar / df_air_player.tm_att
-# df_air_player['yac_mkt_share'] = df_air_player.yac / df_air_player.team_yac
-# df_air_player['yac_wopr'] =  1.5*df_air_player.tgt_mkt_share + 0.7*df_air_player.air_yd_mkt_share + df_air_player.yac_mkt_share
-# df_air_player = df_air_player.drop(['tar', 'games', 'team'], axis=1)
-# -
+dm.delete_from_db('Post_PlayerData', 'ESPN_QBR', f"week={set_week} AND year={set_year}")
+dm.write_to_db(qbr, 'Post_PlayerData', 'ESPN_QBR', 'append')
 
 
+# %%
