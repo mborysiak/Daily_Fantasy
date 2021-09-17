@@ -692,3 +692,42 @@ for cur_pos in ['QB', 'RB', 'WR', 'TE']:
 dm.write_to_db(df, 'Model_Features', 'Backfill', 'replace')
 
 # %%
+weather = dm.read('''SELECT * FROM Game_Weather''', 'Pre_TeamData')
+weather = weather.drop('gametime_unix', axis=1)
+
+for p in ['rain', 'snow']:
+    weather[p+'_amount'] = 0
+    weather.loc[weather.precip_type == p, p + '_amount'] = weather.loc[weather.precip_type == p, 'precip_intensity'] * weather.loc[weather.precip_type ==p, 'precip_prob']
+
+def heat_index(row):
+    T = row[0]
+    RH = row[1]
+    return -42.379 + 2.04901523*T + 10.14333127*RH - .22475541*T*RH - .00683783*T*T - .05481717*RH*RH + .00122874*T*T*RH + .00085282*T*RH*RH - .00000199*T*T*RH*RH
+
+weather['heat_index'] = weather[['temp_high', 'humidity']].apply(heat_index, axis=1)
+weather['wind_chill'] = weather.temp_low - (weather.wind_speed * 0.7)
+
+col_order = ['team', 'week', 'year', 'precip_prob', 'precip_intensity', 'temp_high', 'temp_low',
+             'humidity', 'wind_speed', 'wind_gust', 
+             'uv_index', 'rain_amount', 'snow_amount', 'heat_index', 'wind_chill']
+weather = weather[col_order]
+
+domes = ['LVR', 'NO', 'DAL', 'DET', 'IND', 'ATL', 'HOU', 'LAR', 'LAC', 'ARI', 'MIN']
+weather['is_dome'] = 0
+weather.loc[weather.team.isin(domes), 'is_dome'] = 1
+
+for c in ['temp_high', 'temp_low', 'heat_index', 'wind_chill']:
+    weather.loc[weather.team.isin(domes), c] = 70
+
+for c in ['rain_amount', 'snow_amount', 'precip_prob', 'precip_intensity', 'wind_speed', 'wind_gust', 'uv_index']:
+    weather.loc[weather.team.isin(domes), c] = 0
+
+matchups = dm.read('''SELECT offTeam team, defTeam, week, year 
+                      FROM PFF_Expert_Ranks''', 'Pre_TeamData')
+
+away_weather = pd.merge(weather, matchups, on=['team', 'week', 'year'])
+away_weather = away_weather.drop('team', axis=1).rename(columns={'defTeam': 'team'})
+away_weather = away_weather[col_order]
+
+weather = pd.concat([weather, away_weather], axis=0).sort_values(by=['year', 'week'])
+# %%

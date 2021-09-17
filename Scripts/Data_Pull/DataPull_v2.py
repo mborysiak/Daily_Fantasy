@@ -773,3 +773,61 @@ dm.write_to_db(qbr, 'Post_PlayerData', 'ESPN_QBR', 'append')
 
 
 # %%
+
+city_data  = dm.read(f'''SELECT a.home_team, b.latitude, b.longitude, a.gametime, a.gametime_unix, a.week, a.year
+                                     FROM Gambling_Lines a
+                                     JOIN (SELECT * FROM City_LatLon) b
+                                          ON a.home_team = b.team
+                                   ''', 'Pre_TeamData')
+city_data.gametime = pd.to_datetime(city_data.gametime.apply(lambda x: x.split(' ')[0]))
+city_data.gametime = city_data.gametime.apply(lambda x: str(x + dt.timedelta(1)).split(' ')[0]+'T00:00:00Z')
+city_data
+#%%
+
+KEY = '6c500b03257f351161dbe1fea1aa6558'
+
+weather = []
+for _, row in city_data.iterrows():
+    city = row.home_team
+    print(city)
+
+    gt = row.gametime_unix
+    LATITUDE = row.latitude
+    LONGITUDE = row.longitude
+
+    ds = requests.get(f'https://api.darksky.net/forecast/{KEY}/{LATITUDE},{LONGITUDE},{row.gametime}?exclude=currently')    
+    ds_data = ds.json()['hourly']['data']
+
+    min_time_diff = 100000000
+    for d in ds_data:
+        if abs(d['time'] - gt) < min_time_diff:
+            best_t = d['time']
+            precip_prob = d['precipProbability']
+            precip_intensity = d['precipIntensity']
+            try:
+                precip_type = d['precipType']
+            except:
+                precip_type = None
+            try:
+                temp_high = d['temperatureHigh']
+                temp_low = d['temperatureLow']
+            except:
+                temp_high = d['temperature']
+                temp_low = d['temperature']
+            humidity = d['humidity']
+            wind_speed = d['windSpeed']
+            wind_gust = d['windGust']
+            uv_index = d['uvIndex']
+            min_time_diff = abs(d['time'] - gt)
+
+        out = [city]
+        out.extend([best_t, precip_prob, precip_intensity, precip_type, temp_high,
+                    temp_low, humidity, wind_speed, wind_gust, uv_index, row.week, row.year])
+
+    weather.append(out)
+# -
+
+weather = pd.DataFrame(weather)
+weather.columns = ['team', 'gametime_unix', 'precip_prob', 'precip_intensity', 'precip_type',
+                   'temp_high', 'temp_low', 'humidity', 'wind_speed', 'wind_gust', 'uv_index', 'week', 'year']
+# %%
