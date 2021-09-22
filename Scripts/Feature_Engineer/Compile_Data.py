@@ -61,12 +61,10 @@ def add_rolling_stats(df, gcols, rcols, ):
     cnt_check = df.groupby([gcols[0], 'year'])['week'].count()
     print(f'Counts of Groupby Category Over 17: {cnt_check[cnt_check>17]}')
 
-    print('Calculating Rolling Stats 3 window')
     rolls_mean = rolling_stats(df, gcols, rcols, 3, agg_type='mean')
     rolls_max = rolling_stats(df, gcols, rcols, 3, agg_type='max')
     rolls_med = rolling_stats(df, gcols, rcols, 3, agg_type='median')
 
-    print('Calculating Expanding Stats')
     hist_mean = rolling_expand(df, gcols, rcols, agg_type='mean')
     hist_std = rolling_expand(df, gcols, rcols, agg_type='std')
     hist_p80 = rolling_expand(df, gcols, rcols, agg_type='p80')
@@ -125,18 +123,16 @@ def fix_bye_week(df):
 # Pre Game Data
 #---------------
 
-def fantasy_pros(pos):
+def fantasy_pros(pos, add_rolling=True):
 
     fp = dm.read(f'''SELECT * 
                     FROM FantasyPros 
                     WHERE pos='{pos}' ''', 'Pre_PlayerData')
     fp = name_cleanup(fp)
-    if pos == 'DST':
-        fp = fp.drop('player', axis=1).rename(columns={'team': 'player'})
-    else:
-        fp = fp.drop('team', axis=1)
+    if pos == 'DST': fp = fp.drop('player', axis=1).rename(columns={'team': 'player'})
+    
     fp_cols = ['fp_rank', 'projected_points']
-    fp = add_rolling_stats(fp, ['player'], fp_cols)
+    if add_rolling: fp = add_rolling_stats(fp, ['player'], fp_cols)
 
     # fill in null expert rankings
     fp = forward_fill(fp)
@@ -172,7 +168,7 @@ def add_pfr_matchup(df):
 
 
 
-def get_experts(df, pos):
+def get_experts(df, pos, add_rolling=True):
 
     experts = dm.read(f'''SELECT player, week, year, a.defTeam,
                             fantasyPoints,  fantasyPointsRank,
@@ -206,7 +202,7 @@ def get_experts(df, pos):
     # fill in null expert rankings
     experts = forward_fill(experts)
 
-    experts = add_rolling_stats(experts, ['player'], expert_cols)
+    if add_rolling: experts = add_rolling_stats(experts, ['player'], expert_cols)
 
     for c in ['ProjPts', 'rushAtt', 'rushYds', 'rushTd', 'recvTargets',
                 'recvReceptions', 'recvYds', 'recvTd']:
@@ -328,7 +324,7 @@ def get_player_data(df, pos, YEAR):
 
     player_data = dm.read(f'''SELECT * 
                 FROM {pos}_Stats 
-                WHERE season >= {YEAR-4}
+                WHERE season >= {YEAR-2}
                     AND week != 17''', 'FastR')
     if pos=='QB':
         rcols_player = [c for c in player_data.columns if 'pass_' in c]
@@ -352,6 +348,7 @@ def get_player_data(df, pos, YEAR):
     player_data['week'] = player_data['week'] + 1
     player_data = switch_seasons(player_data)
     player_data = fix_bye_week(player_data)
+    player_data = player_data.drop('team', axis=1)
 
     df = pd.merge(df, player_data, on=['player', 'week', 'year'])
     df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
@@ -387,7 +384,7 @@ def add_player_comparison(df, cols):
 
 def get_team_stats(df, YEAR):
     
-    team_stats = dm.read(f'''SELECT * FROM Team_Stats WHERE season>={YEAR-4}''', 'FastR')
+    team_stats = dm.read(f'''SELECT * FROM Team_Stats WHERE season>={YEAR-2}''', 'FastR')
 
     rcols_team = ['team_rush_touchdown_sum', 'team_tackled_for_loss_sum',
             'team_pass_touchdown_sum', 'team_qb_hit_sum', 'team_sack_sum',
@@ -413,9 +410,9 @@ def get_team_stats(df, YEAR):
     return df
 
 
-def get_coach_stats(df, YEAR):
+def get_coach_stats(df, YEAR, add_rolling=False):
 
-    coach_stats = dm.read(f'''SELECT * FROM Coach_Stats WHERE season>={YEAR-4}''', 'FastR')
+    coach_stats = dm.read(f'''SELECT * FROM Coach_Stats WHERE season>={YEAR-2}''', 'FastR')
 
     rcols_coach = ['coach_shotgun_sum',
         'coach_no_huddle_sum', 'coach_rush_attempt_sum', 'coach_first_down_sum',
@@ -432,7 +429,7 @@ def get_coach_stats(df, YEAR):
         'coach_ydstogo_mean']
 
     coach_stats = coach_stats.rename(columns={'season': 'year'})
-    coach_stats = add_rolling_stats(coach_stats, ['coach'], rcols_coach)
+    if add_rolling: coach_stats = add_rolling_stats(coach_stats, ['coach'], rcols_coach)
 
     coach_stats = coach_stats[coach_stats.year >= 2020].reset_index(drop=True)
     coach_stats['week'] = coach_stats.week + 1
@@ -540,6 +537,52 @@ def add_gambling_lines(df):
     return df
 
 
+def add_weather(df):
+
+    weather = dm.read('''SELECT * FROM Game_Weather''', 'Pre_TeamData')
+    weather = weather.drop('gametime_unix', axis=1)
+
+    for p in ['rain', 'snow']:
+        weather[p+'_amount'] = 0
+        weather.loc[weather.precip_type == p, p + '_amount'] = weather.loc[weather.precip_type == p, 'precip_intensity'] * weather.loc[weather.precip_type ==p, 'precip_prob']
+
+    def heat_index(row):
+        T = row[0]
+        RH = row[1]
+        return -42.379 + 2.04901523*T + 10.14333127*RH - .22475541*T*RH - .00683783*T*T - .05481717*RH*RH + .00122874*T*T*RH + .00085282*T*RH*RH - .00000199*T*T*RH*RH
+
+    weather['heat_index'] = weather[['temp_high', 'humidity']].apply(heat_index, axis=1)
+    weather['wind_chill'] = weather.temp_low - (weather.wind_speed * 0.7)
+
+    col_order = ['team', 'week', 'year', 'precip_prob', 'precip_intensity', 'temp_high', 'temp_low',
+                'humidity', 'wind_speed', 'wind_gust', 
+                'uv_index', 'rain_amount', 'snow_amount', 'heat_index', 'wind_chill', 'is_dome']
+
+    domes = ['LVR', 'NO', 'DAL', 'DET', 'IND', 'ATL', 'HOU', 'LAR', 'LAC', 'ARI', 'MIN']
+    weather['is_dome'] = 0
+    weather.loc[weather.team.isin(domes), 'is_dome'] = 1
+    weather = weather[col_order]
+
+    for c in ['temp_high', 'temp_low', 'heat_index', 'wind_chill']:
+        weather.loc[weather.team.isin(domes), c] = 70
+
+    for c in ['rain_amount', 'snow_amount', 'precip_prob', 'precip_intensity', 'wind_speed', 'wind_gust', 'uv_index']:
+        weather.loc[weather.team.isin(domes), c] = 0
+
+    matchups = dm.read('''SELECT offTeam team, defTeam, week, year 
+                        FROM PFF_Expert_Ranks''', 'Pre_TeamData')
+
+    away_weather = pd.merge(weather, matchups, on=['team', 'week', 'year'])
+    away_weather = away_weather.drop('team', axis=1).rename(columns={'defTeam': 'team'})
+    away_weather = away_weather[col_order]
+
+    weather = pd.concat([weather, away_weather], axis=0).sort_values(by=['year', 'week'])
+
+    df = pd.merge(df, weather, on=['team', 'week', 'year'])
+
+    return df
+
+
 #%%
 
 pos = 'QB'
@@ -549,6 +592,8 @@ df = fantasy_pros(pos); print(df.shape[0])
 df = get_salaries(df, pos); print(df.shape[0])
 df = get_experts(df, pos); print(df.shape[0])
 df = add_pfr_matchup(df); print(df.shape[0])
+df = add_gambling_lines(df); print(df.shape[0])
+df = add_weather(df); print(df.shape[0])
 dst = add_team_matchups().drop('offTeam', axis=1)
 df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
@@ -573,6 +618,8 @@ for pos in ['RB', 'WR', 'TE']:
     df = get_salaries(df, pos); print(df.shape[0])
     df = add_pfr_matchup(df); print(df.shape[0])
     df = get_experts(df, pos); print(df.shape[0])
+    df = add_gambling_lines(df); print(df.shape[0])
+    df = add_weather(df); print(df.shape[0])
     if pos == 'WR': df = cb_matchups(df); print(df.shape[0])
     if pos == 'TE': df = te_matchups(df); print(df.shape[0])
     dst = add_team_matchups().drop('offTeam', axis=1)
@@ -586,7 +633,6 @@ for pos in ['RB', 'WR', 'TE']:
     df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
 
     # pre game data reliant on team information
-    df = add_gambling_lines(df); print(df.shape[0])
     compare_cols = ['fp_rank', 'dk_salary', 'expertConsensus', 'projected_points', 'fantasyPoints', 'ProjPts']
     df = add_player_comparison(df, compare_cols); print(df.shape[0])
 
@@ -633,6 +679,7 @@ defense = defense.groupby('offTeam', as_index=False).fillna(method='ffill')
 defense = defense.fillna(defense.mean())
 
 defense = add_gambling_lines(defense); print(defense.shape[0])
+defense = add_weather(defense); print(defense.shape[0])
 
 defense = defense.sort_values(by=['team', 'year', 'week'])
 
@@ -643,91 +690,51 @@ dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 
 # %%
 
-df = dm.read(f'''SELECT player, a.team, a.pos, week, year, fp_rank, projected_points,
-                        dk_salary, fd_salary, yahoo_salary
-                 FROM FantasyPros a
-                 JOIN (SELECT *
-                       FROM Daily_Salaries) USING (player, week, year)
-                    ''', 'Pre_PlayerData')
-df.player = df.player.apply(dc.name_clean)
-
-experts = dm.read(f'''SELECT player, week, year, a.position pos,
-                             fantasyPoints,  fantasyPointsRank,
-                             `Proj Pts` ProjPts,
-                             expertConsensus
-                    FROM PFF_Proj_Ranks a
-                    JOIN (SELECT *
-                            FROM PFF_Expert_Ranks )
-                            USING (player, week, year)
-                          WHERE expertConsensus IS NOT NULL
-                    ''', 'Pre_PlayerData')
-experts.pos = experts.pos.apply(lambda x: x.upper())
-
-df = pd.merge(df, experts, on=['player','pos', 'week','year'])
-df = forward_fill(df)
-
-
-y_acts = pd.DataFrame()
-for pos in ['QB', 'RB', 'WR', 'TE']:
-    y_acts = pd.concat([y_acts, 
-                        dm.read(f'''SELECT player, team, week, season year, y_act 
-                                    FROM {pos}_Stats
-                                    WHERE year >= 2020''', 'FastR').dropna(subset=['y_act'])
-    ], axis=0)
-
-y_acts.week = y_acts.week + 1
-y_acts = switch_seasons(y_acts)
-y_acts = fix_bye_week(y_acts)
-
-df = pd.merge(df, y_acts, on=['player', 'team', 'week', 'year'], how='left')
-df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
-
-compare_cols = ['fp_rank', 'projected_points',
-            'dk_salary', 'fd_salary', 'yahoo_salary', 'fantasyPoints',
-            'fantasyPointsRank', 'ProjPts', 'expertConsensus']
+# pre-game data
 output = pd.DataFrame()
-for cur_pos in ['QB', 'RB', 'WR', 'TE']:
-    output = pd.concat([output, add_player_comparison(df[df.pos==cur_pos], compare_cols)], axis=0)
+for pos in ['QB', 'RB', 'WR', 'TE']:
+    
+    df = fantasy_pros(pos, add_rolling=False); print(df.shape[0])
+    df = get_salaries(df, pos); print(df.shape[0])
+    df = get_experts(df, pos, add_rolling=False); print(df.shape[0])
+    dst = add_team_matchups().drop('offTeam', axis=1)
+    df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
-dm.write_to_db(df, 'Model_Features', 'Backfill', 'replace')
+    df = add_weather(df); print(df.shape[0])
+    df = add_gambling_lines(df); print(df.shape[0])
+    df = get_team_stats(df, YEAR); print(df.shape[0])
+    df = get_coach_stats(df, YEAR); print(df.shape[0])
+
+    y_acts = dm.read(f'''SELECT player, team, week, season year, y_act 
+                         FROM {pos}_Stats
+                         WHERE year >= 2020
+                               AND y_act IS NOT NULL''', 'FastR')
+
+    y_acts.week = y_acts.week + 1
+    y_acts = switch_seasons(y_acts)
+    y_acts = fix_bye_week(y_acts)
+
+    df = pd.merge(df, y_acts, on=['player', 'team', 'week', 'year'], how='left')
+    df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True); print(df.shape[0])
+
+    df.loc[df.fd_salary < 100, 'fd_salary'] = np.nan
+    df = forward_fill(df)
+    df.fd_salary = df.fd_salary.fillna(df.fd_salary.mean())
+
+    compare_cols = ['fp_rank', 'projected_points',
+                    'dk_salary', 'fd_salary', 'yahoo_salary', 'fantasyPoints',
+                    'fantasyPointsRank', 'ProjPts', 'expertConsensus']
+    df = add_player_comparison(df, compare_cols)
+
+    df = df.dropna(subset=[c for c in df.columns if c !='y_act']).reset_index(drop=True); print(df.shape[0])
+    df['pos'] = pos
+    output = pd.concat([output, df], axis=0)
+
+dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
+
+
 
 # %%
-weather = dm.read('''SELECT * FROM Game_Weather''', 'Pre_TeamData')
-weather = weather.drop('gametime_unix', axis=1)
 
-for p in ['rain', 'snow']:
-    weather[p+'_amount'] = 0
-    weather.loc[weather.precip_type == p, p + '_amount'] = weather.loc[weather.precip_type == p, 'precip_intensity'] * weather.loc[weather.precip_type ==p, 'precip_prob']
 
-def heat_index(row):
-    T = row[0]
-    RH = row[1]
-    return -42.379 + 2.04901523*T + 10.14333127*RH - .22475541*T*RH - .00683783*T*T - .05481717*RH*RH + .00122874*T*T*RH + .00085282*T*RH*RH - .00000199*T*T*RH*RH
-
-weather['heat_index'] = weather[['temp_high', 'humidity']].apply(heat_index, axis=1)
-weather['wind_chill'] = weather.temp_low - (weather.wind_speed * 0.7)
-
-col_order = ['team', 'week', 'year', 'precip_prob', 'precip_intensity', 'temp_high', 'temp_low',
-             'humidity', 'wind_speed', 'wind_gust', 
-             'uv_index', 'rain_amount', 'snow_amount', 'heat_index', 'wind_chill']
-weather = weather[col_order]
-
-domes = ['LVR', 'NO', 'DAL', 'DET', 'IND', 'ATL', 'HOU', 'LAR', 'LAC', 'ARI', 'MIN']
-weather['is_dome'] = 0
-weather.loc[weather.team.isin(domes), 'is_dome'] = 1
-
-for c in ['temp_high', 'temp_low', 'heat_index', 'wind_chill']:
-    weather.loc[weather.team.isin(domes), c] = 70
-
-for c in ['rain_amount', 'snow_amount', 'precip_prob', 'precip_intensity', 'wind_speed', 'wind_gust', 'uv_index']:
-    weather.loc[weather.team.isin(domes), c] = 0
-
-matchups = dm.read('''SELECT offTeam team, defTeam, week, year 
-                      FROM PFF_Expert_Ranks''', 'Pre_TeamData')
-
-away_weather = pd.merge(weather, matchups, on=['team', 'week', 'year'])
-away_weather = away_weather.drop('team', axis=1).rename(columns={'defTeam': 'team'})
-away_weather = away_weather[col_order]
-
-weather = pd.concat([weather, away_weather], axis=0).sort_values(by=['year', 'week'])
 # %%

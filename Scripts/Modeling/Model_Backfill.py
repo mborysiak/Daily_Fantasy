@@ -49,7 +49,7 @@ met = 'y_act'
 # Run Baseline Model
 #-----------------
 
-set_pos = 'TE'
+set_pos = 'RB'
 vers = 'v1'
 
 
@@ -70,13 +70,13 @@ train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
 df_train = df[df.game_date < train_time_split].reset_index(drop=True)
 df_predict = df[df.game_date == train_time_split].reset_index(drop=True)
 
-# to_fill = dm.read(f'''SELECT DISTINCT player FROM Model_Predictions 
-#                                 WHERE pos='{set_pos}'
-#                                     AND version='{vers}'
-#                                     AND week={set_week}
-#                                     AND year={set_year}
-#                                     AND model_type != 'backfill' ''', 'Simulation')
-# df_predict = df_predict[~df_predict.player.isin(list(to_fill.player))].reset_index(drop=True)
+to_fill = dm.read(f'''SELECT DISTINCT player FROM Model_Predictions 
+                                WHERE pos='{set_pos}'
+                                    AND version='{vers}'
+                                    AND week={set_week}
+                                    AND year={set_year}
+                                    AND model_type != 'backfill' ''', 'Simulation')
+
 output_start = df_predict[['player', 'dk_salary']].copy()
 
 # get the minimum number of training samples for the initial datasets
@@ -94,8 +94,8 @@ X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 predictions = pd.DataFrame()
 models = ['lasso',
        'ridge',
-        # 'lgbm', 
-        # 'xgb', 
+        'lgbm', 
+        'xgb', 
          'bridge'
           ]
 for m in models:
@@ -138,11 +138,17 @@ output = output.sort_values(by='dk_salary', ascending=False)
 output['dk_rank'] = range(len(output))
 output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
 
-mean_act = df_train.loc[df_train.fp_rank.isin(df_predict.fp_rank.sort_values().unique()[:12]), 'y_act'].mean() 
-ratio = mean_act / output.pred_fp_per_game[:12].mean()
-output['pred_fp_per_game'] = output['pred_fp_per_game'] * ratio
+# mean_act = df_train.loc[df_train.fp_rank.isin(df_predict.fp_rank.sort_values().unique()[:12]), 'y_act'].mean() 
+# ratio = mean_act / output.pred_fp_per_game[:12].mean()
+# output['pred_fp_per_game'] = output['pred_fp_per_game'] * ratio
 
 output.iloc[:50]
+
+#%%
+
+output = output[~output.player.isin(list(to_fill.player))].reset_index(drop=True)
+output.iloc[:50]
+
 
 #%%
 
