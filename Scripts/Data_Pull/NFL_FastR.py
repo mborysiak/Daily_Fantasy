@@ -27,11 +27,11 @@ def one_hot_col(df, col):
     return pd.concat([df, pd.get_dummies(df[col])], axis=1).drop(col, axis=1)
 
 
-def get_agg_stats(data, gcols, stat_cols, agg_type, prefix=''):
-
+def get_agg_stats(data, gcols, stat_cols, agg_type, prefix='', suffix=None):
+    if suffix is None: suffix = f'_{agg_type}'
     agg_stat = {c: agg_type for c in stat_cols}
     df = data.groupby(gcols).agg(agg_stat)
-    df.columns = [f'{prefix}_{c}_{agg_type}' for c in df.columns]
+    df.columns = [f'{prefix}_{c}{suffix}' for c in df.columns]
 
     return df.reset_index()
 
@@ -149,20 +149,20 @@ data = data.drop('temp', axis=1)
 # Receiving Stats
 #--------------
 
-sum_cols = ['shotgun', 'no_huddle', 'pass_attempt', 
-            'qb_dropback', 'qb_scramble', 'penalty', 'first_down', 'first_down_pass',
-            'fourth_down_converted', 'fourth_down_failed',
-            'third_down_converted', 'goal_to_go','pass_middle',
-            'pass_outside', 'pass_touchdown',
-            'qb_hit',  'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
-            'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
-            'comp_yac_wpa', 'complete_pass', 'incomplete_pass', 'interception',
-            'ep', 'epa', 'touchdown', 'fumble', 'fumble_lost',  'xyac_epa',
-            'xyac_fd', 'xyac_mean_yardage', 'xyac_median_yardage', 'xyac_success',
-            'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
-            'yards_gained', 'ydstogo']
+rec_sum_cols = ['shotgun', 'no_huddle', 'pass_attempt', 
+                'qb_dropback', 'qb_scramble', 'penalty', 'first_down', 'first_down_pass',
+                'fourth_down_converted', 'fourth_down_failed',
+                'third_down_converted', 'goal_to_go','pass_middle',
+                'pass_outside', 'pass_touchdown',
+                'qb_hit',  'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
+                'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
+                'comp_yac_wpa', 'complete_pass', 'incomplete_pass', 'interception',
+                'ep', 'epa', 'touchdown', 'fumble', 'fumble_lost',  'xyac_epa',
+                'xyac_fd', 'xyac_mean_yardage', 'xyac_median_yardage', 'xyac_success',
+                'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
+                'yards_gained', 'ydstogo']
 
-mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
+rec_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
              'grass', 'synthetic', 'indoors', 'outdoors',
              'td_prob', 'qb_epa', 'wp', 'wpa',
              'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
@@ -173,8 +173,8 @@ mean_cols = ['spread_line', 'total_line', 'vegas_wp',
              'yards_gained', 'ydstogo', 'pos_is_home']
 
 gcols =  ['week', 'season', 'posteam', 'receiver_player_name']
-rec_sum = get_agg_stats(data, gcols, sum_cols, 'sum', prefix='rec')
-rec_mean = get_agg_stats(data, gcols, mean_cols, 'mean', prefix='rec')
+rec_sum = get_agg_stats(data, gcols, rec_sum_cols, 'sum', prefix='rec')
+rec_mean = get_agg_stats(data, gcols, rec_mean_cols, 'mean', prefix='rec')
 rec = pd.merge(rec_sum, rec_mean, on=gcols)
 
 rec = rec.rename(columns={'receiver_player_name': 'player', 'posteam': 'team'})
@@ -183,19 +183,19 @@ rec = rec.rename(columns={'receiver_player_name': 'player', 'posteam': 'team'})
 # Rushing Stats
 #--------------
 
-sum_cols = ['shotgun', 'no_huddle', 'rush_attempt', 'first_down',
+rush_sum_cols = ['shotgun', 'no_huddle', 'rush_attempt', 'first_down',
             'first_down_rush', 'fourth_down_converted', 'fourth_down_failed',
             'third_down_converted', 'goal_to_go', 'run_middle', 'run_outside',
              'rush_touchdown', 'tackled_for_loss',
             'ep', 'epa', 'touchdown', 'fumble', 'fumble_lost','yardline_100', 'yards_after_catch',
             'yards_gained', 'ydstogo']
 
-mean_cols = ['td_prob', 'wp', 'wpa', 'ep', 'epa', 'yardline_100',
+rush_mean_cols = ['td_prob', 'wp', 'wpa', 'ep', 'epa', 'yardline_100',
              'yards_gained', 'ydstogo']
 
 gcols =  ['week', 'season', 'posteam', 'rusher_player_name']
-rush_sum = get_agg_stats(data, gcols, sum_cols, 'sum', prefix='rush')
-rush_mean = get_agg_stats(data, gcols, mean_cols, 'mean', prefix='rush')
+rush_sum = get_agg_stats(data, gcols, rush_sum_cols, 'sum', prefix='rush')
+rush_mean = get_agg_stats(data, gcols, rush_mean_cols, 'mean', prefix='rush')
 rush = pd.merge(rush_sum, rush_mean, on=gcols)
 
 rush = rush.rename(columns={'rusher_player_name': 'player', 'posteam': 'team'})
@@ -254,7 +254,7 @@ for df, t_name in zip([wr, rb, te], ['WR_Stats', 'RB_Stats', 'TE_Stats']):
 #%%
 
 
-sum_cols = ['shotgun', 'no_huddle', 'pass_attempt', 
+qb_sum_cols = ['shotgun', 'no_huddle', 'pass_attempt', 
             'qb_dropback', 'qb_scramble', 'penalty', 'first_down', 'first_down_pass',
             'fourth_down_converted', 'fourth_down_failed',
             'third_down_converted', 'third_down_failed', 'goal_to_go','pass_middle',
@@ -269,7 +269,7 @@ sum_cols = ['shotgun', 'no_huddle', 'pass_attempt',
             'drive_ended_with_score', 'drive_first_downs', 'drive_play_count', 'drive_inside20',
             'drive_time_of_possession']
 
-mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
+qb_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
              'grass', 'synthetic', 'indoors', 'outdoors',
              'td_prob', 'qb_epa', 'wp', 'wpa',
              'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
@@ -282,8 +282,8 @@ mean_cols = ['spread_line', 'total_line', 'vegas_wp',
              'drive_time_of_possession']
 
 gcols =  ['week', 'season', 'posteam', 'passer_player_name']
-pass_sum = get_agg_stats(data, gcols, sum_cols, 'sum', prefix='pass')
-pass_mean = get_agg_stats(data, gcols, mean_cols, 'mean', prefix='pass')
+pass_sum = get_agg_stats(data, gcols, qb_sum_cols, 'sum', prefix='pass')
+pass_mean = get_agg_stats(data, gcols, qb_mean_cols, 'mean', prefix='pass')
 qb = pd.merge(pass_sum, pass_mean, on=gcols)
 
 qb = qb.rename(columns={'passer_player_name': 'player', 'posteam': 'team'})
@@ -328,28 +328,11 @@ dm.write_to_db(qb, 'FastR', 'QB_Stats', if_exist='append')
 # Aggregate columns
 #--------------
 
-sum_cols = ['shotgun', 'no_huddle', 'pass_attempt', 'rush_attempt',
-            'qb_dropback', 'qb_scramble', 'penalty', 'first_down', 'first_down_pass',
-            'first_down_rush', 'fourth_down_converted', 'fourth_down_failed',
-            'third_down_converted', 'goal_to_go', 'run_middle', 'run_outside', 'pass_middle',
-            'pass_outside', 'rush_touchdown', 'tackled_for_loss', 'pass_touchdown',
-            'qb_hit', 'sack', 'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
-            'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
-            'comp_yac_wpa', 'complete_pass', 'incomplete_pass', 'interception',
-            'ep', 'epa', 'touchdown', 'fumble', 'fumble_lost',  'xyac_epa',
-            'xyac_fd', 'xyac_mean_yardage', 'xyac_median_yardage', 'xyac_success',
-            'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
-            'yards_gained', 'ydstogo']
+rush_team_sum_cols = [f'rush_{c}_sum' for c in rush_sum_cols]
+rush_team_mean_cols = [f'rush_{c}_mean' for c in rush_mean_cols]
 
-mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
-             'grass', 'synthetic', 'indoors', 'outdoors',
-             'td_prob', 'qb_epa', 'wp', 'wpa',
-             'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
-             'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
-             'comp_yac_wpa',  'ep', 'epa', 'xyac_epa',
-             'xyac_fd', 'xyac_mean_yardage', 'xyac_median_yardage', 'xyac_success',
-             'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
-             'yards_gained', 'ydstogo', 'pos_is_home']
+rec_team_sum_cols = [f'rec_{c}_sum' for c in rec_sum_cols]
+rec_team_mean_cols = [f'rec_{c}_mean' for c in rec_mean_cols]
 
 #--------------
 # Team Stats
@@ -357,12 +340,15 @@ mean_cols = ['spread_line', 'total_line', 'vegas_wp',
 
 gcols = ['season', 'week', 'posteam']
 
-team_sum = get_agg_stats(data, gcols, sum_cols, 'sum', prefix='team')
-team_mean = get_agg_stats(data, gcols, mean_cols, 'mean', prefix='team')
+team_rush_sum = get_agg_stats(rush_sum, gcols, rush_team_sum_cols, 'sum', prefix='team', suffix='')
+team_rush_mean = get_agg_stats(rush_mean, gcols, rush_team_mean_cols, 'mean', prefix='team', suffix='')
+team_rec_sum = get_agg_stats(rec_sum, gcols, rec_team_sum_cols, 'sum', prefix='team', suffix='')
+team_rec_mean = get_agg_stats(rec_mean, gcols, rec_team_mean_cols, 'mean', prefix='team', suffix='')
 
 team = data[gcols].drop_duplicates()
-team = pd.merge(team, team_sum, on=gcols)
-team = pd.merge(team, team_mean, on=gcols)
+for d in [team_rush_sum, team_rush_mean, team_rec_sum, team_rec_mean]:
+    team = pd.merge(team, d, on=gcols)
+
 team = team.rename(columns={'posteam': 'team'})
 team = team.sort_values(by=['season', 'team', 'week'])
 

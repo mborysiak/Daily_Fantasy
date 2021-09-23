@@ -116,6 +116,18 @@ def fix_bye_week(df):
 
     return df
 
+def drop_extra_bye_week(df):
+    # the data is duplicated into the bye week, so
+    # this chunk of code removes the duplicated week where games
+    # weren't actually played
+    df = df.drop_duplicates(subset=['player','week', 'year'])
+    bye_weeks = find_bye_weeks().rename(columns={'next_week': 'bye_week'})
+    bye_weeks.bye_week = bye_weeks.bye_week - 1
+    df = pd.merge(df, bye_weeks, on=['team', 'week', 'year'], how='left')
+    df = df[df.week!=df.bye_week].reset_index(drop=True).drop('bye_week', axis=1)
+
+    return df
+
 #%%
 
 
@@ -218,7 +230,7 @@ def get_experts(df, pos, add_rolling=True):
 def cb_matchups(df):
     
     matchups = dm.read(f'''SELECT offPlayer player, week, year,
-                                offHeightInches, offWeight, offSpeed,
+                                  offHeightInches, offWeight, offSpeed,
                                 offRoutes, offLeft, offSlot, offRight, 
                                 offFr, offCPct, offYprr, offGrade, adv,
                                 defHeightInches, defWeight, defSpeed,
@@ -249,12 +261,12 @@ def cb_matchups(df):
 def te_matchups(df):
     
     matchups = dm.read(f'''SELECT offPlayer player, week, year,
-                                offHeightInches, offWeight, 
-                                offRoutes,offWide, offSlot, offInline, 
-                                offFr, offCPct, offYprr, offGrade, adv,
-                                defHeightInches, defWeight, 
-                                defRoutes, defCPct, defYprr, defGrade
-                        FROM PFF_TE_Matchups
+                                  offHeightInches, offWeight, 
+                                  offRoutes,offWide, offSlot, offInline, 
+                                  offFr, offCPct, offYprr, offGrade, adv,
+                                  defHeightInches, defWeight, 
+                                  defRoutes, defCPct, defYprr, defGrade
+                           FROM PFF_TE_Matchups
     ''', 'Pre_PlayerData')
     matchups = name_cleanup(matchups)
     matchups = matchups.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
@@ -356,6 +368,26 @@ def get_player_data(df, pos, YEAR):
     return df
 
 
+def calc_market_share(df):
+    
+    player_cols = ['rush_rush_attempt_sum', 'rec_xyac_mean_yardage_sum', 'rush_yards_gained_sum',
+                   'rec_yards_gained_sum', 'rec_xyac_epa_sum', 'rush_ep_sum',
+                   'rush_touchdown_sum', 'rec_first_down_sum', 'rec_epa_sum', 'rec_qb_epa_sum',
+                   'rec_pass_attempt_sum', 'rec_xyac_success_sum', 'rec_comp_air_epa_sum',
+                   'rec_air_yards_sum', 'rec_touchdown_sum']
+    team_cols = ['team_' + c for c in player_cols]
+
+    for p, t in zip(player_cols, team_cols):
+        df[p+'_share'] = df[p] / df[t]
+
+    share_cols = [c+'_share' for c in player_cols]
+    df = add_rolling_stats(df, gcols=['player'], rcols=share_cols)
+
+    share_cols = [c for c in df.columns if '_share' in c]
+    df = forward_fill(df, share_cols)
+
+    return df
+
 def add_player_comparison(df, cols):
     
     to_agg = {c: [np.mean, np.max, np.min] for c in cols}
@@ -386,16 +418,7 @@ def get_team_stats(df, YEAR):
     
     team_stats = dm.read(f'''SELECT * FROM Team_Stats WHERE season>={YEAR-2}''', 'FastR')
 
-    rcols_team = ['team_rush_touchdown_sum', 'team_tackled_for_loss_sum',
-            'team_pass_touchdown_sum', 'team_qb_hit_sum', 'team_sack_sum',
-            'team_qb_epa_sum', 'team_cp_sum', 'team_cpoe_sum', 'team_air_epa_sum',
-            'team_air_wpa_sum', 'team_air_yards_sum', 'team_comp_air_epa_sum',
-            'team_comp_air_wpa_sum', 'team_comp_yac_epa_sum',
-            'team_comp_yac_wpa_sum', 'team_complete_pass_sum',
-            'team_incomplete_pass_sum', 'team_interception_sum', 'team_ep_sum',
-            'team_epa_sum', 'team_touchdown_sum', 'team_fumble_sum',
-            'team_fumble_lost_sum', 'team_xyac_epa_sum',
-    ]
+    rcols_team = [c for c in team_stats.columns if 'rush_' in c or 'rec_' in c]
 
     team_stats = team_stats.rename(columns={'season': 'year'})
     team_stats = add_rolling_stats(team_stats, ['team'], rcols_team)
@@ -466,12 +489,11 @@ def add_rz_stats(df):
     rush_rz.player = rush_rz.player.apply(dc.name_clean)
     rec_rz.player = rec_rz.player.apply(dc.name_clean)
 
-    rz = pd.merge(rush_rz, rec_rz, how='outer', on=['player', 'week', 'year', 'team'])
-    rz = rz.drop_duplicates(subset=['player','week', 'year'])
-    bye_weeks = find_bye_weeks().rename(columns={'next_week': 'bye_week'})
-    bye_weeks.bye_week = bye_weeks.bye_week - 1
-    rz = pd.merge(rz, bye_weeks, on=['team', 'week', 'year'], how='left')
-    rz = rz[rz.week!=rz.bye_week].reset_index(drop=True).drop('bye_week', axis=1)
+    rz = pd.merge(rush_rz, rec_rz, on=['player', 'team', 'week', 'year'])
+    # the red zone data is duplicated into the bye week, so
+    # this chunk of code removes the duplicated week where games
+    # weren't actually played
+    rz = drop_extra_bye_week(rz)
 
     for c in rz:
         if 'pct' not in c and 'rz' in c:
@@ -495,23 +517,29 @@ def add_rz_stats(df):
 
 def add_rz_stats_qb(df):
 
-    rz = dm.read('''SELECT * FROM PFR_Redzone_Rush
-                    JOIN (SELECT * FROM PFR_Redzone_Pass)
-                          USING (player, week, team, year)
-                    ''', 'Post_PlayerData')
-    rz.player = rz.player.apply(dc.name_clean)
-    rz = rz.drop('team', axis=1)
-    
+    rz = dm.read('''SELECT * FROM PFR_Redzone_Pass
+                    LEFT JOIN (SELECT * FROM PFR_Redzone_Rush)
+                               USING (player, week, team, year)''', 'Post_PlayerData')
+
+    rz = drop_extra_bye_week(rz)
+
     for c in rz:
         if 'pct' not in c and 'rz' in c:
             rz[c] = rz[c] / rz.week
 
+    rz = rz.fillna(0)
+    rz.week = rz.week + 1
+    rz = fix_bye_week(rz).drop('team', axis=1)
+    rz = switch_seasons(rz)
+
+    rz_cols = [c for c in rz.columns if 'rz' in c]
+    rz = add_rolling_stats(rz, gcols=['player'], rcols=rz_cols)
+    
     df = pd.merge(df, rz, on=['player', 'week', 'year'], how='left')
     df = forward_fill(df)
 
-    rz_cols = [c for c in rz.columns if 'rz' in c]
-    df = add_rolling_stats(df, gcols=['player'], rcols=rz_cols)
-    df = df.fillna(0)
+    rz_cols = [c for c in df.columns if 'rz' in c]
+    df[rz_cols] = df[rz_cols].fillna(0)
 
     return df
 
@@ -583,6 +611,74 @@ def add_weather(df):
     return df
 
 
+def advanced_rb_stats(df):
+
+    adv = dm.read('''SELECT * FROM PFR_Advanced_RB''', 'Post_PlayerData')
+    adv = adv[adv.position.isin(['RB', 'rb', 'Rb'])].drop(['rank', 'position'], axis=1)
+    adv = dc.convert_to_float(adv)
+    adv.player = adv.player.apply(dc.name_clean)
+    
+    adv['yds_before_contact_pct'] = adv['yds_before_contact'] / adv['rush_yds']
+    adv['yds_after_contact_pct'] = adv['yds_after_contact'] / adv['rush_yds']
+    adv['yds_before_contact_per_game'] = adv['yds_before_contact'] / adv['games']
+    adv['yds_after_contact_per_game'] = adv['yds_after_contact'] / adv['games']
+    adv['broke_tackles_per_game'] = adv['broke_tackles'] / adv['games']
+
+    
+    adv = adv[['player', 'team', 'week', 'year', 'yds_before_contact_per_game', 'yds_before_contact_att', 'yds_after_contact_per_game',
+                'yac_att', 'broke_tackles_per_game', 'att_broken', 'yds_before_contact_pct', 'yds_after_contact_pct']]
+
+    adv = drop_extra_bye_week(adv)
+    adv.week = adv.week + 1
+    adv = fix_bye_week(adv).drop('team', axis=1)
+    adv = switch_seasons(adv)
+
+    df = pd.merge(df, adv, on=['player', 'week', 'year'], how='left')
+    df = forward_fill(df)
+
+    adv_cols = ['yds_before_contact_per_game', 'yds_before_contact_att', 'yds_after_contact_per_game',
+                'yac_att', 'broke_tackles_per_game', 'att_broken', 'yds_before_contact_pct', 'yds_after_contact_pct']
+    df[adv_cols] = df[adv_cols].fillna(0)
+
+    return df
+
+
+
+def advanced_rec_stats(df):
+
+    adv = dm.read('''SELECT * FROM PFR_Advanced_WR''', 'Post_PlayerData')
+    adv = dc.convert_to_float(adv)
+    adv.player = adv.player.apply(dc.name_clean)
+    
+    adv['first_downs_per_target'] = adv['first_downs'] / adv['targets']
+    adv['yards_before_catch_per_game'] = adv['yds_before_catch'] / adv['games']
+    adv['yards_after_catch_per_game'] = adv['yards_after_catch'] / adv['games']
+    adv['yards_before_catch_per_target'] = adv['yds_before_catch'] / adv['targets']
+    adv['yards_after_catch_per_target'] = adv['yards_after_catch'] / adv['targets']
+    adv['broken_tackles_per_game'] = adv['broken_tackles'] / adv['targets']
+
+    
+    adv = adv[['player', 'team', 'week', 'year', 'first_downs_per_target', 'yards_before_catch_per_game',
+               'yards_after_catch_per_game', 'yards_before_catch_per_target', 'yards_after_catch_per_target',
+               'yds_before_catch_per_rec', 'yards_after_catch_per_rec', 'rec_per_broken', 'drop_pct',
+               'broken_tackles_per_game']]
+
+    adv = drop_extra_bye_week(adv)
+    adv.week = adv.week + 1
+    adv = fix_bye_week(adv)
+    adv = switch_seasons(adv)
+
+    df = pd.merge(df, adv, on=['player', 'team', 'week', 'year'], how='left')
+    df = forward_fill(df)
+
+    adv_cols = ['player', 'team', 'week', 'year', 'first_downs_per_target', 'yards_before_catch_per_game',
+               'yards_after_catch_per_game', 'yards_before_catch_per_target', 'yards_after_catch_per_target',
+               'yds_before_catch_per_rec', 'yards_after_catch_per_rec', 'rec_per_broken', 'drop_pct',
+               'broken_tackles_per_game']
+    df[adv_cols] = df[adv_cols].fillna(0)
+
+    return df
+
 #%%
 
 pos = 'QB'
@@ -601,7 +697,7 @@ df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 df = get_player_data(df, pos, YEAR); print(df.shape[0])
 df = get_team_stats(df, YEAR); print(df.shape[0])
 df = get_coach_stats(df, YEAR); print(df.shape[0])
-# df = add_rz_stats_qb(df); print(df.shape[0])
+df = add_rz_stats_qb(df); print(df.shape[0])
 
 # fill in the missing data and drop anything remaining
 df = forward_fill(df)
