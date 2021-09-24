@@ -235,12 +235,12 @@ qb = qb.fillna(0)
 for pos in ['rb', 'wr']:
     try:
         os.replace(f"/Users/mborysia/Downloads/{pos}_week{set_week}.csv", 
-                f'{root_path}CSVs/pfr_adv_stats/{set_year}/{pos}_week{set_week}.csv')
+                f'{root_path}/Data/OtherData/pfr_adv_stats/{set_year}/{pos}_week{set_week}.csv')
     except: 
         pass
 
-rb = pd.read_csv(f'{root_path}/CSVs/pfr_adv_stats/{set_year}/rb_week{set_week}.csv')
-rec = pd.read_csv(f'{root_path}/CSVs/pfr_adv_stats/{set_year}/wr_week{set_week}.csv')
+rb = pd.read_csv(f'{root_path}/Data/OtherData/pfr_adv_stats/{set_year}/rb_week{set_week}.csv')
+rec = pd.read_csv(f'{root_path}/Data/OtherData/pfr_adv_stats/{set_year}/wr_week{set_week}.csv')
 
 rb_cols = ['rank', 'player', 'team', 'age', 'position', 'games', 'games_started', 'rush_att', 'rush_yds',
            'first_downs', 'yds_before_contact', 'yds_before_contact_att', 'yds_after_contact', 'yac_att', 

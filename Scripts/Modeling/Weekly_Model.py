@@ -37,8 +37,8 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
-set_pos = 'RB'
-model_type = 'full_model'
+set_pos = 'TE'
+model_type = 'backfill'
 vers = 'v1'
 
 # set year to analyze
@@ -326,7 +326,7 @@ for final_m in final_models:
         stack_params = skm_stack.default_params(stack_pipe)
 
     best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
-                                                              X_stack, y_stack, n_iter=100, 
+                                                              X_stack, y_stack, n_iter=50, 
                                                               run_adp=True, print_coef=True)
     best_models.append(best_model)
 
@@ -366,16 +366,17 @@ output.iloc[:50]
 
 #%%
 
-# if model_type == 'backfill':
-#     to_fill = dm.read(f'''SELECT DISTINCT player FROM Model_Predictions 
-#                                     WHERE pos='{set_pos}'
-#                                         AND version='{vers}'
-#                                         AND week={set_week}
-#                                         AND year={set_year}
-#                                         AND model_type != 'backfill' ''', 'Simulation').player.values
-
-#     output = output[~output.player.isin(to_fill)]
-#     print(output.iloc[:50])
+if model_type == 'backfill':
+    to_fill = dm.read(f'''SELECT DISTINCT player FROM Model_Predictions 
+                                    WHERE pos='{set_pos}'
+                                        AND version='{vers}'
+                                        AND week={set_week}
+                                        AND year={set_year}
+                                        AND model_type != 'backfill' ''', 'Simulation').player.values
+    
+    output = output[output.player!='Ryan Griffin']
+    output = output[~output.player.isin(to_fill)]
+    print(output.iloc[:50])
 
 #%%
 
@@ -403,21 +404,13 @@ preds = dm.read(f'''SELECT *
                     WHERE version='{vers}'
                           AND week = '{set_week}'
                           AND year = '{set_year}' 
-                          AND model_type!= 'backfill'
-                          AND pos != 'Defense'
-                    UNION
-                    SELECT * 
-                    FROM Model_Predictions
-                    WHERE version='{vers}'
-                          AND week = '{set_week}'
-                          AND year = '{set_year}'
-                          AND pos = 'Defense' ''', 'Simulation')
+            ''', 'Simulation')
 
 preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game': 'mean', 
                                                               'std_dev': 'mean',
                                                               'max_score': 'mean'})
 
-drop_teams = ['WAS', 'NYG', 'BAL', 'KC', 'DET', 'GB']
+drop_teams = ['CAR', 'HOU', 'GB', 'SF', 'PHI', 'DAL']
 
 teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
                     FROM FantasyPros

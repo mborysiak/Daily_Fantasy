@@ -80,7 +80,7 @@ def add_rolling_stats(df, gcols, rcols, ):
 
 
 def switch_seasons(df):
-    df.loc[df.week==17, 'year'] = df.loc[df.week==17, 'year'] +1
+    df.loc[df.week==17, 'year'] = df.loc[df.week==17, 'year'] + 1
     df.loc[df.week==17, 'week'] = 1 
     return df
 
@@ -844,4 +844,43 @@ dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 # %%
 
 
+# %%
+
+
+fp = dm.read('''SELECT player, pos, team, week, year, fp_rank, projected_points
+                FROM FantasyPros''', "Pre_PlayerData")
+dk_sal = dm.read('''SELECT player, week, year, dk_salary
+                    FROM Daily_Salaries''', "Pre_PlayerData")
+pff = dm.read('''SELECT player, week, year, expertConsensus, fantasyPoints, `Proj Pts` ProjPts
+                    FROM PFF_Expert_Ranks
+                    JOIN (SELECT player, week, year, fantasyPoints
+                          FROM PFF_Proj_Ranks)
+                          USING (player, week, year) ''', "Pre_PlayerData")
+
+data = pd.merge(fp, dk_sal, on=['player', 'week', 'year'])
+data = pd.merge(data, pff, on=['player', 'week', 'year'])
+
+data['log_expertConsensus'] = np.min(np.log(df.expertConsensus)) - np.log(df.expertConsensus)
+data['log_fp_rank'] = np.min(np.log(df.fp_rank)) - np.log(df.fp_rank)
+data = data.dropna()
+
+cols = ['log_fp_rank', 'dk_salary', 'log_expertConsensus', 
+        'projected_points', 'fantasyPoints', 'ProjPts']
+to_agg = {c: [np.mean, np.max, np.sum] for c in cols}
+team_stats = data.groupby(['team', 'week', 'year']).agg(to_agg)
+
+diff_df = data[['player', 'team', 'week', 'year']].drop_duplicates()
+for c in cols:
+    tmp_df = team_stats[c].reset_index()
+    tmp_df = pd.merge(tmp_df, data[['player', 'team', 'week', 'year', c]], on=['team', 'week', 'year'])
+
+    for a in ['mean', 'amin', 'amax']:
+        tmp_df[f'{c}_{a}_diff'] = tmp_df[c] - tmp_df[a]
+
+    tmp_df = tmp_df[['player', 'team', 'week', 'year', f'{c}_mean_diff', f'{c}_amax_diff', f'{c}_amin_diff']]
+    diff_df = pd.merge(diff_df, tmp_df, on=['player', 'team', 'week', 'year'])
+    
+diff_df = diff_df.drop_duplicates()
+team_stats.columns = [f'{c[0]}_{c[1]}' for c in team_stats.columns]
+team_stats = team_stats.reset_index().drop_duplicates()
 # %%

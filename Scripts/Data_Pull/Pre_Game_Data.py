@@ -287,10 +287,10 @@ def pff_matchups(label):
     
     try:
         os.replace(f"/Users/mborysia/Downloads/{label}_matchup_chart.csv", 
-            f'{root_path}/CSVs/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
+            f'{root_path}/Data/OtherData/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
     except:
         print('No file to pull')
-    df = pd.read_csv(f'{root_path}/CSVs/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
+    df = pd.read_csv(f'{root_path}/Data/OtherData/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
     
     if label != 'te':
         df.offTeam = df.offTeam.map(team_map)
@@ -331,11 +331,11 @@ def pff_proj(label_pre, label_post, folder, rep=True):
     
     try:
         os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
-                   f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
-        df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+                   f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
 
     except:
-        df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
 
     df = df.rename(columns={'teamName': 'offTeam', 'games': 'defTeam'})
     df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
@@ -355,11 +355,11 @@ def pff_rank(label_pre, label_post, folder):
     
     try:
         os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
-                   f'{root_path}CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
-        df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+                   f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
 
     except:
-        df = pd.read_csv(f'{root_path}/CSVs/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
 
     df = df.rename(columns={'Team': 'offTeam', 'Opponent': 'defTeam'})
     df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
