@@ -37,17 +37,17 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
-set_pos = 'Defense'
+set_pos = 'RB'
 model_type = 'full_model'
 vers = 'v1'
 
 # set year to analyze
 set_year = 2021
-set_week = 2
+set_week = 3
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 9
+val_week_min = 10
 
 met = 'y_act'
 
@@ -172,13 +172,13 @@ for m in model_list:
                              skm.feature_union([
                                           skm.piece('agglomeration'), 
                                           skm.piece('k_best'),
+                                          skm.piece('pca')
                                           ]),
-                             skm.piece('std_scale', 'std_scale2'),
                              skm.piece('k_best'),
                              skm.piece(m)])
       
       params = skm.default_params(pipe, 'rand')
-    #   params['select_perc__percentile'] = range(5, 40, 5)
+      params['select_perc__percentile'] = range(5, 30, 5)
 
       if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
 

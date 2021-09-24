@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 2
+WEEK = 3
 
 #%%
 import pandas as pd 
@@ -43,6 +43,7 @@ def rolling_expand(df, gcols, rcols, agg_type='mean'):
         # pull out perc amount and convert to decimal float to calculate quantile rolling
         perc_amt = float(agg_type[1:])/100
         rolls =  df.groupby(gcols)[rcols].apply(lambda x: x.expanding().quantile(perc_amt))
+
     # otherwise, use the string argument of aggregation
     else:
         rolls = df.groupby(gcols)[rcols].apply(lambda x: x.expanding().agg(agg_type))
@@ -63,16 +64,17 @@ def add_rolling_stats(df, gcols, rcols, ):
 
     rolls_mean = rolling_stats(df, gcols, rcols, 3, agg_type='mean')
     rolls_max = rolling_stats(df, gcols, rcols, 3, agg_type='max')
-    rolls_med = rolling_stats(df, gcols, rcols, 3, agg_type='median')
+    # rolls_med = rolling_stats(df, gcols, rcols, 3, agg_type='median')
 
     hist_mean = rolling_expand(df, gcols, rcols, agg_type='mean')
     hist_std = rolling_expand(df, gcols, rcols, agg_type='std')
-    hist_p80 = rolling_expand(df, gcols, rcols, agg_type='p80')
-    hist_p20 = rolling_expand(df, gcols, rcols, agg_type='p20')
+    hist_p80 = rolling_expand(df, gcols, rcols, agg_type='p95')
+    # hist_p20 = rolling_expand(df, gcols, rcols, agg_type='p20')
 
     df = pd.concat([df, 
-                    hist_mean, hist_std, hist_p80, hist_p20, 
-                    rolls_mean, rolls_max, rolls_med], axis=1)
+                    hist_mean, hist_std, hist_p80,# hist_p20, 
+                    rolls_mean, rolls_max,# rolls_med
+                    ], axis=1)
 
     return df
 
@@ -378,13 +380,15 @@ def calc_market_share(df):
     team_cols = ['team_' + c for c in player_cols]
 
     for p, t in zip(player_cols, team_cols):
-        df[p+'_share'] = df[p] / df[t]
+        df[p+'_share'] = df[p] / (df[t]+0.5)
 
     share_cols = [c+'_share' for c in player_cols]
+    df[share_cols] = df[share_cols].fillna(0)
     df = add_rolling_stats(df, gcols=['player'], rcols=share_cols)
 
-    share_cols = [c for c in df.columns if '_share' in c]
-    df = forward_fill(df, share_cols)
+    df = forward_fill(df)
+    share_cols = [c for c in df.columns if 'share' in c]
+    df[share_cols] = df[share_cols].fillna(0)
 
     return df
 
@@ -490,6 +494,7 @@ def add_rz_stats(df):
     rec_rz.player = rec_rz.player.apply(dc.name_clean)
 
     rz = pd.merge(rush_rz, rec_rz, on=['player', 'team', 'week', 'year'])
+
     # the red zone data is duplicated into the bye week, so
     # this chunk of code removes the duplicated week where games
     # weren't actually played
@@ -577,7 +582,8 @@ def add_weather(df):
     def heat_index(row):
         T = row[0]
         RH = row[1]
-        return -42.379 + 2.04901523*T + 10.14333127*RH - .22475541*T*RH - .00683783*T*T - .05481717*RH*RH + .00122874*T*T*RH + .00085282*T*RH*RH - .00000199*T*T*RH*RH
+        return -42.379 + 2.04901523*T + 10.14333127*RH - .22475541*T*RH - .00683783*T*T - \
+             .05481717*RH*RH + .00122874*T*T*RH + .00085282*T*RH*RH - .00000199*T*T*RH*RH
 
     weather['heat_index'] = weather[['temp_high', 'humidity']].apply(heat_index, axis=1)
     weather['wind_chill'] = weather.temp_low - (weather.wind_speed * 0.7)
@@ -704,7 +710,9 @@ df = forward_fill(df)
 df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
 # dm.delete_from_db('Model_Features', 'QB_Data', f"year={YEAR} AND week={WEEK}")
-dm.write_to_db(df, 'Model_Features', 'QB_Data', if_exist='replace')
+dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
+if df.shape[1] > 2000:
+    dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
 
 team_qb = get_max_qb(df)
 for pos in ['RB', 'WR', 'TE']:
@@ -724,6 +732,7 @@ for pos in ['RB', 'WR', 'TE']:
     # post-game data
     df = get_player_data(df, pos, YEAR); print(df.shape[0])
     df = get_team_stats(df, YEAR); print(df.shape[0])
+    df = calc_market_share(df); print(df.shape[0])
     df = get_coach_stats(df, YEAR); print(df.shape[0])
     df = add_rz_stats(df); print(df.shape[0])
     df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
@@ -737,7 +746,9 @@ for pos in ['RB', 'WR', 'TE']:
     df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
     # dm.delete_from_db('Model_Features', f'{pos}_Data', f"year={YEAR} AND week={WEEK}")
-    dm.write_to_db(df, 'Model_Features', f'{pos}_Data', if_exist='replace')
+    dm.write_to_db(df.iloc[:, :2000], 'Model_Features', f'{pos}_Data', if_exist='replace')
+    if df.shape[1] > 2000:
+        dm.write_to_db(df.iloc[:, 2000:], 'Model_Features', f'{pos}_Data2', if_exist='replace')
 
 
 #%%
