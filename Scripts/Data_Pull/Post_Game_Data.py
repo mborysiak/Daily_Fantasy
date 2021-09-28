@@ -344,3 +344,21 @@ qbr['year'] = set_year
 
 dm.delete_from_db('Post_PlayerData', 'ESPN_QBR', f"week={set_week} AND year={set_year}")
 dm.write_to_db(qbr, 'Post_PlayerData', 'ESPN_QBR', 'append')
+
+#%%
+#-----------
+# PFF Defensive Player Downloads
+#-----------
+
+try:
+    os.replace(f"/Users/mborysia/Downloads/defense_summary.csv", 
+                f'{root_path}/Data/OtherData/PFF_Defense/{set_year}/defense_summary_week{set_week}.csv')
+except: 
+    pass
+
+df = pd.read_csv(f'{root_path}/Data/OtherData/PFF_Defense/{set_year}/defense_summary_week{set_week}.csv')
+df['week'] = set_week
+df['year'] = set_year
+
+dm.delete_from_db('Post_PlayerData', 'Defense_Players', f"week={set_week} AND year={set_year}")
+dm.write_to_db(df, 'Post_PlayerData', 'Defense_Players', 'append')

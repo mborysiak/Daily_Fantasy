@@ -37,7 +37,7 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
-set_pos = 'TE'
+set_pos = 'WR'
 model_type = 'backfill'
 vers = 'v1'
 
@@ -326,7 +326,7 @@ for final_m in final_models:
         stack_params = skm_stack.default_params(stack_pipe)
 
     best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
-                                                              X_stack, y_stack, n_iter=50, 
+                                                              X_stack, y_stack, n_iter=100, 
                                                               run_adp=True, print_coef=True)
     best_models.append(best_model)
 
@@ -485,8 +485,8 @@ output = create_sim_output(preds).reset_index(drop=True)
 
 #%%
 
-idx = output[output.player=="Dalvin Cook"].index[0]
-plot_distribution(output.iloc[idx])
+# idx = output[output.player=="Dalvin Cook"].index[0]
+# plot_distribution(output.iloc[idx])
 # %%
 
 dm.write_to_db(output, 'Simulation', f'week{set_week}_year{set_year}', 'replace')

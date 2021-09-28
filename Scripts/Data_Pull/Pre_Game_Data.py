@@ -94,6 +94,7 @@ salaries['week'] = set_week
 salaries['year'] = set_year
 player_salary = salaries[salaries.position!='DST']
 player_salary.player = player_salary.player.apply(dc.name_clean)
+player_salary.team = player_salary.team.map(team_map)
 
 team_salary = salaries[salaries.position=='DST']
 team_salary.team = team_salary.team.map(team_map)
@@ -454,3 +455,16 @@ other_sal['dk_salary'] = other_sal.salary
 other_sal = other_sal.drop('salary', axis=1)
 dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
 dm.write_to_db(other_sal, 'Pre_PlayerData', 'Daily_Salaries', 'append')
+
+#%%
+
+
+df = pd.read_html(f'https://www.nfl.com/injuries/league/{set_year}/reg{set_week}')
+for i in range(len(df)):
+    if i % 10 == 0:
+        print(i)
+    df[i].columns = ['player', 'pos', 'injuries', 'practice_status', 'game_status']
+    df[i]['week'] = set_week
+    df[i]['year'] = set_year
+    dm.write_to_db(df[i], 'Pre_PlayerData', 'PlayerInjuries', 'append')
+# %%

@@ -33,7 +33,7 @@ set_year = 2021
 league=3
 
 # number of iteration to run
-iterations = 2000
+iterations = 1000
 
 # set league information, included position requirements, number of teams, and salary cap
 league_info = {}
