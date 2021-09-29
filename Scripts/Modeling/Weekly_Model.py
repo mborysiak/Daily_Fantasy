@@ -37,8 +37,8 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
-set_pos = 'WR'
-model_type = 'backfill'
+set_pos = 'Defense'
+model_type = 'full_model'
 vers = 'v1'
 
 # set year to analyze
@@ -368,11 +368,11 @@ output.iloc[:50]
 
 if model_type == 'backfill':
     to_fill = dm.read(f'''SELECT DISTINCT player FROM Model_Predictions 
-                                    WHERE pos='{set_pos}'
-                                        AND version='{vers}'
-                                        AND week={set_week}
-                                        AND year={set_year}
-                                        AND model_type != 'backfill' ''', 'Simulation').player.values
+                          WHERE pos='{set_pos}'
+                                AND version='{vers}'
+                                AND week={set_week}
+                                AND year={set_year}
+                                AND model_type != 'backfill' ''', 'Simulation').player.values
     
     output = output[output.player!='Ryan Griffin']
     output = output[~output.player.isin(to_fill)]

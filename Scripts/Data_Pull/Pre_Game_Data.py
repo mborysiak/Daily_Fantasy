@@ -466,5 +466,6 @@ for i in range(len(df)):
     df[i].columns = ['player', 'pos', 'injuries', 'practice_status', 'game_status']
     df[i]['week'] = set_week
     df[i]['year'] = set_year
+    df[i].player = df[i].player.apply(dc.name_clean)
     dm.write_to_db(df[i], 'Pre_PlayerData', 'PlayerInjuries', 'append')
 # %%

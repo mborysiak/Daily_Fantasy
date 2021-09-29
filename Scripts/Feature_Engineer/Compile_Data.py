@@ -368,12 +368,27 @@ def positional_values():
     return all_stats
 
 
-def get_max_qb(df):
+def get_max_qb():
+
+    fp = dm.read('''SELECT player, pos, team, week, year, fp_rank, projected_points
+                        FROM FantasyPros
+                        WHERE pos='QB' ''', "Pre_PlayerData")
+
+    dk_sal = dm.read('''SELECT player, team, week, year, dk_salary
+                        FROM Daily_Salaries''', "Pre_PlayerData")
+
+    pff = dm.read('''SELECT player, week, year, expertConsensus, fantasyPoints, `Proj Pts` ProjPts
+                     FROM PFF_Expert_Ranks
+                     JOIN (SELECT player, week, year, fantasyPoints
+                           FROM PFF_Proj_Ranks)
+                           USING (player, week, year) ''', "Pre_PlayerData")
+
+    df = pd.merge(fp, dk_sal, on=['player', 'team', 'week', 'year'], how='inner')
+    df = pd.merge(df, pff, on=['player', 'week', 'year'], how='inner')
 
     qb_cols = ['team', 'week', 'year', 'fp_rank', 'projected_points',
-                'fantasyPoints',  'fantasyPointsRank', 'ProjPts',
-                'expertConsensus', 'dk_salary', 'fd_salary', 
-                'yahoo_salary']
+                'fantasyPoints', 'ProjPts',
+                'expertConsensus', 'dk_salary']
 
     max_qb = df.groupby(['team', 'year', 'week'], as_index=False).agg({'projected_points': 'max'})
     max_qb = pd.merge(max_qb, df, on=['team', 'year', 'week', 'projected_points'])
@@ -415,9 +430,28 @@ def get_player_data(df, pos, YEAR):
     player_data['week'] = player_data['week'] + 1
     player_data = switch_seasons(player_data)
     player_data = fix_bye_week(player_data)
-    player_data = player_data.drop('team', axis=1)
 
-    df = pd.merge(df, player_data, on=['player', 'week', 'year'])
+    # players who miss a week have their stats lined up with the following week and not the
+    # week that they return. Eg. a player plays week 10 and then missed untils 14. His week 10
+    # stats are set to week 11, rather than week 14. This code block realigns the stats
+    player_data['shift_week'] = player_data.week.shift(-1)
+    player_data['week_delta'] = player_data['shift_week'] - player_data['week']
+    # pull in the bye weeks and join so that the missed week calculation can remove byes
+    byes = find_bye_weeks().rename(columns={'next_week': 'shift_week', 'week': 'bye_week'})
+    player_data = pd.merge(player_data, byes, on=['team', 'shift_week', 'year'], how='left')
+    
+    # filter the data to locate weeks where players missed time in between
+    filter_expr = '''(player_data.week + 1 != player_data.bye_week) & \
+                     (player_data.week_delta > 1) & \
+                     ~((player_data.week==WEEK) & (player_data.year==YEAR))'''
+    # calculate the weeks missed prior to adjusting the last week played data to next week played data
+    player_data['weeks_missed'] = 0
+    player_data.loc[eval(filter_expr), 'weeks_missed'] = player_data.loc[eval(filter_expr), 'week_delta'] - 1
+    player_data.loc[eval(filter_expr), 'week'] = player_data.loc[eval(filter_expr), 'shift_week'] - 1
+    player_data = player_data.drop(['shift_week', 'week_delta', 'bye_week'], axis=1)
+
+    # merge player data back to the main dataframe
+    df = pd.merge(df, player_data, on=['player', 'team', 'week', 'year'])
     df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
 
     return df
@@ -444,6 +478,7 @@ def calc_market_share(df):
     df[share_cols] = df[share_cols].fillna(0)
 
     return df
+
 
 def add_player_comparison(df, cols):
     
@@ -753,8 +788,10 @@ df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
 # post-game data
 df = get_player_data(df, pos, YEAR); print(df.shape[0])
+
 team_stats = get_team_stats(YEAR)
 df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
+
 df = get_coach_stats(df, YEAR); print(df.shape[0])
 df = add_rz_stats_qb(df); print(df.shape[0])
 
@@ -770,12 +807,11 @@ df = df.dropna().reset_index(drop=True); print(df.shape[0])
 # if df.shape[1] > 2000:
 #     dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
 
-team_qb = get_max_qb(df)
-
 #%%
 for pos in ['RB']:#, 'WR', 'TE']:
-    
-    # pre-game data
+    #--------------------
+    # Pre-Game Data
+    #--------------------
     df = fantasy_pros(pos); print(df.shape[0])
     df = df[~((df.player.isin(drop_players)) & (df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
     df = get_salaries(df, pos); print(df.shape[0])
@@ -792,21 +828,28 @@ for pos in ['RB']:#, 'WR', 'TE']:
     dst = add_team_matchups().drop('offTeam', axis=1)
     df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
-    # post-game data
+    #-----------------------
+    # Post-Game Data
+    #----------------------
     df = get_player_data(df, pos, YEAR); print(df.shape[0])
-    df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
-    df = calc_market_share(df); print(df.shape[0])
-    df = get_coach_stats(df, YEAR); print(df.shape[0])
-    df = add_rz_stats(df); print(df.shape[0])
-    df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
+    
+    # team_stats = get_team_stats(YEAR, prev_years=2)
+    # df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
+    
+    # df = calc_market_share(df); print(df.shape[0])
+    # df = get_coach_stats(df, YEAR); print(df.shape[0])
+    # df = add_rz_stats(df); print(df.shape[0])
 
-    # pre game data reliant on team information
-    compare_cols = ['fp_rank', 'dk_salary', 'expertConsensus', 'projected_points', 'fantasyPoints', 'ProjPts']
-    df = add_player_comparison(df, compare_cols); print(df.shape[0])
+    # team_qb = get_max_qb()
+    # df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
 
-    # fill in missing data and drop any remaining rows
-    df = forward_fill(df)
-    df = df.dropna().reset_index(drop=True); print(df.shape[0])
+    # # pre game data reliant on team information
+    # compare_cols = ['fp_rank', 'dk_salary', 'expertConsensus', 'projected_points', 'fantasyPoints', 'ProjPts']
+    # df = add_player_comparison(df, compare_cols); print(df.shape[0])
+
+    # # fill in missing data and drop any remaining rows
+    # df = forward_fill(df)
+    # df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
     # dm.write_to_db(df.iloc[:, :2000], 'Model_Features', f'{pos}_Data', if_exist='replace')
     # if df.shape[1] > 2000:
@@ -826,7 +869,7 @@ pff_def = add_team_matchups().rename(columns={'defTeam': 'team'})
 pff_def = add_rolling_stats(pff_def, gcols=['team'], rcols=[c for c in pff_def.columns if 'expert' in c])
 defense = pd.merge(defense, pff_def, on=['team', 'year', 'week'])
 
-team_qb = team_qb.rename(columns={'team': 'offTeam'})
+team_qb = get_max_qb().rename(columns={'team': 'offTeam'})
 defense = pd.merge(defense, team_qb, on=['offTeam', 'week', 'year'], how='left')
 
 defense = add_gambling_lines(defense); print(defense.shape[0])
@@ -840,8 +883,11 @@ defense = pd.merge(defense, team_stats, on=['offTeam', 'week', 'year']); print(d
 
 defense = defense.copy().rename(columns={'team': 'player'})
 defense = forward_fill(defense)
+defense = defense.fillna(defense.mean())
 
-# dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
+defense.columns = [c.replace('_dst', '') for c in defense.columns]
+
+dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 
 # %%
 
@@ -860,6 +906,12 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     df = add_gambling_lines(df); print(df.shape[0])
     df = get_team_stats(df, YEAR); print(df.shape[0])
     df = get_coach_stats(df, YEAR); print(df.shape[0])
+    
+    pos_values = positional_values()
+    df = pd.merge(df, pos_values, on=['team', 'week', 'year']); print(df.shape[0])
+
+    team_qb = get_max_qb()
+    df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
 
     y_acts = dm.read(f'''SELECT player, team, week, season year, y_act 
                          FROM {pos}_Stats
@@ -891,8 +943,34 @@ dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 
 # %%
 
+def cleanup_injuries():
 
+    inj = dm.read('''SELECT * FROM PlayerInjuries''', 'Pre_PlayerData')
+    inj = pd.concat([inj, pd.get_dummies(inj.game_status)], axis=1)
+    inj = inj.dropna(subset=['injuries']).reset_index(drop=True)
+
+    inj['leg_muscle_injury'] = 0
+    inj.loc[inj.injuries.str.contains('Hamstring|Groin|Calf|Thigh|Quad'), 'leg_muscle_injury'] = 1
+
+    inj['ankle_foot_injury'] = 0
+    inj.loc[inj.injuries.str.contains('Ankle|Foot|Toe|Achilles'), 'ankle_foot_injury'] = 1
+
+    inj['knee_hip_injury'] = 0
+    inj.loc[inj.injuries.str.contains('Knee|Hip'), 'knee_hip_injury'] = 1
+
+    inj['upper_body_injury'] = 0
+    inj.loc[inj.injuries.str.contains('Wrist|Shoulder|Rib|Chest|Back'), 'knee_hip_injury'] = 1
+
+    inj = inj[['player', 'pos', 'week', 'year', 'Questionable', 'Doubtful', 'Out',
+            'leg_muscle_injury', 'ankle_foot_injury', 'knee_hip_injury', 'upper_body_injury']]
+
+    return inj
 
 # %%
-xx[xx.team_dk_salary_sum<30000]
+
+injuries = cleanup_injuries()
+df = pd.merge(df, injuries[injuries.pos=='RB'], on=['player', 'week', 'year'])
+df.iloc[:, -25:]
+# %%
+df.loc[df.Out==1, ['player', 'week', 'year', 'y_act']]
 # %%
