@@ -363,6 +363,7 @@ df['year'] = set_year
 df.player = df.player.apply(dc.name_clean)
 df = df.rename(columns={'team_name': 'team'})
 df.team = df.team.map(team_map)
-
+#%%
 dm.delete_from_db('Post_PlayerData', 'Defense_Players', f"week={set_week} AND year={set_year}")
 dm.write_to_db(df, 'Post_PlayerData', 'Defense_Players', 'append')
+# %%

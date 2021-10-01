@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 3
+WEEK = 4
 
 #%%
 import pandas as pd 
@@ -769,15 +769,90 @@ def get_defense_stats(prev_years=2):
 
     return d_stats
 
+
+
+def add_injuries(df):
+
+    inj = dm.read('''SELECT * FROM PlayerInjuries''', 'Pre_PlayerData')
+    inj = pd.concat([inj, pd.get_dummies(inj.game_status)], axis=1)
+    inj = inj.dropna(subset=['injuries']).reset_index(drop=True)
+
+    inj['leg_muscle_injury'] = 0
+    inj.loc[inj.injuries.str.contains('Hamstring|Groin|Calf|Thigh|Quad'), 'leg_muscle_injury'] = 1
+
+    inj['ankle_foot_injury'] = 0
+    inj.loc[inj.injuries.str.contains('Ankle|Foot|Toe|Achilles'), 'ankle_foot_injury'] = 1
+
+    inj['knee_hip_injury'] = 0
+    inj.loc[inj.injuries.str.contains('Knee|Hip'), 'knee_hip_injury'] = 1
+
+    inj['upper_body_injury'] = 0
+    inj.loc[inj.injuries.str.contains('Wrist|Shoulder|Rib|Chest|Back'), 'knee_hip_injury'] = 1
+
+    inj = inj[['player', 'pos', 'week', 'year', 'Questionable', 'Doubtful', 'Out',
+            'leg_muscle_injury', 'ankle_foot_injury', 'knee_hip_injury', 'upper_body_injury']]
+
+    df = pd.merge(df, inj, on=['player', 'pos', 'week', 'year'], how='left')
+    cols = ['Questionable', 'Doubtful', 'Out', 'leg_muscle_injury', 'ankle_foot_injury',
+            'knee_hip_injury', 'upper_body_injury']
+    df[cols] = df[cols].fillna(0)
+
+    players = list(df.loc[(df.week==WEEK) & (df.year==YEAR), 'player'].values)
+    df = df[(df.Out != 1) & (df.Doubtful != 1)].reset_index(drop=True)
+    player_inj =  list(df.loc[(df.week==WEEK) & (df.year==YEAR), 'player'].values)
+    print(f'Players out this week: {[p for p in players if p not in player_inj]}')
+
+    return df
+
+
+def def_pts_allowed(df, pos):
+
+    pts_allowed = dm.read(f'''SELECT * FROM Def_Allowed_{pos}''', 'Post_PlayerData')
+
+    stat_cols = [c for c in pts_allowed if c not in ('team', 'games', 'week', 'year') and 'per_game' not in c]
+    for c in stat_cols:
+        pts_allowed[c] = pts_allowed[c] / (pts_allowed['games'].fillna(1))
+
+    if pos == 'TE':
+        pts_allowed.columns = [c.replace('wr', 'te') for c in pts_allowed.columns]
+        stat_cols = [c for c in pts_allowed if c not in ('team', 'games', 'week', 'year') and 'per_game' not in c]
+    
+    pts_allowed = pts_allowed.drop([c for c in pts_allowed.columns if 'per_game' in c], axis=1)
+
+    pts_allowed['player'] = pts_allowed.team
+    pts_allowed = drop_extra_bye_week(pts_allowed).drop('player', axis=1)
+
+    pts_allowed.week = pts_allowed.week + 1
+
+    pts_allowed = fix_bye_week(pts_allowed)
+    pts_allowed = switch_seasons(pts_allowed)
+
+    pts_allowed = pts_allowed.rename(columns={'team': 'defTeam'})
+    df = pd.merge(df, pts_allowed.drop('games', axis=1), on=['defTeam', 'week', 'year'], how='left')
+    
+    df = forward_fill(df)
+    df[stat_cols] = df[stat_cols].fillna(df[stat_cols].mean())
+
+    return df
+
+
+
 #%%
 
-drop_players = ['Tee Higgins', 'Antonio Brown', 'Deandre Hopkins', 'Diontae Johnson']
+# defense stats that can be added to the offensive player data
+defense = fantasy_pros('DST').rename(columns={'player': 'team'})
+d_stats = get_defense_stats(prev_years=2).drop('y_act', axis=1)
+defense = pd.merge(defense, d_stats, on=['team', 'week', 'year'], how='inner')
+defense = defense.dropna()
+defense.columns = [f'def_{c}' if 'def' not in c else c for c in defense.columns]
+defense = defense.rename(columns={'def_team': 'defTeam', 'def_week': 'week', 'def_year': 'year'})
+
+#%%
 
 pos = 'QB'
 
 # pre-game data
 df = fantasy_pros(pos); print(df.shape[0])
-df = df[~((df.player.isin(drop_players)) & (df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
 df = get_salaries(df, pos); print(df.shape[0])
 df = get_experts(df, pos); print(df.shape[0])
 df = add_pfr_matchup(df); print(df.shape[0])
@@ -792,7 +867,7 @@ df = get_player_data(df, pos, YEAR); print(df.shape[0])
 team_stats = get_team_stats(YEAR)
 df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
 
-df = get_coach_stats(df, YEAR); print(df.shape[0])
+# df = get_coach_stats(df, YEAR); print(df.shape[0])
 df = add_rz_stats_qb(df); print(df.shape[0])
 
 # get the positional values for the team
@@ -803,17 +878,23 @@ df = pd.merge(df, pos_values, on=['team', 'week', 'year']); print(df.shape[0])
 df = forward_fill(df)
 df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
-# dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
-# if df.shape[1] > 2000:
-#     dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
+df = add_injuries(df); print(df.shape[0])
+df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
+df = def_pts_allowed(df, pos); print(df.shape[0])
+
+print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
+dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
+if df.shape[1] > 2000:
+    dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
 
 #%%
-for pos in ['RB']:#, 'WR', 'TE']:
+for pos in ['RB', 'WR', 'TE']:
+
     #--------------------
     # Pre-Game Data
     #--------------------
+
     df = fantasy_pros(pos); print(df.shape[0])
-    df = df[~((df.player.isin(drop_players)) & (df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
     df = get_salaries(df, pos); print(df.shape[0])
     df = add_pfr_matchup(df); print(df.shape[0])
     df = get_experts(df, pos); print(df.shape[0])
@@ -833,28 +914,32 @@ for pos in ['RB']:#, 'WR', 'TE']:
     #----------------------
     df = get_player_data(df, pos, YEAR); print(df.shape[0])
     
-    # team_stats = get_team_stats(YEAR, prev_years=2)
-    # df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
+    team_stats = get_team_stats(YEAR, prev_years=2)
+    df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
     
-    # df = calc_market_share(df); print(df.shape[0])
+    df = calc_market_share(df); print(df.shape[0])
     # df = get_coach_stats(df, YEAR); print(df.shape[0])
-    # df = add_rz_stats(df); print(df.shape[0])
+    df = add_rz_stats(df); print(df.shape[0])
 
-    # team_qb = get_max_qb()
-    # df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
+    team_qb = get_max_qb()
+    df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
 
-    # # pre game data reliant on team information
-    # compare_cols = ['fp_rank', 'dk_salary', 'expertConsensus', 'projected_points', 'fantasyPoints', 'ProjPts']
-    # df = add_player_comparison(df, compare_cols); print(df.shape[0])
+    # pre game data reliant on team information
+    compare_cols = ['fp_rank', 'dk_salary', 'expertConsensus', 'projected_points', 'fantasyPoints', 'ProjPts']
+    df = add_player_comparison(df, compare_cols); print(df.shape[0])
 
-    # # fill in missing data and drop any remaining rows
-    # df = forward_fill(df)
-    # df = df.dropna().reset_index(drop=True); print(df.shape[0])
+    # fill in missing data and drop any remaining rows
+    df = forward_fill(df)
+    df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
-    # dm.write_to_db(df.iloc[:, :2000], 'Model_Features', f'{pos}_Data', if_exist='replace')
-    # if df.shape[1] > 2000:
-    #     dm.write_to_db(df.iloc[:, 2000:], 'Model_Features', f'{pos}_Data2', if_exist='replace')
+    df = add_injuries(df); print(df.shape[0])
+    df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
+    df = def_pts_allowed(df, pos); print(df.shape[0])
 
+    print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
+    dm.write_to_db(df.iloc[:, :2000], 'Model_Features', f'{pos}_Data', if_exist='replace')
+    if df.shape[1] > 2000:
+        dm.write_to_db(df.iloc[:, 2000:], 'Model_Features', f'{pos}_Data2', if_exist='replace')
 
 #%%
 
@@ -891,12 +976,21 @@ dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 
 # %%
 
+
+# defense stats that can be added to the offensive player data
+defense = fantasy_pros('DST').rename(columns={'player': 'team'})
+d_stats = get_defense_stats(prev_years=2).drop('y_act', axis=1)
+defense = pd.merge(defense, d_stats, on=['team', 'week', 'year'], how='inner')
+defense = defense.dropna()
+defense.columns = [f'def_{c}' if 'def' not in c else c for c in defense.columns]
+defense = defense.rename(columns={'def_team': 'defTeam', 'def_week': 'week', 'def_year': 'year'})
+
+
 # pre-game data
 output = pd.DataFrame()
 for pos in ['QB', 'RB', 'WR', 'TE']:
     
     df = fantasy_pros(pos, add_rolling=False); print(df.shape[0])
-    df = df[~((df.player.isin(drop_players)) & (df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
     df = get_salaries(df, pos); print(df.shape[0])
     df = get_experts(df, pos, add_rolling=False); print(df.shape[0])
     dst = add_team_matchups().drop('offTeam', axis=1)
@@ -904,8 +998,9 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
 
     df = add_weather(df); print(df.shape[0])
     df = add_gambling_lines(df); print(df.shape[0])
-    df = get_team_stats(df, YEAR); print(df.shape[0])
-    df = get_coach_stats(df, YEAR); print(df.shape[0])
+    team_stats = get_team_stats(YEAR, prev_years=2)
+    df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
+    # df = get_coach_stats(df, YEAR); print(df.shape[0])
     
     pos_values = positional_values()
     df = pd.merge(df, pos_values, on=['team', 'week', 'year']); print(df.shape[0])
@@ -934,43 +1029,17 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
                     'fantasyPointsRank', 'ProjPts', 'expertConsensus']
     df = add_player_comparison(df, compare_cols)
 
+    df = add_injuries(df); print(df.shape[0])
+    df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
+    df = def_pts_allowed(df, pos); print(df.shape[0])
+
     df = df.dropna(subset=[c for c in df.columns if c !='y_act']).reset_index(drop=True); print(df.shape[0])
     df['pos'] = pos
+        
+    print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
     output = pd.concat([output, df], axis=0)
 
 dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 
 
-# %%
-
-def cleanup_injuries():
-
-    inj = dm.read('''SELECT * FROM PlayerInjuries''', 'Pre_PlayerData')
-    inj = pd.concat([inj, pd.get_dummies(inj.game_status)], axis=1)
-    inj = inj.dropna(subset=['injuries']).reset_index(drop=True)
-
-    inj['leg_muscle_injury'] = 0
-    inj.loc[inj.injuries.str.contains('Hamstring|Groin|Calf|Thigh|Quad'), 'leg_muscle_injury'] = 1
-
-    inj['ankle_foot_injury'] = 0
-    inj.loc[inj.injuries.str.contains('Ankle|Foot|Toe|Achilles'), 'ankle_foot_injury'] = 1
-
-    inj['knee_hip_injury'] = 0
-    inj.loc[inj.injuries.str.contains('Knee|Hip'), 'knee_hip_injury'] = 1
-
-    inj['upper_body_injury'] = 0
-    inj.loc[inj.injuries.str.contains('Wrist|Shoulder|Rib|Chest|Back'), 'knee_hip_injury'] = 1
-
-    inj = inj[['player', 'pos', 'week', 'year', 'Questionable', 'Doubtful', 'Out',
-            'leg_muscle_injury', 'ankle_foot_injury', 'knee_hip_injury', 'upper_body_injury']]
-
-    return inj
-
-# %%
-
-injuries = cleanup_injuries()
-df = pd.merge(df, injuries[injuries.pos=='RB'], on=['player', 'week', 'year'])
-df.iloc[:, -25:]
-# %%
-df.loc[df.Out==1, ['player', 'week', 'year', 'y_act']]
 # %%

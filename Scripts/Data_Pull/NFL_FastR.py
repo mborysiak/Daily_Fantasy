@@ -361,27 +361,27 @@ dm.delete_from_db('FastR', 'Team_Stats', f"season={cur_season}")
 dm.write_to_db(team, 'FastR', 'Team_Stats', if_exist='append')
 
 #%%
-#--------------
-# Coach Stats
-#--------------
+# #--------------
+# # Coach Stats
+# #--------------
 
-gcols = ['season', 'week', 'coach', 'posteam']
+# gcols = ['season', 'week', 'coach', 'posteam']
 
-coach_labels = get_coaches()
-coach_data = pd.merge(data, coach_labels, on=['season', 'week', 'posteam'])
+# coach_labels = get_coaches()
+# coach_data = pd.merge(data, coach_labels, on=['season', 'week', 'posteam'])
 
-coach_sum = get_agg_stats(coach_data, gcols, sum_cols, 'sum', prefix='coach')
-coach_mean = get_agg_stats(coach_data, gcols, mean_cols, 'mean', prefix='coach')
+# coach_sum = get_agg_stats(coach_data, gcols, sum_cols, 'sum', prefix='coach')
+# coach_mean = get_agg_stats(coach_data, gcols, mean_cols, 'mean', prefix='coach')
 
-coaches = coach_data[gcols].drop_duplicates()
-coaches = pd.merge(coaches, coach_sum, on=gcols)
-coaches = pd.merge(coaches, coach_mean, on=gcols)
-coaches = coaches.sort_values(by=['season', 'coach', 'week'])
-coaches = coaches.rename(columns={'posteam': 'team'})
+# coaches = coach_data[gcols].drop_duplicates()
+# coaches = pd.merge(coaches, coach_sum, on=gcols)
+# coaches = pd.merge(coaches, coach_mean, on=gcols)
+# coaches = coaches.sort_values(by=['season', 'coach', 'week'])
+# coaches = coaches.rename(columns={'posteam': 'team'})
 
-coaches.team = coaches.team.map(team_map)
-dm.delete_from_db('FastR', 'Coach_Stats', f"season={cur_season}")
-dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='append')
+# coaches.team = coaches.team.map(team_map)
+# dm.delete_from_db('FastR', 'Coach_Stats', f"season={cur_season}")
+# dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='append')
 
 #%%
 
@@ -465,3 +465,4 @@ def_scoring['y_act'] = def_scoring.groupby('defteam')['fantasy_pts'].shift(-1)
 def_scoring.defteam = def_scoring.defteam.map(team_map)
 dm.delete_from_db('FastR', 'Defense_Stats', f"season={cur_season}")
 dm.write_to_db(def_scoring, 'FastR', 'Defense_Stats', if_exist='append')
+# %%
