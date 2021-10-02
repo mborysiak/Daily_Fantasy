@@ -6,7 +6,7 @@ __pycache__/
 #ipynb
 *.ipynb
 
-
+*Model_Features.sqlite3
 Backups/
 Archive/
 
@@ -139,3 +139,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+Data/Databases/Model_Features.sqlite3
+Data/Databases/Model_Features.sqlite3
+Data/Databases/Simulation_week4_v2.sqlite3
+Data/Databases/Model_Features.sqlite3

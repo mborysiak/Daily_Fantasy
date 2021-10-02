@@ -895,6 +895,8 @@ for pos in ['RB', 'WR', 'TE']:
     #--------------------
 
     df = fantasy_pros(pos); print(df.shape[0])
+    df = add_injuries(df); print(df.shape[0])
+
     df = get_salaries(df, pos); print(df.shape[0])
     df = add_pfr_matchup(df); print(df.shape[0])
     df = get_experts(df, pos); print(df.shape[0])
@@ -932,7 +934,6 @@ for pos in ['RB', 'WR', 'TE']:
     df = forward_fill(df)
     df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
-    df = add_injuries(df); print(df.shape[0])
     df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
     df = def_pts_allowed(df, pos); print(df.shape[0])
 

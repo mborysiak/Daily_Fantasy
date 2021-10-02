@@ -37,13 +37,16 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
-for set_pos in ['WR', 'RB', 'QB', 'TE']:#, 'Defense']:
-    model_type = 'backfill'
+for set_pos in ['Defense']:# ['WR', 'RB', 'QB', 'TE' 'Defense']:
+
+    model_type = 'full_model'
     vers = 'v1'
 
     # set year to analyze
     set_year = 2021
     set_week = 4
+
+    print(f'\n==================\n{set_pos} {model_type} {set_year} {set_week}\n====================')
 
     # set the earliest date to begin the validation set
     val_year_min = 2020
@@ -254,250 +257,77 @@ for set_pos in ['WR', 'RB', 'QB', 'TE']:#, 'Defense']:
         save_pickle(models, model_output_path, 'class_models')
         save_pickle(scores, model_output_path, 'class_scores')
 
-#%%
-#------------
-# Make the Class Predictions
-#------------
 
-set_pos='RB'
-pkey = f'{set_pos}_year{set_year}_week{set_week}_{model_type}'
-model_output_path = f'{root_path}/Model_Outputs/{set_year}/{pkey}/'
+    #------------
+    # Make the Class Predictions
+    #------------
 
-pred_class = load_pickle(model_output_path, 'class_pred')
-actual_class = load_pickle(model_output_path, 'class_actual')
-models_class = load_pickle(model_output_path, 'class_models')
-scores_class = load_pickle(model_output_path, 'class_scores')
+    pred_class = load_pickle(model_output_path, 'class_pred')
+    actual_class = load_pickle(model_output_path, 'class_actual')
+    models_class = load_pickle(model_output_path, 'class_models')
+    scores_class = load_pickle(model_output_path, 'class_scores')
 
-# create the full stack pipe with meta estimators followed by stacked model
-X_predict_class = pd.DataFrame()
-for cut in cuts:
+    # create the full stack pipe with meta estimators followed by stacked model
+    X_predict_class = pd.DataFrame()
+    for cut in cuts:
 
-    print(f"\n--------------\nPercentile {cut}\n--------------\n")
+        print(f"\n--------------\nPercentile {cut}\n--------------\n")
 
-    df_train_class, df_predict_class = get_class_data(df, cut)
+        df_train_class, df_predict_class = get_class_data(df, cut)
 
-    skm_class_final = SciKitModel(df_train_class, model_obj='class')
-    X_stack_class, y_stack_class = skm_class_final.X_y_stack('class', pred_class, actual_class)
-    X_class_final, y_class_final = skm_class_final.Xy_split(y_metric='y_act', to_drop=drop_cols)
-    
-    # for k, v in models_class.items():
-    #     if str(cut) in k:
-    #         m = skm_class_final.ensemble_pipe(v)
-    #         m.fit(X_class_final, y_class_final)
-    #         cur_pred = pd.Series(m.predict_proba(df_predict_class[X_class_final.columns])[:,1], name=k)
-    #         X_predict_class = pd.concat([X_predict_class, cur_pred], axis=1)
+        skm_class_final = SciKitModel(df_train_class, model_obj='class')
+        X_stack_class, y_stack_class = skm_class_final.X_y_stack('class', pred_class, actual_class)
+        X_class_final, y_class_final = skm_class_final.Xy_split(y_metric='y_act', to_drop=drop_cols)
+        
+    pred = load_pickle(model_output_path, 'reg_pred')
+    actual = load_pickle(model_output_path, 'reg_actual')
+    models = load_pickle(model_output_path, 'reg_models')
+    scores = load_pickle(model_output_path, 'reg_scores')
 
-pred = load_pickle(model_output_path, 'reg_pred')
-actual = load_pickle(model_output_path, 'reg_actual')
-models = load_pickle(model_output_path, 'reg_models')
-scores = load_pickle(model_output_path, 'reg_scores')
+    #------------
+    # Make the Regression Predictions
+    #------------
 
-#------------
-# Make the Regression Predictions
-#------------
+    output = output_start[['player', 'dk_salary']].copy()
 
-output = output_start[['player', 'dk_salary']].copy()
+    df_predict_stack = df_predict.copy()
+    df_predict_stack = df_predict_stack.drop('y_act', axis=1).fillna(0)
+    skm_stack = SciKitModel(df_train)
 
-df_predict_stack = df_predict.copy()
-df_predict_stack = df_predict_stack.drop('y_act', axis=1).fillna(0)
-skm_stack = SciKitModel(df_train)
+    # get the X and y values for stack trainin for the current metric
+    X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
+    X_stack = pd.concat([X_stack, X_stack_class], axis=1)
 
-# get the X and y values for stack trainin for the current metric
-X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
-X_stack = pd.concat([X_stack, X_stack_class], axis=1)
+    best_models = []
+    final_models = [
+                    'ridge',
+                    'lasso',
+                    'lgbm', 
+                    'xgb', 
+                    'rf', 
+                    'bridge'
+                    ]
+    for final_m in final_models:
 
-best_models = []
-final_models = [
-                'ridge',
-                'lasso',
-                'lgbm', 
-                'xgb', 
-                'rf', 
-                'bridge'
-                ]
-for final_m in final_models:
+        print(f'\n{final_m}')
 
-    print(f'\n{final_m}')
+        # get the model pipe for stacking setup and train it on meta features
+        if final_m in ['ridge', 'lasso', 'bridge']:
+            stack_pipe = skm_stack.model_pipe([
+                                    skm_stack.piece('std_scale'), 
+                                    skm_stack.piece('k_best'), 
+                                    skm_stack.piece(final_m)
+                                ])
+            stack_params = skm_stack.default_params(stack_pipe)
+            stack_params['k_best__k'] = range(1, X_stack.shape[1])
 
-    # get the model pipe for stacking setup and train it on meta features
-    if final_m in ['ridge', 'lasso', 'bridge']:
-        stack_pipe = skm_stack.model_pipe([
-                                skm_stack.piece('std_scale'), 
-                                skm_stack.piece('k_best'), 
-                                skm_stack.piece(final_m)
-                            ])
-        stack_params = skm_stack.default_params(stack_pipe)
-        stack_params['k_best__k'] = range(1, X_stack.shape[1])
+        else:
+            stack_pipe = skm_stack.model_pipe([
+                                    skm_stack.piece(final_m)
+                                ])
+            stack_params = skm_stack.default_params(stack_pipe)
 
-    else:
-        stack_pipe = skm_stack.model_pipe([
-                                skm_stack.piece(final_m)
-                            ])
-        stack_params = skm_stack.default_params(stack_pipe)
-
-    best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
-                                                              X_stack, y_stack, n_iter=100, 
-                                                              run_adp=True, print_coef=True)
-    best_models.append(best_model)
-
-
-# # get the final output:
-# X_fp, y_fp = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
-
-# # create the full stack pipe with meta estimators followed by stacked model
-# X_predict = pd.DataFrame()
-# for k, v in models.items():
-#     m = skm_stack.ensemble_pipe(v)
-#     m.fit(X_fp, y_fp)
-#     X_predict = pd.concat([X_predict, pd.Series(m.predict(df_predict[X_fp.columns]), name=k)], axis=1)
-
-# X_predict = pd.concat([X_predict, X_predict_class], axis=1)
-
-# predictions = pd.DataFrame()
-# for bm, fm in zip(best_models, final_models):
-#     prediction = pd.Series(np.round(bm.predict(X_predict), 2), name=f'pred_{met}_{fm}')
-#     predictions = pd.concat([predictions, prediction], axis=1)
-
-# # output = pd.concat([output, predictions], axis=1)
-# output['pred_fp_per_game'] = predictions.mean(axis=1)
-
-# std_models = predictions.std(axis=1) / 10
-# std_bridge = bm.predict(X_predict, return_std=True)[1]
-# output['std_dev'] = std_bridge + std_models
-# output = output.sort_values(by='dk_salary', ascending=False)
-# output['dk_rank'] = range(len(output))
-# output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
-
-# mean_act = df_train.loc[df_train.fp_rank.isin(df_predict.fp_rank.sort_values().unique()[:12]), 'y_act'].mean() 
-# ratio = mean_act / output.pred_fp_per_game[:12].mean()
-# output['pred_fp_per_game'] = output['pred_fp_per_game'] * ratio
-
-output.iloc[:50]
-
-#%%
-
-if model_type == 'backfill':
-    to_fill = dm.read(f'''SELECT DISTINCT player FROM Model_Predictions 
-                          WHERE pos='{set_pos}'
-                                AND version='{vers}'
-                                AND week={set_week}
-                                AND year={set_year}
-                                AND model_type != 'backfill' ''', 'Simulation').player.values
-    
-    output = output[output.player!='Ryan Griffin']
-    output = output[~output.player.isin(to_fill)]
-    print(output.iloc[:50])
-
-#%%
-
-output['pos'] = set_pos
-output['version'] = vers
-output['model_type'] = model_type
-output['max_score'] = 1.02*np.percentile(df_train.y_act.max(), 99)
-output['week'] = set_week
-output['year'] = set_year
-
-del_str = f'''pos='{set_pos}' 
-             AND version='{vers}' 
-             AND week={set_week} 
-             AND year={set_year}
-             AND model_type='{model_type}'
-             '''
-dm.delete_from_db('Simulation', 'Model_Predictions', del_str)
-dm.write_to_db(output, 'Simulation', f'Model_Predictions', 'append')
-
-# %%
-
-
-preds = dm.read(f'''SELECT * 
-                    FROM Model_Predictions 
-                    WHERE version='{vers}'
-                          AND week = '{set_week}'
-                          AND year = '{set_year}' 
-            ''', 'Simulation')
-
-preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game': 'mean', 
-                                                              'std_dev': 'mean',
-                                                              'max_score': 'mean'})
-
-drop_teams = ['CAR', 'HOU', 'GB', 'SF', 'PHI', 'DAL']
-
-teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
-                    FROM FantasyPros
-                    WHERE week={set_week} AND year={set_year}''', 'Pre_PlayerData')
-
-preds = pd.merge(preds, teams, on=['player'])
-preds = preds[~preds.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)
-
-preds.sort_values(by='pred_fp_per_game', ascending=False).iloc[:50]
-
-#%%
-
-def create_distribution(player_data, num_samples=1000):
-
-    import scipy.stats as stats
-
-    # create truncated distribution
-    lower, upper = 0,  player_data.max_score
-    lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
-    upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
-    trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
-    
-    estimates = trunc_dist.rvs(num_samples)
-
-    return estimates
-
-
-def create_sim_output(output, num_samples=1000):
-    sim_out = pd.DataFrame()
-    for _, row in output.iterrows():
-        cur_out = pd.DataFrame([row.player, row.pos]).T
-        cur_out.columns=['player', 'pos']
-        dists = pd.DataFrame(create_distribution(row, num_samples)).T
-        cur_out = pd.concat([cur_out, dists], axis=1)
-        sim_out = pd.concat([sim_out, cur_out], axis=0)
-    
-    return sim_out
-
-
-def plot_distribution(estimates):
-
-    from IPython.core.pylabtools import figsize
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-
-    print('\n', estimates.player)
-    estimates = estimates.iloc[2:]
-
-    # Plot all the estimates
-    plt.figure(figsize(8, 8))
-    sns.distplot(estimates, hist = True, kde = True, bins = 19,
-                 hist_kws = {'edgecolor': 'k', 'color': 'darkblue'},
-                 kde_kws = {'linewidth' : 4},
-                 label = 'Estimated Dist.')
-
-    # Plot the mean estimate
-    plt.vlines(x = estimates.mean(), ymin = 0, ymax = 0.01, 
-                linestyles = '--', colors = 'red',
-                label = 'Pred Estimate',
-                linewidth = 2.5)
-
-    plt.legend(loc = 1)
-    plt.title('Density Plot for Test Observation');
-    plt.xlabel('Grade'); plt.ylabel('Density');
-
-    # Prediction information
-    sum_stats = (np.percentile(estimates, 5), np.percentile(estimates, 95), estimates.std() /estimates.mean())
-    print('Average Estimate = %0.4f' % estimates.mean())
-    print('5%% Estimate = %0.4f    95%% Estimate = %0.4f    Std Error = %0.4f' % sum_stats) 
-
-output = create_sim_output(preds).reset_index(drop=True)
-
-#%%
-
-# idx = output[output.player=="Dalvin Cook"].index[0]
-# plot_distribution(output.iloc[idx])
-# %%
-
-dm.write_to_db(output, 'Simulation', f'week{set_week}_year{set_year}', 'replace')
+        best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
+                                                                X_stack, y_stack, n_iter=100, 
+                                                                run_adp=True, print_coef=True)
 # %%
