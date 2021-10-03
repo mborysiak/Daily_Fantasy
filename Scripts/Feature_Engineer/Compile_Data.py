@@ -992,6 +992,7 @@ output = pd.DataFrame()
 for pos in ['QB', 'RB', 'WR', 'TE']:
     
     df = fantasy_pros(pos, add_rolling=False); print(df.shape[0])
+    df = add_injuries(df); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
     df = get_experts(df, pos, add_rolling=False); print(df.shape[0])
     dst = add_team_matchups().drop('offTeam', axis=1)
@@ -1030,7 +1031,6 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
                     'fantasyPointsRank', 'ProjPts', 'expertConsensus']
     df = add_player_comparison(df, compare_cols)
 
-    df = add_injuries(df); print(df.shape[0])
     df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
     df = def_pts_allowed(df, pos); print(df.shape[0])
 
