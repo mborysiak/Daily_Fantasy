@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 4
+WEEK = 5
 
 #%%
 import pandas as pd 
@@ -402,11 +402,11 @@ def get_max_qb():
 # Post Game Data
 #---------------
 
-def get_player_data(df, pos, YEAR):
+def get_player_data(df, pos, YEAR, prev_years=1):
 
     player_data = dm.read(f'''SELECT * 
                 FROM {pos}_Stats 
-                WHERE season >= {YEAR-2}
+                WHERE season >= 2020
                     AND week != 17''', 'FastR')
     if pos=='QB':
         rcols_player = [c for c in player_data.columns if 'pass_' in c]
@@ -419,11 +419,7 @@ def get_player_data(df, pos, YEAR):
     player_data = player_data.rename(columns={'season': 'year'})
     player_data = add_rolling_stats(player_data, gcols=['player'], rcols=rcols_player)
 
-    y_acts = player_data.y_act
-    all_cols = [c for c in player_data.columns if c != 'y_act']
-    player_data = forward_fill(player_data, all_cols)
-    player_data = pd.concat([player_data, y_acts], axis=1)
-
+    player_data = forward_fill(player_data)
     player_data = player_data[player_data.year >= 2020].reset_index(drop=True)
     player_data = name_cleanup(player_data)
 
@@ -452,7 +448,6 @@ def get_player_data(df, pos, YEAR):
 
     # merge player data back to the main dataframe
     df = pd.merge(df, player_data, on=['player', 'team', 'week', 'year'])
-    df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True)
 
     return df
 
@@ -506,7 +501,7 @@ def add_player_comparison(df, cols):
     return df
 
 
-def get_team_stats(YEAR, prev_years=2):
+def get_team_stats(YEAR, prev_years=1):
     
     team_stats = dm.read(f'''SELECT * FROM Team_Stats WHERE season>={YEAR-prev_years}''', 'FastR')
 
@@ -753,7 +748,7 @@ def advanced_rec_stats(df):
     return df
 
 
-def get_defense_stats(prev_years=2):
+def get_defense_stats(prev_years=1):
     d_stats = dm.read(f'''SELECT * 
                         FROM Defense_Stats 
                         WHERE season>={YEAR-prev_years}
@@ -764,14 +759,14 @@ def get_defense_stats(prev_years=2):
     d_stats = switch_seasons(d_stats)
     d_stats = fix_bye_week(d_stats)
 
-    rcols_def = [c for c in d_stats.columns if c not in ('team', 'week', 'season', 'y_act')]
+    rcols_def = [c for c in d_stats.columns if c not in ('team', 'week', 'season')]
     d_stats = add_rolling_stats(d_stats, gcols=['team'], rcols=rcols_def)
 
     return d_stats
 
 
 
-def add_injuries(df):
+def add_injuries(df, def_join=False, oline_join=False):
 
     inj = dm.read('''SELECT * FROM PlayerInjuries''', 'Pre_PlayerData')
     inj = pd.concat([inj, pd.get_dummies(inj.game_status)], axis=1)
@@ -792,30 +787,48 @@ def add_injuries(df):
     inj = inj[['player', 'pos', 'week', 'year', 'Questionable', 'Doubtful', 'Out',
             'leg_muscle_injury', 'ankle_foot_injury', 'knee_hip_injury', 'upper_body_injury']]
 
-    df = pd.merge(df, inj, on=['player', 'pos', 'week', 'year'], how='left')
+    if def_join: df = pd.merge(df.drop('pos', axis=1), inj, on=['player', 'week', 'year'], how='left')
+    elif oline_join: df = pd.merge(df, inj.drop('pos', axis=1), on=['player', 'week', 'year'], how='left')
+    else:  df = pd.merge(df, inj, on=['player', 'pos', 'week', 'year'], how='left')
+
     cols = ['Questionable', 'Doubtful', 'Out', 'leg_muscle_injury', 'ankle_foot_injury',
             'knee_hip_injury', 'upper_body_injury']
     df[cols] = df[cols].fillna(0)
 
     players = list(df.loc[(df.week==WEEK) & (df.year==YEAR), 'player'].values)
-    df = df[(df.Out != 1) & (df.Doubtful != 1)].reset_index(drop=True)
+
+    # keep doubtful and out players for defense to calculate missing value
+    if def_join != True:
+        df = df[(df.Out != 1) & (df.Doubtful != 1)].reset_index(drop=True)
+
     player_inj =  list(df.loc[(df.week==WEEK) & (df.year==YEAR), 'player'].values)
     print(f'Players out this week: {[p for p in players if p not in player_inj]}')
 
     return df
 
 
-def def_pts_allowed(df, pos):
+def pts_allowed_data(pos):
 
     pts_allowed = dm.read(f'''SELECT * FROM Def_Allowed_{pos}''', 'Post_PlayerData')
+    ignore_cols = ('team', 'games', 'week', 'year')
+    pts_allowed.columns = [f'{pos.lower()}_{c}' if pos.lower() not in c and c not in ignore_cols else c for c in pts_allowed.columns]
+
+    return pts_allowed
+
+def def_pts_allowed(df, join_col='defTeam'):
+
+    qb = pts_allowed_data('QB')
+    rb = pts_allowed_data('RB').drop('games', axis=1)
+    wr = pts_allowed_data('WR').drop('games', axis=1)
+    te = pts_allowed_data('TE').drop('games', axis=1)
+
+    pts_allowed = pd.merge(qb, rb, on=['team', 'week', 'year'])
+    pts_allowed = pd.merge(pts_allowed, wr, on=['team', 'week', 'year'])
+    pts_allowed = pd.merge(pts_allowed, te, on=['team', 'week', 'year'])
 
     stat_cols = [c for c in pts_allowed if c not in ('team', 'games', 'week', 'year') and 'per_game' not in c]
     for c in stat_cols:
         pts_allowed[c] = pts_allowed[c] / (pts_allowed['games'].fillna(1))
-
-    if pos == 'TE':
-        pts_allowed.columns = [c.replace('wr', 'te') for c in pts_allowed.columns]
-        stat_cols = [c for c in pts_allowed if c not in ('team', 'games', 'week', 'year') and 'per_game' not in c]
     
     pts_allowed = pts_allowed.drop([c for c in pts_allowed.columns if 'per_game' in c], axis=1)
 
@@ -827,8 +840,14 @@ def def_pts_allowed(df, pos):
     pts_allowed = fix_bye_week(pts_allowed)
     pts_allowed = switch_seasons(pts_allowed)
 
-    pts_allowed = pts_allowed.rename(columns={'team': 'defTeam'})
-    df = pd.merge(df, pts_allowed.drop('games', axis=1), on=['defTeam', 'week', 'year'], how='left')
+
+    pts_allowed = pts_allowed.sort_values(by=['team', 'year', 'week']).reset_index(drop=True)
+    labels = pts_allowed[['team', 'week', 'year', 'games']]
+    roll_stats = pts_allowed.groupby('team')[stat_cols].rolling(3).agg('mean').reset_index(drop=True)
+    pts_allowed = pd.concat([labels, roll_stats], axis=1).dropna().reset_index(drop=True)
+    
+    pts_allowed = pts_allowed.rename(columns={'team': join_col})
+    df = pd.merge(df, pts_allowed.drop('games', axis=1), on=[join_col, 'week', 'year'], how='left')
     
     df = forward_fill(df)
     df[stat_cols] = df[stat_cols].fillna(df[stat_cols].mean())
@@ -837,11 +856,144 @@ def def_pts_allowed(df, pos):
 
 
 
+def pff_defense_rollup():
+
+    def_players = dm.read('''SELECT * FROM Defense_Players''', 'Post_PlayerData')
+    def_players.player = def_players.player.apply(dc.name_clean)
+    def_players = def_players.rename(columns={'position': 'pos'})
+
+    all_cols = ['player', 'team', 'week', 'year', 'pos', 'player_game_count', 
+            'snap_counts_defense', 'snap_counts_coverage', 'snap_counts_pass_rush',
+            'grades_coverage_defense', 'grades_defense',  
+            'grades_pass_rush_defense', 'grades_run_defense', 'grades_tackle',
+            'hits', 'hurries', 'qb_rating_against', 'interceptions']
+    def_players = def_players.loc[~def_players.pos.isnull(), all_cols].reset_index(drop=True)
+    def_players = def_players.fillna(def_players.mean())
+
+    def_players = drop_extra_bye_week(def_players)
+    def_players.week = def_players.week + 1
+    def_players = fix_bye_week(def_players)
+    def_players = switch_seasons(def_players)
+    def_players = add_injuries(def_players, def_join=True)
+
+    stat_cols = ['grades_coverage_defense', 'grades_defense',  
+                    'grades_pass_rush_defense', 'grades_run_defense', 'grades_tackle',
+                    'hits', 'hurries',  'interceptions']
+    def_players.loc[((def_players.Out == 1) | (def_players.Doubtful == 1)),stat_cols] = \
+                        def_players.loc[((def_players.Out == 1) | (def_players.Doubtful == 1)), stat_cols] / 3
+
+    def_players.loc[((def_players.Out == 1) | (def_players.Doubtful == 1)), 'qb_rating_against'] = 110
+
+    wm_def = lambda x: np.average(x, weights=def_players.loc[x.index, "snap_counts_defense"])
+    wm_cov = lambda x: np.average(x, weights=def_players.loc[x.index, "snap_counts_coverage"])
+    wm_pass_rush = lambda x: np.average(x, weights=def_players.loc[x.index, "snap_counts_pass_rush"])
+    wm_run_def = lambda x: np.average(x, weights=def_players.loc[x.index, "grades_pass_rush_defense"])
+
+    gcols = ["team", "week", "year"]
+    def_team = def_players.groupby(gcols).agg(team_games=('player_game_count', 'max'),
+                                            grades_defense=("grades_defense", wm_def),
+                                            grades_coverage_defense=("grades_coverage_defense", wm_cov),  
+                                            grades_pass_rush_defense=("grades_pass_rush_defense", wm_pass_rush),
+                                            grades_run_defense=("grades_run_defense", wm_run_def),
+                                            hits=('hits', 'sum'),
+                                            hurries=('hurries', 'sum'),
+                                            qb_rating_against=('qb_rating_against', wm_cov),
+                                            grades_tackle=('grades_tackle', wm_run_def)).reset_index()
+
+    per_game_cols = ['hits', 'hurries']
+    for c in per_game_cols:
+        def_team[f'{c}_per_game'] = def_team[c] / def_team.team_games
+    def_team = def_team.drop(per_game_cols, axis=1)
+
+
+
+    team_stat_cols = ['grades_defense', 'grades_coverage_defense', 'grades_pass_rush_defense',
+                    'grades_run_defense', 'qb_rating_against', 'grades_tackle',
+                    'hits_per_game', 'hurries_per_game']
+
+    def_team = def_team.sort_values(by=['team', 'year', 'week']).reset_index(drop=True)
+    labels = def_team[['team', 'week', 'year', 'team_games']]
+    roll_stats = def_team.groupby('team')[team_stat_cols].rolling(3).agg('mean').reset_index(drop=True)
+    def_team = pd.concat([labels, roll_stats], axis=1).dropna().reset_index(drop=True)
+
+    return def_team
+
+
+def pff_oline_rollup():
+    oline = dm.read('''SELECT * FROM Offensive_Line_Players''', 'Post_PlayerData')
+    oline.player = oline.player.apply(dc.name_clean)
+    oline = oline.rename(columns={'position': 'pos'})
+
+    all_cols = ['player', 'team', 'week', 'year', 'pos', 'player_game_count', 
+                'snap_counts_offense', 'grades_offense', 'grades_pass_block', 
+                'grades_run_block', 'hits_allowed', 'hurries_allowed','pressures_allowed', 'pbe']
+    oline = oline.loc[oline.pos.isin(['C', 'G', 'T']), all_cols].reset_index(drop=True)
+    oline = oline.fillna(oline.mean())
+
+    oline = drop_extra_bye_week(oline)
+    oline.week = oline.week + 1
+    oline = fix_bye_week(oline)
+    oline = switch_seasons(oline)
+    oline = add_injuries(oline, oline_join=True)
+
+    stat_cols1 = ['snap_counts_offense', 'grades_offense', 'grades_pass_block', 
+                'grades_run_block', 'pbe']
+    oline.loc[((oline.Out == 1) | (oline.Doubtful == 1)), stat_cols1] = \
+                        oline.loc[((oline.Out == 1) | (oline.Doubtful == 1)), stat_cols1] / 3
+
+    stat_cols2 = ['hits_allowed', 'hurries_allowed','pressures_allowed',]
+    oline.loc[((oline.Out == 1) | (oline.Doubtful == 1)), stat_cols1] = \
+                        2 * (oline.loc[((oline.Out == 1) | (oline.Doubtful == 1)), stat_cols2] + 1)
+
+    wm = lambda x: np.average(x, weights=oline.loc[x.index, "snap_counts_offense"])
+    gcols = ["team", "week", "year"]
+    oline_team = oline.groupby(gcols).agg(team_games=('player_game_count', 'max'),
+                                        grades_offense=("grades_offense", wm),
+                                            grades_pass_block=("grades_pass_block", wm),  
+                                            grades_run_block=("grades_run_block", wm),
+                                            hits_allowed=('hits_allowed', 'sum'),
+                                            hurries_allowed=('hurries_allowed', 'sum'),
+                                            pressures_allowed=('pressures_allowed', 'sum'),
+                                            pbe=('pbe', wm)).reset_index()
+
+    per_game_cols = ['hits_allowed', 'hurries_allowed', 'pressures_allowed']
+    for c in per_game_cols:
+        oline_team[f'{c}_per_game'] = oline_team[c] / oline_team.team_games
+    oline_team = oline_team.drop(per_game_cols, axis=1)
+
+    team_stat_cols = ['grades_offense', 'grades_pass_block', 'grades_run_block', 
+                    'hits_allowed_per_game', 'hurries_allowed_per_game','pressures_allowed_per_game', 'pbe']
+    
+    oline_team = oline_team.sort_values(by=['team', 'year', 'week']).reset_index(drop=True)
+    labels = oline_team[['team', 'week', 'year', 'team_games']]
+    roll_stats = oline_team.groupby('team')[team_stat_cols].rolling(3).agg('mean').reset_index(drop=True)
+    oline_team = pd.concat([labels, roll_stats], axis=1).dropna().reset_index(drop=True)
+
+    return oline_team
+
+
+def attach_y_act(df, pos, defense=False):
+    if defense:
+        y_act = dm.read(f'''SELECT defTeam player, week, season year, fantasy_pts y_act
+                        FROM {pos}_Stats
+                        WHERE season >= 2020''', 'FastR')
+    
+        df = pd.merge(df, y_act, on=['player',  'week', 'year'], how='left')
+    
+    else:
+        y_act = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
+                            FROM {pos}_Stats
+                            WHERE season >= 2020''', 'FastR')
+        
+        df = pd.merge(df, y_act, on=['player', 'team', 'week', 'year'], how='left')
+
+    return df
+
 #%%
 
 # defense stats that can be added to the offensive player data
 defense = fantasy_pros('DST').rename(columns={'player': 'team'})
-d_stats = get_defense_stats(prev_years=2).drop('y_act', axis=1)
+d_stats = get_defense_stats(prev_years=1)
 defense = pd.merge(defense, d_stats, on=['team', 'week', 'year'], how='inner')
 defense = defense.dropna()
 defense.columns = [f'def_{c}' if 'def' not in c else c for c in defense.columns]
@@ -862,27 +1014,41 @@ dst = add_team_matchups().drop('offTeam', axis=1)
 df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
 # post-game data
-df = get_player_data(df, pos, YEAR); print(df.shape[0])
+df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
 
 team_stats = get_team_stats(YEAR)
 df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
 
-# df = get_coach_stats(df, YEAR); print(df.shape[0])
+# # df = get_coach_stats(df, YEAR); print(df.shape[0])
 df = add_rz_stats_qb(df); print(df.shape[0])
 
 # get the positional values for the team
 pos_values = positional_values()
 df = pd.merge(df, pos_values, on=['team', 'week', 'year']); print(df.shape[0])
 
+print('Team Counts by Week Pre Drop:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
+
+
 # fill in the missing data and drop anything remaining
 df = forward_fill(df)
 df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
-df = add_injuries(df); print(df.shape[0])
+# df = add_injuries(df); print(df.shape[0])
 df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
-df = def_pts_allowed(df, pos); print(df.shape[0])
+df = def_pts_allowed(df); print(df.shape[0])
+
+pff_def = pff_defense_rollup().rename(columns={'team': 'defTeam'})
+df = pd.merge(df, pff_def, on=['defTeam', 'week', 'year']); print(df.shape[0])
+
+pff_oline = pff_oline_rollup()
+df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
+
+df = attach_y_act(df, pos)
+df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True); print(df.shape[0])
 
 print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
+print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
+
 dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
 if df.shape[1] > 2000:
     dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
@@ -914,9 +1080,9 @@ for pos in ['RB', 'WR', 'TE']:
     #-----------------------
     # Post-Game Data
     #----------------------
-    df = get_player_data(df, pos, YEAR); print(df.shape[0])
+    df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
     
-    team_stats = get_team_stats(YEAR, prev_years=2)
+    team_stats = get_team_stats(YEAR, prev_years=1)
     df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
     
     df = calc_market_share(df); print(df.shape[0])
@@ -935,9 +1101,20 @@ for pos in ['RB', 'WR', 'TE']:
     df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
     df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
-    df = def_pts_allowed(df, pos); print(df.shape[0])
+    df = def_pts_allowed(df); print(df.shape[0])
+
+    pff_def = pff_defense_rollup().rename(columns={'team': 'defTeam'})
+    df = pd.merge(df, pff_def, on=['defTeam', 'week', 'year']); print(df.shape[0])
+
+    pff_oline = pff_oline_rollup()
+    df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
+    
+    df = attach_y_act(df, pos)
+    df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True); print(df.shape[0])
 
     print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
+    print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
+    
     dm.write_to_db(df.iloc[:, :2000], 'Model_Features', f'{pos}_Data', if_exist='replace')
     if df.shape[1] > 2000:
         dm.write_to_db(df.iloc[:, 2000:], 'Model_Features', f'{pos}_Data2', if_exist='replace')
@@ -967,9 +1144,21 @@ defense = pd.merge(defense, pos_values, on=['offTeam', 'week', 'year']); print(d
 team_stats = get_team_stats(YEAR).rename(columns={'team': 'offTeam'})
 defense = pd.merge(defense, team_stats, on=['offTeam', 'week', 'year']); print(defense.shape[0])
 
+pff_def = pff_defense_rollup()
+defense = pd.merge(defense, pff_def, on=['team', 'week', 'year']); print(defense.shape[0])
+
+pff_oline = pff_oline_rollup().rename(columns={'team': 'offTeam'})
+defense = pd.merge(defense, pff_oline, on=['offTeam', 'week', 'year']); print(defense.shape[0])
+
 defense = defense.copy().rename(columns={'team': 'player'})
 defense = forward_fill(defense)
 defense = defense.fillna(defense.mean())
+
+defense = attach_y_act(defense, pos='Defense', defense=True)
+defense = defense[~(defense.y_act.isnull()) | ((defense.week==WEEK) & (defense.year==YEAR))].reset_index(drop=True); print(defense.shape[0])
+
+print('Unique player-week-years:', defense[['player', 'week', 'year']].drop_duplicates().shape[0])
+print('Team Counts by Week:', defense[['year', 'week', 'player']].drop_duplicates().groupby(['year', 'week'])['player'].count())
 
 defense.columns = [c.replace('_dst', '') for c in defense.columns]
 
@@ -980,7 +1169,7 @@ dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 
 # defense stats that can be added to the offensive player data
 defense = fantasy_pros('DST').rename(columns={'player': 'team'})
-d_stats = get_defense_stats(prev_years=2).drop('y_act', axis=1)
+d_stats = get_defense_stats(prev_years=1)
 defense = pd.merge(defense, d_stats, on=['team', 'week', 'year'], how='inner')
 defense = defense.dropna()
 defense.columns = [f'def_{c}' if 'def' not in c else c for c in defense.columns]
@@ -1010,16 +1199,7 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     team_qb = get_max_qb()
     df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
 
-    y_acts = dm.read(f'''SELECT player, team, week, season year, y_act 
-                         FROM {pos}_Stats
-                         WHERE year >= 2020
-                               AND y_act IS NOT NULL''', 'FastR')
-
-    y_acts.week = y_acts.week + 1
-    y_acts = switch_seasons(y_acts)
-    y_acts = fix_bye_week(y_acts)
-
-    df = pd.merge(df, y_acts, on=['player', 'team', 'week', 'year'], how='left')
+    df = attach_y_act(df, pos)
     df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True); print(df.shape[0])
 
     df.loc[df.fd_salary < 100, 'fd_salary'] = np.nan
@@ -1032,15 +1212,26 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     df = add_player_comparison(df, compare_cols)
 
     df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
-    df = def_pts_allowed(df, pos); print(df.shape[0])
+
+    pff_def = pff_defense_rollup().rename(columns={'team': 'defTeam'})
+    df = pd.merge(df, pff_def, on=['defTeam', 'week', 'year']); print(df.shape[0])
+
+    pff_oline = pff_oline_rollup()
+    df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
 
     df = df.dropna(subset=[c for c in df.columns if c !='y_act']).reset_index(drop=True); print(df.shape[0])
     df['pos'] = pos
-        
+
     print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
+    print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
+    
     output = pd.concat([output, df], axis=0)
 
+output = def_pts_allowed(output); print(output.shape[0])
+
 dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
+
+# %%
 
 
 # %%

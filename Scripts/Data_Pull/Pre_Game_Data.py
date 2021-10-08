@@ -459,15 +459,15 @@ dm.write_to_db(other_sal, 'Pre_PlayerData', 'Daily_Salaries', 'append')
 #%%
 
 
-df = pd.read_html(f'https://www.nfl.com/injuries/league/{set_year}/reg{set_week}')
-for i in range(len(df)):
-    if i % 10 == 0:
-        print(i)
-    df[i].columns = ['player', 'pos', 'injuries', 'practice_status', 'game_status']
-    df[i]['week'] = set_week
-    df[i]['year'] = set_year
-    df[i].player = df[i].player.apply(dc.name_clean)
-    dm.write_to_db(df[i], 'Pre_PlayerData', 'PlayerInjuries', 'append')
+# df = pd.read_html(f'https://www.nfl.com/injuries/league/{set_year}/reg{set_week}')
+# for i in range(len(df)):
+#     if i % 10 == 0:
+#         print(i)
+#     df[i].columns = ['player', 'pos', 'injuries', 'practice_status', 'game_status']
+#     df[i]['week'] = set_week
+#     df[i]['year'] = set_year
+#     df[i].player = df[i].player.apply(dc.name_clean)
+#     dm.write_to_db(df[i], 'Pre_PlayerData', 'PlayerInjuries', 'append')
 # %%
 
 df = pd.read_csv(f'{root_path}/Data/OtherData/Injury_Status/{set_year}/week{set_week}.csv', 

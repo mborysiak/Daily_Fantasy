@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 3
+set_week = 4
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -363,7 +363,28 @@ df['year'] = set_year
 df.player = df.player.apply(dc.name_clean)
 df = df.rename(columns={'team_name': 'team'})
 df.team = df.team.map(team_map)
-#%%
+
 dm.delete_from_db('Post_PlayerData', 'Defense_Players', f"week={set_week} AND year={set_year}")
 dm.write_to_db(df, 'Post_PlayerData', 'Defense_Players', 'append')
+
 # %%
+
+try:
+    os.replace(f"/Users/mborysia/Downloads/offense_blocking.csv", 
+                f'{root_path}/Data/OtherData/PFF_Offensive_Line/{set_year}/offense_blocking_week{set_week}.csv')
+except: 
+    pass
+
+df = pd.read_csv(f'{root_path}/Data/OtherData/PFF_Offensive_Line/{set_year}/offense_blocking_week{set_week}.csv')
+df['week'] = set_week
+df['year'] = set_year
+
+df.player = df.player.apply(dc.name_clean)
+df = df.rename(columns={'team_name': 'team'})
+df.team = df.team.map(team_map)
+
+#%%
+dm.delete_from_db('Post_PlayerData', 'Offensive_Line_Players', f"week={set_week} AND year={set_year}")
+dm.write_to_db(df, 'Post_PlayerData', 'Offensive_Line_Players', 'append')
+# %%
+

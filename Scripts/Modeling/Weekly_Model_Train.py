@@ -1,4 +1,3 @@
-
 #%%
 # core packages
 from random import Random
@@ -37,14 +36,16 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
-for set_pos in ['Defense']:# ['WR', 'RB', 'QB', 'TE' 'Defense']:
+for set_pos in ['WR', 'RB', 'QB','TE', 
+                #'Defense'
+                ]:
 
-    model_type = 'full_model'
+    model_type = 'backfill'
     vers = 'v1'
 
     # set year to analyze
     set_year = 2021
-    set_week = 4
+    set_week = 5
 
     print(f'\n==================\n{set_pos} {model_type} {set_year} {set_week}\n====================')
 
@@ -65,7 +66,7 @@ for set_pos in ['Defense']:# ['WR', 'RB', 'QB', 'TE' 'Defense']:
 
     all_vars = [set_pos, set_year, set_week]
 
-    pkey = f'{set_pos}_year{set_year}_week{set_week}_{model_type}'
+    pkey = f'{set_pos}_year{set_year}_week{set_week}_{model_type}{vers}'
     db_output = {'set_pos': set_pos, 'set_year': set_year, 'set_week': set_week}
     db_output['pkey'] = pkey
 

@@ -222,7 +222,6 @@ fp_cols = {'rec_complete_pass_sum': 1,
 all_stats = calc_fp(all_stats, fp_cols)
 
 all_stats = all_stats.sort_values(by=['player', 'season', 'week']).reset_index(drop=True)
-all_stats['y_act'] = all_stats.groupby('player')['fantasy_pts'].shift(-1)
 
 # extract out the names and positions of each group
 wr = data.loc[(data.receiver_player_position=='WR'), 
@@ -310,7 +309,9 @@ fp_cols = {'pass_yards_gained_sum': 0.04,
 qb = calc_fp(qb, fp_cols)
 
 qb = qb.sort_values(by=['player', 'season', 'week']).reset_index(drop=True)
-qb['y_act'] = qb.groupby('player')['fantasy_pts'].shift(-1)
+
+
+qb = pd.merge(qb[['week', 'season']].drop_duplicates(), qb, on=['week', 'season'], how='left')
 
 #%%
 qb.player = qb.player.apply(dc.name_clean)
@@ -460,9 +461,13 @@ def_scoring = pd.merge(def_scoring, defense_sum, on=['defteam', 'season', 'week'
 def_scoring = pd.merge(def_scoring, defense_mean, on=['defteam', 'season', 'week'])
 
 def_scoring = def_scoring.sort_values(by=['defteam', 'season', 'week']).reset_index(drop=True)
-def_scoring['y_act'] = def_scoring.groupby('defteam')['fantasy_pts'].shift(-1)
 
 def_scoring.defteam = def_scoring.defteam.map(team_map)
 dm.delete_from_db('FastR', 'Defense_Stats', f"season={cur_season}")
 dm.write_to_db(def_scoring, 'FastR', 'Defense_Stats', if_exist='append')
+# %%
+
+
+
+
 # %%
