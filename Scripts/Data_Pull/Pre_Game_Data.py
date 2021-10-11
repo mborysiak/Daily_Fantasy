@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 4
+set_week = 5
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -127,7 +127,8 @@ good_data = {
 
 for _, row in df.iterrows():
     
-    if 'at' in row[1]: 
+    if 'at ' in row[1]: 
+        
         good_data['home_team'].append(row[1].replace('at ', ''))
         good_data['home_line'].append(row[2])
         good_data['away_team'].append(row[3])
@@ -446,15 +447,15 @@ dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
 dm.delete_from_db('Simulation', 'Player_Ids', f"league={set_week} AND year={set_year}")
 dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
 
-# update the salaries with actual DK salaries from the website
-other_sal = dm.read(f'''SELECT * 
-                        FROM Daily_Salaries
-                        WHERE week={set_week} AND year={set_year}''', 'Pre_PlayerData')
-other_sal = pd.merge(other_sal, salary[['player', 'salary']], on=['player'])
-other_sal['dk_salary'] = other_sal.salary
-other_sal = other_sal.drop('salary', axis=1)
-dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
-dm.write_to_db(other_sal, 'Pre_PlayerData', 'Daily_Salaries', 'append')
+# # update the salaries with actual DK salaries from the website
+# other_sal = dm.read(f'''SELECT * 
+#                         FROM Daily_Salaries
+#                         WHERE week={set_week} AND year={set_year}''', 'Pre_PlayerData')
+# other_sal = pd.merge(other_sal, salary[['player', 'salary']], on=['player'])
+# other_sal['dk_salary'] = other_sal.salary
+# other_sal = other_sal.drop('salary', axis=1)
+# dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
+# dm.write_to_db(other_sal, 'Pre_PlayerData', 'Daily_Salaries', 'append')
 
 #%%
 
@@ -481,5 +482,7 @@ df.loc[(df['practice_status'] == 'Did Not Participate In Practice') & \
 df['week'] = set_week
 df['year'] = set_year
 df.player = df.player.apply(dc.name_clean)
+
+dm.delete_from_db('Pre_PlayerData', 'PlayerInjuries', f"week={set_week} AND year={set_year}")
 dm.write_to_db(df, 'Pre_PlayerData', 'PlayerInjuries', 'append')
 # %%

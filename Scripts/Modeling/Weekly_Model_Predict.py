@@ -36,11 +36,11 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 np.random.seed(1234)
 
-vers = 'log_test'
+vers = 'v1'
 
 # set year to analyze
 set_year = 2021
-set_week = 4
+set_week = 5
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -49,11 +49,12 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-model_type = 'full_model'
+model_type = 'backfill'
 
-for set_pos in ['WR'#'QB', 'RB', 'WR', 'TE', 
-                #'Defense'
-                ]:
+if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
+elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
+
+for set_pos in positions:
 
     def_cuts = [33, 75, 90]
     off_cuts = [33, 80, 95]
@@ -207,7 +208,7 @@ for set_pos in ['WR'#'QB', 'RB', 'WR', 'TE',
             stack_params = skm_stack.default_params(stack_pipe)
 
         best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
-                                                                X_stack, y_stack, n_iter=100, 
+                                                                X_stack, y_stack, n_iter=50, 
                                                                 run_adp=True, print_coef=True)
         best_models.append(best_model)
 
@@ -238,6 +239,7 @@ for set_pos in ['WR'#'QB', 'RB', 'WR', 'TE',
     output = output.sort_values(by='dk_salary', ascending=False)
     output['dk_rank'] = range(len(output))
     output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
+
     # mean_act = df_train.loc[df_train.fp_rank.isin(df_predict.fp_rank.sort_values().unique()[:12]), 'y_act'].mean() 
     # ratio = mean_act / output.pred_fp_per_game[:12].mean()
     # output['pred_fp_per_game'] = output['pred_fp_per_game'] * ratio
@@ -259,11 +261,12 @@ for set_pos in ['WR'#'QB', 'RB', 'WR', 'TE',
         output = output[~output.player.isin(to_fill)]
         print(output.iloc[:50])
 
-#%%
+
     output['pos'] = set_pos
     output['version'] = vers
     output['model_type'] = model_type
-    output['max_score'] = 1.02*np.percentile(df_train.y_act.max(), 99)
+    output['max_score'] = 1.05*np.percentile(df_train.y_act, 99.9)
+    output['min_score'] = df_train.y_act.min()
     output['week'] = set_week
     output['year'] = set_year
 
@@ -295,21 +298,22 @@ for c in score_cols: preds[c] = preds[c] * preds.weighting
 preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game': 'sum', 
                                                             'std_dev': 'sum',
                                                             'max_score': 'sum',
+                                                            'min_score': 'sum',
                                                             'weighting': 'sum'})
 
-# for c in score_cols: preds[c] = preds[c] / preds.weighting
-# preds = preds.drop('weighting', axis=1)
+for c in score_cols: preds[c] = preds[c] / preds.weighting
+preds = preds.drop('weighting', axis=1)
 
-# drop_teams = ['CAR', 'HOU', 'GB', 'SF', 'PHI', 'DAL']
+drop_teams = ['ATL', 'NYJ', 'SEA', 'LAR', 'BUF', 'KC', 'IND', 'BAL']
 
-# teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
-#                     FROM FantasyPros
-#                     WHERE week={set_week} AND year={set_year}''', 'Pre_PlayerData')
+teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
+                    FROM FantasyPros
+                    WHERE week={set_week} AND year={set_year}''', 'Pre_PlayerData')
 
-# preds = pd.merge(preds, teams, on=['player'])
-# preds = preds[~preds.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)
+preds = pd.merge(preds, teams, on=['player'])
+preds = preds[~preds.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)
 
-# preds.sort_values(by='pred_fp_per_game', ascending=False).iloc[:50]
+preds.sort_values(by='pred_fp_per_game', ascending=False).iloc[:50]
 
 #%%
 
@@ -318,7 +322,7 @@ def create_distribution(player_data, num_samples=1000):
     import scipy.stats as stats
 
     # create truncated distribution
-    lower, upper = 0,  player_data.max_score
+    lower, upper = player_data.min_score,  player_data.max_score
     lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
     upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
     trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
@@ -375,8 +379,8 @@ sim_dist = create_sim_output(preds).reset_index(drop=True)
 
 #%%
 
-# idx = sim_dist[sim_dist.player=="Dak Prescott"].index[0]
-# plot_distribution(sim_dist.iloc[idx])
+idx = sim_dist[sim_dist.player=="DET"].index[0]
+plot_distribution(sim_dist.iloc[idx])
 
 # %%
 
@@ -394,7 +398,7 @@ plt.show()
 from sklearn.metrics import r2_score
 print(r2_score(y_stack_shuf, hold_pred))
 
-idx = hold_pred[hold_pred > 15].index
+idx = hold_pred[hold_pred > 10].index
 
 print(r2_score(y_stack_shuf[idx], hold_pred[idx]))
 

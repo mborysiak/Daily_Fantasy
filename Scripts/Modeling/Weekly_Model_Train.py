@@ -40,8 +40,8 @@ for set_pos in ['WR', 'RB', 'QB','TE',
                 #'Defense'
                 ]:
 
-    model_type = 'backfill'
-    vers = 'v1'
+    model_type = 'full_model'
+    vers = '3_25_3_percentile_select'
 
     # set year to analyze
     set_year = 2021
@@ -155,7 +155,7 @@ for set_pos in ['WR', 'RB', 'QB','TE',
     params['feature_select__cols'] = [[ 'dk_salary'], ['dk_salary', 'year'] ]
 
     # fit and append the ADP model
-    best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=30,
+    best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
                                                     col_split='game_date', 
                                                     time_split=cv_time_input)
 
@@ -186,12 +186,12 @@ for set_pos in ['WR', 'RB', 'QB','TE',
                                 skm.piece(m)])
         
         params = skm.default_params(pipe, 'rand')
-        params['select_perc__percentile'] = range(5, 30, 5)
+        params['select_perc__percentile'] = range(3, 25, 3)
 
         if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
 
         # run the model with parameter search
-        best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=30,
+        best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
                                                         col_split='game_date', time_split=cv_time_input)
 
         # append the results and the best models for each fold
@@ -238,12 +238,12 @@ for set_pos in ['WR', 'RB', 'QB','TE',
                                         skm_class.piece(m)])
             
             params = skm_class.default_params(pipe, 'rand')
-            params['select_perc_c__percentile'] = range(5, 40, 5)
+            params['select_perc_c__percentile'] = range(3, 25, 3)
             if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
 
             # run the model with parameter search
             best_models, score_results, oof_data = skm_class.time_series_cv(pipe, X_class, y_class, 
-                                                                            params, n_iter=30,
+                                                                            params, n_iter=25,
                                                                             col_split='game_date',
                                                                             time_split=cv_time_input)
 
@@ -329,6 +329,48 @@ for set_pos in ['WR', 'RB', 'QB','TE',
             stack_params = skm_stack.default_params(stack_pipe)
 
         best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
-                                                                X_stack, y_stack, n_iter=100, 
+                                                                X_stack, y_stack, n_iter=50, 
                                                                 run_adp=True, print_coef=True)
+# %%
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import Ridge
+from sklearn.metrics import mean_squared_error
+
+class RandomColumnPercentile(BaseEstimator,TransformerMixin):
+
+    def __init__(self, perc=0.5, verbose=False):
+        """
+        A Custom BaseEstimator that can switch between classifiers.
+        :param estimator: sklearn object - The classifier
+        """ 
+        self.perc = perc
+        self.verbose=False
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        return X.sample(frac=self.perc, axis=1, random_state=123)
+
+X_train = X.iloc[:-200, :]
+y_train = y.iloc[:-200]
+
+X_test = X.iloc[-200:, :]
+y_test = y.iloc[-200:]
+
+pipe = Pipeline([('rc', RandomColumnPercentile(perc=0.9)), 
+                  skm.piece('std_scale'), 
+                  skm.piece('k_best'), 
+                  ('lr', Ridge(alpha=1))])
+pipe.fit(X_train, y_train)
+
+np.sqrt(mean_squared_error(y_test, pipe.predict(X_test)))
+
+# %%
+
+# %%
+X.shape[1]
+# %%
+X.sample(frac=1, axis=1).shape[1]
 # %%

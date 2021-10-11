@@ -972,6 +972,31 @@ def pff_oline_rollup():
     return oline_team
 
 
+
+def add_qbr(df):
+
+    qbr = dm.read('''SELECT * FROM ESPN_QBR''', 'Post_PlayerData')
+
+    def remove_team(name):
+
+        uppers = [x.isupper() for x in name]
+        split_start = [i for i, x in enumerate(uppers) if x][2]
+        
+        return name[:split_start]
+
+    qbr.columns = ['rank', 'player', 'qbr', 'paa', 'plays', 'epa', 'pass_rating', 'run_rating', 
+                   'sack_rating', 'penalty_rating', 'raw_rating', 'week', 'year']
+
+    qbr.player = qbr.player.apply(remove_team).apply(dc.name_clean)
+
+    df = pd.merge(df, qbr, on=['player', 'week', 'year'], how='left')
+
+    df = forward_fill(df)
+
+    return df
+    
+
+
 def attach_y_act(df, pos, defense=False):
     if defense:
         y_act = dm.read(f'''SELECT defTeam player, week, season year, fantasy_pts y_act
@@ -1043,15 +1068,17 @@ df = pd.merge(df, pff_def, on=['defTeam', 'week', 'year']); print(df.shape[0])
 pff_oline = pff_oline_rollup()
 df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
 
+df = add_qbr(df); print(df.shape[0])
+
 df = attach_y_act(df, pos)
 df = df[~(df.y_act.isnull()) | ((df.week==WEEK) & (df.year==YEAR))].reset_index(drop=True); print(df.shape[0])
 
 print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
 print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
 
-dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
-if df.shape[1] > 2000:
-    dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
+# dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
+# if df.shape[1] > 2000:
+#     dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
 
 #%%
 for pos in ['RB', 'WR', 'TE']:
@@ -1230,6 +1257,9 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
 output = def_pts_allowed(output); print(output.shape[0])
 
 dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
+
+# %%
+
 
 # %%
 
