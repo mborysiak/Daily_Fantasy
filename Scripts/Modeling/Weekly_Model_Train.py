@@ -36,12 +36,11 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
-for set_pos in ['WR', 'RB', 'QB','TE', 
-                #'Defense'
+for set_pos in ['QB', 'WR', 'RB','TE', 'Defense'
                 ]:
 
     model_type = 'full_model'
-    vers = '3_25_3_percentile_select'
+    vers = '3_25_3_percentile_reg_3_25_3_perc_class_25iter'
 
     # set year to analyze
     set_year = 2021
@@ -67,12 +66,31 @@ for set_pos in ['WR', 'RB', 'QB','TE',
     all_vars = [set_pos, set_year, set_week]
 
     pkey = f'{set_pos}_year{set_year}_week{set_week}_{model_type}{vers}'
-    db_output = {'set_pos': set_pos, 'set_year': set_year, 'set_week': set_week}
-    db_output['pkey'] = pkey
+    db_output = {
+                 'pkey': [], 
+                 'set_pos': [], 
+                 'set_year': [], 
+                 'set_week':[], 
+                 'model_type':[],
+                 'model': [],
+                 'validation_score': [],
+                 'test_score': []
+                 }
+
+    def add_result_db_output(model_type, model, results, db_output):
+        db_output['pkey'].append(pkey)
+        db_output['set_pos'].append(set_pos)
+        db_output['set_year'].append(set_year)
+        db_output['set_week'].append(set_week)
+        db_output['model_type'].append(model_type)
+        db_output['model'].append(model)
+        db_output['validation_score'].append(results[0])
+        db_output['test_score'].append(results[1])
+
+        return db_output
 
     model_output_path = f'{root_path}/Model_Outputs/{set_year}/{pkey}/'
     if not os.path.exists(model_output_path): os.makedirs(model_output_path)
-
 
     def save_pickle(obj, path, fname, protocol=-1):
         with gzip.open(f"{path}/{fname}.p", 'wb') as f:
@@ -163,6 +181,7 @@ for set_pos in ['WR', 'RB', 'QB','TE',
     pred[f'{met}_adp'] = oof_data['combined']; actual[f'{met}_adp'] = oof_data['actual']
     scores[f'{met}_adp'] = r2; models[f'{met}_adp'] = best_models
 
+    db_output = add_result_db_output('reg', 'adp', r2, db_output)
     #---------------
     # Model Training loop
     #---------------
@@ -198,13 +217,15 @@ for set_pos in ['WR', 'RB', 'QB','TE',
         pred[f'{met}_{m}'] = oof_data['combined']; actual[f'{met}_{m}'] = oof_data['actual']
         scores[f'{met}_{m}'] = r2; models[f'{met}_{m}'] = best_models
 
+        db_output = add_result_db_output('reg', m, r2, db_output)
+
     save_pickle(pred, model_output_path, 'reg_pred')
     save_pickle(actual, model_output_path, 'reg_actual')
     save_pickle(models, model_output_path, 'reg_models')
     save_pickle(scores, model_output_path, 'reg_scores')
 
     #===========================================================================================
-  
+
     # set up blank dictionaries for all metrics
     pred = {}; actual = {}; scores = {}; models = {}
 
@@ -252,6 +273,8 @@ for set_pos in ['WR', 'RB', 'QB','TE',
             actual[f'class_{m}_{cut}'] = oof_data['actual']
             scores[f'class_{m}_{cut}'] = score_results 
             models[f'class_{m}_{cut}'] = best_models
+
+            db_output = add_result_db_output(f'class_{cut}', m, score_results, db_output)
 
         save_pickle(pred, model_output_path, 'class_pred')
         save_pickle(actual, model_output_path, 'class_actual')
@@ -331,46 +354,20 @@ for set_pos in ['WR', 'RB', 'QB','TE',
         best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
                                                                 X_stack, y_stack, n_iter=50, 
                                                                 run_adp=True, print_coef=True)
-# %%
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import Ridge
-from sklearn.metrics import mean_squared_error
 
-class RandomColumnPercentile(BaseEstimator,TransformerMixin):
+        db_output = add_result_db_output('final', final_m, [adp_score, stack_score], db_output)
 
-    def __init__(self, perc=0.5, verbose=False):
-        """
-        A Custom BaseEstimator that can switch between classifiers.
-        :param estimator: sklearn object - The classifier
-        """ 
-        self.perc = perc
-        self.verbose=False
-
-    def fit(self, X, y=None):
-        return self
-
-    def transform(self, X, y=None):
-        return X.sample(frac=self.perc, axis=1, random_state=123)
-
-X_train = X.iloc[:-200, :]
-y_train = y.iloc[:-200]
-
-X_test = X.iloc[-200:, :]
-y_test = y.iloc[-200:]
-
-pipe = Pipeline([('rc', RandomColumnPercentile(perc=0.9)), 
-                  skm.piece('std_scale'), 
-                  skm.piece('k_best'), 
-                  ('lr', Ridge(alpha=1))])
-pipe.fit(X_train, y_train)
-
-np.sqrt(mean_squared_error(y_test, pipe.predict(X_test)))
+    # write out tracking results to tracking DB
+    db_output_pd = pd.DataFrame(db_output)
+    dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
+    dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
 
 # %%
 
-# %%
-X.shape[1]
-# %%
-X.sample(frac=1, axis=1).shape[1]
+for i in range(10):
+
+    x = 2
+    # %reset -f
+
+x
 # %%

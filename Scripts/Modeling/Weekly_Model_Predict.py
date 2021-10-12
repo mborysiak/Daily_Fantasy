@@ -49,9 +49,9 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-model_type = 'backfill'
+model_type = 'full_model'
 
-if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions = ['Defense']# positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
@@ -168,8 +168,6 @@ for set_pos in positions:
     # Make the Regression Predictions
     #------------
 
-    output = output_start[['player', 'dk_salary']].copy()
-
     df_predict_stack = df_predict.copy()
     df_predict_stack = df_predict_stack.drop('y_act', axis=1).fillna(0)
     skm_stack = SciKitModel(df_train)
@@ -230,6 +228,7 @@ for set_pos in positions:
         prediction = pd.Series(np.round(bm.predict(X_predict), 2), name=f'pred_{met}_{fm}')
         predictions = pd.concat([predictions, prediction], axis=1)
 
+    output = output_start[['player', 'dk_salary']].copy()
     # output = pd.concat([output, predictions], axis=1)
     output['pred_fp_per_game'] = predictions.mean(axis=1)
 
