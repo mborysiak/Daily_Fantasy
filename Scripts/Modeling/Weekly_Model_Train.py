@@ -36,21 +36,28 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
-for set_pos in ['QB', 'WR', 'RB','TE', 'Defense'
-                ]:
+for set_pos in ['QB', 'WR', 'RB','TE', 'Defense']:
 
     model_type = 'full_model'
-    vers = '3_25_3_percentile_reg_3_25_3_perc_class_25iter'
+    vers = 'v1'
+
+    set_perc = {
+        'QB': [5, 35, 5],
+        'RB': [5, 45, 5],
+        'WR': [5, 45, 5],
+        'TE': [5, 45, 5],
+        'Defense': [3, 25, 3]
+    }
 
     # set year to analyze
     set_year = 2021
-    set_week = 5
+    set_week = 6
 
     print(f'\n==================\n{set_pos} {model_type} {set_year} {set_week}\n====================')
 
     # set the earliest date to begin the validation set
     val_year_min = 2020
-    val_week_min = 10
+    val_week_min = 11
 
     met = 'y_act'
 
@@ -205,7 +212,9 @@ for set_pos in ['QB', 'WR', 'RB','TE', 'Defense'
                                 skm.piece(m)])
         
         params = skm.default_params(pipe, 'rand')
-        params['select_perc__percentile'] = range(3, 25, 3)
+        params['select_perc__percentile'] = range(set_perc[set_pos][0], 
+                                                  set_perc[set_pos][1], 
+                                                  set_perc[set_pos][2])
 
         if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
 
@@ -259,7 +268,9 @@ for set_pos in ['QB', 'WR', 'RB','TE', 'Defense'
                                         skm_class.piece(m)])
             
             params = skm_class.default_params(pipe, 'rand')
-            params['select_perc_c__percentile'] = range(3, 25, 3)
+            params['select_perc_c__percentile'] = range(set_perc[set_pos][0], 
+                                                        set_perc[set_pos][1], 
+                                                        set_perc[set_pos][2])
             if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
 
             # run the model with parameter search
@@ -362,12 +373,4 @@ for set_pos in ['QB', 'WR', 'RB','TE', 'Defense'
     dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
     dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
 
-# %%
-
-for i in range(10):
-
-    x = 2
-    # %reset -f
-
-x
 # %%
