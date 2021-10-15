@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 5
+set_week = 6
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -164,7 +164,7 @@ if len([c for c in cnter.values() if c > 1]) > 0:
 else:
     print('No duplicate teams')
 
-print('Missing Teams:', [t for t in teams if t not in team_map.values()])
+print('Missing Teams:', set([t for t in team_map.values() if t not in teams]))
 
 #%%
 
@@ -406,6 +406,35 @@ for t, d, db in zip(tables, dfs, dbs):
 
 #%%
 
+
+# df = pd.read_html(f'https://www.nfl.com/injuries/league/{set_year}/reg{set_week}')
+# for i in range(len(df)):
+#     if i % 10 == 0:
+#         print(i)
+#     df[i].columns = ['player', 'pos', 'injuries', 'practice_status', 'game_status']
+#     df[i]['week'] = set_week
+#     df[i]['year'] = set_year
+#     df[i].player = df[i].player.apply(dc.name_clean)
+#     dm.write_to_db(df[i], 'Pre_PlayerData', 'PlayerInjuries', 'append')
+# %%
+
+df = pd.read_csv(f'{root_path}/Data/OtherData/Injury_Status/{set_year}/week{set_week}.csv', 
+                 encoding='latin', skip_blank_lines=True, error_bad_lines=False)
+df.columns = ['player', 'pos', 'injuries', 'practice_status', 'game_status']
+df = df[df.player!='Player'].dropna(axis=0, thresh=3).reset_index(drop=True)
+
+df.loc[(df['practice_status'] == 'Did Not Participate In Practice') & \
+        (df.game_status.isnull()), 'game_status'] = 'Questionable'
+
+df['week'] = set_week
+df['year'] = set_year
+df.player = df.player.apply(dc.name_clean)
+
+dm.delete_from_db('Pre_PlayerData', 'PlayerInjuries', f"week={set_week} AND year={set_year}")
+dm.write_to_db(df, 'Pre_PlayerData', 'PlayerInjuries', 'append')
+
+#%%
+
 #--------------
 # Pull in DK Salaries & Id's
 #--------------
@@ -457,32 +486,4 @@ dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
 # dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
 # dm.write_to_db(other_sal, 'Pre_PlayerData', 'Daily_Salaries', 'append')
 
-#%%
 
-
-# df = pd.read_html(f'https://www.nfl.com/injuries/league/{set_year}/reg{set_week}')
-# for i in range(len(df)):
-#     if i % 10 == 0:
-#         print(i)
-#     df[i].columns = ['player', 'pos', 'injuries', 'practice_status', 'game_status']
-#     df[i]['week'] = set_week
-#     df[i]['year'] = set_year
-#     df[i].player = df[i].player.apply(dc.name_clean)
-#     dm.write_to_db(df[i], 'Pre_PlayerData', 'PlayerInjuries', 'append')
-# %%
-
-df = pd.read_csv(f'{root_path}/Data/OtherData/Injury_Status/{set_year}/week{set_week}.csv', 
-                 encoding='latin', skip_blank_lines=True, error_bad_lines=False)
-df.columns = ['player', 'pos', 'injuries', 'practice_status', 'game_status']
-df = df[df.player!='Player'].dropna(axis=0, thresh=3).reset_index(drop=True)
-
-df.loc[(df['practice_status'] == 'Did Not Participate In Practice') & \
-        (df.game_status.isnull()), 'game_status'] = 'Questionable'
-
-df['week'] = set_week
-df['year'] = set_year
-df.player = df.player.apply(dc.name_clean)
-
-dm.delete_from_db('Pre_PlayerData', 'PlayerInjuries', f"week={set_week} AND year={set_year}")
-dm.write_to_db(df, 'Pre_PlayerData', 'PlayerInjuries', 'append')
-# %%

@@ -10,6 +10,7 @@ import numpy as np
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
 import ff.data_clean as dc
+from xgboost.sklearn import XGBRFRegressor
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -417,7 +418,8 @@ def get_player_data(df, pos, YEAR, prev_years=1):
     player_data = dm.read(f'''SELECT * 
                 FROM {pos}_Stats 
                 WHERE season >= 2020
-                    AND week != 17''', 'FastR')
+                      AND week != 17
+                      ''', 'FastR')
     if pos=='QB':
         rcols_player = [c for c in player_data.columns if 'pass_' in c]
     else:
@@ -1012,6 +1014,9 @@ def add_qbr(df):
     df = pd.merge(df, qbr.drop('team', axis=1), on=['player', 'week', 'year'], how='left')
 
     df = forward_fill(df)
+    fill_cols = ['rank', 'player', 'qbr', 'paa', 'plays', 'epa', 'pass_rating', 'run_rating', 
+                 'sack_rating', 'penalty_rating', 'raw_rating']
+    df[fill_cols] = df[fill_cols].fillna(df[fill_cols].mean())
 
     return df
 
@@ -1264,7 +1269,7 @@ print('Team Counts by Week:', defense[['year', 'week', 'player']].drop_duplicate
 
 defense.columns = [c.replace('_dst', '') for c in defense.columns]
 
-# dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
+dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 
 # %%
 
@@ -1333,7 +1338,7 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
 
 output = def_pts_allowed(output); print(output.shape[0])
 
-# dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
+dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 
 # %%]
 

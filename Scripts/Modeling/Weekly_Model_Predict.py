@@ -36,7 +36,6 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 np.random.seed(1234)
 
-vers = 'v1'
 
 # set year to analyze
 set_year = 2021
@@ -50,8 +49,9 @@ met = 'y_act'
 
 # full_model or backfill
 model_type = 'full_model'
+vers = 'yes_qbr_filled_values_yes_proj_diff'
 
-if model_type == 'full_model': positions = ['Defense']# positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions = ['QB']# positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:

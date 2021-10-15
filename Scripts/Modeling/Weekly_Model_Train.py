@@ -35,10 +35,18 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 np.random.seed(1234)
 
-# set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
-for set_pos in ['QB', 'WR', 'RB','TE', 'Defense']:
+# set year to analyze
+set_year = 2021
+set_week = 6
 
-    model_type = 'full_model'
+# set the earliest date to begin the validation set
+val_year_min = 2020
+val_week_min = 10
+
+# set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
+for set_pos in ['QB', 'WR', 'RB','TE']:#, 'Defense']:
+
+    model_type = 'backfill'
     vers = 'v1'
 
     set_perc = {
@@ -49,15 +57,8 @@ for set_pos in ['QB', 'WR', 'RB','TE', 'Defense']:
         'Defense': [3, 25, 3]
     }
 
-    # set year to analyze
-    set_year = 2021
-    set_week = 6
-
+    
     print(f'\n==================\n{set_pos} {model_type} {set_year} {set_week}\n====================')
-
-    # set the earliest date to begin the validation set
-    val_year_min = 2020
-    val_week_min = 11
 
     met = 'y_act'
 
@@ -293,6 +294,8 @@ for set_pos in ['QB', 'WR', 'RB','TE', 'Defense']:
         save_pickle(scores, model_output_path, 'class_scores')
 
 
+    #=============================================================================================
+
     #------------
     # Make the Class Predictions
     #------------
@@ -373,4 +376,19 @@ for set_pos in ['QB', 'WR', 'RB','TE', 'Defense']:
     dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
     dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
 
+# %%
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+
+XX= X_stack[['y_act_adp']].sample(frac=1, random_state=1234)
+yy= y_stack.sample(frac=1, random_state=1234)
+
+lr = LinearRegression()
+preds = skm.cv_predict(lr, XX, yy, cv=5)
+mean_squared_error(yy, preds)
+# %%
+
+y_stack
+# %%
+X_stack
 # %%
