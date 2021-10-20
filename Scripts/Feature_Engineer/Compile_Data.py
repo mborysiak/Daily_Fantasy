@@ -10,7 +10,6 @@ import numpy as np
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
 import ff.data_clean as dc
-from xgboost.sklearn import XGBRFRegressor
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -1092,7 +1091,14 @@ def drop_y_act_except_current(df, week, year):
     df.loc[((df.week==week) & (df.year==year)), 'y_act'] = 0
     return df
 
+def one_qb_per_week(df):
+    max_qb = df.groupby(['team', 'year', 'week']).agg({'projected_points': 'max',
+                                                       'dk_salary': 'max'}).reset_index()
+    cols = df.columns
+    df = pd.merge(df, max_qb, on=['team', 'year', 'week', 'projected_points', 'dk_salary'])
+    df = df[cols]
 
+    return df
 #%%
 
 # defense stats that can be added to the offensive player data
@@ -1142,21 +1148,23 @@ df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
 
 df = attach_y_act(df, pos)
 df = drop_y_act_except_current(df, WEEK, YEAR); print(df.shape[0])
-df = projected_pts_vs_predicted(df, pos); print(df.shape[0])
+# df = projected_pts_vs_predicted(df, pos); print(df.shape[0])
 
 # fill in missing data and drop any remaining rows
 df = forward_fill(df)
 df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
+df = one_qb_per_week(df); print(df.shape[0])
 print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
 print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
 
-dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
-if df.shape[1] > 2000:
-    dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
+# dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
+# if df.shape[1] > 2000:
+#     dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
 
 #%%
-for pos in ['RB', 
+for pos in [
+            'RB', 
             'WR', 
             'TE'
             ]:
@@ -1330,6 +1338,7 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
     df['pos'] = pos
+    if pos=='QB': df = one_qb_per_week(df); print(df.shape[0])
 
     print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
     print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
@@ -1342,18 +1351,71 @@ dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 
 # %%]
 
-adv_qb = dm.read('''SELECT player, team, week, year,
-                           Cmp_pct comp_pct, TD_Pct td_pct,
-                           Int_pct int_pct, `1d` first_downs,
-                           Y_A yards_per_attempt, AY_A adj_yard_per_attempt,
-                           Y_C yards_per_completion, Rate qb_rating, 
-                           QBR qbr_rating, `Yds.1` sack_yards_lost,
-                           NY_A net_yards_per_att, ANY_A adj_net_yards_per_att,
-                           Sk_pct sack_pct, `4QC` fourth_qtr_comback, 
-                           GWD game_winning_drives, wins / losses win_pct
+qb_adv = dm.read('''SELECT player, team, week, year,
+                           G games, GS games_started,
+                           Cmp pass_completions, Att pass_attempts
                     FROM PFR_Advanced_QB
-                    ''', 'Post_PlayerData')
-adv_qb
+                    WHERE pos IN ('QB', 'qb') ''', 'Post_PlayerData')
+qb_adv.player = qb_adv.player.apply(dc.name_clean)
+
+adv = dm.read('''SELECT player, team, week, year,
+                        Cmp_pct comp_pct, TD_Pct td_pct,
+                        Int_pct int_pct, `1d` first_downs,
+                        Y_A yards_per_attempt, AY_A adj_yard_per_attempt,
+                        Y_C yards_per_completion, Rate qb_rating, 
+                        QBR qbr_rating, `Yds.1` sack_yards_lost,
+                        NY_A net_yards_per_att, ANY_A adj_net_yards_per_att,
+                        Sk_pct sack_pct, `4QC` fourth_qtr_comback, 
+                        GWD game_winning_drives, wins / losses win_pct
+                FROM PFR_Advanced_QB
+                ''', 'Post_PlayerData')
+
+
+adv_acc = dm.read('''SELECT player, team, week, year,
+                            PassingBadTh bad_throws, PassingBad_Pct bad_pass_pct,
+                            PassingOnTgt pass_on_tgt, PassingOnTgt_pct pass_on_tgt_pct
+                     FROM PFR_Advanced_QB_Accuracy''', 'Post_PlayerData')
+
+adv_ay = dm.read('''SELECT player, team, week, year,
+                           PassingIAY intended_ay, 
+                           PassingIAY_PA intended_ay_per_att, 
+                           PassingCAY completed_ay,
+                           PassingCAY_Cmp completed_ay_per_complete,
+                           PassingCAY_PA completed_ay_per_att, 
+                           PassingYAC pass_yac, 
+                           PassingYAC_Cmp pass_yac_per_complete
+                    FROM PFR_Advanced_QB_AirYards''', 'Post_PlayerData' )
+
+adv_ptype = dm.read('''SELECT player, team, week, year,
+                              RPOPlays rpo_plays, RPOYds rpo_yards, 
+                              RPOPassAtt rpo_pass_att, RPOPassYds rpo_pass_yds,
+                              RPORushAtt rpo_rush_att, RPORushYds rpo_rush_yds, 
+                              PlayActionPassAtt play_action_att, PlayActionPassYds play_action_yds
+                    FROM PFR_Advanced_QB_PlayType''', 'Post_PlayerData' )
+
+adv_pressure = dm.read('''SELECT player, team, week, year,
+                                 PassingSk pass_sacks, PassingPktTime pocket_time, 
+                                 PassingBltz pass_against_blitz,
+                                 PassingHrry pass_hurries, PassingHits pass_hits, 
+                                 PassingPrss_pct complete_pct_pressure, PassingScrm scramble_passes,
+                                 PassingYds_Scr pass_yds_per_scramble
+                    FROM PFR_Advanced_QB_Pressure''', 'Post_PlayerData' )
+
+for df in [adv, adv_acc, adv_ay, adv_ptype, adv_pressure]:
+    df.player = df.player.apply(dc.name_clean)
+    qb_adv = pd.merge(qb_adv, df, on=['player', 'team', 'week', 'year'])
+
+per_game = ['pass_completions', 'pass_attempts', 'first_downs', 'sack_yards_lost',
+            'fourth_qtr_comback', 'game_winning_drives', 'bad_throws', 'pass_on_tgt', 'intended_ay',
+            'completed_ay','pass_yac', 'rpo_plays', 'rpo_yards', 'rpo_pass_att', 'rpo_pass_yds',
+            'rpo_rush_att', 'rpo_rush_yds', 'play_action_att', 'play_action_yds', 'pass_sacks', 
+            'pass_against_blitz', 'pass_hurries', 'pass_hits',  'scramble_passes', 'pass_yds_per_scramble']
+for c in per_game:
+    qb_adv[f'{c}_per_game'] = qb_adv[c] / qb_adv.games
+
+
+
+
 # %%
 # TO DO LIST
 # - finish adding in advanced QB stats

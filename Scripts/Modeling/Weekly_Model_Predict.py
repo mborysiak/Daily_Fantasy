@@ -1,4 +1,3 @@
-
 #%%
 # core packages
 from random import Random
@@ -13,6 +12,7 @@ from ff.db_operations import DataManage
 from ff import general as ffgeneral
 import ff.data_clean as dc
 from skmodel import SciKitModel
+from Fix_Standard_Dev import *
 
 import pandas_bokeh
 pandas_bokeh.output_notebook()
@@ -49,10 +49,17 @@ met = 'y_act'
 
 # full_model or backfill
 model_type = 'full_model'
-vers = 'yes_qbr_filled_values_yes_proj_diff'
+vers = 'v1'
 
-if model_type == 'full_model': positions = ['QB']# positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
+
+for p in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+    
+    # determine the number of equal sizes groups for each position
+    pos_grps = {'WR': 70, 'RB': 40, 'QB': 9, 'TE': 6, 'Defense': 13}
+    print(f'Checking Splines for {p}')
+    _ = get_std_splines(p, pos_grps, show_plot=True)
 
 for set_pos in positions:
 
@@ -68,6 +75,7 @@ for set_pos in positions:
     all_vars = [set_pos, set_year, set_week]
 
     pkey = f'{set_pos}_year{set_year}_week{set_week}_{model_type}{vers}'
+    # pkey='QB_year2021_week5_full_modelyes_qbr_filled_values_yes_proj_diff'
     db_output = {'set_pos': set_pos, 'set_year': set_year, 'set_week': set_week}
     db_output['pkey'] = pkey
 
@@ -228,38 +236,26 @@ for set_pos in positions:
         prediction = pd.Series(np.round(bm.predict(X_predict), 2), name=f'pred_{met}_{fm}')
         predictions = pd.concat([predictions, prediction], axis=1)
 
+    #===================
+    # Create Outputs
+    #===================
+        
     output = output_start[['player', 'dk_salary']].copy()
+
     # output = pd.concat([output, predictions], axis=1)
     output['pred_fp_per_game'] = predictions.mean(axis=1)
+    output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
 
-    std_models = predictions.std(axis=1) / 10
-    std_bridge = bm.predict(X_predict, return_std=True)[1]
-    output['std_dev'] = std_bridge + std_models
+    bridge_sd = bm.predict(X_predict, return_std=True)[1]
+    spline_sd = get_std_splines(set_pos, pos_grps)(output.dk_salary)
+    models_sd = predictions.std(axis=1) / 20
+
+    output = fix_std_dev(output, bridge_sd, spline_sd, models_sd)
+
     output = output.sort_values(by='dk_salary', ascending=False)
     output['dk_rank'] = range(len(output))
     output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
-
-    # mean_act = df_train.loc[df_train.fp_rank.isin(df_predict.fp_rank.sort_values().unique()[:12]), 'y_act'].mean() 
-    # ratio = mean_act / output.pred_fp_per_game[:12].mean()
-    # output['pred_fp_per_game'] = output['pred_fp_per_game'] * ratio
-        
-    if set_pos not in ('Defense'):
-        output.loc[output.dk_salary < 4000, 'std_dev'] = np.min(output.std_dev)
-
     print(output.iloc[:50])
-
-    if model_type == 'backfill' and set_pos=='QB':
-        to_fill = dm.read(f'''SELECT DISTINCT player FROM Model_Predictions 
-                            WHERE pos='{set_pos}'
-                                    AND version='{vers}'
-                                    AND week={set_week}
-                                    AND year={set_year}
-                                    AND model_type != 'backfill' ''', 'Simulation').player.values
-        
-        output = output[output.player!='Ryan Griffin']
-        output = output[~output.player.isin(to_fill)]
-        print(output.iloc[:50])
-
 
     output['pos'] = set_pos
     output['version'] = vers
@@ -295,15 +291,17 @@ for c in score_cols: preds[c] = preds[c] * preds.weighting
 
 # Groupby and aggregate with namedAgg [1]:
 preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game': 'sum', 
-                                                            'std_dev': 'sum',
-                                                            'max_score': 'sum',
-                                                            'min_score': 'sum',
-                                                            'weighting': 'sum'})
+                                                              'std_dev': 'sum',
+                                                              'max_score': 'sum',
+                                                              'min_score': 'sum',
+                                                              'weighting': 'sum'})
+
+
 
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['ATL', 'NYJ', 'SEA', 'LAR', 'BUF', 'KC', 'IND', 'BAL']
+drop_teams = ['TB', 'PHI', 'SEA', 'PIT', 'MIA', 'JAC', 'BUF', 'TEN']
 
 teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
                     FROM FantasyPros
@@ -313,6 +311,7 @@ preds = pd.merge(preds, teams, on=['player'])
 preds = preds[~preds.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)
 
 preds.sort_values(by='pred_fp_per_game', ascending=False).iloc[:50]
+
 
 #%%
 
@@ -378,7 +377,7 @@ sim_dist = create_sim_output(preds).reset_index(drop=True)
 
 #%%
 
-idx = sim_dist[sim_dist.player=="DET"].index[0]
+idx = sim_dist[sim_dist.player=="Ceedee Lamb"].index[0]
 plot_distribution(sim_dist.iloc[idx])
 
 # %%
@@ -386,21 +385,3 @@ plot_distribution(sim_dist.iloc[idx])
 dm.write_to_db(sim_dist, 'Simulation', f'week{set_week}_year{set_year}', 'replace')
 # %%
 
-import matplotlib.pyplot as plt
-
-X_stack_shuf = X_stack.sample(frac=1, random_state=12345).reset_index(drop=True)
-y_stack_shuf = y_stack.sample(frac=1, random_state=12345).reset_index(drop=True)
-
-hold_pred = pd.Series(skm_stack.cv_predict(best_model, X_stack_shuf, y_stack_shuf, cv=10))
-plt.scatter(hold_pred, y_stack_shuf)
-plt.show()
-from sklearn.metrics import r2_score
-print(r2_score(y_stack_shuf, hold_pred))
-
-idx = hold_pred[hold_pred > 10].index
-
-print(r2_score(y_stack_shuf[idx], hold_pred[idx]))
-
-plt.scatter(hold_pred[idx], y_stack_shuf[idx])
-plt.show()
-# %%

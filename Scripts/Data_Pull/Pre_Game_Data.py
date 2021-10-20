@@ -487,3 +487,5 @@ dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
 # dm.write_to_db(other_sal, 'Pre_PlayerData', 'Daily_Salaries', 'append')
 
 
+
+# %%

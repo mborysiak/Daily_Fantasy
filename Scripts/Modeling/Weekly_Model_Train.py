@@ -37,17 +37,19 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 6
+set_week = 5
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
 val_week_min = 10
 
-# set to position to analyze: 'RB', 'WR', 'QB', or 'TE', 'Defense'
-for set_pos in ['QB', 'WR', 'RB','TE']:#, 'Defense']:
+model_type = 'full_model'
+vers = 'backtest'
 
-    model_type = 'backfill'
-    vers = 'v1'
+if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
+elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
+
+for set_pos in positions:
 
     set_perc = {
         'QB': [5, 35, 5],
@@ -56,7 +58,6 @@ for set_pos in ['QB', 'WR', 'RB','TE']:#, 'Defense']:
         'TE': [5, 45, 5],
         'Defense': [3, 25, 3]
     }
-
     
     print(f'\n==================\n{set_pos} {model_type} {set_year} {set_week}\n====================')
 
@@ -182,12 +183,14 @@ for set_pos in ['QB', 'WR', 'RB','TE']:#, 'Defense']:
 
     # fit and append the ADP model
     best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
-                                                    col_split='game_date', 
+                                                   col_split='game_date', 
                                                     time_split=cv_time_input)
 
     # append all of the metric outputs
-    pred[f'{met}_adp'] = oof_data['combined']; actual[f'{met}_adp'] = oof_data['actual']
-    scores[f'{met}_adp'] = r2; models[f'{met}_adp'] = best_models
+    pred[f'{met}_adp'] = oof_data['hold']
+    actual[f'{met}_adp'] = oof_data['actual']
+    scores[f'{met}_adp'] = r2
+    models[f'{met}_adp'] = best_models
 
     db_output = add_result_db_output('reg', 'adp', r2, db_output)
     #---------------
@@ -224,8 +227,10 @@ for set_pos in ['QB', 'WR', 'RB','TE']:#, 'Defense']:
                                                         col_split='game_date', time_split=cv_time_input)
 
         # append the results and the best models for each fold
-        pred[f'{met}_{m}'] = oof_data['combined']; actual[f'{met}_{m}'] = oof_data['actual']
-        scores[f'{met}_{m}'] = r2; models[f'{met}_{m}'] = best_models
+        pred[f'{met}_{m}'] = oof_data['hold']
+        actual[f'{met}_{m}'] = oof_data['actual']
+        scores[f'{met}_{m}'] = r2
+        models[f'{met}_{m}'] = best_models
 
         db_output = add_result_db_output('reg', m, r2, db_output)
 
@@ -281,7 +286,7 @@ for set_pos in ['QB', 'WR', 'RB','TE']:#, 'Defense']:
                                                                             time_split=cv_time_input)
 
             # append the results and the best models for each fold
-            pred[f'class_{m}_{cut}'] = oof_data['combined']
+            pred[f'class_{m}_{cut}'] = oof_data['hold']
             actual[f'class_{m}_{cut}'] = oof_data['actual']
             scores[f'class_{m}_{cut}'] = score_results 
             models[f'class_{m}_{cut}'] = best_models
@@ -376,19 +381,4 @@ for set_pos in ['QB', 'WR', 'RB','TE']:#, 'Defense']:
     dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
     dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
 
-# %%
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error
-
-XX= X_stack[['y_act_adp']].sample(frac=1, random_state=1234)
-yy= y_stack.sample(frac=1, random_state=1234)
-
-lr = LinearRegression()
-preds = skm.cv_predict(lr, XX, yy, cv=5)
-mean_squared_error(yy, preds)
-# %%
-
-y_stack
-# %%
-X_stack
 # %%
