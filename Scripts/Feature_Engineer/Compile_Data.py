@@ -840,23 +840,35 @@ def def_pts_allowed(df, join_col='defTeam'):
     stat_cols = [c for c in pts_allowed if c not in ('team', 'games', 'week', 'year') and 'per_game' not in c]
     for c in stat_cols:
         pts_allowed[c] = pts_allowed[c] / (pts_allowed['games'].fillna(1))
-    
+
     pts_allowed = pts_allowed.drop([c for c in pts_allowed.columns if 'per_game' in c], axis=1)
 
+    # fix the bye week and conversion between seasons
     pts_allowed['player'] = pts_allowed.team
     pts_allowed = drop_extra_bye_week(pts_allowed).drop('player', axis=1)
-
     pts_allowed.week = pts_allowed.week + 1
-
     pts_allowed = fix_bye_week(pts_allowed)
     pts_allowed = switch_seasons(pts_allowed)
 
+    # add in new columns
+    pts_allowed['pass_over_rush_yd_allowed'] = pts_allowed['qb_pass_yds_allowed'] / pts_allowed['rb_rush_yds_allowed']
+    pts_allowed['pass_minus_rush_yd_allowed'] = pts_allowed['qb_pass_yds_allowed'] - pts_allowed['rb_rush_yds_allowed']
+    pts_allowed['wr_over_rb_yd_allowed'] = pts_allowed['wr_rec_yds_allowed'] / pts_allowed['rb_rec_yds_allowed']
+    pts_allowed['wr_over_te_yd_allowed'] = pts_allowed['wr_rec_yds_allowed'] / pts_allowed['te_rec_yds_allowed']
 
+    pts_allowed['pass_over_rush_dk_allowed'] = pts_allowed['qb_dk_fp_allowed'] / pts_allowed['rb_dk_pts_allowed']
+    pts_allowed['pass_minus_rush_dk_allowed'] = pts_allowed['qb_dk_fp_allowed'] - pts_allowed['rb_dk_pts_allowed']
+    pts_allowed['wr_over_rb_dk_allowed'] = pts_allowed['wr_dk_pts_allowed'] / pts_allowed['rb_dk_pts_allowed']
+    pts_allowed['wr_over_te_dk_allowed'] = pts_allowed['wr_dk_pts_allowed'] / pts_allowed['te_wr_dk_pts_allowed']
+
+    # average out the stats over rolling 3 games
+    stat_cols = [c for c in pts_allowed if c not in ('team', 'games', 'week', 'year') and 'per_game' not in c]
     pts_allowed = pts_allowed.sort_values(by=['team', 'year', 'week']).reset_index(drop=True)
     labels = pts_allowed[['team', 'week', 'year', 'games']]
     roll_stats = pts_allowed.groupby('team')[stat_cols].rolling(3).agg('mean').reset_index(drop=True)
     pts_allowed = pd.concat([labels, roll_stats], axis=1).dropna().reset_index(drop=True)
-    
+
+    # join the pts allowed to the dataframe
     pts_allowed = pts_allowed.rename(columns={'team': join_col})
     df = pd.merge(df, pts_allowed.drop('games', axis=1), on=[join_col, 'week', 'year'], how='left')
     
@@ -1021,6 +1033,92 @@ def add_qbr(df):
 
 
 
+def add_qb_adv(df):
+    qb_adv = dm.read('''SELECT player, team, week, year,
+                            G games, GS games_started,
+                            Cmp pass_completions, Att pass_attempts
+                        FROM PFR_Advanced_QB
+                        WHERE pos IN ('QB', 'qb') ''', 'Post_PlayerData')
+    qb_adv.player = qb_adv.player.apply(dc.name_clean)
+
+    adv = dm.read('''SELECT player, team, week, year,
+                            Cmp_pct comp_pct, TD_Pct td_pct,
+                            Int_pct int_pct, `1d` first_downs,
+                            Y_A yards_per_attempt, AY_A adj_yard_per_attempt,
+                            Y_C yards_per_completion, Rate qb_rating, 
+                            QBR qbr_rating, `Yds.1` sack_yards_lost,
+                            NY_A net_yards_per_att, ANY_A adj_net_yards_per_att,
+                            Sk_pct sack_pct, `4QC` fourth_qtr_comback, 
+                            GWD game_winning_drives, wins / losses win_pct
+                    FROM PFR_Advanced_QB
+                    ''', 'Post_PlayerData')
+
+    adv_acc = dm.read('''SELECT player, team, week, year,
+                                PassingBadTh bad_throws, PassingBad_Pct bad_pass_pct,
+                                PassingOnTgt pass_on_tgt, PassingOnTgt_pct pass_on_tgt_pct
+                        FROM PFR_Advanced_QB_Accuracy''', 'Post_PlayerData')
+
+    adv_ay = dm.read('''SELECT player, team, week, year,
+                            PassingIAY intended_ay, 
+                            PassingIAY_PA intended_ay_per_att, 
+                            PassingCAY completed_ay,
+                            PassingCAY_Cmp completed_ay_per_complete,
+                            PassingCAY_PA completed_ay_per_att, 
+                            PassingYAC pass_yac, 
+                            PassingYAC_Cmp pass_yac_per_complete
+                        FROM PFR_Advanced_QB_AirYards''', 'Post_PlayerData' )
+
+    adv_ptype = dm.read('''SELECT player, team, week, year,
+                                RPOPlays rpo_plays, RPOYds rpo_yards, 
+                                RPOPassAtt rpo_pass_att, RPOPassYds rpo_pass_yds,
+                                RPORushAtt rpo_rush_att, RPORushYds rpo_rush_yds, 
+                                PlayActionPassAtt play_action_att, PlayActionPassYds play_action_yds
+                        FROM PFR_Advanced_QB_PlayType''', 'Post_PlayerData' )
+
+    adv_pressure = dm.read('''SELECT player, team, week, year,
+                                    PassingSk pass_sacks, PassingPktTime pocket_time, 
+                                    PassingBltz pass_against_blitz,
+                                    PassingHrry pass_hurries, PassingHits pass_hits, 
+                                    PassingPrss_pct complete_pct_pressure, PassingScrm scramble_passes,
+                                    PassingYds_Scr pass_yds_per_scramble
+                        FROM PFR_Advanced_QB_Pressure''', 'Post_PlayerData' )
+
+    for _df in [adv, adv_acc, adv_ay, adv_ptype, adv_pressure]:
+        _df.player = _df.player.apply(dc.name_clean)
+        qb_adv = pd.merge(qb_adv, _df, on=['player', 'team', 'week', 'year'])
+
+    qb_adv = dc.convert_to_float(qb_adv)
+
+    per_game = ['pass_completions', 'pass_attempts', 'first_downs', 'sack_yards_lost',
+                'fourth_qtr_comback', 'game_winning_drives', 'bad_throws', 'pass_on_tgt', 'intended_ay',
+                'completed_ay','pass_yac', 'rpo_plays', 'rpo_yards', 'rpo_pass_att', 'rpo_pass_yds',
+                'rpo_rush_att', 'rpo_rush_yds', 'play_action_att', 'play_action_yds', 'pass_sacks', 
+                'pass_against_blitz', 'pass_hurries', 'pass_hits',  'scramble_passes', 'pass_yds_per_scramble']
+
+    for c in per_game:
+        qb_adv[f'{c}_per_game'] = qb_adv[c] / qb_adv.games
+
+    per_att = ['first_downs',  'sack_yards_lost', 'rpo_yards', 'rpo_yards', 'play_action_yds', 'pass_on_tgt']
+    for c in per_att:
+        qb_adv[f'{c}_per_att'] = qb_adv[c] / qb_adv.pass_attempts
+
+    qb_adv['complete_over_intended_ay'] = qb_adv.completed_ay - qb_adv.intended_ay
+
+
+    qb_adv.week = qb_adv.week + 1
+    qb_adv = fix_bye_week(qb_adv).drop(['team', 'games', 'games_started', 
+                                        'pass_completions', 'pass_attempts'], axis=1)
+    qb_adv = switch_seasons(qb_adv)
+
+    df = pd.merge(df, qb_adv, on=['player', 'week', 'year'], how='left')
+    df = forward_fill(df)
+    fill_cols = [c for c in qb_adv if c not in ('player', 'week', 'year')]
+    df[fill_cols] = df[fill_cols].fillna(df[fill_cols].mean())
+
+    return df
+
+
+
 
 def results_vs_predicted(df, col):
 
@@ -1132,6 +1230,7 @@ df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
 
 df = add_rz_stats_qb(df); print(df.shape[0])
 df = add_qbr(df); print(df.shape[0])
+df = add_qb_adv(df); print(df.shape[0])
 
 # get the positional values for the team
 pos_values = positional_values()
@@ -1349,78 +1448,18 @@ output = def_pts_allowed(output); print(output.shape[0])
 
 dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 
-# %%]
-
-qb_adv = dm.read('''SELECT player, team, week, year,
-                           G games, GS games_started,
-                           Cmp pass_completions, Att pass_attempts
-                    FROM PFR_Advanced_QB
-                    WHERE pos IN ('QB', 'qb') ''', 'Post_PlayerData')
-qb_adv.player = qb_adv.player.apply(dc.name_clean)
-
-adv = dm.read('''SELECT player, team, week, year,
-                        Cmp_pct comp_pct, TD_Pct td_pct,
-                        Int_pct int_pct, `1d` first_downs,
-                        Y_A yards_per_attempt, AY_A adj_yard_per_attempt,
-                        Y_C yards_per_completion, Rate qb_rating, 
-                        QBR qbr_rating, `Yds.1` sack_yards_lost,
-                        NY_A net_yards_per_att, ANY_A adj_net_yards_per_att,
-                        Sk_pct sack_pct, `4QC` fourth_qtr_comback, 
-                        GWD game_winning_drives, wins / losses win_pct
-                FROM PFR_Advanced_QB
-                ''', 'Post_PlayerData')
-
-
-adv_acc = dm.read('''SELECT player, team, week, year,
-                            PassingBadTh bad_throws, PassingBad_Pct bad_pass_pct,
-                            PassingOnTgt pass_on_tgt, PassingOnTgt_pct pass_on_tgt_pct
-                     FROM PFR_Advanced_QB_Accuracy''', 'Post_PlayerData')
-
-adv_ay = dm.read('''SELECT player, team, week, year,
-                           PassingIAY intended_ay, 
-                           PassingIAY_PA intended_ay_per_att, 
-                           PassingCAY completed_ay,
-                           PassingCAY_Cmp completed_ay_per_complete,
-                           PassingCAY_PA completed_ay_per_att, 
-                           PassingYAC pass_yac, 
-                           PassingYAC_Cmp pass_yac_per_complete
-                    FROM PFR_Advanced_QB_AirYards''', 'Post_PlayerData' )
-
-adv_ptype = dm.read('''SELECT player, team, week, year,
-                              RPOPlays rpo_plays, RPOYds rpo_yards, 
-                              RPOPassAtt rpo_pass_att, RPOPassYds rpo_pass_yds,
-                              RPORushAtt rpo_rush_att, RPORushYds rpo_rush_yds, 
-                              PlayActionPassAtt play_action_att, PlayActionPassYds play_action_yds
-                    FROM PFR_Advanced_QB_PlayType''', 'Post_PlayerData' )
-
-adv_pressure = dm.read('''SELECT player, team, week, year,
-                                 PassingSk pass_sacks, PassingPktTime pocket_time, 
-                                 PassingBltz pass_against_blitz,
-                                 PassingHrry pass_hurries, PassingHits pass_hits, 
-                                 PassingPrss_pct complete_pct_pressure, PassingScrm scramble_passes,
-                                 PassingYds_Scr pass_yds_per_scramble
-                    FROM PFR_Advanced_QB_Pressure''', 'Post_PlayerData' )
-
-for df in [adv, adv_acc, adv_ay, adv_ptype, adv_pressure]:
-    df.player = df.player.apply(dc.name_clean)
-    qb_adv = pd.merge(qb_adv, df, on=['player', 'team', 'week', 'year'])
-
-per_game = ['pass_completions', 'pass_attempts', 'first_downs', 'sack_yards_lost',
-            'fourth_qtr_comback', 'game_winning_drives', 'bad_throws', 'pass_on_tgt', 'intended_ay',
-            'completed_ay','pass_yac', 'rpo_plays', 'rpo_yards', 'rpo_pass_att', 'rpo_pass_yds',
-            'rpo_rush_att', 'rpo_rush_yds', 'play_action_att', 'play_action_yds', 'pass_sacks', 
-            'pass_against_blitz', 'pass_hurries', 'pass_hits',  'scramble_passes', 'pass_yds_per_scramble']
-for c in per_game:
-    qb_adv[f'{c}_per_game'] = qb_adv[c] / qb_adv.games
-
-
-
 
 # %%
 # TO DO LIST
-# - finish adding in advanced QB stats
-# - create pass / run funnel defense stats
 # - figure out why some columns are null / no variance for Corr-- fix underlying data
 # - add in missed projection data for the backfill dataset
 # - add in PFF scores
 # - re-work market share data
+
+
+#%%
+join_col = 'defTeam'
+
+
+
+# %%

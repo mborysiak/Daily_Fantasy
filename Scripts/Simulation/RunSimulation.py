@@ -30,7 +30,7 @@ np.random.seed(1234)
 path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
 set_year = 2021
-league=6
+league=5
 
 # number of iteration to run
 iterations = 1000
@@ -43,6 +43,8 @@ league_info['initial_cap'] = 50000
 league_info['salary_cap'] = 50000
 
 flex_pos = ['RB', 'WR', 'TE']
+
+total_pos = np.sum(list(league_info['pos_require'].values()))
 
 #==================
 # Initialize the Simluation Class
@@ -188,7 +190,7 @@ my_team_table =  dash_table.DataTable(
 #--------------
 
 team_info = pd.DataFrame({'Mean Points': [None],
-                          '95th Percentile Points': [None],
+                          'Remaining Salary Per': [np.round(league_info['salary_cap'] / total_pos,0)],
                           'Remaining Salary': [league_info['salary_cap']]})
 
 team_info_table =  dash_table.DataTable(
@@ -404,7 +406,7 @@ def update_output(n_clicks, n_clicks_csv, drafted_data, drafted_columns):
     remain_sal = league_info['salary_cap'] - np.sum(to_add['salaries'])
 
     # run the simulation
-    if my_team_select.shape[0] < 9:
+    if my_team_select.shape[0] < total_pos:
         _, _ = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
     
     # get the results dataframe structured
@@ -431,15 +433,14 @@ def update_output(n_clicks, n_clicks_csv, drafted_data, drafted_columns):
         my_team_update = pd.merge(my_team_update.drop('Points Added', axis=1), my_player_mean, on='Player', how='left')
         my_team_update['Points Added'] = my_team_update['Points Added'].fillna(0)
 
-        my_player_95th = [np.round(np.sum(np.percentile(my_player_pts.iloc[:,1:], 95, axis=1)),1)]
+        remain_sal_per = np.round(remain_sal / (total_pos - len(selected)),0)
 
-    else: 
-        my_player_95th = [None]
-        
+    else:
+        remain_sal_per = np.round(remain_sal / total_pos,0)
 
     # update team information table
     team_info_update = pd.DataFrame({'Mean Points': np.round(my_team_update['Points Added'].sum(), 1), 
-                                     '95th Percentile Pts': my_player_95th,
+                                     'Remaining Salary Per': [remain_sal_per],
                                      'Remaining Salary': [remain_sal]})
     
     # save out csv of status

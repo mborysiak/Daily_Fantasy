@@ -43,7 +43,7 @@ set_week = 5
 val_year_min = 2020
 val_week_min = 10
 
-model_type = 'full_model'
+model_type = 'backfill'
 vers = 'backtest'
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']

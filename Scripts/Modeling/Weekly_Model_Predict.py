@@ -48,8 +48,8 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-model_type = 'full_model'
-vers = 'v1'
+model_type = 'backfill'
+vers = 'backtest'
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
@@ -301,7 +301,7 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['TB', 'PHI', 'SEA', 'PIT', 'MIA', 'JAC', 'BUF', 'TEN']
+drop_teams = ['LAR', 'SEA', 'BUF', 'KC', 'BAL', 'IND', 'ATL', 'NYJ']
 
 teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
                     FROM FantasyPros
