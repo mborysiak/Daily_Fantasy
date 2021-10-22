@@ -49,7 +49,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 6
+set_week = 7
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -59,9 +59,9 @@ met = 'y_act'
 
 # full_model or backfill
 model_type = 'full_model'
-vers = 'v1_keep_ten'
+vers = 'v1_keep_10_reg_all_class_kb_20_100_10'
 
-if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions = ['QB']# ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
@@ -140,7 +140,7 @@ for set_pos in positions:
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
     print('Shape of Train Set', df_train.shape)
-
+#%%
     #------------
     # Make the Class Predictions
     #------------
@@ -166,8 +166,8 @@ for set_pos in positions:
             if str(cut) in k:
                 m = skm_class_final.ensemble_pipe(v)
                 m.fit(X_class_final, y_class_final)
-                cur_pred = pd.Series(m.predict_proba(df_predict_class[X_class_final.columns])[:,1], name=k)
-                X_predict_class = pd.concat([X_predict_class, cur_pred], axis=1)
+              #  cur_pred = pd.Series(m.predict_proba(df_predict_class[X_class_final.columns])[:,1], name=k)
+             #   X_predict_class = pd.concat([X_predict_class, cur_pred], axis=1)
 
     pred = load_pickle(model_output_path, 'reg_pred')
     actual = load_pickle(model_output_path, 'reg_actual')
@@ -220,7 +220,7 @@ for set_pos in positions:
                                                                 run_adp=True, print_coef=True)
         best_models.append(best_model)
 
-
+#%%
     # get the final output:
     X_fp, y_fp = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
@@ -387,3 +387,41 @@ plot_distribution(sim_dist.iloc[idx])
 dm.write_to_db(sim_dist, 'Simulation', f'week{set_week}_year{set_year}', 'replace')
 # %%
 
+
+skm = SciKitModel(df_train)
+X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
+
+drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
+keep_words = ['def', 'qb', 'team']#, 'miss', 'team', 'diff']
+to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+
+drop_pct = 0.8
+num_drop = int(len(X.columns)*drop_pct)
+model = 'rf'
+
+pipe = skm.model_pipe([skm.piece('feature_drop'),
+                        skm.piece('std_scale'), 
+                        # skm.feature_union([
+                        #                     skm.piece('agglomeration'), 
+                        #                     skm.piece('k_best'),
+                        #                     skm.piece('pca')
+                        #                     ]),
+                        skm.piece('k_best'),
+                        skm.piece(model)])
+params = skm.default_params(pipe)
+params['k_best__k'] = range(5, 50, 5)
+params['feature_drop__col'] = [list(np.random.choice(X.columns, num_drop, replace=False)) for _ in range(25)]
+
+# fit and append the ADP model
+best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=50,
+                                                col_split='game_date', 
+                                                time_split=cv_time_input)
+
+#%%
+i = 1
+try: coefs = best_models[i].named_steps[model].coef_
+except: coefs = best_models[i].named_steps[model].feature_importances_
+try:cols = X.drop(best_models[i].named_steps['feature_drop'].col, axis=1).columns[best_models[i].named_steps['k_best'].get_support()]
+except: cols = X.columns[best_models[i].named_steps['k_best'].get_support()]
+pd.Series(coefs, index=cols).sort_values().plot.barh(figsize=(5,10))
+# %%
