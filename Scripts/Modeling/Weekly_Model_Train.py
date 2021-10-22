@@ -37,14 +37,17 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 5
+set_week = 7
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
 val_week_min = 10
 
-model_type = 'backfill'
-vers = 'backtest'
+model_type = 'full_model'
+vers = 'v1_keep_10_kb_20_100_10'
+
+to_keep = 10
+kb = (20, 100, 10)
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
@@ -52,14 +55,14 @@ elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 for set_pos in positions:
 
     set_perc = {
-        'QB': [5, 35, 5],
-        'RB': [5, 45, 5],
-        'WR': [5, 45, 5],
-        'TE': [5, 45, 5],
-        'Defense': [3, 25, 3]
+        'QB': [5, 30, 5],
+        'RB': [5, 40, 5],
+        'WR': [5, 40, 5],
+        'TE': [5, 40, 5],
+        'Defense': [3, 20, 3]
     }
     
-    print(f'\n==================\n{set_pos} {model_type} {set_year} {set_week}\n====================')
+    print(f'\n==================\n{set_pos} {model_type} {set_year} {set_week} {vers}\n====================')
 
     met = 'y_act'
 
@@ -164,7 +167,7 @@ for set_pos in positions:
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
     print('Shape of Train Set', df_train.shape)
 
-    #===========================================================================================
+   #===========================================================================================
 
     # set up blank dictionaries for all metrics
     pred = {}; actual = {}; scores = {}; models = {}
@@ -177,9 +180,13 @@ for set_pos in positions:
     X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
     # set up the ADP model pipe
-    pipe = skm.model_pipe([skm.piece('feature_select'), skm.piece('std_scale'), skm.piece('lr')])
+    pipe = skm.model_pipe([skm.piece('feature_select'), 
+                           skm.piece('std_scale'), 
+                           skm.piece('k_best'),
+                           skm.piece('lr')])
     params = skm.default_params(pipe)
-    params['feature_select__cols'] = [[ 'dk_salary'], ['dk_salary', 'year'] ]
+    params['k_best__k'] = range(5)
+    params['feature_select__cols'] = [['ProjPts', 'dk_salary', 'fantasyPoints', 'year', 'week']]
 
     # fit and append the ADP model
     best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
@@ -204,8 +211,13 @@ for set_pos in positions:
         print('\n============\n')
         print(m)
 
+        drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
+        keep_words = ['def', 'qb', 'team']
+        to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+
         # set up the model pipe and get the default search parameters
-        pipe = skm.model_pipe([skm.piece('std_scale'), 
+        pipe = skm.model_pipe([ skm.piece('feature_drop'),
+                                skm.piece('std_scale'), 
                                 skm.piece('select_perc'),
                                 skm.feature_union([
                                             skm.piece('agglomeration'), 
@@ -219,6 +231,9 @@ for set_pos in positions:
         params['select_perc__percentile'] = range(set_perc[set_pos][0], 
                                                   set_perc[set_pos][1], 
                                                   set_perc[set_pos][2])
+        
+        params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(5)]
+        params['k_best__k'] = range(kb[0], kb[1], kb[2])
 
         if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
 
@@ -264,7 +279,8 @@ for set_pos in positions:
             print(m)
 
             # set up the model pipe and get the default search parameters
-            pipe = skm_class.model_pipe([skm_class.piece('std_scale'), 
+            pipe = skm_class.model_pipe([skm_class.piece('feature_drop'),
+                                        skm_class.piece('std_scale'), 
                                         skm_class.piece('select_perc_c'),
                                         skm_class.feature_union([
                                                             skm_class.piece('agglomeration'), 
@@ -278,6 +294,8 @@ for set_pos in positions:
                                                         set_perc[set_pos][1], 
                                                         set_perc[set_pos][2])
             if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
+            params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(5)]
+            params['k_best_c__k'] = range(kb[0], kb[1], kb[2])
 
             # run the model with parameter search
             best_models, score_results, oof_data = skm_class.time_series_cv(pipe, X_class, y_class, 
@@ -381,4 +399,37 @@ for set_pos in positions:
     dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
     dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
 
+# %%
+
+skm = SciKitModel(df_train)
+X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
+
+drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
+keep_words = ['def', 'qb', 'team']#, 'miss', 'team', 'diff']
+to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-3, replace=False)) for _ in range(10)]
+
+# random_dc = list(np.random.choice(to_drop, len(to_drop)-5, replace=False))
+# print([c for c in to_drop if c not in random_dc])
+
+pipe = skm.model_pipe([skm.piece('feature_drop'),
+                        skm.piece('std_scale'), 
+                        # skm.piece('k_best'),
+                        skm.piece('ridge')])
+params = skm.default_params(pipe)
+params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-3, replace=False)) for _ in range(10)]
+params['k_best__k'] = range(10, 100, 10)
+
+# fit and append the ADP model
+best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
+                                                col_split='game_date', 
+                                                time_split=cv_time_input)
+
+#%%
+i = 3
+coefs = best_models[i].named_steps['ridge'].coef_
+cols = X.drop(best_models[i].named_steps['feature_drop'].col, axis=1).columns[best_models[i].named_steps['k_best'].get_support()]
+pd.Series(coefs, index=cols).sort_values().plot.barh(figsize=(5,15))
+
+# %%
 # %%

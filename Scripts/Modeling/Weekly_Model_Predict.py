@@ -26,6 +26,16 @@ pd.set_option('display.max_columns', 999)
 from sklearn import set_config
 set_config(display='diagram')
 
+#%%
+for p in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+    
+    # determine the number of equal sizes groups for each position
+    pos_grps = {'WR': 40, 'RB': 20, 'QB': 9, 'TE': 7, 'Defense': 13}
+    print(f'Checking Splines for {p}')
+    _ = get_std_splines(p, pos_grps, show_plot=True)
+
+#%%
+
 #==========
 # General Setting
 #==========
@@ -39,7 +49,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 5
+set_week = 6
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -48,18 +58,11 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-model_type = 'backfill'
-vers = 'backtest'
+model_type = 'full_model'
+vers = 'v1_keep_ten'
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
-
-for p in ['QB', 'RB', 'WR', 'TE', 'Defense']:
-    
-    # determine the number of equal sizes groups for each position
-    pos_grps = {'WR': 70, 'RB': 40, 'QB': 9, 'TE': 6, 'Defense': 13}
-    print(f'Checking Splines for {p}')
-    _ = get_std_splines(p, pos_grps, show_plot=True)
 
 for set_pos in positions:
 
@@ -75,7 +78,6 @@ for set_pos in positions:
     all_vars = [set_pos, set_year, set_week]
 
     pkey = f'{set_pos}_year{set_year}_week{set_week}_{model_type}{vers}'
-    # pkey='QB_year2021_week5_full_modelyes_qbr_filled_values_yes_proj_diff'
     db_output = {'set_pos': set_pos, 'set_year': set_year, 'set_week': set_week}
     db_output['pkey'] = pkey
 
@@ -283,7 +285,7 @@ preds = dm.read(f'''SELECT *
                           AND year = '{set_year}' 
             ''', 'Simulation')
 
-preds['weighting'] = 1
+preds['weighting'] =1
 preds.loc[preds.model_type=='full_model', 'weighting'] = 1
 
 score_cols = ['pred_fp_per_game', 'std_dev', 'max_score']
@@ -301,7 +303,7 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['LAR', 'SEA', 'BUF', 'KC', 'BAL', 'IND', 'ATL', 'NYJ']
+drop_teams = ['TB', 'PHI', 'SEA', 'PIT', 'MIA', 'JAC', 'BUF', 'TEN']
 
 teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
                     FROM FantasyPros

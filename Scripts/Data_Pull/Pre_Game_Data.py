@@ -442,12 +442,10 @@ dm.write_to_db(df, 'Pre_PlayerData', 'PlayerInjuries', 'append')
 try:
     os.replace(f"/Users/mborysia/Downloads/DKSalaries.csv", 
             f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv')   
-    os.replace(f"/Users/mborysia/Downloads/DKSalariesIds.csv", 
-            f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesIds_week{set_week}.csv')       
 except:
     print('No file to move')
 
-ids = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesIds_week{set_week}.csv',
+ids = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv',
                   skiprows=7).dropna(axis=1)
 ids = ids[['Name', 'ID']].rename(columns={'ID': 'GoodId'})
 

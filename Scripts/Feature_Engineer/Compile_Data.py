@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 6
+WEEK = 7
 
 #%%
 import pandas as pd 
@@ -1189,6 +1189,12 @@ def drop_y_act_except_current(df, week, year):
     df.loc[((df.week==week) & (df.year==year)), 'y_act'] = 0
     return df
 
+def remove_non_uniques(df):
+    cols = df.nunique()[df.nunique()==1].index
+    cols = [c for c in cols if c != 'pos']
+    df = df.drop(cols, axis=1)
+    return df
+
 def one_qb_per_week(df):
     max_qb = df.groupby(['team', 'year', 'week']).agg({'projected_points': 'max',
                                                        'dk_salary': 'max'}).reset_index()
@@ -1254,18 +1260,20 @@ df = forward_fill(df)
 df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
 df = one_qb_per_week(df); print(df.shape[0])
+
 print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
 print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
 
-# dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
-# if df.shape[1] > 2000:
-#     dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
+df = remove_non_uniques(df)
+dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
+if df.shape[1] > 2000:
+    dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
 
 #%%
 for pos in [
             'RB', 
-            'WR', 
-            'TE'
+           'WR', 
+           'TE'
             ]:
 
     #--------------------
@@ -1329,6 +1337,8 @@ for pos in [
     print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
     print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
     
+    df = remove_non_uniques(df)
+
     dm.write_to_db(df.iloc[:, :2000], 'Model_Features', f'{pos}_Data', if_exist='replace')
     if df.shape[1] > 2000:
         dm.write_to_db(df.iloc[:, 2000:], 'Model_Features', f'{pos}_Data2', if_exist='replace')
@@ -1376,6 +1386,7 @@ print('Team Counts by Week:', defense[['year', 'week', 'player']].drop_duplicate
 
 defense.columns = [c.replace('_dst', '') for c in defense.columns]
 
+df = remove_non_uniques(df)
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 
 # %%
@@ -1430,7 +1441,7 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
 
     df = attach_y_act(df, pos)
     df = drop_y_act_except_current(df, WEEK, YEAR); print(df.shape[0])
-    # df = projected_pts_vs_predicted(df, 'WR'); print(df.shape[0])
+    df = projected_pts_vs_predicted(df, pos); print(df.shape[0])
 
     # fill in missing data and drop any remaining rows
     df = forward_fill(df)
@@ -1445,21 +1456,64 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     output = pd.concat([output, df], axis=0)
 
 output = def_pts_allowed(output); print(output.shape[0])
+output = remove_non_uniques(output)
 
 dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 
 
 # %%
 # TO DO LIST
-# - figure out why some columns are null / no variance for Corr-- fix underlying data
-# - add in missed projection data for the backfill dataset
 # - add in PFF scores
+# - add in snaps and snap share
 # - re-work market share data
 
-
 #%%
-join_col = 'defTeam'
 
+cur_pos = 'RB'
 
+dk_sal = dm.read('''SELECT player, team, week, year, dk_salary
+                    FROM Daily_Salaries
+                    WHERE dk_salary > 5500 
+                          AND position='QB'
+                    UNION
+                    SELECT player, team, week, year, dk_salary
+                    FROM Daily_Salaries
+                    WHERE dk_salary > 4500 
+                          AND position!='QB' ''', "Pre_PlayerData")
 
+pff = dm.read('''SELECT player, offTeam team, week, year, expertConsensus, fantasyPoints, `Proj Pts` ProjPts
+                    FROM PFF_Expert_Ranks
+                    JOIN (SELECT player, week, year, fantasyPoints
+                        FROM PFF_Proj_Ranks)
+                        USING (player, week, year) ''', "Pre_PlayerData")
+
+inj = dm.read('''SELECT player, week, year, 1 as is_out
+                 FROM PlayerInjuries
+                 WHERE game_status IN ('Out', 'Doubtful') 
+                       AND pos in ('QB', 'RB', 'WR', 'TE')''', 'Pre_PlayerData')
+
+data = pd.merge(dk_sal, pff, on=['player', 'team', 'week', 'year'], how='left')
+data = pd.merge(data, inj, on=['player',  'week', 'year'], how='left')
+data.is_out = data.is_out.fillna(0)
+
+missing_game = data.loc[(data.is_out==1) | (data.expertConsensus.isnull()),
+                        ['player', 'team', 'week', 'year', 'dk_salary']]
+
+pos = dm.read('''SELECT DISTINCT player, team, year, pos
+                 FROM FantasyPros
+                 ''', "Pre_PlayerData")
+
+missing_game = pd.merge(missing_game, pos, on=['player', 'team', 'year'])
+missing_game = missing_game.groupby(['team', 'pos', 'week', 'year']).agg({'dk_salary': 'sum'}).reset_index()
+missing_game = missing_game.rename(columns={'dk_salary': 'missing_salary'})
+missing_game_pos = missing_game[missing_game.pos==cur_pos].drop('pos', axis=1)
+
+xx = pd.merge(df, missing_game_pos, on=['team', 'week', 'year'], how='left').fillna({'missing_salary': 0})
+
+# missing_game[missing_game.team=='SEA'].iloc[:50]
+# %%
+
+xx[xx.player=='Darrel Williams']
+# %%
+yy = xx.corr()['y_act']
 # %%

@@ -30,7 +30,7 @@ np.random.seed(1234)
 path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
 set_year = 2021
-league=5
+league=6
 
 # number of iteration to run
 iterations = 1000
