@@ -7,7 +7,7 @@ import os
 import gzip
 import pickle
 import datetime as dt
-
+import matplotlib.pyplot as plt
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
 import ff.data_clean as dc
@@ -26,13 +26,11 @@ pd.set_option('display.max_columns', 999)
 from sklearn import set_config
 set_config(display='diagram')
 
-#%%
+splines = {}
 for p in ['QB', 'RB', 'WR', 'TE', 'Defense']:
-    
-    # determine the number of equal sizes groups for each position
-    pos_grps = {'WR': 40, 'RB': 20, 'QB': 9, 'TE': 7, 'Defense': 13}
     print(f'Checking Splines for {p}')
-    _ = get_std_splines(p, pos_grps, show_plot=True)
+    spl_sd, spl_perc = get_std_splines(p, show_plot=True)
+    splines[p] = [spl_sd, spl_perc]
 
 #%%
 
@@ -46,7 +44,6 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 np.random.seed(1234)
 
-
 # set year to analyze
 set_year = 2021
 set_week = 7
@@ -58,10 +55,10 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-model_type = 'full_model'
-vers = 'v1_keep_10_reg_all_class_kb_20_100_10'
+model_type = 'backfill'
+vers = 'v1_keep_all_kb_20_100_10'
 
-if model_type == 'full_model': positions = ['QB']# ['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
@@ -135,12 +132,12 @@ for set_pos in positions:
     df_train = df[df.game_date < train_time_split].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
     df_predict = df[df.game_date == train_time_split].reset_index(drop=True)
-    output_start = df_predict[['player', 'dk_salary']].copy()
+    output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy()
 
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
     print('Shape of Train Set', df_train.shape)
-#%%
+
     #------------
     # Make the Class Predictions
     #------------
@@ -166,8 +163,8 @@ for set_pos in positions:
             if str(cut) in k:
                 m = skm_class_final.ensemble_pipe(v)
                 m.fit(X_class_final, y_class_final)
-              #  cur_pred = pd.Series(m.predict_proba(df_predict_class[X_class_final.columns])[:,1], name=k)
-             #   X_predict_class = pd.concat([X_predict_class, cur_pred], axis=1)
+                cur_pred = pd.Series(m.predict_proba(df_predict_class[X_class_final.columns])[:,1], name=k)
+                X_predict_class = pd.concat([X_predict_class, cur_pred], axis=1)
 
     pred = load_pickle(model_output_path, 'reg_pred')
     actual = load_pickle(model_output_path, 'reg_actual')
@@ -220,7 +217,6 @@ for set_pos in positions:
                                                                 run_adp=True, print_coef=True)
         best_models.append(best_model)
 
-#%%
     # get the final output:
     X_fp, y_fp = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
@@ -234,25 +230,37 @@ for set_pos in positions:
     X_predict = pd.concat([X_predict, X_predict_class], axis=1)
 
     predictions = pd.DataFrame()
+    val_predictions = pd.DataFrame()
     for bm, fm in zip(best_models, final_models):
+        val_predict = pd.Series(skm_stack.cv_predict(bm, X_fp, y_fp), name=f'pred_{met}_{fm}')
+        val_predictions = pd.concat([val_predictions, val_predict], axis=1)
         prediction = pd.Series(np.round(bm.predict(X_predict), 2), name=f'pred_{met}_{fm}')
         predictions = pd.concat([predictions, prediction], axis=1)
+
+    plt.scatter(val_predictions.mean(axis=1), y_fp)
+    plt.xlabel('predictions');plt.ylabel('actual')
+    plt.show()
+    from sklearn.metrics import r2_score
+    print('Total R2:', r2_score(y_fp, val_predictions.mean(axis=1)))
 
     #===================
     # Create Outputs
     #===================
         
-    output = output_start[['player', 'dk_salary']].copy()
-
+    output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points']].copy()
+    output['sd_metric'] = (output.fantasyPoints + output.ProjPts + output.projected_points) / 3
+    output = output.drop(['fantasyPoints', 'ProjPts', 'projected_points'], axis=1)
     # output = pd.concat([output, predictions], axis=1)
+
     output['pred_fp_per_game'] = predictions.mean(axis=1)
     output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
 
-    bridge_sd = bm.predict(X_predict, return_std=True)[1]
-    spline_sd = get_std_splines(set_pos, pos_grps)(output.dk_salary)
-    models_sd = predictions.std(axis=1) / 20
-
+    bridge_sd = splines[set_pos][0](output.sd_metric)#bm.predict(X_predict, return_std=True)[1]
+    spline_sd = splines[set_pos][0](output.sd_metric)
+    models_sd = 0 #predictions.std(axis=1) / 20
     output = fix_std_dev(output, bridge_sd, spline_sd, models_sd)
+
+    output['max_score'] = splines[set_pos][1](output.sd_metric)
 
     output = output.sort_values(by='dk_salary', ascending=False)
     output['dk_rank'] = range(len(output))
@@ -262,10 +270,13 @@ for set_pos in positions:
     output['pos'] = set_pos
     output['version'] = vers
     output['model_type'] = model_type
-    output['max_score'] = 1.05*np.percentile(df_train.y_act, 99.9)
     output['min_score'] = df_train.y_act.min()
     output['week'] = set_week
     output['year'] = set_year
+
+    output = output[['player', 'dk_salary', 'sd_metric', 'pred_fp_per_game', 'std_dev',
+                     'dk_rank', 'pos', 'version', 'model_type', 'max_score', 'min_score',
+                     'week', 'year']]
 
     del_str = f'''pos='{set_pos}' 
                 AND version='{vers}' 
@@ -285,7 +296,7 @@ preds = dm.read(f'''SELECT *
                           AND year = '{set_year}' 
             ''', 'Simulation')
 
-preds['weighting'] =1
+preds['weighting'] = 1
 preds.loc[preds.model_type=='full_model', 'weighting'] = 1
 
 score_cols = ['pred_fp_per_game', 'std_dev', 'max_score']
@@ -303,7 +314,7 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['TB', 'PHI', 'SEA', 'PIT', 'MIA', 'JAC', 'BUF', 'TEN']
+drop_teams = ['CLE', 'DEN', 'IND', 'SF', 'NO', 'SEA']
 
 teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
                     FROM FantasyPros
@@ -379,49 +390,91 @@ sim_dist = create_sim_output(preds).reset_index(drop=True)
 
 #%%
 
-idx = sim_dist[sim_dist.player=="Ceedee Lamb"].index[0]
+idx = sim_dist[sim_dist.player=="Jakobi Meyers"].index[0]
 plot_distribution(sim_dist.iloc[idx])
 
 # %%
 
 dm.write_to_db(sim_dist, 'Simulation', f'week{set_week}_year{set_year}', 'replace')
+
+
+# %%
+
+for i in range(12):
+
+    players = dm.read('''SELECT * FROM Best_Lineups WHERE week=7''', 'Results').iloc[i, :9].values
+
+    cur_team = preds[preds.player.isin(players)].copy()
+
+    cur_team['variance'] = cur_team.std_dev ** 2
+    sum_variance = np.sum(cur_team.variance)
+    sum_mean_var = np.var(cur_team.pred_fp_per_game)
+
+    team_var = np.sqrt(sum_variance + sum_mean_var)
+    team_mean = cur_team.pred_fp_per_game.sum()
+
+    import seaborn as sns
+    estimates = np.random.normal(team_mean, team_var, 10000)
+    
+    print(i, np.percentile(estimates, 50))
+
+    # sns.distplot(estimates, hist = True, kde = True, bins = 19,
+    #                 hist_kws = {'edgecolor': 'k', 'color': 'darkblue'},
+    #                 kde_kws = {'linewidth' : 4},
+    #                 label = 'Estimated Dist.')
+    
+    
+# %%
+
+players = dm.read('''SELECT * FROM Best_Lineups''', 'Results')
+players = players.loc[1:, ['0', '1', '2', '3', '4', '5', '6', '7', '8', 'week', 'year']]
+players['lineup_num'] = range(len(players))
+best_lineups = pd.melt(players, id_vars=['week', 'year', 'lineup_num'])
+best_lineups = best_lineups.rename(columns={'value': 'player'}).drop('variable', axis=1)
+
+y_act = dm.read(f'''SELECT defTeam player, week, season year, fantasy_pts y_act
+                    FROM Defense_Stats
+                    WHERE season >= 2020''', 'FastR')
+
+for p in ['QB', 'RB', 'WR', 'TE']:
+    y_act_cur = dm.read(f'''SELECT player, week, season year, fantasy_pts y_act
+                            FROM {p}_Stats
+                            WHERE season >= 2020''', 'FastR')
+    y_act = pd.concat([y_act, y_act_cur], axis=0)
+
+best_lineups = pd.merge(best_lineups, y_act, on=['player', 'week', 'year'])
+team_scores = best_lineups.groupby('lineup_num').agg({'y_act': 'sum'}).y_act
+for i in range(50, 100, 5):
+    print(f'Percentile {i}:', np.percentile(team_scores, i))
+
+print(f'Percentile 99:', np.percentile(team_scores, 99))
+sns.distplot(team_scores, hist = True, kde = True, bins = 15,
+                 hist_kws = {'edgecolor': 'k', 'color': 'darkblue'},
+                 kde_kws = {'linewidth' : 4},
+                 label = 'Estimated Dist.')
+
+
 # %%
 
 
-skm = SciKitModel(df_train)
-X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
+df = dm.read('''SELECT * FROM Model_Predictions''', 'Simulation')
 
-drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
-keep_words = ['def', 'qb', 'team']#, 'miss', 'team', 'diff']
-to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
 
-drop_pct = 0.8
-num_drop = int(len(X.columns)*drop_pct)
-model = 'rf'
+ # pull in the salary and actual results data
+dk_sal = dm.read('''SELECT team player, team, week, year, projected_points sd_metric
+                    FROM FantasyPros
+                    WHERE pos='DST' ''', 'Pre_PlayerData')
 
-pipe = skm.model_pipe([skm.piece('feature_drop'),
-                        skm.piece('std_scale'), 
-                        # skm.feature_union([
-                        #                     skm.piece('agglomeration'), 
-                        #                     skm.piece('k_best'),
-                        #                     skm.piece('pca')
-                        #                     ]),
-                        skm.piece('k_best'),
-                        skm.piece(model)])
-params = skm.default_params(pipe)
-params['k_best__k'] = range(5, 50, 5)
-params['feature_drop__col'] = [list(np.random.choice(X.columns, num_drop, replace=False)) for _ in range(25)]
-
-# fit and append the ADP model
-best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=50,
-                                                col_split='game_date', 
-                                                time_split=cv_time_input)
-
-#%%
-i = 1
-try: coefs = best_models[i].named_steps[model].coef_
-except: coefs = best_models[i].named_steps[model].feature_importances_
-try:cols = X.drop(best_models[i].named_steps['feature_drop'].col, axis=1).columns[best_models[i].named_steps['k_best'].get_support()]
-except: cols = X.columns[best_models[i].named_steps['k_best'].get_support()]
-pd.Series(coefs, index=cols).sort_values().plot.barh(figsize=(5,10))
+stats = dm.read(f'''SELECT defTeam player, defTeam team, week, season year, fantasy_pts y_act
+                    FROM {pos}_Stats ''', 'FastR')
+else:
+# pull in the salary and actual results data
+dk_sal = dm.read('''SELECT player, offTeam team, week, year, projected_points, fantasyPoints, ProjPts
+                    FROM PFF_Proj_Ranks
+                    JOIN (SELECT player, team offTeam, week, year, projected_points 
+                            FROM FantasyPros)
+                            USING (player, offTeam, week, year)
+                    JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts 
+                            FROM PFF_Expert_Ranks)
+                            USING (player, offTeam, week, year)''', 'Pre_PlayerData')
 # %%

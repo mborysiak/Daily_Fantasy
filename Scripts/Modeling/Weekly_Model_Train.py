@@ -43,12 +43,14 @@ set_week = 7
 val_year_min = 2020
 val_week_min = 10
 
-model_type = 'backfill'
-vers = 'v1_drop_75pct_25iter_kbonly_kb_5_50_5'
+model_type = 'full_model'
+vers = 'keep20_25iter_kbonly_kb_20_100_5'
 
-drop_pct = 0.75
-kb = (5, 50, 5)
+to_keep = 10
+kb = (20, 100, 10)
 n_iters = 25
+drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
+keep_words = ['def', 'qb', 'team']
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
@@ -220,8 +222,8 @@ for set_pos in positions:
         
         params = skm.default_params(pipe, 'rand')
         
-        num_drop = int(len(X.columns)*drop_pct)
-        params['feature_drop__col'] = [list(np.random.choice(X.columns, num_drop, replace=False)) for _ in range(int(n_iters/2))]
+        to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+        params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(n_iters)]
         params['k_best__k'] = range(kb[0], kb[1], kb[2])
         if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
 
@@ -275,8 +277,8 @@ for set_pos in positions:
             params = skm_class.default_params(pipe, 'rand')
             
             if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
-            num_drop = int(len(X_class.columns)*drop_pct)
-            params['feature_drop__col'] = [list(np.random.choice(X_class.columns, num_drop, replace=False)) for _ in range(int(n_iters/2))]
+            to_drop = [c for c in X_class.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+            params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(n_iters)]
             params['k_best_c__k'] = range(kb[0], kb[1], kb[2])
 
             # run the model with parameter search
@@ -417,9 +419,9 @@ to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any
 
 drop_pct = 0.8
 num_drop = int(len(X.columns)*drop_pct)
-model = 'rf'
+model = 'enet'
 
-pipe = skm.model_pipe([skm.piece('feature_drop'),
+pipe = skm.model_pipe([#skm.piece('feature_drop'),
                         skm.piece('std_scale'), 
                         # skm.feature_union([
                         #                     skm.piece('agglomeration'), 
@@ -430,17 +432,18 @@ pipe = skm.model_pipe([skm.piece('feature_drop'),
                         skm.piece(model)])
 params = skm.default_params(pipe)
 params['k_best__k'] = range(5, 50, 5)
-params['feature_drop__col'] = [list(np.random.choice(X.columns, num_drop, replace=False)) for _ in range(25)]
+# params['feature_drop__col'] = [list(np.random.choice(X.columns, num_drop, replace=False)) for _ in range(25)]
 
 # fit and append the ADP model
-best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=50,
+best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
                                                 col_split='game_date', 
                                                 time_split=cv_time_input)
 
 #%%
-i = 1
+i = 4
 try: coefs = best_models[i].named_steps[model].coef_
 except: coefs = best_models[i].named_steps[model].feature_importances_
 try:cols = X.drop(best_models[i].named_steps['feature_drop'].col, axis=1).columns[best_models[i].named_steps['k_best'].get_support()]
 except: cols = X.columns[best_models[i].named_steps['k_best'].get_support()]
 pd.Series(coefs, index=cols).sort_values().plot.barh(figsize=(5,10))
+# %%

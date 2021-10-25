@@ -26,7 +26,7 @@ def rolling_stats(df, gcols, rcols, period, agg_type='mean'):
     Calculate rolling mean stats over a specified number of previous weeks
     '''
     
-    rolls = df.groupby(gcols)[rcols].rolling(3).agg(agg_type).reset_index(drop=True)
+    rolls = df.groupby(gcols)[rcols].rolling(3, min_periods=1).agg(agg_type).reset_index(drop=True)
     rolls.columns = [f'r{agg_type}{period}_{c}' for c in rolls.columns]
 
     return rolls
@@ -62,18 +62,21 @@ def add_rolling_stats(df, gcols, rcols, ):
     cnt_check = df.groupby([gcols[0], 'year'])['week'].count()
     print(f'Counts of Groupby Category Over 17: {cnt_check[cnt_check>17]}')
 
-    rolls_mean = rolling_stats(df, gcols, rcols, 3, agg_type='mean')
-    rolls_max = rolling_stats(df, gcols, rcols, 3, agg_type='max')
-    # rolls_med = rolling_stats(df, gcols, rcols, 3, agg_type='median')
+    rolls3_mean = rolling_stats(df, gcols, rcols, 3, agg_type='mean')
+    rolls3_max = rolling_stats(df, gcols, rcols, 3, agg_type='max')
 
-    hist_mean = rolling_expand(df, gcols, rcols, agg_type='mean')
-    hist_std = rolling_expand(df, gcols, rcols, agg_type='std')
-    hist_p80 = rolling_expand(df, gcols, rcols, agg_type='p95')
+    rolls8_mean = rolling_stats(df, gcols, rcols, 8, agg_type='mean')
+    rolls8_max = rolling_stats(df, gcols, rcols, 8, agg_type='max')
+    rolls8_std = rolling_stats(df, gcols, rcols, 8, agg_type='std')
+
+    # hist_mean = rolling_expand(df, gcols, rcols, agg_type='mean')
+    # hist_std = rolling_expand(df, gcols, rcols, agg_type='std')
+    # hist_p80 = rolling_expand(df, gcols, rcols, agg_type='p95')
     # hist_p20 = rolling_expand(df, gcols, rcols, agg_type='p20')
 
     df = pd.concat([df, 
-                    hist_mean, hist_std, hist_p80,# hist_p20, 
-                    rolls_mean, rolls_max,# rolls_med
+                    rolls8_mean, rolls8_max, rolls8_std,
+                    rolls3_mean, rolls3_max
                     ], axis=1)
 
     return df
@@ -1105,6 +1108,7 @@ def add_qb_adv(df):
     qb_adv['complete_over_intended_ay'] = qb_adv.completed_ay - qb_adv.intended_ay
 
 
+    qb_adv = drop_extra_bye_week(qb_adv)
     qb_adv.week = qb_adv.week + 1
     qb_adv = fix_bye_week(qb_adv).drop(['team', 'games', 'games_started', 
                                         'pass_completions', 'pass_attempts'], axis=1)
@@ -1268,7 +1272,6 @@ df = remove_non_uniques(df)
 dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
 if df.shape[1] > 2000:
     dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
-
 #%%
 for pos in [
             'RB', 
@@ -1465,7 +1468,9 @@ dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 # TO DO LIST
 # - add in PFF scores
 # - add in snaps and snap share
-# - re-work market share data
+# - Market share in terms of projected FP, dk salary, etc
+# - Remove outliers in QB dataset
+# - Convert all average to longer rolling period and fill in nulls with actual value
 
 #%%
 

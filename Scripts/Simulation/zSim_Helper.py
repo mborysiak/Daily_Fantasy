@@ -71,8 +71,12 @@ class FootballSimulation():
         #--------
         
         # create a copy of self.data for current iteration settings
-        data = self.data.copy()
         league_info = copy.deepcopy(league_info)
+        data = self.data.copy()
+        # pos = data[['pos']]
+        # sal_col = data[['salary']]
+        # data = self._df_shuffle(data.drop(['pos', 'salary'], axis=1))
+        # data = pd.concat([pos, data.sample(frac=0.25, axis=1), sal_col], axis=1)
        
         # drop other selected players + calculate inflation metrics
         data, drop_proj_sal, drop_act_sal = self._drop_players(data, league_info, to_drop)
@@ -402,7 +406,7 @@ class FootballSimulation():
         Return: Randomly selected array of points and salaries + skews for a given trial
         '''
         # select random number between 0 and sise of distributions
-        ran_num = random.randint(2, 1000-1)
+        ran_num = random.randint(2, data.shape[1]-1)
 
         # pull out a random column of points and convert to points per game
         ppg = data.iloc[:, ran_num].values.astype('double')
@@ -557,8 +561,8 @@ class FootballSimulation():
 # import sqlite3
 # path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 # conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
-# set_year = 2020
-# league=15
+# set_year = 2021
+# league=7
 
 # # number of iteration to run
 # iterations = 1000
@@ -581,7 +585,7 @@ class FootballSimulation():
 # pts_dict['TE'] = [rec_yd_per_pt, ppr, rush_rec_td]
 
 # # instantiate simulation class and add salary information to data
-# sim =  FootballSimulation(conn_sim, set_year, league, iterations)
+# sim =  FootballSimulation(conn_sim, set_year, league)
 
 # # set league information, included position requirements, number of teams, and salary cap
 # league_info = {}
@@ -600,7 +604,7 @@ class FootballSimulation():
 # to_add['salaries'] = []
 
 # _, _ = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
-# sim.show_most_selected(to_add, iterations, num_show=30)
+# sim.show_most_selected(to_add, iterations, num_show=30).sort_values(by='Percent Drafted', ascending=False)
 # %%
 
 # from ff.db_operations import DataManage
