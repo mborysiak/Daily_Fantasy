@@ -1,5 +1,29 @@
 #%%
 
+def add_fp_rolling(df, pos):
+    
+    from ff.db_operations import DataManage   
+    import ff.general as ffgeneral 
+    
+    # set the root path and database management object
+    root_path = ffgeneral.get_main_path('Daily_Fantasy')
+    db_path = f'{root_path}/Data/Databases/'
+    dm = DataManage(db_path)
+
+    y_act = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
+                        FROM {pos}_Stats
+                        WHERE season >= 2020''', 'FastR')
+
+    df = pd.merge(df, y_act, on=['player', 'team', 'week', 'year'], how='outer')
+    df = df.sort_values(by=['player', 'year', 'week'])
+    df['fantasy_pts_score'] = df.groupby('player')['y_act'].shift(1)
+    df = df.drop('y_act', axis=1)
+    df = df.groupby('player')['fantasy_pts_score'].rolling(8, min_periods=1).mean()
+    df = df[~((df.week==1)  & (df.year==2020))]
+
+    return df
+
+
 def get_std_splines(pos, show_plot=False, k=2, s=2000):
     
     from ff.db_operations import DataManage   

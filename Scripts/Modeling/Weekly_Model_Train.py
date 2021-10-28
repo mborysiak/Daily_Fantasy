@@ -44,10 +44,10 @@ val_year_min = 2020
 val_week_min = 10
 
 model_type = 'full_model'
-vers = 'keep20_25iter_kbonly_kb_20_100_5'
+vers = 'keep_all_kb_5_50_5_roll8_actualptsscored'
 
 to_keep = 10
-kb = (20, 100, 10)
+kb = (5, 50, 5)
 n_iters = 25
 drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
 keep_words = ['def', 'qb', 'team']
@@ -57,7 +57,7 @@ elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
 
-    set_perc = {
+    prc = {
         'QB': [5, 30, 5],
         'RB': [5, 40, 5],
         'WR': [5, 40, 5],
@@ -215,17 +215,24 @@ for set_pos in positions:
         print(m)
 
         # set up the model pipe and get the default search parameters
-        pipe = skm.model_pipe([ skm.piece('feature_drop'),
-                                skm.piece('std_scale'), 
+        pipe = skm.model_pipe([skm.piece('std_scale'), 
+                                skm.piece('select_perc'),
+                                skm.feature_union([
+                                            skm.piece('agglomeration'), 
+                                            skm.piece('k_best'),
+                                            skm.piece('pca')
+                                            ]),
                                 skm.piece('k_best'),
                                 skm.piece(m)])
         
+        # set params
         params = skm.default_params(pipe, 'rand')
-        
-        to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
-        params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(n_iters)]
+        params['select_perc__percentile'] = range(prc[set_pos][0],  prc[set_pos][1], prc[set_pos][2])
         params['k_best__k'] = range(kb[0], kb[1], kb[2])
         if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
+    
+        # to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+        # params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(n_iters)]
 
         # run the model with parameter search
         best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=n_iters,
@@ -269,18 +276,25 @@ for set_pos in positions:
             print(m)
 
             # set up the model pipe and get the default search parameters
-            pipe = skm_class.model_pipe([skm_class.piece('feature_drop'),
-                                         skm_class.piece('std_scale'), 
-                                         skm_class.piece('k_best_c'),
-                                         skm_class.piece(m)])
+            pipe = skm.model_pipe([skm.piece('std_scale'), 
+                                   skm.piece('select_perc_c'),
+                                   skm.feature_union([
+                                                skm.piece('agglomeration'), 
+                                                skm.piece('k_best_c'),
+                                                skm.piece('pca')
+                                                ]),
+                                    skm.piece('k_best_c'),
+                                    skm.piece(m)])
             
-            params = skm_class.default_params(pipe, 'rand')
-            
-            if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
-            to_drop = [c for c in X_class.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
-            params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(n_iters)]
+            # set params
+            params = skm.default_params(pipe, 'rand')
+            params['select_perc_c__percentile'] = range(prc[set_pos][0],  prc[set_pos][1], prc[set_pos][2])
             params['k_best_c__k'] = range(kb[0], kb[1], kb[2])
+            if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
 
+            # to_drop = [c for c in X_class.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+            # params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(n_iters)]
+            
             # run the model with parameter search
             best_models, score_results, oof_data = skm_class.time_series_cv(pipe, X_class, y_class, 
                                                                             params, n_iter=n_iters,

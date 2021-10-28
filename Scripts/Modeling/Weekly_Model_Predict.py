@@ -55,8 +55,8 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-model_type = 'backfill'
-vers = 'v1_keep_all_kb_20_100_10'
+model_type = 'full_model'
+vers = 'keep_all_kb_20_100_10_roll8'
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
@@ -416,13 +416,11 @@ for i in range(12):
     import seaborn as sns
     estimates = np.random.normal(team_mean, team_var, 10000)
     
-    print(i, np.percentile(estimates, 50))
-
-    # sns.distplot(estimates, hist = True, kde = True, bins = 19,
-    #                 hist_kws = {'edgecolor': 'k', 'color': 'darkblue'},
-    #                 kde_kws = {'linewidth' : 4},
-    #                 label = 'Estimated Dist.')
-    
+    print(i, team_mean, team_var, np.percentile(estimates, 80), np.percentile(estimates, 99))
+    sns.distplot(estimates, hist = True, kde = True, bins = 19,
+                 hist_kws = {'edgecolor': 'k', 'color': 'darkblue'},
+                 kde_kws = {'linewidth' : 4},
+                 label = 'Estimated Dist.')
     
 # %%
 
@@ -467,7 +465,7 @@ dk_sal = dm.read('''SELECT team player, team, week, year, projected_points sd_me
 
 stats = dm.read(f'''SELECT defTeam player, defTeam team, week, season year, fantasy_pts y_act
                     FROM {pos}_Stats ''', 'FastR')
-else:
+
 # pull in the salary and actual results data
 dk_sal = dm.read('''SELECT player, offTeam team, week, year, projected_points, fantasyPoints, ProjPts
                     FROM PFF_Proj_Ranks

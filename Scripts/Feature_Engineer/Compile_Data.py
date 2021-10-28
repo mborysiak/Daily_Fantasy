@@ -26,7 +26,7 @@ def rolling_stats(df, gcols, rcols, period, agg_type='mean'):
     Calculate rolling mean stats over a specified number of previous weeks
     '''
     
-    rolls = df.groupby(gcols)[rcols].rolling(3, min_periods=1).agg(agg_type).reset_index(drop=True)
+    rolls = df.groupby(gcols)[rcols].rolling(period, min_periods=1).agg(agg_type).reset_index(drop=True)
     rolls.columns = [f'r{agg_type}{period}_{c}' for c in rolls.columns]
 
     return rolls
@@ -152,14 +152,16 @@ def fantasy_pros(pos, add_rolling=True):
     
     fp['log_fp_rank'] = np.log(fp.fp_rank+1)
 
-    fp_cols = ['log_fp_rank', 'fp_rank', 'projected_points']
-    if add_rolling: fp = add_rolling_stats(fp, ['player'], fp_cols)
-
-    # fill in null expert rankings
-    fp = forward_fill(fp)
-
     return fp
 
+
+def fantasy_pros_rolling(df):
+
+    fp_cols = ['log_fp_rank', 'fp_rank', 'projected_points']
+    df = add_rolling_stats(df, ['player'], fp_cols)
+    df = forward_fill(df)
+
+    return df
 
 
 def get_salaries(df, pos):
@@ -532,37 +534,6 @@ def get_team_stats(YEAR, prev_years=1):
     return team_stats
 
 
-def get_coach_stats(df, YEAR, add_rolling=False):
-
-    coach_stats = dm.read(f'''SELECT * FROM Coach_Stats WHERE season>={YEAR-2}''', 'FastR')
-
-    rcols_coach = ['coach_shotgun_sum',
-        'coach_no_huddle_sum', 'coach_rush_attempt_sum', 'coach_first_down_sum',
-        'coach_first_down_rush_sum', 'coach_fourth_down_converted_sum',
-        'coach_fourth_down_failed_sum', 'coach_third_down_converted_sum',
-        'coach_goal_to_go_sum', 'coach_run_middle_sum', 'coach_run_outside_sum',
-        'coach_rush_touchdown_sum', 'coach_tackled_for_loss_sum',
-        'coach_ep_sum', 'coach_epa_sum', 'coach_touchdown_sum',
-        'coach_fumble_sum', 'coach_yardline_100_sum',
-        'coach_yards_after_catch_sum', 'coach_yards_gained_sum',
-        'coach_ydstogo_sum', 'coach_td_prob_mean', 'coach_wp_mean',
-        'coach_wpa_mean', 'coach_ep_mean', 'coach_epa_mean',
-        'coach_yardline_100_mean', 'coach_yards_gained_mean',
-        'coach_ydstogo_mean']
-
-    coach_stats = coach_stats.rename(columns={'season': 'year'})
-    if add_rolling: coach_stats = add_rolling_stats(coach_stats, ['coach'], rcols_coach)
-
-    coach_stats = coach_stats[coach_stats.year >= 2020].reset_index(drop=True)
-    coach_stats['week'] = coach_stats.week + 1
-    coach_stats = switch_seasons(coach_stats)
-    coach_stats = fix_bye_week(coach_stats)
-
-    df = pd.merge(df, coach_stats, on=['team', 'week', 'year'])
-
-    return df
-
-
 def add_rz_stats(df):
 
     rush_rz = dm.read('''SELECT * FROM PFR_Redzone_Rush''', 'Post_PlayerData')
@@ -780,7 +751,7 @@ def get_defense_stats(prev_years=1):
 
 
 
-def add_injuries(df, def_join=False, oline_join=False):
+def add_injuries(df, pos=None, def_join=False, oline_join=False):
 
     inj = dm.read('''SELECT * FROM PlayerInjuries''', 'Pre_PlayerData')
     inj = pd.concat([inj, pd.get_dummies(inj.game_status)], axis=1)
@@ -812,8 +783,13 @@ def add_injuries(df, def_join=False, oline_join=False):
     players = list(df.loc[(df.week==WEEK) & (df.year==YEAR), 'player'].values)
 
     # keep doubtful and out players for defense to calculate missing value
-    if def_join != True:
+    if not def_join and not oline_join:
         df = df[(df.Out != 1) & (df.Doubtful != 1)].reset_index(drop=True)
+        
+        # also remove any players that don't have an actual score value
+        df = attach_y_act(df, pos)
+        df = drop_y_act_except_current(df, WEEK, YEAR)
+        df = df.drop('y_act', axis=1)
 
     player_inj =  list(df.loc[(df.week==WEEK) & (df.year==YEAR), 'player'].values)
     print(f'Players out this week: {[p for p in players if p not in player_inj]}')
@@ -963,11 +939,12 @@ def pff_oline_rollup():
     stat_cols1 = ['snap_counts_offense', 'grades_offense', 'grades_pass_block', 
                 'grades_run_block', 'pbe']
     oline.loc[((oline.Out == 1) | (oline.Doubtful == 1)), stat_cols1] = \
-                        oline.loc[((oline.Out == 1) | (oline.Doubtful == 1)), stat_cols1] / 3
+                oline.loc[((oline.Out == 1) | (oline.Doubtful == 1)), stat_cols1] / 3
 
     stat_cols2 = ['hits_allowed', 'hurries_allowed','pressures_allowed',]
     oline.loc[((oline.Out == 1) | (oline.Doubtful == 1)), stat_cols1] = \
                         2 * (oline.loc[((oline.Out == 1) | (oline.Doubtful == 1)), stat_cols2] + 1)
+    oline = oline.fillna(oline.mean())
 
     wm = lambda x: np.average(x, weights=oline.loc[x.index, "snap_counts_offense"])
     gcols = ["team", "week", "year"]
@@ -1130,7 +1107,7 @@ def results_vs_predicted(df, col):
     df[f'{col}_miss'] = df.y_act - df[col]
     df[f'{col}_miss'] = (df.groupby('player')[f'{col}_miss'].shift(1)).fillna(0)
     df = add_rolling_stats(df, ['player'], [f'{col}_miss'])
-    df[f'{col}_miss_recent_all'] = df[f'rmean3_{col}_miss'] - df[f'meanall_{col}_miss']
+    df[f'{col}_miss_recent_vs8'] = df[f'rmean3_{col}_miss'] - df[f'rmean8_{col}_miss']
 
     good_cols = [c for c in df.columns if 'miss' in c or c in ('player', 'team', 'week', 'year')]
     df = df[good_cols]
@@ -1207,6 +1184,25 @@ def one_qb_per_week(df):
     df = df[cols]
 
     return df
+
+
+def add_fp_rolling(df, pos):
+    
+    y_act = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
+                        FROM {pos}_Stats
+                        WHERE season >= 2020''', 'FastR')
+
+    df = pd.merge(df, y_act, on=['player', 'team', 'week', 'year'], how='outer')
+    df = df.sort_values(by=['player', 'year', 'week'])
+    df['fantasy_pts_score'] = df.groupby('player')['y_act'].shift(1)
+    df = df.drop('y_act', axis=1)
+    df = add_rolling_stats(df, ['player'], ['fantasy_pts_score'])
+
+    df = forward_fill(df)
+    df = df[~((df.week==1)  & (df.year==2020))]
+
+    return df
+
 #%%
 
 # defense stats that can be added to the offensive player data
@@ -1223,6 +1219,9 @@ pos = 'QB'
 
 # pre-game data
 df = fantasy_pros(pos); print(df.shape[0])
+df = add_injuries(df, pos); print(df.shape[0])
+df = add_fp_rolling(df, pos); print(df.shape[0])
+df = fantasy_pros_rolling(df); print(df.shape[0])
 df = get_salaries(df, pos); print(df.shape[0])
 df = get_experts(df, pos); print(df.shape[0])
 df = add_pfr_matchup(df); print(df.shape[0])
@@ -1230,7 +1229,7 @@ df = add_gambling_lines(df); print(df.shape[0])
 df = add_weather(df); print(df.shape[0])
 dst = add_team_matchups().drop('offTeam', axis=1)
 df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
-df = add_injuries(df); print(df.shape[0])
+
 
 # post-game data
 df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
@@ -1257,7 +1256,7 @@ df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
 
 df = attach_y_act(df, pos)
 df = drop_y_act_except_current(df, WEEK, YEAR); print(df.shape[0])
-# df = projected_pts_vs_predicted(df, pos); print(df.shape[0])
+df = projected_pts_vs_predicted(df, pos); print(df.shape[0])
 
 # fill in missing data and drop any remaining rows
 df = forward_fill(df)
@@ -1269,12 +1268,15 @@ print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicate
 print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
 
 df = remove_non_uniques(df)
+df = df[(df.ProjPts > 10) & (df.projected_points > 10)].reset_index(drop=True)
+
 dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
 if df.shape[1] > 2000:
     dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
+
 #%%
 for pos in [
-            'RB', 
+           'RB', 
            'WR', 
            'TE'
             ]:
@@ -1284,8 +1286,9 @@ for pos in [
     #--------------------
 
     df = fantasy_pros(pos); print(df.shape[0])
-    df = add_injuries(df); print(df.shape[0])
-
+    df = add_injuries(df, pos); print(df.shape[0])
+    df = add_fp_rolling(df, pos); print(df.shape[0])
+    df = fantasy_pros_rolling(df); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
     df = add_pfr_matchup(df); print(df.shape[0])
     df = get_experts(df, pos); print(df.shape[0])
@@ -1408,7 +1411,7 @@ output = pd.DataFrame()
 for pos in ['QB', 'RB', 'WR', 'TE']:
     
     df = fantasy_pros(pos, add_rolling=False); print(df.shape[0])
-    df = add_injuries(df); print(df.shape[0])
+    df = add_injuries(df, pos); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
     df = get_experts(df, pos, add_rolling=False); print(df.shape[0])
     dst = add_team_matchups().drop('offTeam', axis=1)
@@ -1469,9 +1472,7 @@ dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 # - add in PFF scores
 # - add in snaps and snap share
 # - Market share in terms of projected FP, dk salary, etc
-# - Remove outliers in QB dataset
-# - Convert all average to longer rolling period and fill in nulls with actual value
-
+# - check into GBM / LGBM / XGB / RF param options and maybe adjust?
 #%%
 
 cur_pos = 'RB'
@@ -1500,25 +1501,41 @@ inj = dm.read('''SELECT player, week, year, 1 as is_out
 data = pd.merge(dk_sal, pff, on=['player', 'team', 'week', 'year'], how='left')
 data = pd.merge(data, inj, on=['player',  'week', 'year'], how='left')
 data.is_out = data.is_out.fillna(0)
+data
+# missing_game = data.loc[(data.is_out==1) | (data.expertConsensus.isnull()),
+#                         ['player', 'team', 'week', 'year', 'dk_salary']]
 
-missing_game = data.loc[(data.is_out==1) | (data.expertConsensus.isnull()),
-                        ['player', 'team', 'week', 'year', 'dk_salary']]
+# pos = dm.read('''SELECT DISTINCT player, team, year, pos
+#                  FROM FantasyPros
+#                  ''', "Pre_PlayerData")
 
-pos = dm.read('''SELECT DISTINCT player, team, year, pos
-                 FROM FantasyPros
-                 ''', "Pre_PlayerData")
+# missing_game = pd.merge(missing_game, pos, on=['player', 'team', 'year'])
+# missing_game = missing_game.groupby(['team', 'pos', 'week', 'year']).agg({'dk_salary': 'sum'}).reset_index()
+# missing_game = missing_game.rename(columns={'dk_salary': 'missing_salary'})
+# missing_game_pos = missing_game[missing_game.pos==cur_pos].drop('pos', axis=1)
 
-missing_game = pd.merge(missing_game, pos, on=['player', 'team', 'year'])
-missing_game = missing_game.groupby(['team', 'pos', 'week', 'year']).agg({'dk_salary': 'sum'}).reset_index()
-missing_game = missing_game.rename(columns={'dk_salary': 'missing_salary'})
-missing_game_pos = missing_game[missing_game.pos==cur_pos].drop('pos', axis=1)
-
-xx = pd.merge(df, missing_game_pos, on=['team', 'week', 'year'], how='left').fillna({'missing_salary': 0})
+# xx = pd.merge(df, missing_game_pos, on=['team', 'week', 'year'], how='left').fillna({'missing_salary': 0})
 
 # missing_game[missing_game.team=='SEA'].iloc[:50]
 # %%
 
-xx[xx.player=='Darrel Williams']
-# %%
-yy = xx.corr()['y_act']
-# %%
+to_agg = {c: [np.mean, np.max, np.min] for c in cols}
+team_stats = df.groupby(['team', 'week', 'year']).agg(to_agg)
+
+diff_df = df[['player', 'team', 'week', 'year']].drop_duplicates()
+for c in cols:
+    tmp_df = team_stats[c].reset_index()
+    tmp_df = pd.merge(tmp_df, df[['player', 'team', 'week', 'year', c]], on=['team', 'week', 'year'])
+
+    for a in ['mean', 'amin', 'amax']:
+        tmp_df[f'{c}_{a}_diff'] = tmp_df[c] - tmp_df[a]
+
+    tmp_df = tmp_df[['player', 'team', 'week', 'year', f'{c}_mean_diff', f'{c}_amax_diff', f'{c}_amin_diff']]
+    diff_df = pd.merge(diff_df, tmp_df, on=['player', 'team', 'week', 'year'])
+    
+diff_df = diff_df.drop_duplicates()
+team_stats.columns = [f'{c[0]}_{c[1]}' for c in team_stats.columns]
+team_stats = team_stats.reset_index().drop_duplicates()
+
+df = pd.merge(df, team_stats, on=['team', 'week', 'year'])
+df = pd.merge(df, diff_df, on=['player', 'team', 'week', 'year'])
