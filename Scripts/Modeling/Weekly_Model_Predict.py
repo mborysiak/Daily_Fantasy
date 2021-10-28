@@ -27,9 +27,9 @@ from sklearn import set_config
 set_config(display='diagram')
 
 splines = {}
-for p in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+for k, p in zip([1, 1, 2, 2, 1], ['QB', 'RB', 'WR', 'TE', 'Defense']):
     print(f'Checking Splines for {p}')
-    spl_sd, spl_perc = get_std_splines(p, show_plot=True)
+    spl_sd, spl_perc = get_std_splines(p, show_plot=True, k=k)
     splines[p] = [spl_sd, spl_perc]
 
 #%%
@@ -56,9 +56,9 @@ met = 'y_act'
 
 # full_model or backfill
 model_type = 'full_model'
-vers = 'keep_all_kb_20_100_10_roll8'
+vers = 'keep_all_kb_5_50_5_roll8_actualptsscored'
 
-if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions =['Defense']# ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
@@ -132,7 +132,8 @@ for set_pos in positions:
     df_train = df[df.game_date < train_time_split].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
     df_predict = df[df.game_date == train_time_split].reset_index(drop=True)
-    output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy()
+    output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts',
+                               'rmean8_fantasy_pts_score', 'rmax8_fantasy_pts_score']].copy()
 
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
@@ -246,21 +247,31 @@ for set_pos in positions:
     #===================
     # Create Outputs
     #===================
+
+    if set_pos == 'Defense':
         
-    output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points']].copy()
-    output['sd_metric'] = (output.fantasyPoints + output.ProjPts + output.projected_points) / 3
-    output = output.drop(['fantasyPoints', 'ProjPts', 'projected_points'], axis=1)
+        output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points',
+                            'rmean8_fantasy_pts_score', 'rmax8_fantasy_pts_score']].copy()
+        output['sd_metric'] = (output.fantasyPoints + output.ProjPts + \
+                            output.projected_points + output.rmean8_fantasy_pts_score) / 4
+        output['max_metric'] = (output.fantasyPoints + output.ProjPts + \
+                            output.projected_points + output.rmax8_fantasy_pts_score) / 4
+        output = output.drop(['fantasyPoints', 'ProjPts', 'projected_points', 
+                            'rmean8_fantasy_pts_score', 'rmax8_fantasy_pts_score'], axis=1)
+
+    else:
+        output = output_start[['player', 'dk_salary', 'projected_points',
+                            'rmean8_fantasy_pts_score', 'rmax8_fantasy_pts_score']].copy()
+        output['sd_metric'] = (output.projected_points + output.rmean8_fantasy_pts_score) / 2
+        output['max_metric'] = (output.projected_points + output.rmax8_fantasy_pts_score) / 2
+        output = output.drop(['projected_points', 'rmean8_fantasy_pts_score', 'rmax8_fantasy_pts_score'], axis=1)
     # output = pd.concat([output, predictions], axis=1)
 
     output['pred_fp_per_game'] = predictions.mean(axis=1)
     output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
 
-    bridge_sd = splines[set_pos][0](output.sd_metric)#bm.predict(X_predict, return_std=True)[1]
-    spline_sd = splines[set_pos][0](output.sd_metric)
-    models_sd = 0 #predictions.std(axis=1) / 20
-    output = fix_std_dev(output, bridge_sd, spline_sd, models_sd)
-
-    output['max_score'] = splines[set_pos][1](output.sd_metric)
+    output['std_dev'] = splines[set_pos][0](output.sd_metric)
+    output['max_score'] = splines[set_pos][1](output.max_metric)
 
     output = output.sort_values(by='dk_salary', ascending=False)
     output['dk_rank'] = range(len(output))

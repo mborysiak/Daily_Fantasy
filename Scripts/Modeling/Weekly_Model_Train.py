@@ -44,7 +44,7 @@ val_year_min = 2020
 val_week_min = 10
 
 model_type = 'full_model'
-vers = 'keep_all_kb_5_50_5_roll8_actualptsscored'
+vers = 'keep_all_kb_5_50_5_roll8_and_fullhist_actualptsscored'
 
 to_keep = 10
 kb = (5, 50, 5)

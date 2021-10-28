@@ -69,14 +69,14 @@ def add_rolling_stats(df, gcols, rcols, ):
     rolls8_max = rolling_stats(df, gcols, rcols, 8, agg_type='max')
     rolls8_std = rolling_stats(df, gcols, rcols, 8, agg_type='std')
 
-    # hist_mean = rolling_expand(df, gcols, rcols, agg_type='mean')
-    # hist_std = rolling_expand(df, gcols, rcols, agg_type='std')
-    # hist_p80 = rolling_expand(df, gcols, rcols, agg_type='p95')
-    # hist_p20 = rolling_expand(df, gcols, rcols, agg_type='p20')
+    hist_mean = rolling_expand(df, gcols, rcols, agg_type='mean')
+    hist_std = rolling_expand(df, gcols, rcols, agg_type='std')
+    hist_p80 = rolling_expand(df, gcols, rcols, agg_type='p95')
 
     df = pd.concat([df, 
                     rolls8_mean, rolls8_max, rolls8_std,
-                    rolls3_mean, rolls3_max
+                    rolls3_mean, rolls3_max,
+                    hist_mean, hist_std, hist_p80
                     ], axis=1)
 
     return df
@@ -142,7 +142,7 @@ def drop_extra_bye_week(df):
 #---------------
 
 
-def fantasy_pros(pos, add_rolling=True):
+def fantasy_pros(pos):
 
     fp = dm.read(f'''SELECT * 
                     FROM FantasyPros 
@@ -1187,12 +1187,20 @@ def one_qb_per_week(df):
 
 
 def add_fp_rolling(df, pos):
-    
-    y_act = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
-                        FROM {pos}_Stats
-                        WHERE season >= 2020''', 'FastR')
 
-    df = pd.merge(df, y_act, on=['player', 'team', 'week', 'year'], how='outer')
+    if pos == 'Defense':
+        y_act = dm.read(f'''SELECT defTeam player, week, season year, fantasy_pts y_act
+                            FROM {pos}_Stats
+                            WHERE season >= 2020 ''', 'FastR')
+        df = pd.merge(df, y_act, on=['player', 'week', 'year'], how='outer')
+
+    else:
+        y_act = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
+                            FROM {pos}_Stats
+                            WHERE season >= 2020''', 'FastR')
+
+        df = pd.merge(df, y_act, on=['player', 'team', 'week', 'year'], how='outer')
+
     df = df.sort_values(by=['player', 'year', 'week'])
     df['fantasy_pts_score'] = df.groupby('player')['y_act'].shift(1)
     df = df.drop('y_act', axis=1)
@@ -1351,7 +1359,10 @@ for pos in [
 
 #%%
 
-defense = fantasy_pros('DST').rename(columns={'player': 'team'})
+defense = fantasy_pros('DST')
+defense = add_fp_rolling(defense, 'Defense'); print(defense.shape[0])
+defense = defense.rename(columns={'player': 'team'}); print(defense.shape[0])
+
 d_stats = get_defense_stats(prev_years=2)
 defense = pd.merge(defense, d_stats, on=['team', 'week', 'year'], how='inner')
 
@@ -1382,17 +1393,17 @@ defense = pd.merge(defense, pff_oline, on=['offTeam', 'week', 'year']); print(de
 
 defense = defense.copy().rename(columns={'team': 'player'})
 defense = forward_fill(defense)
-defense = defense.fillna(defense.mean())
 
 defense = attach_y_act(defense, pos='Defense', defense=True)
-defense = defense[~(defense.y_act.isnull()) | ((defense.week==WEEK) & (defense.year==YEAR))].reset_index(drop=True); print(defense.shape[0])
+defense = drop_y_act_except_current(defense, WEEK, YEAR); print(defense.shape[0])
+defense = defense.dropna(); print(defense.shape[0])
 
 print('Unique player-week-years:', defense[['player', 'week', 'year']].drop_duplicates().shape[0])
 print('Team Counts by Week:', defense[['year', 'week', 'player']].drop_duplicates().groupby(['year', 'week'])['player'].count())
 
 defense.columns = [c.replace('_dst', '') for c in defense.columns]
+defense = remove_non_uniques(defense)
 
-df = remove_non_uniques(df)
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 
 # %%
@@ -1410,7 +1421,7 @@ defense = defense.rename(columns={'def_team': 'defTeam', 'def_week': 'week', 'de
 output = pd.DataFrame()
 for pos in ['QB', 'RB', 'WR', 'TE']:
     
-    df = fantasy_pros(pos, add_rolling=False); print(df.shape[0])
+    df = fantasy_pros(pos); print(df.shape[0])
     df = add_injuries(df, pos); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
     df = get_experts(df, pos, add_rolling=False); print(df.shape[0])
