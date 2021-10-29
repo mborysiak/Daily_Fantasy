@@ -56,9 +56,9 @@ met = 'y_act'
 
 # full_model or backfill
 model_type = 'full_model'
-vers = 'keep_all_kb_5_50_5_roll8_actualptsscored'
+vers = 'keep_all_kb_5_50_5_roll8_and_fullhist_actualptsscored'
 
-if model_type == 'full_model': positions =['Defense']# ['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions =['QB']# ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
@@ -132,13 +132,17 @@ for set_pos in positions:
     df_train = df[df.game_date < train_time_split].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
     df_predict = df[df.game_date == train_time_split].reset_index(drop=True)
-    output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts',
-                               'rmean8_fantasy_pts_score', 'rmax8_fantasy_pts_score']].copy()
+    output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy()
 
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
     print('Shape of Train Set', df_train.shape)
 
+    output = output_start[['player', 'dk_salary', 'projected_points']].copy()
+    _, recent = rolling_max_std(set_pos)
+    output = pd.merge(output, recent, on='player', how='left')
+output
+#%%
     #------------
     # Make the Class Predictions
     #------------
@@ -250,21 +254,15 @@ for set_pos in positions:
 
     if set_pos == 'Defense':
         
-        output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points',
-                            'rmean8_fantasy_pts_score', 'rmax8_fantasy_pts_score']].copy()
-        output['sd_metric'] = (output.fantasyPoints + output.ProjPts + \
-                            output.projected_points + output.rmean8_fantasy_pts_score) / 4
-        output['max_metric'] = (output.fantasyPoints + output.ProjPts + \
-                            output.projected_points + output.rmax8_fantasy_pts_score) / 4
-        output = output.drop(['fantasyPoints', 'ProjPts', 'projected_points', 
-                            'rmean8_fantasy_pts_score', 'rmax8_fantasy_pts_score'], axis=1)
+        output = output_start[['player', 'dk_salary', 'projected_points']].copy()
+        _, recent = rolling_max_std(set_pos)
+        output = pd.merge(output, recent, on='player', how='left')
+        output = create_sd_max_metrics(output, defense=True)
 
     else:
-        output = output_start[['player', 'dk_salary', 'projected_points',
-                            'rmean8_fantasy_pts_score', 'rmax8_fantasy_pts_score']].copy()
-        output['sd_metric'] = (output.projected_points + output.rmean8_fantasy_pts_score) / 2
-        output['max_metric'] = (output.projected_points + output.rmax8_fantasy_pts_score) / 2
-        output = output.drop(['projected_points', 'rmean8_fantasy_pts_score', 'rmax8_fantasy_pts_score'], axis=1)
+        output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points']].copy()
+        output = create_sd_max_metrics(output, defense=False)
+
     # output = pd.concat([output, predictions], axis=1)
 
     output['pred_fp_per_game'] = predictions.mean(axis=1)
@@ -305,6 +303,7 @@ preds = dm.read(f'''SELECT *
                     WHERE version='{vers}'
                           AND week = '{set_week}'
                           AND year = '{set_year}' 
+                          AND player != 'Ryan Griffin'
             ''', 'Simulation')
 
 preds['weighting'] = 1

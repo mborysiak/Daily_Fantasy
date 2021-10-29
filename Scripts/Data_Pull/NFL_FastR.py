@@ -361,28 +361,6 @@ team['team'] = team['team'].map(team_map)
 dm.delete_from_db('FastR', 'Team_Stats', f"season={cur_season}")
 dm.write_to_db(team, 'FastR', 'Team_Stats', if_exist='append')
 
-#%%
-# #--------------
-# # Coach Stats
-# #--------------
-
-# gcols = ['season', 'week', 'coach', 'posteam']
-
-# coach_labels = get_coaches()
-# coach_data = pd.merge(data, coach_labels, on=['season', 'week', 'posteam'])
-
-# coach_sum = get_agg_stats(coach_data, gcols, sum_cols, 'sum', prefix='coach')
-# coach_mean = get_agg_stats(coach_data, gcols, mean_cols, 'mean', prefix='coach')
-
-# coaches = coach_data[gcols].drop_duplicates()
-# coaches = pd.merge(coaches, coach_sum, on=gcols)
-# coaches = pd.merge(coaches, coach_mean, on=gcols)
-# coaches = coaches.sort_values(by=['season', 'coach', 'week'])
-# coaches = coaches.rename(columns={'posteam': 'team'})
-
-# coaches.team = coaches.team.map(team_map)
-# dm.delete_from_db('FastR', 'Coach_Stats', f"season={cur_season}")
-# dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='append')
 
 #%%
 
@@ -469,5 +447,27 @@ dm.write_to_db(def_scoring, 'FastR', 'Defense_Stats', if_exist='append')
 
 
 
+#%%
+# #--------------
+# # Coach Stats
+# #--------------
+
+# gcols = ['season', 'week', 'coach', 'posteam']
+
+# coach_labels = get_coaches()
+# coach_data = pd.merge(data, coach_labels, on=['season', 'week', 'posteam'])
+
+# coach_sum = get_agg_stats(coach_data, gcols, sum_cols, 'sum', prefix='coach')
+# coach_mean = get_agg_stats(coach_data, gcols, mean_cols, 'mean', prefix='coach')
+
+# coaches = coach_data[gcols].drop_duplicates()
+# coaches = pd.merge(coaches, coach_sum, on=gcols)
+# coaches = pd.merge(coaches, coach_mean, on=gcols)
+# coaches = coaches.sort_values(by=['season', 'coach', 'week'])
+# coaches = coaches.rename(columns={'posteam': 'team'})
+
+# coaches.team = coaches.team.map(team_map)
+# dm.delete_from_db('FastR', 'Coach_Stats', f"season={cur_season}")
+# dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='append')
 
 # %%

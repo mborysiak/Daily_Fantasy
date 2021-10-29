@@ -1,5 +1,58 @@
 #%%
 
+def create_sd_max_metrics(df, defense=False):
+
+    if defense: 
+        df['sd_metric'] = df.projected_points
+        df['max_metric'] = df.projected_points
+        df = df.drop(['projected_points', 'roll_max', 'roll_std'], axis=1)
+
+    else: 
+        df['sd_metric'] = (df.fantasyPoints + df.ProjPts + \
+                            df.projected_points + df.roll_std) / 4
+        df['max_metric'] = (df.fantasyPoints + df.ProjPts + \
+                            df.projected_points + df.roll_max) / 4
+        
+        df = df.drop(['fantasyPoints', 'ProjPts', 'projected_points', 
+                        'roll_std', 'roll_max'], axis=1)
+
+    return df
+
+
+def rolling_max_std(pos):
+
+    from ff.db_operations import DataManage   
+    import ff.general as ffgeneral 
+    import pandas as pd
+
+    # set the root path and database management object
+    root_path = ffgeneral.get_main_path('Daily_Fantasy')
+    db_path = f'{root_path}/Data/Databases/'
+    dm = DataManage(db_path)
+
+    if pos != 'Defense':
+        df = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
+                        FROM {pos}_Stats
+                        WHERE season >= 2020
+                            AND week < 17 ''', 'FastR')
+    else:
+        df = dm.read(f'''SELECT defTeam player, defTeam team, week, season year, fantasy_pts y_act
+                         FROM {pos}_Stats
+                         WHERE season >= 2020
+                                AND week < 17 ''', 'FastR')
+    
+    df = df.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
+    df['roll_pts'] = df.groupby(['player'])['y_act'].shift(1)
+    df['roll_max'] = df.groupby('player')['roll_pts'].rolling(8, min_periods=1).apply(lambda x: pd.Series(x).nlargest(2).iloc[-1]).values
+    df['roll_mean'] = df.groupby('player')['roll_pts'].rolling(9, min_periods=1).apply(lambda x: pd.Series(x).nlargest(5).iloc[-1]).values
+    df['roll_std'] = df.roll_max - df.roll_mean
+    df = df.drop(['roll_pts', 'roll_mean'], axis=1)
+    
+    most_recent = df.drop_duplicates(subset=['player'], keep='last')
+    most_recent = most_recent[['player', 'roll_max', 'roll_std']]
+
+    return df, most_recent
+
 
 def get_std_splines(pos, show_plot=False, k=2, s=2000):
     
@@ -21,53 +74,33 @@ def get_std_splines(pos, show_plot=False, k=2, s=2000):
     if pos == 'Defense':
 
          # pull in the salary and actual results data
-        dk_sal = dm.read('''SELECT team player, team, week, year, projected_points
+        proj = dm.read('''SELECT team player, team, week, year, projected_points
                             FROM FantasyPros
-                            WHERE pos='DST' ''', 'Pre_PlayerData')
-
-        stats = dm.read(f'''SELECT defTeam player, defTeam team, week, season year, fantasy_pts y_act
-                            FROM {pos}_Stats
-                            WHERE season >= 2020 ''', 'FastR')
+                            WHERE pos='DST'
+                                  AND week < 17 ''', 'Pre_PlayerData')
     
     else:
         # pull in the salary and actual results data
-        dk_sal = dm.read('''SELECT player, offTeam team, week, year, projected_points, fantasyPoints, ProjPts
+        proj = dm.read('''SELECT player, offTeam team, week, year, projected_points, fantasyPoints, ProjPts
                             FROM PFF_Proj_Ranks
                             JOIN (SELECT player, team offTeam, week, year, projected_points 
                                   FROM FantasyPros)
                                   USING (player, offTeam, week, year)
                             JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts 
                                   FROM PFF_Expert_Ranks)
-                                  USING (player, offTeam, week, year)''', 'Pre_PlayerData')
+                                  USING (player, offTeam, week, year)
+                            WHERE week < 17''', 'Pre_PlayerData')
 
-        stats = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
-                            FROM {pos}_Stats
-                            WHERE season >= 2020 ''', 'FastR')
-        
-    # join together and sort by dk_salary to prepare for group creation
-    df = pd.merge(dk_sal, stats, on=['player', 'team', 'week', 'year'])
-    df = df.sort_values(by=['player', 'year', 'year']).reset_index(drop=True)
-    df['fantasy_pts_score'] = df.groupby(['player'])['y_act'].shift(1)
-    df['rmax8_fantasy_pts_score'] = df.groupby(['player'])[['fantasy_pts_score']].rolling(8, min_periods=1).max().values
-    df['rstd8_fantasy_pts_score'] = df.groupby(['player'])[['fantasy_pts_score']].rolling(8, min_periods=1).std().values
+    # get the rolling stats data    
+    stats, _ = rolling_max_std(pos)
 
-    if pos == 'Defense':
-        df['sd_metric'] = df.projected_points# (df.projected_points + df.rstd8_fantasy_pts_score) / 2
-        df['max_metric'] = df.projected_points#(df.projected_points + df.rmax8_fantasy_pts_score) / 2
-        df = df.drop(['projected_points', 'rmax8_fantasy_pts_score', 'rstd8_fantasy_pts_score'], axis=1)
+    # join together and calculate sd and max metrics
+    df = pd.merge(proj, stats, on=['player', 'team', 'week', 'year'])
+    if pos == 'Defense': df = create_sd_max_metrics(df, defense=True)
+    else: df = create_sd_max_metrics(df, defense=False)
 
-    else:
-        df['sd_metric'] = (df.projected_points + df.fantasyPoints + \
-                               df.rstd8_fantasy_pts_score + df.ProjPts ) / 4
-        df['max_metric'] = (df.projected_points + df.fantasyPoints + \
-                                df.rmax8_fantasy_pts_score + df.ProjPts) / 4
-
-        df = df.drop(['projected_points', 'ProjPts', 'fantasyPoints', 
-                      'rmax8_fantasy_pts_score', 'rstd8_fantasy_pts_score' ], axis=1)
-
-    # join together and sort by dk_salary to prepare for group creation
-    df = df.dropna().sort_values(by='sd_metric').reset_index(drop=True)
-
+    # create the groups    
+    df = df.dropna()
     min_grps = int(df.shape[0] / 100)
     max_grps = int(df.shape[0] / 40)
 
@@ -76,11 +109,13 @@ def get_std_splines(pos, show_plot=False, k=2, s=2000):
     y_max = {}
     max_r2 = {}
     for x_val, met in zip(['sd_metric', 'max_metric'], ['std_dev', 'perc_99']):
+        
+        df = df.sort_values(by=x_val).reset_index(drop=True)
 
         max_r2[met] = 0
         for num_grps in range(min_grps, max_grps, 1):
 
-            # create equal sizes groups going down the dataframe ordered by dk_salary
+            # create equal sizes groups going down the dataframe ordered by each metric
             df_len = len(df)
             repeats = math.ceil(df.shape[0] / num_grps)
             grps = np.repeat([i for i in range(num_grps)], repeats)
@@ -118,17 +153,26 @@ def get_std_splines(pos, show_plot=False, k=2, s=2000):
     return splines['std_dev'], splines['perc_99'] 
 
 
-def fix_std_dev(df, bridge, spline, models):
+# def fix_std_dev(df, bridge, spline, models):
 
-    import numpy as np
+#     import numpy as np
     
-    df['std_dev'] = bridge
+#     df['std_dev'] = bridge
     
-    std_error = np.mean(df.loc[:3, 'std_dev'] / df.loc[:3, 'pred_fp_per_game'])
-    serr_std_dev = df.pred_fp_per_game * std_error
+#     std_error = np.mean(df.loc[:3, 'std_dev'] / df.loc[:3, 'pred_fp_per_game'])
+#     serr_std_dev = df.pred_fp_per_game * std_error
     
-    df['std_dev'] = (serr_std_dev + spline) / 2
-    df['std_dev'] = df.std_dev + models
-    # df.loc[df.dk_salary > 4000, 'std_dev'] = df.loc[df.dk_salary > 4000, 'std_dev'] + models
+#     df['std_dev'] = (serr_std_dev + spline) / 2
+#     df['std_dev'] = df.std_dev + models
+#     # df.loc[df.dk_salary > 4000, 'std_dev'] = df.loc[df.dk_salary > 4000, 'std_dev'] + models
 
-    return df
+#     return df
+
+
+# %%
+
+full_stats, recent = rolling_max_std('WR')
+recent.dropna().sort_values(by='roll_max', ascending=False).iloc[:50]
+# %%
+get_std_splines('WR', show_plot=True, k=2, s=2000)
+# %%

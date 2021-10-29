@@ -37,17 +37,16 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 7
+set_week = 8
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
 val_week_min = 10
 
-model_type = 'full_model'
-vers = 'keep_all_kb_5_50_5_roll8_and_fullhist_actualptsscored'
+model_type = 'backfill'
+vers = 'v1_roll8_fullhist'
 
 to_keep = 10
-kb = (5, 50, 5)
 n_iters = 25
 drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
 keep_words = ['def', 'qb', 'team']
@@ -57,11 +56,19 @@ elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
 
+    kbs = {
+        'QB': [20, 100, 10],
+        'RB': [20, 100, 10],
+        'WR': [20, 100, 10],
+        'TE': [5, 50, 5],
+        'Defense': [5, 50, 5]
+    }
+
     prc = {
-        'QB': [5, 30, 5],
-        'RB': [5, 40, 5],
-        'WR': [5, 40, 5],
-        'TE': [5, 40, 5],
+        'QB': [5, 35, 5],
+        'RB': [5, 35, 5],
+        'WR': [5, 35, 5],
+        'TE': [5, 35, 5],
         'Defense': [3, 20, 3]
     }
     
@@ -228,7 +235,7 @@ for set_pos in positions:
         # set params
         params = skm.default_params(pipe, 'rand')
         params['select_perc__percentile'] = range(prc[set_pos][0],  prc[set_pos][1], prc[set_pos][2])
-        params['k_best__k'] = range(kb[0], kb[1], kb[2])
+        params['k_best__k'] = range(kbs[set_pos][0],kbs[set_pos][1], kbs[set_pos][2])
         if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
     
         # to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
@@ -289,7 +296,7 @@ for set_pos in positions:
             # set params
             params = skm.default_params(pipe, 'rand')
             params['select_perc_c__percentile'] = range(prc[set_pos][0],  prc[set_pos][1], prc[set_pos][2])
-            params['k_best_c__k'] = range(kb[0], kb[1], kb[2])
+            params['k_best_c__k'] = range(kbs[set_pos][0], kbs[set_pos][1], kbs[set_pos][2])
             if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
 
             # to_drop = [c for c in X_class.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
