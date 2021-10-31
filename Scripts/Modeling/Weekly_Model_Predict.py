@@ -27,12 +27,10 @@ from sklearn import set_config
 set_config(display='diagram')
 
 splines = {}
-for k, p in zip([1, 1, 2, 2, 1], ['QB', 'RB', 'WR', 'TE', 'Defense']):
+for k, p in zip([1, 2, 2, 2, 1], ['QB', 'RB', 'WR', 'TE', 'Defense']):
     print(f'Checking Splines for {p}')
     spl_sd, spl_perc = get_std_splines(p, show_plot=True, k=k)
     splines[p] = [spl_sd, spl_perc]
-
-#%%
 
 #==========
 # General Setting
@@ -46,7 +44,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 7
+set_week = 8
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -56,10 +54,12 @@ met = 'y_act'
 
 # full_model or backfill
 model_type = 'full_model'
-vers = 'keep_all_kb_5_50_5_roll8_and_fullhist_actualptsscored'
+vers = 'v1_roll8_fullhist'
 
-if model_type == 'full_model': positions =['QB']# ['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions =['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
+
+#%%
 
 for set_pos in positions:
 
@@ -138,11 +138,6 @@ for set_pos in positions:
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
     print('Shape of Train Set', df_train.shape)
 
-    output = output_start[['player', 'dk_salary', 'projected_points']].copy()
-    _, recent = rolling_max_std(set_pos)
-    output = pd.merge(output, recent, on='player', how='left')
-output
-#%%
     #------------
     # Make the Class Predictions
     #------------
@@ -252,21 +247,15 @@ output
     # Create Outputs
     #===================
 
-    if set_pos == 'Defense':
-        
-        output = output_start[['player', 'dk_salary', 'projected_points']].copy()
-        _, recent = rolling_max_std(set_pos)
-        output = pd.merge(output, recent, on='player', how='left')
-        output = create_sd_max_metrics(output, defense=True)
-
-    else:
-        output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points']].copy()
-        output = create_sd_max_metrics(output, defense=False)
+    output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points']].copy()
 
     # output = pd.concat([output, predictions], axis=1)
-
     output['pred_fp_per_game'] = predictions.mean(axis=1)
-    output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
+    _, recent = rolling_max_std(set_pos)
+    output = pd.merge(output, recent, on='player')
+
+    if set_pos == 'Defense': output = create_sd_max_metrics(output, defense=True)
+    else: output = create_sd_max_metrics(output, defense=False)
 
     output['std_dev'] = splines[set_pos][0](output.sd_metric)
     output['max_score'] = splines[set_pos][1](output.max_metric)
@@ -324,7 +313,7 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['CLE', 'DEN', 'IND', 'SF', 'NO', 'SEA']
+drop_teams = ['ARI', 'GB', 'DAL', 'MIN','KC', 'NYG']
 
 teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
                     FROM FantasyPros

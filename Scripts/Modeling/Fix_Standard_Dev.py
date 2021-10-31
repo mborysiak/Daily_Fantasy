@@ -42,8 +42,12 @@ def rolling_max_std(pos):
                                 AND week < 17 ''', 'FastR')
     
     df = df.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
-    df['roll_pts'] = df.groupby(['player'])['y_act'].shift(1)
+    df['roll_pts'] = df.y_act#df.groupby(['player'])['y_act'].shift(1)
     df['roll_max'] = df.groupby('player')['roll_pts'].rolling(8, min_periods=1).apply(lambda x: pd.Series(x).nlargest(2).iloc[-1]).values
+    
+    # df['roll_std'] = df.groupby('player')['roll_pts'].rolling(8, min_periods=1).std().values
+    # df = df.drop(['roll_pts'], axis=1)
+
     df['roll_mean'] = df.groupby('player')['roll_pts'].rolling(9, min_periods=1).apply(lambda x: pd.Series(x).nlargest(5).iloc[-1]).values
     df['roll_std'] = df.roll_max - df.roll_mean
     df = df.drop(['roll_pts', 'roll_mean'], axis=1)
@@ -171,8 +175,11 @@ def get_std_splines(pos, show_plot=False, k=2, s=2000):
 
 # %%
 
-full_stats, recent = rolling_max_std('WR')
-recent.dropna().sort_values(by='roll_max', ascending=False).iloc[:50]
-# %%
-get_std_splines('WR', show_plot=True, k=2, s=2000)
+# full_stats, recent = rolling_max_std('WR')
+# recent.dropna().sort_values(by='roll_std', ascending=False).iloc[:50]
+# # %%
+# get_std_splines('QB', show_plot=True, k=1, s=2000)
+
+# #%%
+# full_stats[full_stats.player=="Ja'Marr Chase"]
 # %%
