@@ -43,10 +43,10 @@ set_week = 8
 val_year_min = 2020
 val_week_min = 10
 
-model_type = 'backfill'
-vers = 'v1_roll8_fullhist'
+model_type = 'full_model'
+vers = 'roll8_only_newparams_kbonly'
 
-to_keep = 10
+to_keep = -1
 n_iters = 25
 drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
 keep_words = ['def', 'qb', 'team']
@@ -57,10 +57,10 @@ elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 for set_pos in positions:
 
     kbs = {
-        'QB': [20, 100, 10],
-        'RB': [20, 100, 10],
-        'WR': [20, 100, 10],
-        'TE': [5, 50, 5],
+        'QB': [5, 75, 5],
+        'RB': [5, 100, 5],
+        'WR': [5, 100, 5],
+        'TE': [5, 75, 5],
         'Defense': [5, 50, 5]
     }
 
@@ -401,6 +401,9 @@ for set_pos in positions:
 
     # write out tracking results to tracking DB
     db_output_pd = pd.DataFrame(db_output)
+    db_output_pd = db_output_pd.assign(perc_low=prc[set_pos][0]).assign(perc_high=prc[set_pos][1]).assign(perc_range=prc[set_pos][2])
+    db_output_pd = db_output_pd.assign(kb_low=kbs[set_pos][0]).assign(kb_high=kbs[set_pos][1]).assign(kb_range=kbs[set_pos][2])
+    db_output_pd = db_output_pd.assign(n_iters=n_iters).assign(to_keep=to_keep).assign(val_week=val_week_min).assign(val_year=val_year_min)
     dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
     dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
 
@@ -461,6 +464,41 @@ best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
                                                 time_split=cv_time_input)
 
 #%%
+skm = SciKitModel(df_train)
+X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
+
+
+drop_pct = 0.5
+num_drop = int(len(X.columns)*drop_pct)
+model = 'rf'
+
+pipe = skm.model_pipe([#skm.piece('feature_drop'),
+                       skm.piece('std_scale'), 
+                    #    skm.piece('select_perc'),
+                    #     skm.feature_union([
+                    #                         skm.piece('agglomeration'), 
+                    #                         skm.piece('k_best'),
+                    #                         skm.piece('pca')
+                    #                         ]),
+                       skm.piece('k_best'),
+                        skm.piece(model)])
+params = skm.default_params(pipe)
+params['k_best__k'] = range(5, 75, 5)
+# params['select_perc__percentile'] = range(5, 35, 5)
+
+params['rf__n_estimators']= range(20, 150, 10)
+params['rf__max_depth']= range(2, 30, 3)
+params['rf__min_samples_leaf'] = range(3, 15)
+params['rf__max_features'] = [0.8, 0.9, 1]
+# params['rf__subsample'] =  [1]
+# params['feature_drop__col'] = [list(np.random.choice(X.columns, num_drop, replace=False)) for _ in range(25)]
+
+# fit and append the ADP model
+best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
+                                                col_split='game_date', 
+                                                time_split=cv_time_input)
+
+#%%
 i = 4
 try: coefs = best_models[i].named_steps[model].coef_
 except: coefs = best_models[i].named_steps[model].feature_importances_
@@ -468,3 +506,15 @@ try:cols = X.drop(best_models[i].named_steps['feature_drop'].col, axis=1).column
 except: cols = X.columns[best_models[i].named_steps['k_best'].get_support()]
 pd.Series(coefs, index=cols).sort_values().plot.barh(figsize=(5,10))
 # %%
+params['gbm__n_estimators']= range(10, 100, 10)
+params['gbm__max_depth']= range(2, 30, 3)
+params['gbm__min_samples_leaf'] = range(5, 20, 2)
+params['gbm__max_features'] = [0.7, 0.8, 0.9, 1]
+params['gbm__subsample'] =  [0.5, 0.6, 0.7]
+
+
+params['lgbm__n_estimators']= range(10, 100, 10)
+params['lgbm__max_depth']= range(2, 30, 3)
+params['lgbm__reg_lambda'] = range(0, 100, 10)
+params['lgbm__colsample_bytree'] = [0.7, 0.8, 0.9, 1]
+params['lgbm__subsample'] =  [1]

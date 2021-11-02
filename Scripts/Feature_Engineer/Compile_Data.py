@@ -69,14 +69,14 @@ def add_rolling_stats(df, gcols, rcols, ):
     rolls8_max = rolling_stats(df, gcols, rcols, 8, agg_type='max')
     rolls8_std = rolling_stats(df, gcols, rcols, 8, agg_type='std')
 
-    hist_mean = rolling_expand(df, gcols, rcols, agg_type='mean')
-    hist_std = rolling_expand(df, gcols, rcols, agg_type='std')
-    hist_p80 = rolling_expand(df, gcols, rcols, agg_type='p95')
+    # hist_mean = rolling_expand(df, gcols, rcols, agg_type='mean')
+    # hist_std = rolling_expand(df, gcols, rcols, agg_type='std')
+    # hist_p80 = rolling_expand(df, gcols, rcols, agg_type='p95')
 
     df = pd.concat([df, 
                     rolls8_mean, rolls8_max, rolls8_std,
                     rolls3_mean, rolls3_max,
-                    hist_mean, hist_std, hist_p80
+                    #hist_mean, hist_std, hist_p80
                     ], axis=1)
 
     return df
