@@ -31,7 +31,7 @@ for k, p in zip([1, 2, 2, 2, 1], ['QB', 'RB', 'WR', 'TE', 'Defense']):
     print(f'Checking Splines for {p}')
     spl_sd, spl_perc = get_std_splines(p, show_plot=True, k=k)
     splines[p] = [spl_sd, spl_perc]
-
+#%%
 #==========
 # General Setting
 #==========
@@ -56,7 +56,7 @@ met = 'y_act'
 model_type = 'full_model'
 vers = 'v1_roll8_fullhist'
 
-if model_type == 'full_model': positions =['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions =['QB']#['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 #%%
@@ -187,30 +187,25 @@ for set_pos in positions:
     final_models = [
                     'ridge',
                     'lasso',
+                    'enet',
                     'lgbm', 
                     'xgb', 
                     'rf', 
-                    'bridge'
+                    'gbm'
+                    # 'gbm', 
+                    # 'knn'
                     ]
     for final_m in final_models:
 
         print(f'\n{final_m}')
 
         # get the model pipe for stacking setup and train it on meta features
-        if final_m in ['ridge', 'lasso', 'bridge']:
-            stack_pipe = skm_stack.model_pipe([
-                                 #   skm_stack.piece('std_scale'), 
-                                    skm_stack.piece('k_best'), 
-                                    skm_stack.piece(final_m)
-                                ])
-            stack_params = skm_stack.default_params(stack_pipe)
-            stack_params['k_best__k'] = range(1, X_stack.shape[1])
-
-        else:
-            stack_pipe = skm_stack.model_pipe([
-                                    skm_stack.piece(final_m)
-                                ])
-            stack_params = skm_stack.default_params(stack_pipe)
+        stack_pipe = skm_stack.model_pipe([
+                                skm_stack.piece('k_best'), 
+                                skm_stack.piece(final_m)
+                            ])
+        stack_params = skm_stack.default_params(stack_pipe)
+        stack_params['k_best__k'] = range(1, X_stack.shape[1])
 
         best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
                                                                 X_stack, y_stack, n_iter=50, 
@@ -237,11 +232,23 @@ for set_pos in positions:
         prediction = pd.Series(np.round(bm.predict(X_predict), 2), name=f'pred_{met}_{fm}')
         predictions = pd.concat([predictions, prediction], axis=1)
 
+    #------------
+    # Scatter and Metrics for Overall Results
+    #------------
     plt.scatter(val_predictions.mean(axis=1), y_fp)
     plt.xlabel('predictions');plt.ylabel('actual')
     plt.show()
     from sklearn.metrics import r2_score
     print('Total R2:', r2_score(y_fp, val_predictions.mean(axis=1)))
+
+    val_high_score = pd.concat([val_predictions.mean(axis=1), y_fp], axis=1)
+    val_high_score.columns = ['predictions','y_act']
+    val_high_score = val_high_score[val_high_score.predictions >= \
+                                    np.percentile(val_high_score.predictions, 75)]
+
+    val_high_score.plot.scatter(x='predictions', y='y_act')
+    plt.show()
+    print('High Score R2:', r2_score(val_high_score.y_act, val_high_score.predictions))
 
     #===================
     # Create Outputs

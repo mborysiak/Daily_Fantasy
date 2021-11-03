@@ -41,10 +41,10 @@ set_week = 8
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 10
+val_week_min = 12
 
 model_type = 'full_model'
-vers = 'roll8_only_newparams_kbonly'
+vers = 'roll8_fullhist_latervalweek_kbestallstack'
 
 to_keep = -1
 n_iters = 25
@@ -57,10 +57,10 @@ elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 for set_pos in positions:
 
     kbs = {
-        'QB': [5, 75, 5],
-        'RB': [5, 100, 5],
-        'WR': [5, 100, 5],
-        'TE': [5, 75, 5],
+        'QB': [20, 100, 10],
+        'RB': [20, 100, 10],
+        'WR': [20, 100, 10],
+        'TE': [20, 100, 10],
         'Defense': [5, 50, 5]
     }
 
@@ -378,20 +378,20 @@ for set_pos in positions:
         print(f'\n{final_m}')
 
         # get the model pipe for stacking setup and train it on meta features
-        if final_m in ['ridge', 'lasso', 'bridge']:
-            stack_pipe = skm_stack.model_pipe([
-                                    skm_stack.piece('std_scale'), 
-                                    skm_stack.piece('k_best'), 
-                                    skm_stack.piece(final_m)
-                                ])
-            stack_params = skm_stack.default_params(stack_pipe)
-            stack_params['k_best__k'] = range(1, X_stack.shape[1])
+        # if final_m in ['ridge', 'lasso', 'bridge']:
+        stack_pipe = skm_stack.model_pipe([
+                                # skm_stack.piece('std_scale'), 
+                                skm_stack.piece('k_best'), 
+                                skm_stack.piece(final_m)
+                            ])
+        stack_params = skm_stack.default_params(stack_pipe)
+        stack_params['k_best__k'] = range(1, X_stack.shape[1])
 
-        else:
-            stack_pipe = skm_stack.model_pipe([
-                                    skm_stack.piece(final_m)
-                                ])
-            stack_params = skm_stack.default_params(stack_pipe)
+        # else:
+        #     stack_pipe = skm_stack.model_pipe([
+        #                             skm_stack.piece(final_m)
+        #                         ])
+        #     stack_params = skm_stack.default_params(stack_pipe)
 
         best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
                                                                 X_stack, y_stack, n_iter=50, 
