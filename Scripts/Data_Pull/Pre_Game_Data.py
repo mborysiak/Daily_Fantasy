@@ -464,10 +464,13 @@ salary_id = pd.concat([salary_id, defense.rename(columns={'TeamAbbrev': 'player'
 
 salary = salary_id[['player', 'salary']]
 salary = salary.assign(year=set_year).assign(league=set_week)
+salary.loc[salary.player=='Eli Mitchell'] = 'Elijah Mitchell'
 
 ids = salary_id[['player', 'player_id']]
 ids = ids.assign(year=set_year).assign(league=set_week)
+ids.loc[ids.player=='Eli Mitchell'] = 'Elijah Mitchell'
 
+#%%
 dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
 dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
 

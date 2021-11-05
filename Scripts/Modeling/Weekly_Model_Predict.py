@@ -54,9 +54,9 @@ met = 'y_act'
 
 # full_model or backfill
 model_type = 'full_model'
-vers = 'v1_roll8_fullhist'
+vers = 'roll8_fullhist_kbestallstack_keep50'
 
-if model_type == 'full_model': positions =['QB']#['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions =['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 #%%
@@ -187,12 +187,11 @@ for set_pos in positions:
     final_models = [
                     'ridge',
                     'lasso',
-                    'enet',
+                    'bridge',
                     'lgbm', 
                     'xgb', 
                     'rf', 
-                    'gbm'
-                    # 'gbm', 
+                    # 'gbm' ,
                     # 'knn'
                     ]
     for final_m in final_models:
@@ -201,6 +200,11 @@ for set_pos in positions:
 
         # get the model pipe for stacking setup and train it on meta features
         stack_pipe = skm_stack.model_pipe([
+                                skm_stack.feature_union([
+                                                skm_stack.piece('agglomeration'), 
+                                                skm_stack.piece('k_best'),
+                                                skm_stack.piece('pca')
+                                                ]),
                                 skm_stack.piece('k_best'), 
                                 skm_stack.piece(final_m)
                             ])
@@ -209,7 +213,7 @@ for set_pos in positions:
 
         best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
                                                                 X_stack, y_stack, n_iter=50, 
-                                                                run_adp=True, print_coef=True)
+                                                                run_adp=True, print_coef=False)
         best_models.append(best_model)
 
     # get the final output:

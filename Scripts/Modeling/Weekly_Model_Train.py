@@ -41,12 +41,12 @@ set_week = 8
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 12
+val_week_min = 10
 
 model_type = 'full_model'
-vers = 'roll8_fullhist_latervalweek_kbestallstack'
+vers = 'roll8_fullhist_kbestallstack_keep25_or_drophalf'
 
-to_keep = -1
+to_keep = 25
 n_iters = 25
 drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
 keep_words = ['def', 'qb', 'team']
@@ -57,10 +57,10 @@ elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 for set_pos in positions:
 
     kbs = {
-        'QB': [20, 100, 10],
-        'RB': [20, 100, 10],
-        'WR': [20, 100, 10],
-        'TE': [20, 100, 10],
+        'QB': [5, 50, 5],
+        'RB': [10, 100, 10],
+        'WR': [5, 50, 5],
+        'TE': [5, 50, 5],
         'Defense': [5, 50, 5]
     }
 
@@ -222,12 +222,13 @@ for set_pos in positions:
         print(m)
 
         # set up the model pipe and get the default search parameters
-        pipe = skm.model_pipe([skm.piece('std_scale'), 
+        pipe = skm.model_pipe([ skm.piece('feature_drop'),
+                                skm.piece('std_scale'), 
                                 skm.piece('select_perc'),
                                 skm.feature_union([
                                             skm.piece('agglomeration'), 
                                             skm.piece('k_best'),
-                                            skm.piece('pca')
+                                            # skm.piece('pca')
                                             ]),
                                 skm.piece('k_best'),
                                 skm.piece(m)])
@@ -238,8 +239,11 @@ for set_pos in positions:
         params['k_best__k'] = range(kbs[set_pos][0],kbs[set_pos][1], kbs[set_pos][2])
         if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
     
-        # to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
-        # params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(n_iters)]
+        if set_pos in ('QB', 'RB'):
+            to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+            params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(10)]
+        else:
+            params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
 
         # run the model with parameter search
         best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=n_iters,
@@ -283,12 +287,13 @@ for set_pos in positions:
             print(m)
 
             # set up the model pipe and get the default search parameters
-            pipe = skm.model_pipe([skm.piece('std_scale'), 
+            pipe = skm.model_pipe([skm.piece('feature_drop'),
+                                   skm.piece('std_scale'), 
                                    skm.piece('select_perc_c'),
                                    skm.feature_union([
                                                 skm.piece('agglomeration'), 
                                                 skm.piece('k_best_c'),
-                                                skm.piece('pca')
+                                                # skm.piece('pca')
                                                 ]),
                                     skm.piece('k_best_c'),
                                     skm.piece(m)])
@@ -299,9 +304,12 @@ for set_pos in positions:
             params['k_best_c__k'] = range(kbs[set_pos][0], kbs[set_pos][1], kbs[set_pos][2])
             if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
 
-            # to_drop = [c for c in X_class.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
-            # params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(n_iters)]
-            
+            if set_pos in ('QB', 'RB'):
+                to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+                params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(10)]
+            else:
+                params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
+
             # run the model with parameter search
             best_models, score_results, oof_data = skm_class.time_series_cv(pipe, X_class, y_class, 
                                                                             params, n_iter=n_iters,
@@ -378,24 +386,21 @@ for set_pos in positions:
         print(f'\n{final_m}')
 
         # get the model pipe for stacking setup and train it on meta features
-        # if final_m in ['ridge', 'lasso', 'bridge']:
         stack_pipe = skm_stack.model_pipe([
-                                # skm_stack.piece('std_scale'), 
+                                skm_stack.feature_union([
+                                                skm_stack.piece('agglomeration'), 
+                                                skm_stack.piece('k_best'),
+                                                skm_stack.piece('pca')
+                                                ]),
                                 skm_stack.piece('k_best'), 
                                 skm_stack.piece(final_m)
                             ])
         stack_params = skm_stack.default_params(stack_pipe)
         stack_params['k_best__k'] = range(1, X_stack.shape[1])
 
-        # else:
-        #     stack_pipe = skm_stack.model_pipe([
-        #                             skm_stack.piece(final_m)
-        #                         ])
-        #     stack_params = skm_stack.default_params(stack_pipe)
-
         best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
                                                                 X_stack, y_stack, n_iter=50, 
-                                                                run_adp=True, print_coef=True)
+                                                                run_adp=True, print_coef=False)
 
         db_output = add_result_db_output('final', final_m, [adp_score, stack_score], db_output)
 
