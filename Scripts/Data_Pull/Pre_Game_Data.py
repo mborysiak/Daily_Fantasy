@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 8
+set_week = 10
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -81,11 +81,11 @@ def cleanup_sal(df, name):
 dk = cleanup_sal(dk_sal, 'dk_salary')
 fd = cleanup_sal(fd_sal, 'fd_salary')
 yahoo = cleanup_sal(yahoo_sal, 'yahoo_salary')
-salaries = pd.merge(dk, fd, how='inner', 
+salaries = pd.merge(dk, fd, how='left', 
                     left_on=['player','position', 'team'],
                     right_on=['player', 'position', 'team'])
 
-salaries = pd.merge(salaries, yahoo, how='inner',
+salaries = pd.merge(salaries, yahoo, how='left',
                     left_on=['player','position', 'team'],
                     right_on=['player', 'position', 'team'])
 
@@ -464,11 +464,11 @@ salary_id = pd.concat([salary_id, defense.rename(columns={'TeamAbbrev': 'player'
 
 salary = salary_id[['player', 'salary']]
 salary = salary.assign(year=set_year).assign(league=set_week)
-salary.loc[salary.player=='Eli Mitchell'] = 'Elijah Mitchell'
+salary.loc[salary.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
 
 ids = salary_id[['player', 'player_id']]
 ids = ids.assign(year=set_year).assign(league=set_week)
-ids.loc[ids.player=='Eli Mitchell'] = 'Elijah Mitchell'
+ids.loc[ids.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
 
 #%%
 dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
@@ -487,6 +487,55 @@ dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
 # dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
 # dm.write_to_db(other_sal, 'Pre_PlayerData', 'Daily_Salaries', 'append')
 
+# %%
+dk = pd.read_csv('c:/Users/mborysia/Downloads/dk-ownership (1).csv')
+dk.player = dk.player.apply(dc.name_clean)
+dk.loc[dk.position=='D', 'player'] = dk.loc[dk.position=='D', 'team']
+dk.loc[dk.position=='D', 'position'] = 'DST'
+
+dk = dk[['player', 'position', 'ownership']]
+dk['week'] = set_week
+dk['year'] = set_year
+
+dm.delete_from_db('Simulation', 'Projected_Ownership', f"week={set_week} AND year={set_year}")
+dm.write_to_db(dk, 'Simulation', 'Projected_Ownership', 'replace')
 
 
 # %%
+
+# import pandas as pd
+# dk = pd.read_csv('c:/Users/mborysia/Downloads/dk-ownership (1).csv')
+# dk = dk[['player', 'team', 'position', 'salary']].rename(columns={'salary': 'dk_salary'})
+
+# dk.player = dk.player.apply(dc.name_clean)
+# dk.team = dk.team.map(team_map)
+# dk.loc[dk.position=='D', 'position'] = 'DST'
+
+# fd = pd.read_csv('c:/Users/mborysia/Downloads/fd-ownership.csv')
+# fd = fd[['player', 'team', 'salary']].rename(columns={'salary': 'fd_salary'})
+# fd.player = fd.player.apply(dc.name_clean)
+# fd.team = fd.team.map(team_map)
+
+# yahoo_player = dm.read('''SELECT player, team, position, yahoo_salary
+#                           FROM Daily_Salaries
+#                           WHERE week=9 AND year=2021''', 'Pre_PlayerData')
+# yahoo_team = dm.read('''SELECT player, team, position, yahoo_salary
+#                         FROM Daily_Salaries
+#                         WHERE week=9 AND year=2021''', 'Pre_TeamData')
+# yahoo = pd.concat([yahoo_player, yahoo_team], axis=0)
+
+# df = pd.merge(dk, fd, on=['player', 'team'])
+# df = pd.merge(df, yahoo, on=['player', 'team', 'position'], how='left')
+
+# df['week'] = set_week
+# df['year'] = set_year
+
+# players = df[df.position!='DST']
+# teams = df[df.position=='DST']
+
+# dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', "week=9 AND year=2021")
+# dm.write_to_db(players, 'Pre_PlayerData', 'Daily_Salaries', 'append')
+
+# dm.delete_from_db('Pre_TeamData', 'Daily_Salaries', "week=9 AND year=2021")
+# dm.write_to_db(teams, 'Pre_TeamData', 'Daily_Salaries', 'append')
+

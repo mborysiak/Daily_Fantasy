@@ -95,6 +95,10 @@ def get_std_splines(pos, show_plot=False, k=2, s=2000):
                                   USING (player, offTeam, week, year)
                             WHERE week < 17''', 'Pre_PlayerData')
 
+    if pos=='QB':
+        proj = proj[(proj.ProjPts > 8) & (proj.projected_points > 8)].reset_index(drop=True)
+
+
     # get the rolling stats data    
     stats, _ = rolling_max_std(pos)
 

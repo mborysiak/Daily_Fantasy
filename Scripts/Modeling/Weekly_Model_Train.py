@@ -37,24 +37,28 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 8
+set_week = 10
 
-# set the earliest date to begin the validation set
-val_year_min = 2020
-val_week_min = 10
+model_type = 'backfill'
+vers = 'roll8_fullhist_kbestallstack_WRTEDEFkeep25_QBRBdrophalf'
 
-model_type = 'full_model'
-vers = 'roll8_fullhist_kbestallstack_keep25_or_drophalf'
-
-to_keep = 25
 n_iters = 25
+to_keep = 25
+
 drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
 keep_words = ['def', 'qb', 'team']
+
+
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
+
+    # set the earliest date to begin the validation set
+    val_year_min = 2020
+    if set_pos in ('WR', 'TE'): val_week_min = 12
+    else: val_week_min=10
 
     kbs = {
         'QB': [5, 50, 5],
@@ -176,7 +180,7 @@ for set_pos in positions:
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
     print('Shape of Train Set', df_train.shape)
-
+    
     #===========================================================================================
 
     # set up blank dictionaries for all metrics
@@ -239,11 +243,14 @@ for set_pos in positions:
         params['k_best__k'] = range(kbs[set_pos][0],kbs[set_pos][1], kbs[set_pos][2])
         if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
     
+        if model_type=='backfill':
+            params['feature_drop__col'] = [[None]]
+
         if set_pos in ('QB', 'RB'):
+            params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
+        else:
             to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
             params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(10)]
-        else:
-            params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
 
         # run the model with parameter search
         best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=n_iters,
@@ -304,11 +311,16 @@ for set_pos in positions:
             params['k_best_c__k'] = range(kbs[set_pos][0], kbs[set_pos][1], kbs[set_pos][2])
             if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
 
+
+            if model_type=='backfill':
+                params['feature_drop__col'] = [[None]]
+                
             if set_pos in ('QB', 'RB'):
+                params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
+            else:
                 to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
                 params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(10)]
-            else:
-                params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
+                
 
             # run the model with parameter search
             best_models, score_results, oof_data = skm_class.time_series_cv(pipe, X_class, y_class, 

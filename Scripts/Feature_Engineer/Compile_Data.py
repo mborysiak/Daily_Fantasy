@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 9
+WEEK = 10
 
 #%%
 import pandas as pd 
@@ -135,7 +135,6 @@ def drop_extra_bye_week(df):
     return df
 
 #%%
-
 
 #---------------
 # Pre Game Data
@@ -1483,7 +1482,6 @@ dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 # - add in PFF scores
 # - add in snaps and snap share
 # - Market share in terms of projected FP, dk salary, etc
-# - check into GBM / LGBM / XGB / RF param options and maybe adjust?
 #%%
 
 cur_pos = 'RB'

@@ -31,6 +31,7 @@ for k, p in zip([1, 2, 2, 2, 1], ['QB', 'RB', 'WR', 'TE', 'Defense']):
     print(f'Checking Splines for {p}')
     spl_sd, spl_perc = get_std_splines(p, show_plot=True, k=k)
     splines[p] = [spl_sd, spl_perc]
+
 #%%
 #==========
 # General Setting
@@ -44,7 +45,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 8
+set_week = 10
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -53,13 +54,11 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-model_type = 'full_model'
-vers = 'roll8_fullhist_kbestallstack_keep50'
+model_type = 'backfill'
+vers = 'roll8_fullhist_kbestallstack_WRTEDEFkeep25_QBRBdrophalf'
 
 if model_type == 'full_model': positions =['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
-
-#%%
 
 for set_pos in positions:
 
@@ -324,7 +323,7 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['ARI', 'GB', 'DAL', 'MIN','KC', 'NYG']
+drop_teams = ['NYJ', 'IND', 'TEN', 'LAR', 'CHI', 'PIT']
 
 teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
                     FROM FantasyPros

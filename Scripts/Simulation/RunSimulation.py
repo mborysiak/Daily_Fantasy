@@ -27,10 +27,10 @@ np.random.seed(1234)
 #--------
 
 # connection for simulation and specific table
-path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
+path = f'/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
 set_year = 2021
-league=8
+league=9
 
 # number of iteration to run
 iterations = 1000
@@ -57,6 +57,12 @@ sim = FootballSimulation(conn_sim, set_year, league)
 d = sim.return_data()
 d = d.rename(columns={'pos': 'Position', 'salary': 'Salary'})
 d.Position = d.Position.apply(lambda x: x[1:])
+
+# pull in projected ownership
+ownership = dm.read(f'''SELECT player Player, ownership Ownership
+                        FROM Projected_Ownership
+                        WHERE week={league} 
+                              AND year={set_year}''', 'Simulation')
 
 #------------------
 # For Beta Keepers
@@ -221,14 +227,14 @@ def create_bar(x_val, y_val, orient='h', color_str=main_color_rgba, text=None):
     return go.Bar(x=x_val, y=y_val, marker=marker_set, orientation=orient, text=text, showlegend=False)
 
 
-def create_fig_layout(fig1, fig2):
+def create_fig_layout(fig1, fig2, fig3):
     '''
     Function to combine bar charts into a single figure
     '''
-    fig = go.Figure(data=[fig1, fig2])
+    fig = go.Figure(data=[fig1, fig2, fig3])
     
     # Change the bar mode
-    fig.update_layout(barmode='group', autosize=True, height=1600, 
+    fig.update_layout(barmode='group', autosize=True, height=1800, 
                       margin=dict(l=0, r=25, b=0, t=15, pad=0),
                       uniformtext_minsize=25, uniformtext_mode='hide')
     fig.update_traces(texttemplate='%{text:.2s}', textposition='outside')
@@ -414,11 +420,16 @@ def update_output(n_clicks, n_clicks_csv, drafted_data, drafted_columns):
     avg_sal = avg_sal.sort_values(by='Percent Drafted').reset_index()
     avg_sal.columns = ['Player', 'PercentDrafted', 'AverageSalary', 'ExpectedSalaryDiff']
 
+    avg_sal = pd.merge(avg_sal, ownership, on='Player', how='left')
+    avg_sal.Ownership = avg_sal.Ownership.fillna(0)
+
     # Creating two subplots and merging into single figure
-    (pl, pc_dr, av_sl) = avg_sal.Player, avg_sal.PercentDrafted,  avg_sal.AverageSalary/1000
+    (pl, pc_dr, av_sl, own) = avg_sal.Player, avg_sal.PercentDrafted,  avg_sal.AverageSalary/1000, avg_sal.Ownership
     pick_bar = create_bar(pc_dr, pl, text=pc_dr)
-    sal_bar = create_bar(av_sl, pl, color_str='rgba(250, 190, 88, 1)', text=av_sl)
-    gr_fig = create_fig_layout(sal_bar, pick_bar)
+    sal_bar = create_bar(av_sl, pl, color_str='rgba(237, 137, 117, 1)', text=av_sl)
+    own_bar = create_bar(own, pl, color_str='rgba(250, 190, 88, 1)', text=own)
+
+    gr_fig = create_fig_layout(own_bar, sal_bar, pick_bar)
  
     # hist_fig = create_hist(cur_team_dist)
 
