@@ -323,11 +323,20 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['NYJ', 'IND', 'TEN', 'LAR', 'CHI', 'PIT']
+drop_teams = ['BAL', 'MIA', 'SF', 'LAR', 'KC', 'LVR']
 
-teams = dm.read(f'''SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, team 
+teams = dm.read(f'''SELECT player, team
+                    FROM (
+                    SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
+                        team,
+                        row_number() OVER (PARTITION BY player ORDER BY projected_points DESC) rn 
                     FROM FantasyPros
-                    WHERE week={set_week} AND year={set_year}''', 'Pre_PlayerData')
+                    WHERE week={set_week} AND year={set_year}
+                    ) WHERE rn=1''', 'Pre_PlayerData')
+
+dm.delete_from_db('Simulation', 'Player_Teams', f"week={set_week} AND year={set_year}")
+dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'append')
+
 
 preds = pd.merge(preds, teams, on=['player'])
 preds = preds[~preds.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)

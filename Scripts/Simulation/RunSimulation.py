@@ -20,7 +20,7 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
-np.random.seed(1234)
+# np.random.seed(1234)
 
 #--------
 # League Settings
@@ -30,7 +30,7 @@ np.random.seed(1234)
 path = f'/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
 set_year = 2021
-league=9
+league=10
 
 # number of iteration to run
 iterations = 1000
@@ -57,6 +57,7 @@ sim = FootballSimulation(conn_sim, set_year, league)
 d = sim.return_data()
 d = d.rename(columns={'pos': 'Position', 'salary': 'Salary'})
 d.Position = d.Position.apply(lambda x: x[1:])
+
 
 # pull in projected ownership
 ownership = dm.read(f'''SELECT player Player, ownership Ownership
@@ -119,19 +120,23 @@ main_color_rgba = f'rgba({main_color}, 0.8)'
 # Set up dataframe and Data Table for My Team
 #--------------
 
-player_list = []
-for pl, row in d.sort_values(by='Salary', ascending=False)[['Salary', 'Position']].iterrows():
-    if row.Position != 'FLEX':
-        player_list.append([row.Position, pl, row.Salary, 0])
+def get_pick_df(d):
+    player_list = []
+    for pl, row in d.sort_values(by='Salary', ascending=False)[['Salary', 'Position']].iterrows():
+        if row.Position != 'FLEX':
+            player_list.append([row.Position, pl, row.Salary, 0])
 
-pick_df = pd.DataFrame(player_list, columns=['Position', 'Player', 'List Salary', 'Salary'])
-pick_df['My Team'] = 'No'
+    pick_df = pd.DataFrame(player_list, columns=['Position', 'Player', 'List Salary', 'Salary'])
+    pick_df['My Team'] = 'No'
 
-for p, s in keepers.items():
-    pick_df.loc[pick_df.Player==p, 'Salary'] = s
+    for p, s in keepers.items():
+        pick_df.loc[pick_df.Player==p, 'Salary'] = s
+
+    return pick_df
 
 # set up all players drafted DataTable
-drafted_player_table =  dash_table.DataTable(
+def get_drafted_player_table(pick_df):
+    return dash_table.DataTable(
                             id='draft-results-table',
 
                             columns=[{'id': c, 'name': c, 'editable': (c == 'Salary')} for c in pick_df.columns if c != 'My Team'] +
@@ -279,34 +284,45 @@ file_download = dcc.Download(id="download")
 # Build out App Layout
 #============================
 
-app.layout = html.Div([
+def app_layout():
 
-     html.Div([
-         html.Div([
-            html.H5("Enter Draft Pick Information"),
-            drafted_player_table,
-            ], className="four columns"),
+    d = sim.create_sample_data()
+    d = d.rename(columns={'pos': 'Position', 'salary': 'Salary'})
+    d.Position = d.Position.apply(lambda x: x[1:])
 
-            html.Div([
-                html.H5('My Team'),
-                my_team_table, html.Hr(),
-                submit_button, html.Hr(),
-                html.H5('Team Information'),
-                team_info_table,
-                html.Hr(),
-                download_button, file_download,
-                html.Hr(),
-                hist_gr
-            ], className='four columns'),
+    pick_df = get_pick_df(d)
+    drafted_player_table = get_drafted_player_table(pick_df)
 
-            html.Div([
-                html.H5('Recommended Picks'),
-                bar_gr
-            ], className="four columns")
-       
-       ], className="row2") ,        
-         
-])
+    return html.Div([
+                html.Div([
+                    html.Div([
+                        html.H5("Enter Draft Pick Information"),
+                        drafted_player_table,
+                        ], className="four columns"),
+
+                        html.Div([
+                            html.H5('My Team'),
+                            my_team_table, html.Hr(),
+                            submit_button, html.Hr(),
+                            html.H5('Team Information'),
+                            team_info_table,
+                            html.Hr(),
+                            download_button, file_download,
+                            html.Hr(),
+                            hist_gr
+                        ], className='four columns'),
+
+                        html.Div([
+                            html.H5('Recommended Picks'),
+                            bar_gr
+                        ], className="four columns")
+
+                ], className="row2") ,        
+                    
+                ])
+
+
+app.layout = app_layout
 
 
 #============================

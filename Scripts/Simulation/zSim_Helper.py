@@ -19,7 +19,11 @@ class FootballSimulation():
     #==========
     
     def __init__(self, conn_sim, set_year, week):
-        
+
+        self.week = week
+        self.set_year = set_year
+        self.conn_sim = conn_sim
+
         # create empty dataframe to store player point distributions
         pos_update = {'QB': 'aQB', 'RB': 'bRB', 'WR': 'cWR', 'TE': 'dTE', 'Defense': 'fDST'}
         self.data = pd.read_sql_query(f'''SELECT * FROM week{week}_year{set_year}''', conn_sim)
@@ -44,12 +48,38 @@ class FootballSimulation():
         self.data = self.data.sort_values(by=['pos', 'salary'], ascending=[True, False])
         self.data = self.data.set_index('player')
 
+        # pull in teams for sampling
+        self.teams = pd.read_sql_query("SELECT * FROM Player_Teams", conn_sim)
+
     
     def return_data(self):
         '''
         Returns self.data if necessary.
         '''
         return self.data
+
+    def create_sample_data(self):
+
+        sample_data = self.data.copy()
+        teams = self.teams.set_index('player')
+        sample_data = pd.merge(sample_data, teams, left_index=True, right_index=True)
+        player_teams = sample_data[['team', 'pos']].reset_index()
+
+        teams = player_teams.team.unique()
+        teams = np.random.choice(teams, int(0.8*len(teams)))
+        qb_wrs_te = player_teams.loc[(player_teams.pos.isin(['aQB', 'cWR', 'dTE'])) & \
+                                    (player_teams.team.isin(teams)), 'player'].values
+
+        rb_def = player_teams.loc[(player_teams.pos.isin(['bRB', 'fDST'])), 'player'].values
+        rb_def = np.random.choice(rb_def, int(0.8*len(rb_def)))
+
+        self.sample_data = sample_data[(sample_data.index.isin(qb_wrs_te)) | \
+                                        (sample_data.index.isin(rb_def))].drop('team', axis=1)
+
+        self.sample_data = self.sample_data.sort_values(by=['pos', 'salary'], ascending=[True, False])
+
+
+        return self.sample_data
 
     #==========
     # Running the Simulation for Given League Settings and Keepers
@@ -72,7 +102,8 @@ class FootballSimulation():
         
         # create a copy of self.data for current iteration settings
         league_info = copy.deepcopy(league_info)
-        data = self.data.copy()
+        data = self.sample_data.copy()
+        # data = data.sample(frac=0.8).reset_index(drop=True)
         # pos = data[['pos']]
         # sal_col = data[['salary']]
         # data = self._df_shuffle(data.drop(['pos', 'salary'], axis=1))
@@ -556,36 +587,36 @@ class FootballSimulation():
 
 # %%
 
-# # connection for simulation and specific table
-# import os
-# import sqlite3
-# path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
-# conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
-# set_year = 2021
-# league=7
+# connection for simulation and specific table
+import os
+import sqlite3
+path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
+conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
+set_year = 2021
+league=7
 
-# # number of iteration to run
-# iterations = 1000
+# number of iteration to run
+iterations = 1000
 
-# # define point values for all statistical categories
-# pass_yd_per_pt = 0.04 
-# pass_td_pt = 4
-# int_pts = -2
-# sacks = -1
-# rush_yd_per_pt = 0.1 
-# rec_yd_per_pt = 0.1
-# rush_rec_td = 7
-# ppr = .5
+# define point values for all statistical categories
+pass_yd_per_pt = 0.04 
+pass_td_pt = 4
+int_pts = -2
+sacks = -1
+rush_yd_per_pt = 0.1 
+rec_yd_per_pt = 0.1
+rush_rec_td = 7
+ppr = .5
 
-# # creating dictionary containing point values for each position
-# pts_dict = {}
-# pts_dict['QB'] = [pass_yd_per_pt, pass_td_pt, rush_yd_per_pt, rush_rec_td, int_pts, sacks]
-# pts_dict['RB'] = [rush_yd_per_pt, rec_yd_per_pt, ppr, rush_rec_td]
-# pts_dict['WR'] = [rec_yd_per_pt, ppr, rush_rec_td]
-# pts_dict['TE'] = [rec_yd_per_pt, ppr, rush_rec_td]
+# creating dictionary containing point values for each position
+pts_dict = {}
+pts_dict['QB'] = [pass_yd_per_pt, pass_td_pt, rush_yd_per_pt, rush_rec_td, int_pts, sacks]
+pts_dict['RB'] = [rush_yd_per_pt, rec_yd_per_pt, ppr, rush_rec_td]
+pts_dict['WR'] = [rec_yd_per_pt, ppr, rush_rec_td]
+pts_dict['TE'] = [rec_yd_per_pt, ppr, rush_rec_td]
 
-# # instantiate simulation class and add salary information to data
-# sim =  FootballSimulation(conn_sim, set_year, league)
+# instantiate simulation class and add salary information to data
+sim =  FootballSimulation(conn_sim, set_year, league)
 
 # # set league information, included position requirements, number of teams, and salary cap
 # league_info = {}
