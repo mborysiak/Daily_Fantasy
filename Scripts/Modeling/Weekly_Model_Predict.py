@@ -27,7 +27,7 @@ from sklearn import set_config
 set_config(display='diagram')
 
 splines = {}
-for k, p in zip([1, 2, 2, 2, 1], ['QB', 'RB', 'WR', 'TE', 'Defense']):
+for k, p in zip([1, 2, 2, 2, 2], ['QB', 'RB', 'WR', 'TE', 'Defense']):
     print(f'Checking Splines for {p}')
     spl_sd, spl_perc = get_std_splines(p, show_plot=True, k=k)
     splines[p] = [spl_sd, spl_perc]
@@ -45,7 +45,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 10
+set_week = 11
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -57,7 +57,7 @@ met = 'y_act'
 model_type = 'backfill'
 vers = 'roll8_fullhist_kbestallstack_WRTEDEFkeep25_QBRBdrophalf'
 
-if model_type == 'full_model': positions =['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
@@ -136,7 +136,6 @@ for set_pos in positions:
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
     print('Shape of Train Set', df_train.shape)
-
     #------------
     # Make the Class Predictions
     #------------
@@ -262,10 +261,11 @@ for set_pos in positions:
     # output = pd.concat([output, predictions], axis=1)
     output['pred_fp_per_game'] = predictions.mean(axis=1)
     _, recent = rolling_max_std(set_pos)
-    output = pd.merge(output, recent, on='player')
+    output = pd.merge(output, recent, on='player', how='left')
+    output.roll_std = output.roll_std.fillna(recent.roll_std.median())
+    output.roll_max = output.roll_max.fillna(recent.roll_std.median())
 
-    if set_pos == 'Defense': output = create_sd_max_metrics(output, defense=True)
-    else: output = create_sd_max_metrics(output, defense=False)
+    output = create_sd_max_metrics(output)
 
     output['std_dev'] = splines[set_pos][0](output.sd_metric)
     output['max_score'] = splines[set_pos][1](output.max_metric)
@@ -323,7 +323,7 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['BAL', 'MIA', 'SF', 'LAR', 'KC', 'LVR']
+drop_teams = ['PIT', 'LAC', 'NYG', 'TB', 'NE', 'ATL']
 
 teams = dm.read(f'''SELECT player, team
                     FROM (
@@ -334,8 +334,8 @@ teams = dm.read(f'''SELECT player, team
                     WHERE week={set_week} AND year={set_year}
                     ) WHERE rn=1''', 'Pre_PlayerData')
 
-dm.delete_from_db('Simulation', 'Player_Teams', f"week={set_week} AND year={set_year}")
-dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'append')
+# dm.delete_from_db('Simulation', 'Player_Teams', f"week={set_week} AND year={set_year}")
+dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'replace')
 
 
 preds = pd.merge(preds, teams, on=['player'])

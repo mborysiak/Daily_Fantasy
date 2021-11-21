@@ -22,8 +22,8 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 pd.set_option('display.max_columns', 999)
 
-from sklearn import set_config
-set_config(display='diagram')
+# from sklearn import set_config
+# set_config(display='diagram')
 
 #==========
 # General Setting
@@ -37,9 +37,9 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 10
+set_week = 11
 
-model_type = 'backfill'
+model_type = 'full_model'
 vers = 'roll8_fullhist_kbestallstack_WRTEDEFkeep25_QBRBdrophalf'
 
 n_iters = 25
@@ -50,7 +50,7 @@ keep_words = ['def', 'qb', 'team']
 
 
 
-if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions = ['WR']# ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
@@ -201,7 +201,7 @@ for set_pos in positions:
     params = skm.default_params(pipe)
     params['k_best__k'] = range(5)
     params['feature_select__cols'] = [['ProjPts', 'dk_salary', 'fantasyPoints', 'year', 'week']]
-
+#%%
     # fit and append the ADP model
     best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
                                                    col_split='game_date', 
@@ -424,114 +424,101 @@ for set_pos in positions:
     dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
     dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
 
-# %%
-
-skm = SciKitModel(df_train)
-X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
-
-drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
-keep_words = ['def', 'qb', 'team']#, 'miss', 'team', 'diff']
-to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
-params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-3, replace=False)) for _ in range(10)]
-
-# random_dc = list(np.random.choice(to_drop, len(to_drop)-5, replace=False))
-# print([c for c in to_drop if c not in random_dc])
-
-pipe = skm.model_pipe([skm.piece('feature_drop'),
-                        skm.piece('std_scale'), 
-                        # skm.piece('k_best'),
-                        skm.piece('ridge')])
-params = skm.default_params(pipe)
-params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-3, replace=False)) for _ in range(10)]
-params['k_best__k'] = range(10, 100, 10)
-
-# fit and append the ADP model
-best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
-                                                col_split='game_date', 
-                                                time_split=cv_time_input)
 
 #%%
+
+df_train_subset = df_train[df_train.ProjPts > np.percentile(df_train.ProjPts, 20)].reset_index(drop=True)
+
 skm = SciKitModel(df_train)
 X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
-drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
-keep_words = ['def', 'qb', 'team']#, 'miss', 'team', 'diff']
-to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+plt.hist(y)
+plt.show()
 
-drop_pct = 0.8
-num_drop = int(len(X.columns)*drop_pct)
-model = 'enet'
+y = y + abs(y.min()) + 1
+plt.hist(np.log1p(y))
+plt.show()
 
-pipe = skm.model_pipe([#skm.piece('feature_drop'),
+#%%
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.preprocessing import QuantileTransformer
+from sklearn.linear_model import PoissonRegressor
+from lightgbm import LGBMRegressor
+from xgboost import XGBRegressor
+
+# set up the model pipe and get the default search parameters
+pipe = skm.model_pipe([
+                         skm.piece('feature_drop'),
                         skm.piece('std_scale'), 
-                        # skm.feature_union([
-                        #                     skm.piece('agglomeration'), 
-                        #                     skm.piece('k_best'),
-                        #                     skm.piece('pca')
-                        #                     ]),
+                        skm.piece('select_perc'),
+                        skm.feature_union([
+                                    skm.piece('agglomeration'), 
+                                    skm.piece('k_best'),
+                                    # skm.piece('pca')
+                                    ]),
                         skm.piece('k_best'),
-                        skm.piece(model)])
-params = skm.default_params(pipe)
-params['k_best__k'] = range(5, 50, 5)
-# params['feature_drop__col'] = [list(np.random.choice(X.columns, num_drop, replace=False)) for _ in range(25)]
+                        # ('ridge', PoissonRegressor())
+                        # ('lgbm', LGBMRegressor(n_jobs=1, objective='tweedie'))
+                        # ('xgb', XGBRegressor(n_jobs=1, objective='reg:tweedie'))
+                        skm.piece('xgb')
+                        ])
+
+
+# set params
+params = skm.default_params(pipe, 'rand')
+params['select_perc__percentile'] = range(prc[set_pos][0],  prc[set_pos][1], prc[set_pos][2])
+params['k_best__k'] = range(kbs[set_pos][0],kbs[set_pos][1], kbs[set_pos][2])
+if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
+
+if model_type=='backfill':
+    params['feature_drop__col'] = [[None]]
+
+if set_pos in ('QB', 'RB'):
+    params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
+else:
+    to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+    params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(10)]
+
+transform = False
+
+if transform:
+    print('yes_transform')
+    # pipe = TransformedTargetRegressor(pipe, func=np.log1p, inverse_func=np.expm1)
+    pipe = TransformedTargetRegressor(pipe, transformer=QuantileTransformer(output_distribution="normal"))
+    from sklearn.pipeline import Pipeline
+    pipe = Pipeline([('full_pipe', pipe)])
+    params = {'full_pipe__regressor__'+k: v for k, v in params.items()}
 
 # fit and append the ADP model
 best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
                                                 col_split='game_date', 
                                                 time_split=cv_time_input)
 
-#%%
-skm = SciKitModel(df_train)
-X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
+import matplotlib.pyplot as plt
+from sklearn.metrics import r2_score, mean_squared_error
 
-drop_pct = 0.5
-num_drop = int(len(X.columns)*drop_pct)
-model = 'rf'
+try: del oof_data['val']
+except: pass
+results = pd.DataFrame(oof_data)
 
-pipe = skm.model_pipe([#skm.piece('feature_drop'),
-                       skm.piece('std_scale'), 
-                    #    skm.piece('select_perc'),
-                    #     skm.feature_union([
-                    #                         skm.piece('agglomeration'), 
-                    #                         skm.piece('k_best'),
-                    #                         skm.piece('pca')
-                    #                         ]),
-                       skm.piece('k_best'),
-                        skm.piece(model)])
-params = skm.default_params(pipe)
-params['k_best__k'] = range(5, 75, 5)
-# params['select_perc__percentile'] = range(5, 35, 5)
+print(r2_score(oof_data['actual'], oof_data['hold']))
+plt.scatter(oof_data['hold'], oof_data['actual'])
 
-params['rf__n_estimators']= range(20, 150, 10)
-params['rf__max_depth']= range(2, 30, 3)
-params['rf__min_samples_leaf'] = range(3, 15)
-params['rf__max_features'] = [0.8, 0.9, 1]
-# params['rf__subsample'] =  [1]
-# params['feature_drop__col'] = [list(np.random.choice(X.columns, num_drop, replace=False)) for _ in range(25)]
+high_pred = results[results.hold > np.percentile(results.hold, 75)]
+print(r2_score(high_pred.actual, high_pred.hold))
+plt.scatter(high_pred.hold,high_pred.actual)
+plt.show()
 
-# fit and append the ADP model
-best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
-                                                col_split='game_date', 
-                                                time_split=cv_time_input)
+print(np.sqrt(mean_squared_error(high_pred.actual, high_pred.hold)))
+results['resid'] = results.actual - results.hold
+plt.scatter(results.hold, results.resid)
 
 #%%
 i = 4
-try: coefs = best_models[i].named_steps[model].coef_
-except: coefs = best_models[i].named_steps[model].feature_importances_
+try: coefs = best_models[i].named_steps[m].coef_
+except: coefs = best_models[i].named_steps[m].feature_importances_
 try:cols = X.drop(best_models[i].named_steps['feature_drop'].col, axis=1).columns[best_models[i].named_steps['k_best'].get_support()]
 except: cols = X.columns[best_models[i].named_steps['k_best'].get_support()]
 pd.Series(coefs, index=cols).sort_values().plot.barh(figsize=(5,10))
 # %%
-params['gbm__n_estimators']= range(10, 100, 10)
-params['gbm__max_depth']= range(2, 30, 3)
-params['gbm__min_samples_leaf'] = range(5, 20, 2)
-params['gbm__max_features'] = [0.7, 0.8, 0.9, 1]
-params['gbm__subsample'] =  [0.5, 0.6, 0.7]
-
-
-params['lgbm__n_estimators']= range(10, 100, 10)
-params['lgbm__max_depth']= range(2, 30, 3)
-params['lgbm__reg_lambda'] = range(0, 100, 10)
-params['lgbm__colsample_bytree'] = [0.7, 0.8, 0.9, 1]
-params['lgbm__subsample'] =  [1]

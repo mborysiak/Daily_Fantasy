@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 10
+WEEK = 11
 
 #%%
 import pandas as pd 
@@ -1548,3 +1548,9 @@ team_stats = team_stats.reset_index().drop_duplicates()
 
 df = pd.merge(df, team_stats, on=['team', 'week', 'year'])
 df = pd.merge(df, diff_df, on=['player', 'team', 'week', 'year'])
+
+#%%
+
+df = dm.read('''SELECT * FROM WR_Stats WHERE season>=2020 AND rec_yards_gained_sum > 10 ''', 'FastR')
+df.fantasy_pts.plot.hist()
+# %%

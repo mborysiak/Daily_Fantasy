@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 10
+set_week = 11
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -417,6 +417,8 @@ for t, d, db in zip(tables, dfs, dbs):
 #     df[i].player = df[i].player.apply(dc.name_clean)
 #     dm.write_to_db(df[i], 'Pre_PlayerData', 'PlayerInjuries', 'append')
 # %%
+
+# https://www.nfl.com/injuries/league/2021/reg11
 
 df = pd.read_csv(f'{root_path}/Data/OtherData/Injury_Status/{set_year}/week{set_week}.csv', 
                  encoding='latin', skip_blank_lines=True, error_bad_lines=False)
