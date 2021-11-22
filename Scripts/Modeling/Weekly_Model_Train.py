@@ -180,7 +180,7 @@ for set_pos in positions:
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
     print('Shape of Train Set', df_train.shape)
-    
+#%%
     #===========================================================================================
 
     # set up blank dictionaries for all metrics
@@ -201,7 +201,7 @@ for set_pos in positions:
     params = skm.default_params(pipe)
     params['k_best__k'] = range(5)
     params['feature_select__cols'] = [['ProjPts', 'dk_salary', 'fantasyPoints', 'year', 'week']]
-#%%
+
     # fit and append the ADP model
     best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
                                                    col_split='game_date', 
@@ -427,9 +427,12 @@ for set_pos in positions:
 
 #%%
 
+#=====================================================
+
+
 df_train_subset = df_train[df_train.ProjPts > np.percentile(df_train.ProjPts, 20)].reset_index(drop=True)
 
-skm = SciKitModel(df_train)
+skm = SciKitModel(df_train_subset)
 X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
 plt.hist(y)
@@ -439,16 +442,20 @@ y = y + abs(y.min()) + 1
 plt.hist(np.log1p(y))
 plt.show()
 
+y = np.log1p(y)
+
 #%%
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.preprocessing import QuantileTransformer
 from sklearn.linear_model import PoissonRegressor
 from lightgbm import LGBMRegressor
 from xgboost import XGBRegressor
+import matplotlib.pyplot as plt
 
 # set up the model pipe and get the default search parameters
+m = 'enet'
 pipe = skm.model_pipe([
-                         skm.piece('feature_drop'),
+                        skm.piece('feature_drop'),
                         skm.piece('std_scale'), 
                         skm.piece('select_perc'),
                         skm.feature_union([
@@ -460,7 +467,7 @@ pipe = skm.model_pipe([
                         # ('ridge', PoissonRegressor())
                         # ('lgbm', LGBMRegressor(n_jobs=1, objective='tweedie'))
                         # ('xgb', XGBRegressor(n_jobs=1, objective='reg:tweedie'))
-                        skm.piece('xgb')
+                        skm.piece(m)
                         ])
 
 
@@ -483,11 +490,13 @@ transform = False
 
 if transform:
     print('yes_transform')
-    # pipe = TransformedTargetRegressor(pipe, func=np.log1p, inverse_func=np.expm1)
-    pipe = TransformedTargetRegressor(pipe, transformer=QuantileTransformer(output_distribution="normal"))
+    pipe = TransformedTargetRegressor(pipe, func=np.log1p, inverse_func=np.expm1)
+    # pipe = TransformedTargetRegressor(pipe, transformer=QuantileTransformer(output_distribution="normal"))
     from sklearn.pipeline import Pipeline
     pipe = Pipeline([('full_pipe', pipe)])
     params = {'full_pipe__regressor__'+k: v for k, v in params.items()}
+else:
+    print('no_transform')
 
 # fit and append the ADP model
 best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
@@ -495,12 +504,14 @@ best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
                                                 time_split=cv_time_input)
 
 
-import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score, mean_squared_error
 
 try: del oof_data['val']
 except: pass
 results = pd.DataFrame(oof_data)
+
+oof_data['actual'] = np.exp(oof_data['actual'])
+oof_data['hold'] = np.exp(oof_data['hold'])
 
 print(r2_score(oof_data['actual'], oof_data['hold']))
 plt.scatter(oof_data['hold'], oof_data['actual'])

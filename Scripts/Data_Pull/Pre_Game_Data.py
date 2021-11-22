@@ -502,6 +502,47 @@ dk['year'] = set_year
 dm.delete_from_db('Simulation', 'Projected_Ownership', f"week={set_week} AND year={set_year}")
 dm.write_to_db(dk, 'Simulation', 'Projected_Ownership', 'replace')
 
+#%%
+
+
+try:
+    os.replace(f"/Users/mborysia/Downloads/DKSalariesShowdown.csv", 
+            f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv')   
+except:
+    print('No file to move')
+
+ids = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv',
+                  skiprows=7).dropna(axis=1)
+ids = ids[['Name', 'ID']].rename(columns={'ID': 'GoodId'})
+
+salary_id = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv',
+                        skiprows=7).dropna(axis=1)
+salary_id = pd.merge(salary_id, ids, on='Name', how='left')
+salary_id.loc[~salary_id.GoodId.isnull(), 'ID'] = salary_id.loc[~salary_id.GoodId.isnull(), 'GoodId']
+
+salary_id = salary_id.rename(columns={'Name': 'player', 'Salary': 'salary', 'ID': 'player_id', 'Roster Position': 'pos'})
+salary_id.player = salary_id.player.apply(dc.name_clean)
+
+defense = salary_id.loc[salary_id['pos']=='DST', ['TeamAbbrev', 'salary', 'player_id']]
+salary_id = salary_id.loc[salary_id['pos'] != 'DST']
+salary_id = salary_id[['player', 'pos', 'salary', 'player_id']]
+salary_id = pd.concat([salary_id, defense.rename(columns={'TeamAbbrev': 'player'})], axis=0)
+
+salary = salary_id[['player', 'pos', 'salary']]
+salary = salary.assign(year=set_year).assign(league=set_week)
+salary = salary.drop_duplicates().reset_index(drop=True)
+
+salary.loc[salary.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
+
+ids = salary_id[['player', 'player_id']]
+ids = ids.assign(year=set_year).assign(league=set_week)
+ids.loc[ids.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
+
+dm.delete_from_db('Simulation', 'Showdown_Salaries', f"league={set_week} AND year={set_year}")
+dm.write_to_db(salary, 'Simulation', 'Showdown_Salaries', 'append')
+
+dm.delete_from_db('Simulation', 'Showdown_Player_Ids', f"league={set_week} AND year={set_year}")
+dm.write_to_db(ids, 'Simulation', 'Showdown_Player_Ids', 'append')
 
 # %%
 
