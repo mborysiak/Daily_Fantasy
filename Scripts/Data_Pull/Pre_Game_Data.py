@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 11
+set_week = 12
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -544,41 +544,87 @@ dm.write_to_db(salary, 'Simulation', 'Showdown_Salaries', 'append')
 dm.delete_from_db('Simulation', 'Showdown_Player_Ids', f"league={set_week} AND year={set_year}")
 dm.write_to_db(ids, 'Simulation', 'Showdown_Player_Ids', 'append')
 
+#%%
+k_points = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv',
+                        skiprows=7).dropna(axis=1)
+k_points = k_points.loc[k_points.Position=='K', ['Name', 'AvgPointsPerGame']].drop_duplicates()
+k_points.columns = ['player', 'pred_fp_per_game']
+k_points['std_dev'] = k_points.pred_fp_per_game / 2
+k_points['max_score'] = k_points.pred_fp_per_game * 2.5
+k_points['min_score'] = 0
+k_points['week'] = set_week
+k_points['year'] = set_year
+vers = dm.read("SELECT version FROM Model_Predictions WHERE version IS NOT NULL", 'Simulation').iloc[-1]['version']
+k_points['version'] = vers
+dm.write_to_db(k_points, 'Simulation', 'Model_Predictions', 'append')
+
 # %%
 
-# import pandas as pd
-# dk = pd.read_csv('c:/Users/mborysia/Downloads/dk-ownership (1).csv')
-# dk = dk[['player', 'team', 'position', 'salary']].rename(columns={'salary': 'dk_salary'})
 
-# dk.player = dk.player.apply(dc.name_clean)
-# dk.team = dk.team.map(team_map)
-# dk.loc[dk.position=='D', 'position'] = 'DST'
 
-# fd = pd.read_csv('c:/Users/mborysia/Downloads/fd-ownership.csv')
-# fd = fd[['player', 'team', 'salary']].rename(columns={'salary': 'fd_salary'})
-# fd.player = fd.player.apply(dc.name_clean)
-# fd.team = fd.team.map(team_map)
+def clean_alt_salary(df, sal):
+    cols = ['player', 'position', 'year', 'week', 'salary', 'score', 'factor', 'rank']
+    df.columns = cols
+    df.salary = df.salary.apply(lambda x: int(x.replace('$', '')))
 
-# yahoo_player = dm.read('''SELECT player, team, position, yahoo_salary
-#                           FROM Daily_Salaries
-#                           WHERE week=9 AND year=2021''', 'Pre_PlayerData')
-# yahoo_team = dm.read('''SELECT player, team, position, yahoo_salary
-#                         FROM Daily_Salaries
-#                         WHERE week=9 AND year=2021''', 'Pre_TeamData')
-# yahoo = pd.concat([yahoo_player, yahoo_team], axis=0)
+    if sal == 'fd': df.loc[df.position=='D', 'position'] = 'DST'
+    df_pl = df[df.position != 'DST'].reset_index(drop=True)
+    df_team = df[df.position == 'DST'].reset_index(drop=True)
 
-# df = pd.merge(dk, fd, on=['player', 'team'])
-# df = pd.merge(df, yahoo, on=['player', 'team', 'position'], how='left')
+    df_pl.player = df_pl.player.apply(lambda x: x.split(',')[1].lstrip() + ' ' + x.split(',')[0])
+    df_pl.player = df_pl.player.apply(dc.name_clean)
 
-# df['week'] = set_week
-# df['year'] = set_year
+    if sal == 'dk':
+        df_team.player = df_team.player.apply(lambda x: x.replace(',', ''))
+        df_team.player = df_team.player.map(full_team_map)
+    else:    
+        alt_team_map = {' '.join(k.split(' ')[:-1]): v for k, v in full_team_map.items()}
+        df_team.player = df_team.player.map(alt_team_map)
 
-# players = df[df.position!='DST']
-# teams = df[df.position=='DST']
+    df_team['team'] = df_team.player
+    df_team = df_team[['player', 'team', 'position', 'salary']].rename(columns={'salary': f'{sal}_salary'})
 
-# dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', "week=9 AND year=2021")
-# dm.write_to_db(players, 'Pre_PlayerData', 'Daily_Salaries', 'append')
+    teams = dm.read(f'''SELECT player, team
+                        FROM (
+                        SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
+                            team,
+                            row_number() OVER (PARTITION BY player ORDER BY year, week, projected_points DESC) rn 
+                        FROM FantasyPros
+                        ) WHERE rn=1''', 'Pre_PlayerData')
 
-# dm.delete_from_db('Pre_TeamData', 'Daily_Salaries', "week=9 AND year=2021")
-# dm.write_to_db(teams, 'Pre_TeamData', 'Daily_Salaries', 'append')
+    df_pl = pd.merge(df_pl, teams, on=['player'])
 
+    df_pl = df_pl[['player', 'team', 'position', 'salary']].rename(columns={'salary': f'{sal}_salary'})
+
+
+    return df_pl, df_team
+
+dk = pd.read_html('https://www.footballdiehards.com/fantasyfootball/dailygames/Draftkings-Salary-data.cfm')[0]
+dk_pl, dk_team = clean_alt_salary(dk, 'dk')
+
+fd = pd.read_html('https://www.footballdiehards.com/fantasyfootball/dailygames/Fanduel-Salary-data.cfm')[0]
+fd_pl, fd_team = clean_alt_salary(fd, 'fd')
+
+
+yahoo_pl = dm.read('''SELECT player, team, position, yahoo_salary
+                          FROM Daily_Salaries
+                          WHERE week=11 AND year=2021''', 'Pre_PlayerData')
+yahoo_team = dm.read('''SELECT team, position, yahoo_salary
+                        FROM Daily_Salaries
+                        WHERE week=9 AND year=2021''', 'Pre_TeamData')
+df_pl = pd.merge(dk_pl, fd_pl, on=['player', 'team', 'position'], how='left')
+df_pl = pd.merge(df_pl, yahoo_pl, on=['player', 'team', 'position'], how='left')
+df_pl = df_pl.assign(week=set_week).assign(year=set_year)
+
+df_team = pd.merge(dk_team, fd_team, on=['player', 'team', 'position'], how='left')
+df_team = pd.merge(df_team, yahoo_team, on=['team', 'position'], how='left')
+df_team = df_team.assign(week=set_week).assign(year=set_year)
+
+dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
+dm.write_to_db(df_pl, 'Pre_PlayerData', 'Daily_Salaries', 'append')
+
+dm.delete_from_db('Pre_TeamData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
+dm.write_to_db(df_team, 'Pre_TeamData', 'Daily_Salaries', 'append')
+
+
+# %%

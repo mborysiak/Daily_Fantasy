@@ -60,18 +60,20 @@ class FootballSimulation():
 
     def create_sample_data(self):
 
+        frac = 0.7
+
         sample_data = self.data.copy()
         teams = self.teams.set_index('player')
         sample_data = pd.merge(sample_data, teams, left_index=True, right_index=True)
         player_teams = sample_data[['team', 'pos']].reset_index()
 
         teams = player_teams.team.unique()
-        teams = np.random.choice(teams, int(0.8*len(teams)))
+        teams = np.random.choice(teams, int(frac*len(teams)), replace=False)
         qb_wrs_te = player_teams.loc[(player_teams.pos.isin(['aQB', 'cWR', 'dTE'])) & \
                                     (player_teams.team.isin(teams)), 'player'].values
 
         rb_def = player_teams.loc[(player_teams.pos.isin(['bRB', 'fDST'])), 'player'].values
-        rb_def = np.random.choice(rb_def, int(0.8*len(rb_def)))
+        rb_def = np.random.choice(rb_def, int(frac*len(rb_def)), replace=False)
 
         self.sample_data = sample_data[(sample_data.index.isin(qb_wrs_te)) | \
                                         (sample_data.index.isin(rb_def))].drop('team', axis=1)

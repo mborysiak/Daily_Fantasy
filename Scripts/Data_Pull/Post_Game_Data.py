@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 10
+set_week = 11
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -383,7 +383,6 @@ df.player = df.player.apply(dc.name_clean)
 df = df.rename(columns={'team_name': 'team'})
 df.team = df.team.map(team_map)
 
-#%%
 dm.delete_from_db('Post_PlayerData', 'Offensive_Line_Players', f"week={set_week} AND year={set_year}")
 dm.write_to_db(df, 'Post_PlayerData', 'Offensive_Line_Players', 'append')
 # %%

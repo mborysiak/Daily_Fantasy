@@ -39,9 +39,8 @@ class FootballSimulation():
 
         # add flex data
         self.data.loc[self.data.pos=='CPT', 'pos'] = 'aCPT'
-        flex = self.data[self.data.pos.isin(['aCPT'])]
-        flex.loc[:, 'pos'] = 'bFLEX'
-        self.data = pd.concat([self.data, flex], axis=0)
+        self.data.loc[self.data.pos=='FLEX', 'pos'] = 'bFLEX'
+     
         
         # reset index
         self.data = self.data.sort_values(by=['pos', 'salary'], ascending=[True, False])
@@ -80,6 +79,7 @@ class FootballSimulation():
         # create a copy of self.data for current iteration settings
         league_info = copy.deepcopy(league_info)
         data = self.data.copy()
+
         # data = data.sample(frac=0.8).reset_index(drop=True)
         # pos = data[['pos']]
         # sal_col = data[['salary']]
@@ -92,7 +92,8 @@ class FootballSimulation():
         # drop your selected players + calculate inflation metrics
         data, league_info, to_add, add_proj_sal, add_act_sal = self._add_players(data, league_info, to_add)
         pos_require = list(league_info['pos_require'].values())
-        
+        positions = data.pos
+
         # calculate inflation based on drafted players and their salaries
         inflation = 1
 
@@ -109,7 +110,8 @@ class FootballSimulation():
 
         # pull out the names of all players and set to names
         names = data.index
-        dict_names = list(data.index)
+        dict_names = [d + '_CPT' for d in data.index]
+        dict_names.extend([d + '_FLEX' for d in data.index])
         dict_names.extend(to_add['players'])
         
         # create empty matrices
@@ -145,7 +147,7 @@ class FootballSimulation():
             x = self._run_opt(A, points, salaries_tmp, league_info['salary_cap'], pos_require)
 
             # pull out and store the selected names, points, and salaries
-            results, self.counts, trial_counts = self._pull_results(x, names, points, salaries_tmp, 
+            results, self.counts, trial_counts = self._pull_results(x, names, positions, points, salaries_tmp, 
                                                                     to_add, results, counts, trial_counts)
         
         # format the results after the simulation loop is finished
@@ -153,7 +155,11 @@ class FootballSimulation():
 
         # add self version of variable for output calculations
         self._inflation = inflation
-        self._sal = self.data.reset_index()[['player', 'salary']].drop_duplicates().set_index('player')
+        self._sal = self.data.reset_index()[['player', 'pos', 'salary']].drop_duplicates()
+        self._sal.pos = self._sal.pos.apply(lambda x: x[1:])
+        self._sal.player = self._sal.player = self._sal.player + '_' + self._sal.pos 
+        self._sal = self._sal.set_index('player').drop('pos', axis=1)
+        
 
         return self.counts, inflation, 
     
@@ -196,6 +202,9 @@ class FootballSimulation():
         #--------
         # Dropping Other Team's Players
         #--------
+
+        # remove the position from the player name to drop from dataset
+        to_drop['players'] = [p.split('_')[0] for p in to_drop['players']]
         
         # find players from data that will be dropped and remove them from other data
         drop_data = data[data.index.isin(to_drop['players'])]
@@ -219,6 +228,9 @@ class FootballSimulation():
         Return: The players that remain available for the simulation, the players to be kept,
                 and metrics to calculate salary inflation.
         '''
+
+        # remove the position from the player name to drop from dataset
+        to_add['players'] = [p.split('_')[0] for p in to_add['players']]
         
         # pull data for players that have been added to your team and split out other players
         add_data = data[data.index.isin(to_add['players'])]
@@ -432,7 +444,7 @@ class FootballSimulation():
     #==========
     
     @staticmethod
-    def _pull_results(x, names, points, salaries, to_add, results, counts, trial_counts):
+    def _pull_results(x, names, positions, points, salaries, to_add, results, counts, trial_counts):
         '''
         This method pulls in each individual result from the simulation loop and stores it in dictionaries.
         
@@ -448,6 +460,8 @@ class FootballSimulation():
         trial_counts += 1
         
         names_ = list(names[x])
+        positions_ = list(positions[x])
+        names_ = [f'{n}_{p[1:]}' for n, p in zip(names_, positions_)]
         names_.extend(to_add['players'])
         
         points_ = list(points[x])
@@ -562,7 +576,7 @@ class FootballSimulation():
         return avg_sal
 
 
-# %%
+#%%
 
 # # connection for simulation and specific table
 # import os
@@ -570,10 +584,10 @@ class FootballSimulation():
 # path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 # conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
 # set_year = 2021
-# league=7
+# league=11
 
 # # number of iteration to run
-# iterations = 1000
+# iterations = 10
 
 # # define point values for all statistical categories
 # pass_yd_per_pt = 0.04 
@@ -593,11 +607,11 @@ class FootballSimulation():
 # pts_dict['TE'] = [rec_yd_per_pt, ppr, rush_rec_td]
 
 # # instantiate simulation class and add salary information to data
-# sim =  FootballSimulation(conn_sim, set_year, league)
+# sim = FootballSimulation(conn_sim, set_year, league)
 
 # # set league information, included position requirements, number of teams, and salary cap
 # league_info = {}
-# league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DEF': 1}
+# league_info['pos_require'] = {'CPT': 1, 'FLEX': 5}
 # league_info['num_teams'] = 12
 # league_info['initial_cap'] = 50000
 # league_info['salary_cap'] = 50000

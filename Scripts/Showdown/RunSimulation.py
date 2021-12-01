@@ -30,10 +30,10 @@ dm = DataManage(db_path)
 path = f'/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
 set_year = 2021
-league=11
+league=12
 
 # number of iteration to run
-iterations = 250
+iterations = 1000
 
 # set league information, included position requirements, number of teams, and salary cap
 league_info = {}
@@ -114,8 +114,7 @@ main_color_rgba = f'rgba({main_color}, 0.8)'
 def get_pick_df(d):
     player_list = []
     for pl, row in d.sort_values(by='Salary', ascending=False)[['Salary', 'Position']].iterrows():
-        if row.Position != 'FLEX':
-            player_list.append([row.Position, pl, row.Salary, 0])
+        player_list.append([row.Position, pl, row.Salary, 0])
 
     pick_df = pd.DataFrame(player_list, columns=['Position', 'Player', 'List Salary', 'Salary'])
     pick_df['My Team'] = 'No'
@@ -331,7 +330,7 @@ def update_to_drop(df):
     to_drop['salaries'] = []
     for _, row in df.iterrows():
         if row.Salary > 0:
-            to_drop['players'].append(row.Player)
+            to_drop['players'].append(row.Player + '_' + row.Position)
             to_drop['salaries'].append(row.Salary)
 
     return to_drop
@@ -348,7 +347,7 @@ def update_to_add(df):
     to_add['salaries'] = []
     for _, row in df.iterrows():
         if row.Player is not None and row.Player!='' and row.Salary > 0:
-            to_add['players'].append(row.Player)
+            to_add['players'].append(row.Player + '_' + row.Position)
             to_add['salaries'].append(row.Salary)
 
     return to_add
@@ -426,7 +425,6 @@ def update_output(n_clicks, n_clicks_csv, drafted_data, drafted_columns):
     avg_sal = sim.show_most_selected(to_add, iterations, num_show=30)
     avg_sal = avg_sal.sort_values(by='Percent Drafted').reset_index()
     avg_sal.columns = ['Player', 'PercentDrafted', 'AverageSalary', 'ExpectedSalaryDiff']
-
 
     # Creating two subplots and merging into single figure
     (pl, pc_dr, av_sl) = avg_sal.Player, avg_sal.PercentDrafted,  avg_sal.AverageSalary/1000

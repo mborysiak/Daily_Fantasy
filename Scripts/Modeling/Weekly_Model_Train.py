@@ -37,9 +37,9 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 11
+set_week = 12
 
-model_type = 'full_model'
+model_type = 'backfill'
 vers = 'roll8_fullhist_kbestallstack_WRTEDEFkeep25_QBRBdrophalf'
 
 n_iters = 25
@@ -50,7 +50,7 @@ keep_words = ['def', 'qb', 'team']
 
 
 
-if model_type == 'full_model': positions = ['WR']# ['QB', 'RB', 'WR', 'TE',  'Defense']
+if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE', 'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
@@ -180,7 +180,7 @@ for set_pos in positions:
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
     print('Shape of Train Set', df_train.shape)
-#%%
+
     #===========================================================================================
 
     # set up blank dictionaries for all metrics

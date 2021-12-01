@@ -34,7 +34,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 11
+set_week = 12
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -73,19 +73,20 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['NYG', 'TB']
+drop_teams = ['SEA', 'WAS']
 
 teams = dm.read(f'''SELECT player, team
                     FROM (
                     SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
                         team,
-                        row_number() OVER (PARTITION BY player ORDER BY projected_points DESC) rn 
+                        row_number() OVER (PARTITION BY player ORDER BY year, week, projected_points DESC) rn 
                     FROM FantasyPros
                     WHERE week={set_week} AND year={set_year}
                     ) WHERE rn=1''', 'Pre_PlayerData')
 
-preds = pd.merge(preds, teams, on=['player'])
-preds = preds[preds.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)
+preds = pd.merge(preds, teams, on=['player'], how='left')
+preds = preds[(preds.team.isin(drop_teams)) | \
+    (preds.player.isin(['Joey Slye', 'Jason Myers']))].drop('team', axis=1).reset_index(drop=True)
 
 captain = preds.copy()
 captain.pos = 'CPT'
@@ -195,57 +196,4 @@ for i in range(12):
                  kde_kws = {'linewidth' : 4},
                  label = 'Estimated Dist.')
     
-# %%
-
-players = dm.read('''SELECT * FROM Best_Lineups''', 'Results')
-players = players.loc[1:, ['0', '1', '2', '3', '4', '5', '6', '7', '8', 'week', 'year']]
-players['lineup_num'] = range(len(players))
-best_lineups = pd.melt(players, id_vars=['week', 'year', 'lineup_num'])
-best_lineups = best_lineups.rename(columns={'value': 'player'}).drop('variable', axis=1)
-
-y_act = dm.read(f'''SELECT defTeam player, week, season year, fantasy_pts y_act
-                    FROM Defense_Stats
-                    WHERE season >= 2020''', 'FastR')
-
-for p in ['QB', 'RB', 'WR', 'TE']:
-    y_act_cur = dm.read(f'''SELECT player, week, season year, fantasy_pts y_act
-                            FROM {p}_Stats
-                            WHERE season >= 2020''', 'FastR')
-    y_act = pd.concat([y_act, y_act_cur], axis=0)
-
-best_lineups = pd.merge(best_lineups, y_act, on=['player', 'week', 'year'])
-team_scores = best_lineups.groupby('lineup_num').agg({'y_act': 'sum'}).y_act
-for i in range(50, 100, 5):
-    print(f'Percentile {i}:', np.percentile(team_scores, i))
-
-print(f'Percentile 99:', np.percentile(team_scores, 99))
-sns.distplot(team_scores, hist = True, kde = True, bins = 15,
-                 hist_kws = {'edgecolor': 'k', 'color': 'darkblue'},
-                 kde_kws = {'linewidth' : 4},
-                 label = 'Estimated Dist.')
-
-
-# %%
-
-
-df = dm.read('''SELECT * FROM Model_Predictions''', 'Simulation')
-
-
- # pull in the salary and actual results data
-dk_sal = dm.read('''SELECT team player, team, week, year, projected_points sd_metric
-                    FROM FantasyPros
-                    WHERE pos='DST' ''', 'Pre_PlayerData')
-
-stats = dm.read(f'''SELECT defTeam player, defTeam team, week, season year, fantasy_pts y_act
-                    FROM {pos}_Stats ''', 'FastR')
-
-# pull in the salary and actual results data
-dk_sal = dm.read('''SELECT player, offTeam team, week, year, projected_points, fantasyPoints, ProjPts
-                    FROM PFF_Proj_Ranks
-                    JOIN (SELECT player, team offTeam, week, year, projected_points 
-                            FROM FantasyPros)
-                            USING (player, offTeam, week, year)
-                    JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts 
-                            FROM PFF_Expert_Ranks)
-                            USING (player, offTeam, week, year)''', 'Pre_PlayerData')
 # %%

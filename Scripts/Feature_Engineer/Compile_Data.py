@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 11
+WEEK = 12
 
 #%%
 import pandas as pd 
@@ -1528,29 +1528,29 @@ data
 # missing_game[missing_game.team=='SEA'].iloc[:50]
 # %%
 
-to_agg = {c: [np.mean, np.max, np.min] for c in cols}
-team_stats = df.groupby(['team', 'week', 'year']).agg(to_agg)
+# to_agg = {c: [np.mean, np.max, np.min] for c in cols}
+# team_stats = df.groupby(['team', 'week', 'year']).agg(to_agg)
 
-diff_df = df[['player', 'team', 'week', 'year']].drop_duplicates()
-for c in cols:
-    tmp_df = team_stats[c].reset_index()
-    tmp_df = pd.merge(tmp_df, df[['player', 'team', 'week', 'year', c]], on=['team', 'week', 'year'])
+# diff_df = df[['player', 'team', 'week', 'year']].drop_duplicates()
+# for c in cols:
+#     tmp_df = team_stats[c].reset_index()
+#     tmp_df = pd.merge(tmp_df, df[['player', 'team', 'week', 'year', c]], on=['team', 'week', 'year'])
 
-    for a in ['mean', 'amin', 'amax']:
-        tmp_df[f'{c}_{a}_diff'] = tmp_df[c] - tmp_df[a]
+#     for a in ['mean', 'amin', 'amax']:
+#         tmp_df[f'{c}_{a}_diff'] = tmp_df[c] - tmp_df[a]
 
-    tmp_df = tmp_df[['player', 'team', 'week', 'year', f'{c}_mean_diff', f'{c}_amax_diff', f'{c}_amin_diff']]
-    diff_df = pd.merge(diff_df, tmp_df, on=['player', 'team', 'week', 'year'])
+#     tmp_df = tmp_df[['player', 'team', 'week', 'year', f'{c}_mean_diff', f'{c}_amax_diff', f'{c}_amin_diff']]
+#     diff_df = pd.merge(diff_df, tmp_df, on=['player', 'team', 'week', 'year'])
     
-diff_df = diff_df.drop_duplicates()
-team_stats.columns = [f'{c[0]}_{c[1]}' for c in team_stats.columns]
-team_stats = team_stats.reset_index().drop_duplicates()
+# diff_df = diff_df.drop_duplicates()
+# team_stats.columns = [f'{c[0]}_{c[1]}' for c in team_stats.columns]
+# team_stats = team_stats.reset_index().drop_duplicates()
 
-df = pd.merge(df, team_stats, on=['team', 'week', 'year'])
-df = pd.merge(df, diff_df, on=['player', 'team', 'week', 'year'])
+# df = pd.merge(df, team_stats, on=['team', 'week', 'year'])
+# df = pd.merge(df, diff_df, on=['player', 'team', 'week', 'year'])
 
-#%%
+# #%%
 
-df = dm.read('''SELECT * FROM WR_Stats WHERE season>=2020 AND rec_yards_gained_sum > 10 ''', 'FastR')
-df.fantasy_pts.plot.hist()
-# %%
+# df = dm.read('''SELECT * FROM WR_Stats WHERE season>=2020 AND rec_yards_gained_sum > 10 ''', 'FastR')
+# df.fantasy_pts.plot.hist()
+# # %%
