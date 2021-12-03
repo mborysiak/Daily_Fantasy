@@ -39,8 +39,8 @@ np.random.seed(1234)
 set_year = 2021
 set_week = 12
 
-model_type = 'backfill'
-vers = 'roll8_fullhist_kbestallstack_WRTEDEFkeep25_QBRBdrophalf'
+model_type = 'full_model'
+vers = 'normal_remove_less_than_1'
 
 n_iters = 25
 to_keep = 25
@@ -58,7 +58,7 @@ for set_pos in positions:
     # set the earliest date to begin the validation set
     val_year_min = 2020
     if set_pos in ('WR', 'TE'): val_week_min = 12
-    else: val_week_min=10
+    else: val_week_min = 10
 
     kbs = {
         'QB': [5, 50, 5],
@@ -171,6 +171,11 @@ for set_pos in positions:
     cv_time_input = int(dt.datetime(val_year_min, 1, val_week_min).strftime('%Y%m%d'))
     train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
 
+
+    # test log
+    df = df[df.y_act > 1].reset_index(drop=True)
+
+
     # # get the train / predict dataframes and output dataframe
     df_train = df[df.game_date < train_time_split].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
@@ -192,6 +197,9 @@ for set_pos in positions:
 
     skm = SciKitModel(df_train)
     X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
+
+    # # test log
+    # y = np.log(y)
 
     # set up the ADP model pipe
     pipe = skm.model_pipe([skm.piece('feature_select'), 
@@ -430,7 +438,8 @@ for set_pos in positions:
 #=====================================================
 
 
-df_train_subset = df_train[df_train.ProjPts > np.percentile(df_train.ProjPts, 20)].reset_index(drop=True)
+# df_train_subset = df_train[df_train.ProjPts > np.percentile(df_train.ProjPts, 20)].reset_index(drop=True)
+df_train_subset = df_train[df_train.y_act > 0.5].reset_index(drop=True)
 
 skm = SciKitModel(df_train_subset)
 X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
@@ -438,11 +447,11 @@ X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
 plt.hist(y)
 plt.show()
 
-y = y + abs(y.min()) + 1
+# y = y + abs(y.min()) + 1
 plt.hist(np.log1p(y))
 plt.show()
 
-y = np.log1p(y)
+# y = np.log1p(y)
 
 #%%
 from sklearn.compose import TransformedTargetRegressor
@@ -452,8 +461,10 @@ from lightgbm import LGBMRegressor
 from xgboost import XGBRegressor
 import matplotlib.pyplot as plt
 
+np.random.seed(1234)
+
 # set up the model pipe and get the default search parameters
-m = 'enet'
+m = 'ridge'
 pipe = skm.model_pipe([
                         skm.piece('feature_drop'),
                         skm.piece('std_scale'), 
@@ -508,15 +519,19 @@ from sklearn.metrics import r2_score, mean_squared_error
 
 try: del oof_data['val']
 except: pass
+# results = np.log1p(pd.DataFrame(oof_data))
+# results = np.exp(pd.DataFrame(oof_data))
 results = pd.DataFrame(oof_data)
 
-oof_data['actual'] = np.exp(oof_data['actual'])
-oof_data['hold'] = np.exp(oof_data['hold'])
+# oof_data['actual'] = np.exp(oof_data['actual'])
+# oof_data['hold'] = np.exp(oof_data['hold'])
+# oof_data['actual'] = np.log1p(oof_data['actual'])
+# oof_data['hold'] = np.log1p(oof_data['hold'])
 
 print(r2_score(oof_data['actual'], oof_data['hold']))
 plt.scatter(oof_data['hold'], oof_data['actual'])
 
-high_pred = results[results.hold > np.percentile(results.hold, 75)]
+high_pred = results[results.hold > np.percentile(results.hold, 85)]
 print(r2_score(high_pred.actual, high_pred.hold))
 plt.scatter(high_pred.hold,high_pred.actual)
 plt.show()

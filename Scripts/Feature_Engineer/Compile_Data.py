@@ -10,6 +10,7 @@ import numpy as np
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
 import ff.data_clean as dc
+from scipy.stats.morestats import shapiro
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -1482,8 +1483,66 @@ dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 # - add in PFF scores
 # - add in snaps and snap share
 # - Market share in terms of projected FP, dk salary, etc
+
+#%%
+from scipy.stats import kstest, norm, poisson, shapiro
+from seaborn import distplot
+import matplotlib.pyplot as plt
+
+
+players = dm.read('''SELECT player , week
+                    FROM FantasyPros 
+                    WHERE week=3 and year=2021
+                            and pos='RB'
+                            and projected_points > 6 ''', 'Pre_PlayerData').player.values
+
+normal_count = 0
+log_count = 0
+normal_count_games = []
+log_count_games = []
+
+for player in players:
+    print(player)
+
+    df = dm.read(f'''SELECT fantasy_pts FROM RB_Stats 
+                    WHERE player="{player}"
+                        AND fantasy_pts > 2 ''', 'FastR')
+    # df.fantasy_pts = df.fantasy_pts + abs(df.fantasy_pts.min()) + 1
+
+    distplot(df)
+    plt.show()
+    stats, p_normal = shapiro(df)
+    compare = norm.rvs(loc=df.mean(), scale=df.std(), size=1000)
+    ktest = kstest(df.values.reshape(1, -1)[0], compare)[1]
+
+    compare_p = poisson.rvs(df.mean(), size=1000)
+    ktest_p = kstest(df.values.reshape(1, -1)[0], compare_p)[1]
+
+    print('prob normal:', p_normal, 'k test:',  ktest,  'poisson k test:', ktest_p)
+
+    df = np.log(df)
+    distplot(df)
+    plt.show()
+    compare = norm.rvs(loc=df.mean(), scale=df.std(), size=1000)
+    ktest = kstest(df.values.reshape(1, -1)[0], compare)[1]
+    stats, p_log = shapiro(df)
+    print(p_log, ktest)
+
+    if p_normal > p_log:
+        normal_count += 1
+        normal_count_games.append(len(df))
+    else: 
+        log_count += 1
+        log_count_games.append(len(df))
+
+print('normal counts:', normal_count, 'avg games', np.mean(normal_count_games))
+print('log counts:', log_count, 'avg games', np.mean(log_count_games))
 #%%
 
+
+
+
+#%%
 cur_pos = 'RB'
 
 dk_sal = dm.read('''SELECT player, team, week, year, dk_salary

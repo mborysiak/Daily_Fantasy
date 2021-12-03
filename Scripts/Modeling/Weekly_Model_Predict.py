@@ -27,7 +27,7 @@ from sklearn import set_config
 set_config(display='diagram')
 
 splines = {}
-for k, p in zip([1, 2, 2, 2, 2], ['QB', 'RB', 'WR', 'TE', 'Defense']):
+for k, p in zip([1, 1, 1, 1, 1], ['QB', 'RB', 'WR', 'TE', 'Defense']):
     print(f'Checking Splines for {p}')
     spl_sd, spl_perc = get_std_splines(p, show_plot=True, k=k)
     splines[p] = [spl_sd, spl_perc]
@@ -54,8 +54,8 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-model_type = 'backfill'
-vers = 'roll8_fullhist_kbestallstack_WRTEDEFkeep25_QBRBdrophalf'
+model_type = 'full_model'
+vers = 'normal_remove_less_than_1'
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
@@ -130,6 +130,11 @@ for set_pos in positions:
     # # get the train / predict dataframes and output dataframe
     df_train = df[df.game_date < train_time_split].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
+
+    #  # test log    
+    # df_train = df_train[df_train.y_act > 2].reset_index(drop=True)
+
+
     df_predict = df[df.game_date == train_time_split].reset_index(drop=True)
     output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy()
 
@@ -177,9 +182,14 @@ for set_pos in positions:
     df_predict_stack = df_predict_stack.drop('y_act', axis=1).fillna(0)
     skm_stack = SciKitModel(df_train)
 
-    # get the X and y values for stack trainin for the current metric
+    # get the X and y values for stack training for the current metric
     X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
     X_stack = pd.concat([X_stack, X_stack_class], axis=1)
+
+
+    # # test log
+    # y_stack = np.log1p(y_stack)
+
 
     best_models = []
     final_models = [
@@ -373,7 +383,7 @@ def create_sim_output(output, num_samples=1000):
     return sim_out
 
 
-def plot_distribution(estimates):
+def plot_distribution(estimates, exponent=False):
 
     from IPython.core.pylabtools import figsize
     import seaborn as sns
@@ -381,6 +391,9 @@ def plot_distribution(estimates):
 
     print('\n', estimates.player)
     estimates = estimates.iloc[2:]
+
+    if exponent:
+        estimates = estimates.apply(lambda x: np.exp(x))
 
     # Plot all the estimates
     plt.figure(figsize(8, 8))
@@ -408,9 +421,9 @@ sim_dist = create_sim_output(preds).reset_index(drop=True)
 
 #%%
 
-idx = sim_dist[sim_dist.player=="Jakobi Meyers"].index[0]
+idx = sim_dist[sim_dist.player=="Davante Adams"].index[0]
 plot_distribution(sim_dist.iloc[idx])
-
+# plot_distribution(sim_dist.iloc[idx], exponent=True)
 # %%
 
 dm.write_to_db(sim_dist, 'Simulation', f'week{set_week}_year{set_year}', 'replace')

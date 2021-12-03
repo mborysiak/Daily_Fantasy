@@ -1,6 +1,7 @@
 #%%
 
 # core packages
+from numpy.core.fromnumeric import size
 import pandas as pd
 import numpy as np
 import random
@@ -71,15 +72,15 @@ class FootballSimulation():
         player_teams = sample_data[['team', 'pos']].reset_index()
 
         teams = player_teams.team.unique()
-        teams = np.random.choice(teams, int(0.8*len(teams)))
+        teams = np.random.choice(teams, int(1*len(teams)))
         qb_wrs_te = player_teams.loc[(player_teams.pos.isin(['aQB', 'cWR', 'dTE'])) & \
                                     (player_teams.team.isin(teams)), 'player'].values
 
         rb_def = player_teams.loc[(player_teams.pos.isin(['bRB', 'fDST'])), 'player'].values
-        rb_def = np.random.choice(rb_def, int(0.8*len(rb_def)))
+        rb_def = np.random.choice(rb_def, int(1*len(rb_def)))
 
         self.sample_data = sample_data[(sample_data.index.isin(qb_wrs_te)) | \
-                                        (sample_data.index.isin(rb_def))].drop('team', axis=1)
+                                        (sample_data.index.isin(rb_def))]
 
         self.sample_data = self.sample_data.sort_values(by=['pos', 'salary'], ascending=[True, False])
 
@@ -178,7 +179,7 @@ class FootballSimulation():
         self._inflation = inflation
         self._sal = self.data.reset_index()[['player', 'salary']].drop_duplicates().set_index('player')
 
-        return self.counts, inflation, 
+        return self.counts, inflation, self.results
     
     #==========
     # Helper Functions for the Simulation Loop
@@ -587,59 +588,140 @@ class FootballSimulation():
 
 # %%
 
-# # connection for simulation and specific table
-# import os
-# import sqlite3
-# path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
-# conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
-# set_year = 2021
-# league=10
+# connection for simulation and specific table
+import os
+import sqlite3
+path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
+conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
+set_year = 2021
+league=12
 
-# # number of iteration to run
-# iterations = 500
+# number of iteration to run
+iterations = 500
 
-# # define point values for all statistical categories
-# pass_yd_per_pt = 0.04 
-# pass_td_pt = 4
-# int_pts = -2
-# sacks = -1
-# rush_yd_per_pt = 0.1 
-# rec_yd_per_pt = 0.1
-# rush_rec_td = 7
-# ppr = .5
+# define point values for all statistical categories
+pass_yd_per_pt = 0.04 
+pass_td_pt = 4
+int_pts = -2
+sacks = -1
+rush_yd_per_pt = 0.1 
+rec_yd_per_pt = 0.1
+rush_rec_td = 7
+ppr = .5
 
-# # creating dictionary containing point values for each position
-# pts_dict = {}
-# pts_dict['QB'] = [pass_yd_per_pt, pass_td_pt, rush_yd_per_pt, rush_rec_td, int_pts, sacks]
-# pts_dict['RB'] = [rush_yd_per_pt, rec_yd_per_pt, ppr, rush_rec_td]
-# pts_dict['WR'] = [rec_yd_per_pt, ppr, rush_rec_td]
-# pts_dict['TE'] = [rec_yd_per_pt, ppr, rush_rec_td]
+# creating dictionary containing point values for each position
+pts_dict = {}
+pts_dict['QB'] = [pass_yd_per_pt, pass_td_pt, rush_yd_per_pt, rush_rec_td, int_pts, sacks]
+pts_dict['RB'] = [rush_yd_per_pt, rec_yd_per_pt, ppr, rush_rec_td]
+pts_dict['WR'] = [rec_yd_per_pt, ppr, rush_rec_td]
+pts_dict['TE'] = [rec_yd_per_pt, ppr, rush_rec_td]
 
-# # instantiate simulation class and add salary information to data
-# sim =  FootballSimulation(conn_sim, set_year, league)
+# instantiate simulation class and add salary information to data
+sim =  FootballSimulation(conn_sim, set_year, league)
 
-# # set league information, included position requirements, number of teams, and salary cap
-# league_info = {}
-# league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DEF': 1}
-# league_info['num_teams'] = 12
-# league_info['initial_cap'] = 50000
-# league_info['salary_cap'] = 50000
+# set league information, included position requirements, number of teams, and salary cap
+league_info = {}
+league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DEF': 1}
+league_info['num_teams'] = 12
+league_info['initial_cap'] = 50000
+league_info['salary_cap'] = 50000
 
-# to_drop = {}
-# to_drop['players'] = []
-# to_drop['salaries'] = []
+to_drop = {}
+to_drop['players'] = []
+to_drop['salaries'] = []
 
-# # input information for players and their associated salaries selected by your team
-# to_add = {}
-# to_add['players'] = []
-# to_add['salaries'] = []
+# input information for players and their associated salaries selected by your team
+to_add = {}
+to_add['players'] = []
+to_add['salaries'] = []
 
-# xx = sim.create_sample_data()
-# _, _ = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
-# sim.show_most_selected(to_add, iterations, num_show=30).sort_values(by='Percent Drafted', ascending=False)
+xx = sim.create_sample_data()
+_, _, results = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
+sim.show_most_selected(to_add, iterations, num_show=30).sort_values(by='Percent Drafted', ascending=False)
+
+#%%
+
+data = sim.create_sample_data()
+output = data[['pos']]
+
+#%%
+
+pos_require = league_info['pos_require']
+pos_require = list(league_info['pos_require'].values())
+
+num_positions = len(pos_require)
+total_players = len(data)
 
 
+pos_counts = data.pos.value_counts().reset_index()
+pos_counts.columns = ['pos', 'pos_counts']
+pos_counts = pos_counts.sort_values(by='pos').reset_index(drop=True)
+pos_counts['pos_counts'] = pos_counts.pos_counts.cumsum()
 
+A = np.zeros(shape=(num_positions, total_players))
+
+for i in range(num_positions):
+    if i == 0: min_idx = 0
+    else: min_idx = pos_counts['pos_counts'][i-1]
+    
+    max_idx = pos_counts['pos_counts'][i]
+    A[i, min_idx:max_idx] = 1
+
+points = -1*data.iloc[:, np.random.choice(range(2, 1000))].values
+salary_cap = 50000
+pos_require = np.array(pos_require).reshape(-1,1)
+
+
+team_map = {}
+unique_teams = data.team.unique()
+for i, team in enumerate(unique_teams):
+    team_map[team] = i
+
+G_teams = np.zeros(shape=(len(unique_teams), len(data)))
+
+teams = data.team
+for i, team in enumerate(teams):
+    G_teams[team_map[team], i] = -1
+
+G_salaries = data.salary.values.reshape(1, len(data))
+G = np.concatenate([G_salaries, G_teams])
+
+h_salary = np.array(salary_cap).reshape(1, 1)
+h_teams = np.full(shape=(len(unique_teams), 1), fill_value=0)
+
+stack_team = 'LAR'
+h_teams[team_map[stack_team]][0] = -3
+h = np.concatenate([h_salary, h_teams])
+
+# generate the c matrix with the point values to be optimized
+c = matrix(points, tc='d')
+
+# generate the G matrix that contains the salary values for constraining
+G = matrix(G, tc='d')
+
+# generate the h matrix with the salary cap constraint
+h = matrix(h, tc='d')
+
+# generate the b matrix with the number of position constraints
+b = matrix(pos_require, tc='d')
+
+A = matrix(A, tc='d')
+
+# solve the integer LP problem
+(status, x) = ilp(c, G, h, A=A, b=b, B=set(range(0, len(points))))
+
+data.index[np.array(x)[:, 0]==1]
+
+#%%
+
+from collections import Counter
+from  itertools import combinations
+
+results = results.iloc[:, :9]
+
+c = Counter([y for x in results.values for y in combinations(x, 4)])
+df = pd.DataFrame({'Pair': list(c.keys()), 'Qty': list(c.values())})
+df.sort_values(by='Qty', ascending=False)
 # %%
 
 # from ff.db_operations import DataManage
