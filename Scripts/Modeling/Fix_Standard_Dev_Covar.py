@@ -338,10 +338,12 @@ def get_near_psd(A):
 pred_cov_final = pd.DataFrame(get_near_psd(pred_cov))
 pred_cov_final.columns = pred_cov.columns
 pred_cov_final.index = pred_cov.index
+pred_cov_final = pred_cov_final.reset_index().rename(columns={'index': 'player'})
 
 preds = preds.set_index('player').rename_axis(None)
-mean_points = preds.loc[pred_cov.index.values, ['pos', 'pred_fp_per_game']].reset_index()
+mean_points = preds.loc[pred_cov.index.values, ['pos', 'team', 'pred_fp_per_game']].reset_index()
 mean_points = mean_points.rename(columns={'index': 'player'})
+mean_points.loc[mean_points.pos=='Defense', 'pos'] = 'DEF' 
 
 dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
 dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
@@ -350,7 +352,7 @@ dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
 
 import scipy.stats as ss
 dist = ss.multivariate_normal(mean=mean_points.pred_fp_per_game.values, 
-                              cov=pred_cov_final, allow_singular=True)
+                              cov=pred_cov_final.drop('player', axis=1), allow_singular=True)
 predictions = pd.DataFrame(dist.rvs(1000)).T
 predictions.index = pred_cov_final.index
 
