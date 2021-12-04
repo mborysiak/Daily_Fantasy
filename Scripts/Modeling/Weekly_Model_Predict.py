@@ -27,7 +27,7 @@ from sklearn import set_config
 set_config(display='diagram')
 
 splines = {}
-for k, p in zip([1, 1, 1, 1, 1], ['QB', 'RB', 'WR', 'TE', 'Defense']):
+for k, p in zip([1, 2, 2, 2, 2], ['QB', 'RB', 'WR', 'TE', 'Defense']):
     print(f'Checking Splines for {p}')
     spl_sd, spl_perc = get_std_splines(p, show_plot=True, k=k)
     splines[p] = [spl_sd, spl_perc]
@@ -45,7 +45,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 12
+set_week = 13
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -54,8 +54,8 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-model_type = 'full_model'
-vers = 'normal_remove_less_than_1'
+model_type = 'backfill'
+vers = 'standard'
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
@@ -333,21 +333,9 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['DET','CHI', 'LVR','DAL', 'BUF', 'NO', 'CLE', 'BAL', 'SEA', 'WAS']
+drop_teams = ['DAL', 'NO', 'KC', 'DEN', 'BUF', 'NE']
 
-teams = dm.read(f'''SELECT player, team
-                    FROM (
-                    SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
-                        team,
-                        row_number() OVER (PARTITION BY player ORDER BY projected_points DESC) rn 
-                    FROM FantasyPros
-                    WHERE week={set_week} AND year={set_year}
-                    ) WHERE rn=1''', 'Pre_PlayerData')
-
-# dm.delete_from_db('Simulation', 'Player_Teams', f"week={set_week} AND year={set_year}")
-dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'replace')
-
-
+teams = dm.read(f'''SELECT * FROM Player_Teams''', 'Simulation')
 preds = pd.merge(preds, teams, on=['player'])
 preds = preds[~preds.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)
 

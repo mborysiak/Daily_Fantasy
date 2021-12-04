@@ -60,7 +60,7 @@ class FootballSimulation():
 
     def create_sample_data(self):
 
-        frac = 1
+        frac = 0.7
 
         sample_data = self.data.copy()
         teams = self.teams.set_index('player')

@@ -26,19 +26,23 @@ class FootballSimulation():
         self.conn_sim = conn_sim
 
         # create empty dataframe to store player point distributions
-        pos_update = {'QB': 'aQB', 'RB': 'bRB', 'WR': 'cWR', 'TE': 'dTE', 'Defense': 'fDST'}
-        self.data = pd.read_sql_query(f'''SELECT * FROM week{week}_year{set_year}''', conn_sim)
-        self.data['pos'] = self.data['pos'].map(pos_update)
+        self.means = pd.read_sql_query('''SELECT * FROM Covar_Means''', conn_sim)
+        self.covar = pd.read_sql_query('''SELECT * FROM Covar_Matrix''', conn_sim)
 
         # add salaries to the dataframe and set index to player
-        salaries = pd.read_sql_query(f'''SELECT player, salary
-                                         FROM Salaries
-                                         WHERE year={set_year}
-                                               AND league={week} ''', conn_sim)
+        self.salaries = pd.read_sql_query(f'''SELECT player, salary
+                                              FROM Salaries
+                                              WHERE year={set_year}
+                                                    AND league={week} ''', conn_sim)
+        
+        pos_update = {'QB': 'aQB', 'RB': 'bRB', 'WR': 'cWR', 'TE': 'dTE', 'Defense': 'fDST'}
+        self.data['pos'] = self.data['pos'].map(pos_update)
+
+        
 
         self.sal = salaries
         self.data = pd.merge(self.data, salaries, how='left', left_on='player', right_on='player')
-        self.data.salary = self.data.salary.fillna(3000)
+        self.data.salary = self.data.salary.fillna(0)
         
         # add flex data
         flex = self.data[self.data.pos.isin(['bRB', 'cWR', 'dTE'])]

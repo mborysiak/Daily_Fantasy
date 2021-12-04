@@ -37,18 +37,16 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 12
+set_week = 13
 
-model_type = 'full_model'
-vers = 'normal_remove_less_than_1'
+model_type = 'backfill'
+vers = 'standard'
 
 n_iters = 25
 to_keep = 25
 
 drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
 keep_words = ['def', 'qb', 'team']
-
-
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE', 'Defense']
 elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
@@ -172,8 +170,8 @@ for set_pos in positions:
     train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
 
 
-    # test log
-    df = df[df.y_act > 1].reset_index(drop=True)
+    # # test log
+    # df = df[df.y_act > 1].reset_index(drop=True)
 
 
     # # get the train / predict dataframes and output dataframe

@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 12
+set_week = 13
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -58,9 +58,24 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
     df.team = df.team.apply(lambda x: x.replace('COV_IR', '').lstrip().rstrip())
     df.team = df.team.map(team_map)
 
+    if set_pos == 'WR':
+        df = df[df.player != 'Cordarrelle Patterson']
+
     dm.delete_from_db('Pre_PlayerData', 'FantasyPros', f"week={set_week} and year={set_year} and pos='{set_pos}'")
     dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros', if_exist='append')
 
+#%%
+
+teams = dm.read(f'''SELECT player, team
+                    FROM (
+                    SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
+                        team,
+                        row_number() OVER (PARTITION BY player ORDER BY projected_points DESC) rn 
+                    FROM FantasyPros
+                    WHERE week={set_week} AND year={set_year}
+                    ) WHERE rn=1''', 'Pre_PlayerData')
+
+dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'replace')
 
 #%%
 
@@ -98,6 +113,8 @@ player_salary.team = player_salary.team.map(team_map)
 
 team_salary = salaries[salaries.position=='DST']
 team_salary.team = team_salary.team.map(team_map)
+
+player_salary.sort_values(by='dk_salary', ascending=False).iloc[:20]
 
 #%%
 dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} and year={set_year}")
@@ -404,18 +421,7 @@ for t, d, db in zip(tables, dfs, dbs):
     dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}")
     dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
 
-#%%
 
-
-# df = pd.read_html(f'https://www.nfl.com/injuries/league/{set_year}/reg{set_week}')
-# for i in range(len(df)):
-#     if i % 10 == 0:
-#         print(i)
-#     df[i].columns = ['player', 'pos', 'injuries', 'practice_status', 'game_status']
-#     df[i]['week'] = set_week
-#     df[i]['year'] = set_year
-#     df[i].player = df[i].player.apply(dc.name_clean)
-#     dm.write_to_db(df[i], 'Pre_PlayerData', 'PlayerInjuries', 'append')
 # %%
 
 # https://www.nfl.com/injuries/league/2021/reg11
@@ -472,22 +478,12 @@ ids = salary_id[['player', 'player_id']]
 ids = ids.assign(year=set_year).assign(league=set_week)
 ids.loc[ids.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
 
-#%%
 dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
 dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
 
 dm.delete_from_db('Simulation', 'Player_Ids', f"league={set_week} AND year={set_year}")
 dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
 
-# # update the salaries with actual DK salaries from the website
-# other_sal = dm.read(f'''SELECT * 
-#                         FROM Daily_Salaries
-#                         WHERE week={set_week} AND year={set_year}''', 'Pre_PlayerData')
-# other_sal = pd.merge(other_sal, salary[['player', 'salary']], on=['player'])
-# other_sal['dk_salary'] = other_sal.salary
-# other_sal = other_sal.drop('salary', axis=1)
-# dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
-# dm.write_to_db(other_sal, 'Pre_PlayerData', 'Daily_Salaries', 'append')
 
 # %%
 dk = pd.read_csv('c:/Users/mborysia/Downloads/dk-ownership (1).csv')
@@ -544,7 +540,6 @@ dm.write_to_db(salary, 'Simulation', 'Showdown_Salaries', 'append')
 dm.delete_from_db('Simulation', 'Showdown_Player_Ids', f"league={set_week} AND year={set_year}")
 dm.write_to_db(ids, 'Simulation', 'Showdown_Player_Ids', 'append')
 
-#%%
 k_points = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv',
                         skiprows=7).dropna(axis=1)
 k_points = k_points.loc[k_points.Position=='K', ['Name', 'AvgPointsPerGame']].drop_duplicates()
