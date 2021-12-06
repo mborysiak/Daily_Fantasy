@@ -250,11 +250,11 @@ for i in range(len(percs) - 1):
 
 # set year to analyze
 set_year = 2021
-set_week = 12
+set_week = 13
 
 # full_model or backfill
-vers = 'roll8_fullhist_kbestallstack_WRTEDEFkeep25_QBRBdrophalf'
-drop_teams = ['DET','CHI', 'LVR','DAL', 'BUF', 'NO', 'CLE', 'BAL', 'SEA', 'WAS']
+vers = 'standard'
+drop_teams = ['DAL', 'NO', 'KC', 'DEN', 'BUF', 'NE']
 
 
 def get_predictions(drop_teams, vers, set_week, set_year):

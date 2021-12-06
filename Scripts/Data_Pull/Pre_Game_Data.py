@@ -542,13 +542,19 @@ dm.write_to_db(ids, 'Simulation', 'Showdown_Player_Ids', 'append')
 
 k_points = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv',
                         skiprows=7).dropna(axis=1)
+
 k_points = k_points.loc[k_points.Position=='K', ['Name', 'AvgPointsPerGame']].drop_duplicates()
 k_points.columns = ['player', 'pred_fp_per_game']
+k_points.player = k_points.player.apply(dc.name_clean)
+
 k_points['std_dev'] = k_points.pred_fp_per_game / 2
 k_points['max_score'] = k_points.pred_fp_per_game * 2.5
 k_points['min_score'] = 0
 k_points['week'] = set_week
 k_points['year'] = set_year
+k_points['pos'] = 'K'
+
+k_points['model_type'] = 'full_model'
 vers = dm.read("SELECT version FROM Model_Predictions WHERE version IS NOT NULL", 'Simulation').iloc[-1]['version']
 k_points['version'] = vers
 dm.write_to_db(k_points, 'Simulation', 'Model_Predictions', 'append')

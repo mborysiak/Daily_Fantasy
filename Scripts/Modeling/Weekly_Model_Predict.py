@@ -54,11 +54,11 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-model_type = 'backfill'
+model_type = 'full_model'
 vers = 'standard'
 
-if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
-elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
+if model_type == 'full_model': positions = ['RB', 'WR']# ['QB', 'RB', 'WR', 'TE',  'Defense']
+elif model_type == 'backfill': positions = ['RB', 'WR']#['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
 
