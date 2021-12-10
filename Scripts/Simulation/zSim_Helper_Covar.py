@@ -194,12 +194,19 @@ def create_G_team(team_map, player_map):
     for i in range(num_players):
 
         cur_team = player_map[i]['team']
-        G_teams[team_map[cur_team], i] = -1
+        cur_pos = player_map[i]['pos']
+        if cur_pos != 'DEF':
+            G_teams[team_map[cur_team], i] = -1
 
     return G_teams
 
 
-def create_h_teams(team_map, max_team, min_players):
+def create_h_teams(team_map, set_max_team, min_players):
+    if set_max_team is None: 
+        max_team = get_max_team(labels, c_points)
+    else:
+        max_team = set_max_team
+
     h_teams = np.full(shape=(len(team_map), 1), fill_value=0)
     h_teams[team_map[max_team]] = -min_players
 
@@ -235,12 +242,11 @@ covar = dm.read('''SELECT * FROM Covar_Matrix''', 'Simulation')
 top_team_players = get_top_players_from_team(data)
 
 min_players_same_team = 3
-num_options = 250
+num_options = 500
 
 # set league information, included position requirements, number of teams, and salary cap
 pos_require = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DEF': 1}
-to_add = ['Sony Michel', 'Cooper Kupp', 'Elijah Mitchell', 
-          'Chris Godwin', 'Rob Gronkowski', 'Tom Brady']
+to_add = []
 to_drop = []
 salary_cap = 50000
 set_max_team = None
@@ -253,15 +259,15 @@ for p in data.player:
 
 for i in range(500):
 
-    if i % 50 == 0:
+    if i % 100 == 0:
 
         predictions = get_predictions(data, covar, num_options)
         predictions = create_flex(predictions, flex_pos)
 
         pos_require_chk = copy.deepcopy(pos_require)
-        remaining_pos = np.sum(list(pos_require_chk.values()))
         predictions, h_player_add, open_pos_require = add_players(predictions, to_add, pos_require_chk)
         predictions = drop_players(predictions, to_drop)
+        remaining_pos_cnt = np.sum(list(open_pos_require.values()))
 
         if i == 0:
             position_map = position_matrix_mapping(pos_require)
@@ -282,12 +288,15 @@ for i in range(500):
     # generate the c matrix with the point values to be optimized
     labels, c_points = sample_c_points(predictions, num_options)
     
-    if set_max_team is None: 
-        max_team = get_max_team(labels, c_points)
-    h_teams = create_h_teams(team_map, max_team, min_players_same_team)
+    if remaining_pos_cnt > min_players_same_team:
+    
+        h_teams = create_h_teams(team_map, set_max_team, min_players_same_team)
+        G = np.concatenate([G_salaries, G_teams, G_players])
+        h = np.concatenate([h_salaries, h_teams, h_players])
 
-    G = np.concatenate([G_salaries, G_teams, G_players])
-    h = np.concatenate([h_salaries, h_teams, h_players])
+    else:
+        G = np.concatenate([G_salaries, G_players])
+        h = np.concatenate([h_salaries, h_players])
 
     G = matrix(G, tc='d')
     h = matrix(h, tc='d')
@@ -297,7 +306,6 @@ for i in range(500):
 
     # solve the integer LP problem
     (status, x) = ilp(c, G, h, A=A, b=b, B=set(range(0, len(c_points))))
-
 
     # find all LP results chosen and equal to 1
     x = np.array(x)[:, 0]==1
