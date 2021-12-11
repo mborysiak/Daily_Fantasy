@@ -21,7 +21,7 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
-week=13
+week=14
 set_year=2021
 flex_pos = ['RB', 'WR', 'TE']
 
@@ -298,27 +298,27 @@ for i in range(500):
         G = np.concatenate([G_salaries, G_players])
         h = np.concatenate([h_salaries, h_players])
 
-    G = matrix(G, tc='d')
-    h = matrix(h, tc='d')
-    b = matrix(b_position, tc='d')
-    A = matrix(A_position, tc='d')    
-    c = matrix(c_points, tc='d')
+#     G = matrix(G, tc='d')
+#     h = matrix(h, tc='d')
+#     b = matrix(b_position, tc='d')
+#     A = matrix(A_position, tc='d')    
+#     c = matrix(c_points, tc='d')
 
-    # solve the integer LP problem
-    (status, x) = ilp(c, G, h, A=A, b=b, B=set(range(0, len(c_points))))
+#     # solve the integer LP problem
+#     (status, x) = ilp(c, G, h, A=A, b=b, B=set(range(0, len(c_points))))
 
-    # find all LP results chosen and equal to 1
-    x = np.array(x)[:, 0]==1
-    names = predictions.player.values[x]
+#     # find all LP results chosen and equal to 1
+#     x = np.array(x)[:, 0]==1
+#     names = predictions.player.values[x]
 
-    if len(names) != len(np.unique(names)):
-        pass
-    else:
-        for n in names:
-            player_selections[n] += 1
+#     if len(names) != len(np.unique(names)):
+#         pass
+#     else:
+#         for n in names:
+#             player_selections[n] += 1
 
-results = pd.DataFrame(player_selections,index=['SelectionCounts']).T
-results.sort_values(by='SelectionCounts', ascending=False).iloc[:25]
+# results = pd.DataFrame(player_selections,index=['SelectionCounts']).T
+# results.sort_values(by='SelectionCounts', ascending=False).iloc[:25]
 
 #%%
 

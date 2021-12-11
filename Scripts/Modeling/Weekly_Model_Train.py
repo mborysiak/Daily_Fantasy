@@ -37,7 +37,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 13
+set_week = 14
 
 model_type = 'backfill'
 vers = 'standard'
