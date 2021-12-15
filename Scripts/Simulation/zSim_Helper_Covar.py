@@ -21,317 +21,353 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
-week=14
-set_year=2021
-flex_pos = ['RB', 'WR', 'TE']
+class FootballSimulation:
 
-def join_salary(df):
+    def __init__(self, dm, pos_require_start, week, set_year, num_iters):
 
-    # add salaries to the dataframe and set index to player
-    salaries = dm.read(f'''SELECT player, salary
-                            FROM Salaries
-                            WHERE year={set_year}
-                                AND league={week} ''', 'Simulation')
+        self.week = week
+        self.year = set_year
+        self.pos_require_start = pos_require_start
+        self.num_iters = num_iters
 
-    df = pd.merge(df, salaries, how='left', left_on='player', right_on='player')
-    df.salary = df.salary.fillna(10000)
+        # pull in the player data (means, team, position) and covariance matrix
+        player_data = dm.read('''SELECT * FROM Covar_Means''', 'Simulation')
+        self.covar = dm.read('''SELECT * FROM Covar_Matrix''', 'Simulation')
 
-    return df
+        # extract the top players for each team
+        self.top_team_players = self.get_top_players_from_team(player_data)
 
+        # join in salary data to player data
+        self.player_data = self.join_salary(player_data)
 
-def get_top_players_from_team(df):
-    df = df[df.pos!='DEF']
-    df = df.sort_values(by=['team', 'pred_fp_per_game'], ascending=[True, False])
-    df['player_rank'] = df.groupby('team').cumcount()
-    df = df.loc[df.player_rank <= 5, ['player', 'team']].reset_index(drop=True)
+    def join_salary(self, df):
 
-    return df
+        # add salaries to the dataframe and set index to player
+        salaries = dm.read(f'''SELECT player, salary
+                                FROM Salaries
+                                WHERE year={self.set_year}
+                                    AND league={self.week} ''', 'Simulation')
 
+        df = pd.merge(df, salaries, how='left', left_on='player', right_on='player')
+        df.salary = df.salary.fillna(10000)
 
-def get_predictions(data, covar, num_options):
-
-    import scipy.stats as ss
-    dist = ss.multivariate_normal(mean=data.pred_fp_per_game.values, 
-                                cov=covar.drop('player', axis=1).values, allow_singular=True)
-    predictions = pd.DataFrame(dist.rvs(num_options)).T
-    predictions = pd.concat([data[['player', 'pos', 'team', 'salary']], predictions], axis=1)
-
-    return predictions
+        return df
 
 
-def _df_shuffle(df):
-    '''
-    Input: A dataframe to be shuffled, row-by-row indepedently.
-    Return: The same dataframe whose columns have been shuffled for each row.
-    '''
-    # store the index before converting to numpy
-    idx = df.index
-    df = df.values
+    @staticmethod
+    def get_top_players_from_team(df, top_players=5):
+                
+        df = df[df.pos!='DEF']
+        df = df.sort_values(by=['team', 'pred_fp_per_game'], ascending=[True, False])
+        df['player_rank'] = df.groupby('team').cumcount()
+        df = df.loc[df.player_rank <= top_players-1, ['player', 'team']].reset_index(drop=True)
 
-    # shuffle each row separately, inplace, and convert o df
-    _ = [np.random.shuffle(i) for i in df]
-
-    return pd.DataFrame(df, index=idx)
+        return df
 
 
-def create_flex(df, flex_pos):
-        
-    # filter to flex positions and create labels
-    flex = df[df.pos.isin(flex_pos)]
-    flex_labels = flex[['player','pos', 'team', 'salary']]
+    def get_predictions(self, num_options=500):
 
-    # shuffle the data
-    flex = _df_shuffle(flex.drop(['pos', 'team', 'salary', 'player'], axis=1))
-    # flex.columns = [str(c) for c in flex.columns]
-    
-    # concat the flex labels with data and add the position
-    flex = pd.concat([flex_labels, flex], axis=1)
-    flex.loc[:, 'pos'] = 'FLEX'
+        import scipy.stats as ss
+        dist = ss.multivariate_normal(mean=self.player_data.pred_fp_per_game.values, 
+                                      cov=self.covar.drop('player', axis=1).values, 
+                                      allow_singular=True)
+        predictions = pd.DataFrame(dist.rvs(num_options)).T
+        labels = self.player_data[['player', 'pos', 'team', 'salary']]
+        predictions = pd.concat([labels, predictions], axis=1)
 
-    # concat the flex data to the full data
-    df = pd.concat([df, flex], axis=0).reset_index(drop=True)
+        return predictions
 
-    return df
+    def init_select_cnts(self):
+        player_selections = {}
+        for p in self.player_data:
+            player_selections[p] = 0
+        return player_selections
 
-def add_players(df, to_add, pos_require):
-    h_player_add = {}
-    cur_loop = []
 
-    df_add = df[df.player.isin(to_add)]
-    for player, pos in df_add[['player', 'pos']].values:
+    def add_flex(self, open_pos_require):
 
-        if player not in cur_loop and pos_require[pos] > 0:
-            h_player_add[f'{player}_{pos}'] = -1
-            pos_require[pos] -= 1
-            cur_loop.append(player)
-        
+        cur_pos_require = copy.deepcopy(self.pos_require_start)
+
+        chk_flex = [p for p,v in open_pos_require.items() if v == -1]
+        if len(chk_flex) == 0:
+            flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[0.38, 0.49, 0.13])
         else:
-            df = df[~((df.player==player) & (df.pos==pos))]
+            flex_pos = chk_flex[0]
 
-    df = df.reset_index(drop=True)
+        cur_pos_require[flex_pos] += 1
 
-    return df, h_player_add, pos_require
-
-
-def drop_players(df, to_drop):
-    return df[~df.player.isin(to_drop)].reset_index(drop=True)
+        return cur_pos_require
 
 
-def player_matrix_mapping(df):
-    idx_player_map = {}
-    player_idx_map = {}
-    for i, row in df.iterrows():
-        idx_player_map[i] = {
-            'player': row.player,
-            'team': row.team,
-            'pos': row.pos,
-            'salary': row.salary
-        }
-
-        player_idx_map[f'{row.player}_{row.pos}'] = i
-
-    return idx_player_map, player_idx_map
-
-def position_matrix_mapping(pos_require):
-    position_map = {}
-    i = 0
-    for k, _ in pos_require.items():
-        position_map[k] = i
-        i+=1
-
-    return position_map
-
-def team_matrix_mapping(df):
-    
-    team_map = {}
-    unique_teams = df.team.unique()
-    for i, team in enumerate(unique_teams):
-        team_map[team] = i
-
-    return team_map
-
-def create_A_position(position_map, player_map):
-
-    num_positions = len(position_map)
-    num_players = len(player_map)
-    A_positions = np.zeros(shape=(num_positions, num_players))
-
-    for i in range(num_players):
-        cur_pos = player_map[i]['pos']
-        row_idx = position_map[cur_pos]
-        A_positions[row_idx, i] = 1
-
-    return A_positions
-
-def create_b_matrix(pos_require):
-    return np.array(list(pos_require.values())).reshape(-1,1)
-
-def create_G_salaries(df):
-    return df.salary.values.reshape(1, len(df))
-
-def create_h_salaries(salary_cap):
-    return np.array(salary_cap).reshape(1, 1)
-
-
-
-def get_max_team(labels, c_points):
-    team_pts = pd.concat([labels, c_points], axis=1)
-    team_pts = team_pts[~team_pts.pos.isin(['DEF', 'FLEX'])]
-    team_pts = pd.merge(team_pts, top_team_players, on=['player', 'team'])
-    team_pts = team_pts.drop(['salary', 'player', 'pos'], axis=1)
-    team_pts = team_pts.groupby('team').sum()
-    best_team = team_pts.idxmin().values[0]
-
-    return best_team
-
-
-def create_G_team(team_map, player_map):
-    
-    num_players = len(player_map)
-    num_teams = len(team_map)
-    G_teams = np.zeros(shape=(num_teams, num_players))
-
-    for i in range(num_players):
-
-        cur_team = player_map[i]['team']
-        cur_pos = player_map[i]['pos']
-        if cur_pos != 'DEF':
-            G_teams[team_map[cur_team], i] = -1
-
-    return G_teams
-
-
-def create_h_teams(team_map, set_max_team, min_players):
-    if set_max_team is None: 
-        max_team = get_max_team(labels, c_points)
-    else:
-        max_team = set_max_team
-
-    h_teams = np.full(shape=(len(team_map), 1), fill_value=0)
-    h_teams[team_map[max_team]] = -min_players
-
-    return h_teams
-
-def create_G_players(player_map):
-
-    num_players = len(player_map)
-    G_players = np.zeros(shape=(num_players, num_players))
-    np.fill_diagonal(G_players, -1)
-
-    return G_players
-
-def create_h_players(player_map, h_player_add):
-    num_players = len(player_map)
-    h_players = np.zeros(shape=(num_players, 1))
-
-    for player, val in h_player_add.items():
-        h_players[player_map[player]] = val
-
-    return h_players
-
-def sample_c_points(data, max_entries):
-
-    labels = data[['player', 'pos', 'team', 'salary']]
-    current_points = -1 * data.iloc[:, np.random.choice(range(4, max_entries+4))]
-
-    return labels, current_points
-
-# create empty dataframe to store player point distributions
-data = dm.read('''SELECT * FROM Covar_Means''', 'Simulation')
-covar = dm.read('''SELECT * FROM Covar_Matrix''', 'Simulation')
-top_team_players = get_top_players_from_team(data)
-
-min_players_same_team = 3
-num_options = 500
-
-# set league information, included position requirements, number of teams, and salary cap
-pos_require = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DEF': 1}
-to_add = []
-to_drop = []
-salary_cap = 50000
-set_max_team = None
-
-data = join_salary(data)
-
-player_selections = {}
-for p in data.player:
-    player_selections[p] = 0
-
-for i in range(500):
-
-    if i % 100 == 0:
-
-        predictions = get_predictions(data, covar, num_options)
-        predictions = create_flex(predictions, flex_pos)
-
-        pos_require_chk = copy.deepcopy(pos_require)
-        predictions, h_player_add, open_pos_require = add_players(predictions, to_add, pos_require_chk)
-        predictions = drop_players(predictions, to_drop)
-        remaining_pos_cnt = np.sum(list(open_pos_require.values()))
-
-        if i == 0:
-            position_map = position_matrix_mapping(pos_require)
-            idx_player_map, player_idx_map = player_matrix_mapping(predictions)
-            team_map = team_matrix_mapping(predictions)
-
-            A_position = create_A_position(position_map, idx_player_map)
-            b_position = create_b_matrix(pos_require)
-
-            G_salaries = create_G_salaries(predictions)
-            h_salaries = create_h_salaries(salary_cap)
-
-            G_players = create_G_players(player_idx_map)
-            h_players = create_h_players(player_idx_map, h_player_add)
-
-            G_teams = create_G_team(team_map, idx_player_map)
+    def add_players(self, to_add):
         
-    # generate the c matrix with the point values to be optimized
-    labels, c_points = sample_c_points(predictions, num_options)
-    
-    if remaining_pos_cnt > min_players_same_team:
-    
-        h_teams = create_h_teams(team_map, set_max_team, min_players_same_team)
-        G = np.concatenate([G_salaries, G_teams, G_players])
-        h = np.concatenate([h_salaries, h_teams, h_players])
+        h_player_add = {}
+        open_pos_require = copy.deepcopy(self.pos_require)
+        df_add = self.player_data[self.player_data.player.isin(to_add)]
+        for player, pos in df_add[['player', 'pos']].values:
+            h_player_add[f'{player}'] = -1
+            open_pos_require[pos] -= 1
 
-    else:
-        G = np.concatenate([G_salaries, G_players])
-        h = np.concatenate([h_salaries, h_players])
-
-#     G = matrix(G, tc='d')
-#     h = matrix(h, tc='d')
-#     b = matrix(b_position, tc='d')
-#     A = matrix(A_position, tc='d')    
-#     c = matrix(c_points, tc='d')
-
-#     # solve the integer LP problem
-#     (status, x) = ilp(c, G, h, A=A, b=b, B=set(range(0, len(c_points))))
-
-#     # find all LP results chosen and equal to 1
-#     x = np.array(x)[:, 0]==1
-#     names = predictions.player.values[x]
-
-#     if len(names) != len(np.unique(names)):
-#         pass
-#     else:
-#         for n in names:
-#             player_selections[n] += 1
-
-# results = pd.DataFrame(player_selections,index=['SelectionCounts']).T
-# results.sort_values(by='SelectionCounts', ascending=False).iloc[:25]
-
-#%%
-
-df = predictions.copy()
-
-# set league information, included position requirements, number of teams, and salary cap
-pos_require = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DEF': 1}
-to_add = ['Tom Brady', 'Chris Godwin', 'Mike Evans', 'Brandon Aiyuk', 'Tee Higgins']
+        return h_player_add, open_pos_require
 
 
+    def get_current_team_cnts(self, to_add):
+
+        added_teams = self.player_data.loc[self.player_data.player.isin(to_add), 
+                                           ['player', 'team']].drop_duplicates()
+        added_teams = list(added_teams.team)
+
+        if len(added_teams) > 0:
+            from collections import Counter
+            cnts = Counter(added_teams).most_common()
+            max_added_team_cnts = cnts[0][1]
+        else:
+            max_added_team_cnts = 0
+
+        return added_teams, max_added_team_cnts
 
 
+    @staticmethod
+    def drop_players(df, to_drop):
+        return df[~df.player.isin(to_drop)].reset_index(drop=True)
+
+
+    def player_matrix_mapping(df):
+        idx_player_map = {}
+        player_idx_map = {}
+        for i, row in df.iterrows():
+            idx_player_map[i] = {
+                'player': row.player,
+                'team': row.team,
+                'pos': row.pos,
+                'salary': row.salary
+            }
+
+            player_idx_map[f'{row.player}'] = i
+
+        return idx_player_map, player_idx_map
+
+
+    @staticmethod
+    def position_matrix_mapping(pos_require):
+        position_map = {}
+        i = 0
+        for k, _ in pos_require.items():
+            position_map[k] = i
+            i+=1
+
+        return position_map
+
+
+    def team_matrix_mapping(df):
         
+        team_map = {}
+        unique_teams = df.team.unique()
+        for i, team in enumerate(unique_teams):
+            team_map[team] = i
+
+        return team_map
+
+    def create_A_position(position_map, player_map):
+
+        num_positions = len(position_map)
+        num_players = len(player_map)
+        A_positions = np.zeros(shape=(num_positions, num_players))
+
+        for i in range(num_players):
+            cur_pos = player_map[i]['pos']
+            row_idx = position_map[cur_pos]
+            A_positions[row_idx, i] = 1
+
+        return A_positions
+
+    def create_b_matrix(pos_require):
+        return np.array(list(pos_require.values())).reshape(-1,1)
+
+    def create_G_salaries(df):
+        return df.salary.values.reshape(1, len(df))
+
+    def create_h_salaries(salary_cap):
+        return np.array(salary_cap).reshape(1, 1)
+
+
+    def create_G_team(team_map, player_map):
+        
+        num_players = len(player_map)
+        num_teams = len(team_map)
+        G_teams = np.zeros(shape=(num_teams, num_players))
+
+        for i in range(num_players):
+
+            cur_team = player_map[i]['team']
+            cur_pos = player_map[i]['pos']
+            if cur_pos != 'DEF':
+                G_teams[team_map[cur_team], i] = -1
+
+        return G_teams
+
+
+    def get_max_team(labels, c_points, added_teams):
+
+        team_pts = pd.concat([labels, c_points], axis=1)
+        team_pts = team_pts[~team_pts.pos.isin(['DEF'])]
+        team_pts = pd.merge(team_pts, top_team_players, on=['player', 'team'])
+        team_pts = team_pts.drop(['salary', 'player', 'pos'], axis=1)
+        team_pts = team_pts.groupby('team').sum()
+
+        best_teams = team_pts.apply(lambda x: pd.Series(x.nsmallest(3).index))
+        best_teams = [b[0] for b in best_teams.values]
+        best_teams.extend(added_teams)
+
+        best_team = np.random.choice(best_teams)
+
+        return best_team
+
+
+    def create_h_teams(team_map, added_teams, set_max_team, min_players):
+
+        if set_max_team is None: 
+            max_team = get_max_team(labels, c_points, added_teams)
+        else:
+            max_team = set_max_team
+
+        h_teams = np.full(shape=(len(team_map), 1), fill_value=0)
+        h_teams[team_map[max_team]] = -min_players
+
+        return h_teams, max_team
+
+    def create_G_players(player_map):
+
+        num_players = len(player_map)
+        G_players = np.zeros(shape=(num_players, num_players))
+        np.fill_diagonal(G_players, -1)
+
+        return G_players
+
+    def create_h_players(player_map, h_player_add):
+        num_players = len(player_map)
+        h_players = np.zeros(shape=(num_players, 1))
+
+        for player, val in h_player_add.items():
+            h_players[player_map[player]] = val
+
+        return h_players
+
+    def sample_c_points(data, max_entries):
+
+        labels = data[['player', 'pos', 'team', 'salary']]
+        current_points = -1 * data.iloc[:, np.random.choice(range(4, max_entries+4))]
+
+        return labels, current_points
+
+
+    def solve_ilp(c, G, h, A, b):
+            
+        # solve the integer LP problem
+        (status, x) = ilp(c, G, h, A=A, b=b, B=set(range(0, len(c))))
+
+        return status, x
+
+
+    def tally_player_selections(predictions, player_selections, x):
+            
+            # find all LP results chosen and equal to 1
+            x = np.array(x)[:, 0]==1
+            names = predictions.player.values[x]
+
+            # add up the player selections
+            if len(names) != len(np.unique(names)):
+                pass
+            else:
+                for n in names:
+                    player_selections[n] += 1
+
+            return player_selections
+
+
+    pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
+    num_runs = 500
+
+    # set league information, included position requirements, number of teams, and salary cap
+    to_add = ["Ja'Marr Chase", 'Joe Burrow', 'Tee Higgins', 'George Kittle',
+            'Javonte Williams', 'Melvin Gordon', 'CLE', 'Gabriel Davis', 'Hunter Renfrow']
+    to_drop = ['Antonio Gibson']
+
+    min_players_same_team = 3
+    salary_cap = 50000
+    set_max_team = None
+
+    def run_sim(self, to_add, to_drop, min_players_same_team, set_max_team):
+        
+        player_selections = self.init_select_cnts()
+        max_team_cnt = []
+
+        for i in range(self.num_iters):
+
+            if i % 100 == 0:
+
+                # pull out current add players and added teams
+                h_player_add, open_pos_require = self.add_players(to_add)
+                remaining_pos_cnt = np.sum(list(open_pos_require.values()))
+                added_teams, max_added_team_cnt = self.get_current_team_cnts(to_add)
+
+                # append the flex position to position requirements
+                cur_pos_require = self.add_flex(open_pos_require)
+
+                # get predictions and remove to drop players
+                predictions = self.get_predictions(num_options=500)
+                predictions = self.drop_players(predictions, to_drop)
+
+                if i == 0:
+                    position_map = self.position_matrix_mapping(cur_pos_require)
+                    idx_player_map, player_idx_map = player_matrix_mapping(predictions)
+                    team_map = team_matrix_mapping(predictions)
+
+                    A_position = create_A_position(position_map, idx_player_map)
+                    b_position = create_b_matrix(cur_pos_require)
+
+                    G_salaries = create_G_salaries(predictions)
+                    h_salaries = create_h_salaries(salary_cap)
+
+                    G_players = create_G_players(player_idx_map)
+                    h_players = create_h_players(player_idx_map, h_player_add)
+
+                    G_teams = create_G_team(team_map, idx_player_map)
+                
+            # generate the c matrix with the point values to be optimized
+            labels, c_points = sample_c_points(predictions, num_options)
+            
+            if remaining_pos_cnt > min_players_same_team and max_added_team_cnt < min_players_same_team:
+            
+                h_teams, max_team = create_h_teams(team_map, added_teams, set_max_team, min_players_same_team)
+                max_team_cnt.append(max_team)
+                G = np.concatenate([G_salaries, G_teams, G_players])
+                h = np.concatenate([h_salaries, h_teams, h_players])
+
+            else:
+                G = np.concatenate([G_salaries, G_players])
+                h = np.concatenate([h_salaries, h_players])
+
+            G = matrix(G, tc='d')
+            h = matrix(h, tc='d')
+            b = matrix(b_position, tc='d')
+            A = matrix(A_position, tc='d')    
+            c = matrix(c_points, tc='d')
+
+            if len(to_add) < 9:
+                status, x = solve_ilp(c, G, h, A, b)
+                player_selections = tally_player_selections(predictions, player_selections, x)
+            
+        results = pd.DataFrame(player_selections,index=['SelectionCounts']).T
+        results.sort_values(by='SelectionCounts', ascending=False).iloc[:25]
+
+
+
+
+
+
+
+
 
 
 # %%
