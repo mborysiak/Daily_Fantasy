@@ -7,6 +7,7 @@ import os
 import gzip
 import pickle
 import datetime as dt
+import matplotlib.pyplot as plt
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -37,7 +38,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 14
+set_week = 15
 
 model_type = 'backfill'
 vers = 'standard'
@@ -419,8 +420,55 @@ for set_pos in positions:
         best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
                                                                 X_stack, y_stack, n_iter=50, 
                                                                 run_adp=True, print_coef=False)
-
+        best_models.append(best_model)
         db_output = add_result_db_output('final', final_m, [adp_score, stack_score], db_output)
+
+
+        # get the final output:
+        X_fp, y_fp = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
+
+        val_predictions = pd.DataFrame()
+        for bm, fm in zip(best_models, final_models):
+            val_predict = pd.Series(skm_stack.cv_predict(bm, X_fp, y_fp), name=f'pred_{met}_{fm}')
+            val_predictions = pd.concat([val_predictions, val_predict], axis=1)
+
+        #------------
+        # Scatter and Metrics for Overall Results
+        #------------
+        plt.scatter(val_predict, y_fp)
+        plt.xlabel('predictions');plt.ylabel('actual')
+        plt.show()
+        from sklearn.metrics import r2_score
+        print('Total R2:', r2_score(y_fp, val_predict))
+
+        val_high_score = pd.concat([val_predict, y_fp], axis=1)
+        val_high_score.columns = ['predictions','y_act']
+        val_high_score = val_high_score[val_high_score.predictions >= \
+                                        np.percentile(val_high_score.predictions, 75)]
+
+        val_high_score.plot.scatter(x='predictions', y='y_act')
+        plt.show()
+        print('High Score R2:', r2_score(val_high_score.y_act, val_high_score.predictions))
+
+
+    #------------
+    # Scatter and Metrics for Overall Results
+    #------------
+    plt.scatter(val_predictions.mean(axis=1), y_fp)
+    plt.xlabel('predictions');plt.ylabel('actual')
+    plt.show()
+    from sklearn.metrics import r2_score
+    print('Total R2:', r2_score(y_fp, val_predictions.mean(axis=1)))
+
+    val_high_score = pd.concat([val_predictions.mean(axis=1), y_fp], axis=1)
+    val_high_score.columns = ['predictions','y_act']
+    val_high_score = val_high_score[val_high_score.predictions >= \
+                                    np.percentile(val_high_score.predictions, 75)]
+
+    val_high_score.plot.scatter(x='predictions', y='y_act')
+    plt.show()
+    print('High Score R2:', r2_score(val_high_score.y_act, val_high_score.predictions))
+
 
     # write out tracking results to tracking DB
     db_output_pd = pd.DataFrame(db_output)
