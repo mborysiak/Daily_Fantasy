@@ -250,11 +250,11 @@ for i in range(len(percs) - 1):
 
 # set year to analyze
 set_year = 2021
-set_week = 14
+set_week = 15
 
-# full_model or backfill
 vers = 'standard'
-drop_teams = ['MIN', 'PIT', 'CHI', 'GB', 'LAR', 'ARI']
+drop_teams = ['KC', 'LAC', 'IND', 'NE', 'NO', 'TB', 
+              'LVR', 'CLE', 'MIN', 'CHI', 'LAR', 'SEA', 'WAS', 'PHI']
 
 
 def get_predictions(drop_teams, vers, set_week, set_year):

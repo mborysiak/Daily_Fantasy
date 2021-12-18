@@ -2,11 +2,9 @@
 #%%
 
 # import sim functions
-from zSim_Helper import *
+from pandas.core.frame import DataFrame
+from zSim_Helper_Covar import *
 import seaborn as sns
-from IPython.core.pylabtools import figsize
-import os
-import sqlite3
 
 # set the root path and database management object
 from ff.db_operations import DataManage
@@ -20,57 +18,45 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
-# np.random.seed(1234)
+year = 2021
+week = 15
+num_iters = 5
 
 #--------
 # League Settings
 #--------
 
-# connection for simulation and specific table
-path = f'/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
-conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
-set_year = 2021
-league=14
-
-# number of iteration to run
-iterations = 250
-
 # set league information, included position requirements, number of teams, and salary cap
-league_info = {}
-league_info['pos_require'] = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'FLEX': 1, 'DST': 1}
-league_info['num_teams'] = 12
-league_info['initial_cap'] = 50000
-league_info['salary_cap'] = 50000
+salary_cap = 50000
+pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 
-flex_pos = ['RB', 'WR', 'TE']
-
-total_pos = np.sum(list(league_info['pos_require'].values()))
+# create a dictionary that also contains FLEX
+pos_require_flex = copy.deepcopy(pos_require_start)
+del pos_require_flex['DEF']
+pos_require_flex['FLEX'] = 1
+pos_require_flex['DEF'] = 1
+total_pos = np.sum(list(pos_require_flex.values()))
 
 #==================
 # Initialize the Simluation Class
 #==================
 
 # instantiate simulation class and add salary information to data
-sim = FootballSimulation(conn_sim, set_year, league)
+sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters)
 
 # return the data and set up dataframe for proportion of salary across position
-d = sim.return_data()
+d = sim.player_data
 d = d.rename(columns={'pos': 'Position', 'salary': 'Salary'})
-d.Position = d.Position.apply(lambda x: x[1:])
-
 
 # pull in projected ownership
 ownership = dm.read(f'''SELECT player Player, ownership Ownership
                         FROM Projected_Ownership
-                        WHERE week={league} 
-                              AND year={set_year}''', 'Simulation')
+                        WHERE week={week} 
+                              AND year={year}''', 'Simulation')
 
 #------------------
 # For Beta Keepers
 #------------------
-
-# input information for players and their associated salaries selected by other teams
-keepers = {}
 
 import dash
 import dash_table
@@ -86,26 +72,12 @@ import plotly.figure_factory as ff
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets, prevent_initial_callbacks=False)
 
-
 #==================
 # Expected Points Functions
 #==================
 
 def csv_check(df, name):
     return df.to_csv(f'c:/Users/mborysia/Desktop/FF_App/{name}.csv', index=False)
-
-#==========================
-# Submit Data Entry
-#==========================
-
-# submit button
-red_button_style = {'background-color': 'red',
-                    'color': 'white',
-                    'height': '20',
-                    'width': '100%',
-                    'fontSize': 16}
-submit_button = html.Button(id='submit-button-state', n_clicks=0, 
-                            children='Refresh Top Picks', style=red_button_style)
 
 
 #============================
@@ -120,22 +92,19 @@ main_color_rgba = f'rgba({main_color}, 0.8)'
 # Set up dataframe and Data Table for My Team
 #--------------
 
-def get_pick_df(d):
+def init_player_table_df(d):
+
     player_list = []
-    for pl, row in d.sort_values(by='Salary', ascending=False)[['Salary', 'Position']].iterrows():
-        if row.Position != 'FLEX':
-            player_list.append([row.Position, pl, row.Salary, 0])
+    for _, row in d.sort_values(by='Salary', ascending=False).iterrows():
+        player_list.append([row.Position, row.player, row.Salary, 0])
 
     pick_df = pd.DataFrame(player_list, columns=['Position', 'Player', 'List Salary', 'Salary'])
     pick_df['My Team'] = 'No'
 
-    for p, s in keepers.items():
-        pick_df.loc[pick_df.Player==p, 'Salary'] = s
-
     return pick_df
 
 # set up all players drafted DataTable
-def get_drafted_player_table(pick_df):
+def init_player_table_dash(pick_df):
     return dash_table.DataTable(
                             id='draft-results-table',
 
@@ -154,8 +123,7 @@ def get_drafted_player_table(pick_df):
                                         'options': [
                                             {'label': i, 'value': i} for i in ['Yes', 'No']
                                         ]
-                                    }
-                                    # 'style': {'backgroundColor': 'white', 'color': 'black'}
+                                        }
                                     },
                             style_data_conditional=[{
                                         'if': {'column_editable': False},
@@ -168,23 +136,17 @@ def get_drafted_player_table(pick_df):
                                     }
                         )
 
-
 #--------------
-# Set up dataframe and Data Table for My Team
+# Set up dataframe and Data Table for My Team and Team Info
 #--------------
 
-my_team_list = []
-for k, v in league_info['pos_require'].items():
-    for i in range(v):
-        my_team_list.append([k, None, 0, 0])
-my_team_df = pd.DataFrame(my_team_list, columns=['Position', 'Player', 'Salary', 'Points Added'])
+def basic_dash_table(id_name, df, text_align='left', font_size=14):
 
- # set up my team  drafted DataTable
-my_team_table =  dash_table.DataTable(
-                            id='my-team-table',
-                            columns=[{"name": i, "id": i, 'editable': False} for i in my_team_df.columns],
-                            data=my_team_df.to_dict('records'),
-                            style_cell={'textAlign': 'left', 'fontSize':14, 'font-family':'sans-serif'},
+     return  dash_table.DataTable(
+                            id=id_name,
+                            columns=[{"name": i, "id": i, 'editable': False} for i in df.columns],
+                            data=df.to_dict('records'),
+                            style_cell={'textAlign': text_align, 'fontSize': font_size, 'font-family':'sans-serif'},
                             style_header={
                                         'backgroundColor': main_color_rgb,
                                         'fontWeight': 'bold',
@@ -196,29 +158,22 @@ my_team_table =  dash_table.DataTable(
                                     }],
                         )
 
-#--------------
-# Set up dataframe and Data Table for Team Info
-#--------------
+def init_my_team_df(pos_require):
 
-team_info = pd.DataFrame({'Mean Points': [None],
-                          'Remaining Salary Per': [np.round(league_info['salary_cap'] / total_pos,0)],
-                          'Remaining Salary': [league_info['salary_cap']]})
+    my_team_list = []
+    for k, v in pos_require.items():
+        for _ in range(v):
+            my_team_list.append([k, None, 0, 0])
+    my_team_df = pd.DataFrame(my_team_list, columns=['Position', 'Player', 'Salary', 'Points Added'])
+    
+    return my_team_df
 
-team_info_table =  dash_table.DataTable(
-                            id='team-info-table',
-                            columns=[{"name": i, "id": i, 'editable': False} for i in team_info.columns],
-                            data=team_info.to_dict('records'),
-                            style_cell={'textAlign': 'center', 'fontSize':14, 'font-family':'sans-serif'},
-                            style_header={
-                                        'backgroundColor': main_color_rgb,
-                                        'fontWeight': 'bold',
-                                        'color': 'white'
-                                    },
-                            style_data_conditional=[{
-                                        'if': {'column_editable': False},
-                                        'backgroundColor': 'rgb(230, 230, 230)',
-                                    }],
-                        )
+
+def init_team_info_df(salary_cap, total_pos):
+
+    return pd.DataFrame({'Mean Points': [None],
+                         'Remaining Salary Per': [np.round(salary_cap / total_pos,0)],
+                         'Remaining Salary': [salary_cap]})
 
 #==========================
 # Plotting Functions
@@ -229,56 +184,58 @@ def create_bar(x_val, y_val, orient='h', color_str=main_color_rgba, text=None):
     Function to create a horizontal bar chart
     '''
     marker_set = dict(color=color_str, line=dict(color=color_str, width=1))
-    return go.Bar(x=x_val, y=y_val, marker=marker_set, orientation=orient, text=text, showlegend=False)
+    return go.Bar(x=x_val, y=y_val, marker=marker_set, orientation=orient, 
+                 text=text, showlegend=False)
 
 
-def create_fig_layout(fig1, fig2, fig3):
+def create_fig_layout(figs, height=450):
     '''
     Function to combine bar charts into a single figure
     '''
-    fig = go.Figure(data=[fig1, fig2, fig3])
+    fig = go.Figure(data=figs)
     
     # Change the bar mode
-    fig.update_layout(barmode='group', autosize=True, height=1800, 
+    fig.update_layout(barmode='group', autosize=True, height=height, 
                       margin=dict(l=0, r=25, b=0, t=15, pad=0),
                       uniformtext_minsize=25, uniformtext_mode='hide')
     fig.update_traces(texttemplate='%{text:.2s}', textposition='outside')
 
     return fig
 
-def create_hist(team_dist):
+
+def init_graph_dash_object(id_name):
+    return  dcc.Graph(id=id_name)
+
+#==========================
+# Clickable buttons
+#==========================
+
+def init_submit_dash_button():
     
-    hist_data = [team_dist.projection.values]
-    group_labels = [''] # name of the dataset
+    # submit button
+    red_button_style = {'background-color': 'red',
+                        'color': 'white',
+                        'height': '20',
+                        'width': '100%',
+                        'fontSize': 16}
 
-    fig_hist = ff.create_distplot(hist_data, group_labels, bin_size=10, show_rug=False, colors=[main_color_rgba])
-    fig_hist.update_layout(autosize=True, height=200, margin=dict(l=0, r=0, b=0, t=0, pad=0), showlegend=False)
-
-    return fig_hist
+    return html.Button(id='submit-button-state', n_clicks=0, 
+                       children='Refresh Top Picks', style=red_button_style)
 
 
-#--------------
-# Plot Creation
-#--------------
+def init_download_dash_button():
 
-# bar chart creation
-bar_gr = dcc.Graph(id='draft-results-graph')
+    blue_button_style = {'background-color': 'blue',
+                        'color': 'white',
+                        'height': '20',
+                        'width': '100%',
+                        'fontSize': 16}
 
-# histogram creation
-hist_gr = dcc.Graph(id='team-points-graph')
+    download_button = html.Button("Push to Database", id="download-button", style=blue_button_style)
+    file_download = dcc.Download(id="download")
 
-#-------------
-# Set up the CSV download button
-#-------------
+    return download_button, file_download
 
-blue_button_style = {'background-color': 'blue',
-                    'color': 'white',
-                    'height': '20',
-                    'width': '100%',
-                    'fontSize': 16}
-
-download_button = html.Button("Push to Database", id="download-button", style=blue_button_style)
-file_download = dcc.Download(id="download")
 
 #============================
 # Build out App Layout
@@ -286,82 +243,72 @@ file_download = dcc.Download(id="download")
 
 def app_layout():
 
-    d = sim.create_sample_data()
+    # pull in current player data
+    d = sim.player_data
     d = d.rename(columns={'pos': 'Position', 'salary': 'Salary'})
-    d.Position = d.Position.apply(lambda x: x[1:])
+    
+    # create the player data dash interface
+    player_data_df = init_player_table_df(d)
+    player_data_dash_table = init_player_table_dash(player_data_df)
 
-    pick_df = get_pick_df(d)
-    drafted_player_table = get_drafted_player_table(pick_df)
+    # get the interface for my team selection tracking
+    my_team_df = init_my_team_df(pos_require_flex)
+    my_team_dash_table = basic_dash_table('my-team-table', my_team_df)
+
+    # get the interface for tracking overal team information (points, salary, etc)
+    team_info_df = init_team_info_df(salary_cap, total_pos)
+    team_info_dash_table = basic_dash_table('team-info-table', team_info_df, text_align='center')
+
+    # get the interface for the player selection bar graph
+    player_selection_graph = init_graph_dash_object(id_name='draft-results-graph',)
+    best_team_graph =  init_graph_dash_object(id_name='best-team-graph')
+
+    # get the interface for submit and download buttons
+    download_button, file_download = init_download_dash_button()
+    submit_button = init_submit_dash_button()
 
     return html.Div([
                 html.Div([
-                    html.Div([
-                        html.H5("Enter Draft Pick Information"),
-                        drafted_player_table,
-                        ], className="four columns"),
+                            # first column of viz with player data
+                            html.Div([
+                                html.H5("Enter Draft Pick Information"),
+                                player_data_dash_table,
+                                ], className="four columns"),
 
-                        html.Div([
-                            html.H5('My Team'),
-                            my_team_table, html.Hr(),
-                            submit_button, html.Hr(),
-                            html.H5('Team Information'),
-                            team_info_table,
-                            html.Hr(),
-                            download_button, file_download,
-                            html.Hr(),
-                            hist_gr
-                        ], className='four columns'),
+                            # second column of viz with my team, team info, and refresh buttons
+                            html.Div([
+                                html.H5('My Team'),
+                                my_team_dash_table, html.Hr(),
 
-                        html.Div([
-                            html.H5('Recommended Picks'),
-                            bar_gr
-                        ], className="four columns")
+                                submit_button, html.Hr(),
+
+                                html.H5('Team Information'),
+                                team_info_dash_table, html.Hr(),
+
+                                download_button, file_download, html.Hr(),
+                            ], className='four columns'),
+
+                            # third column of viz with player recommendation graph
+                            html.Div([
+                                html.H5('Top Scoring Teams'),
+                                best_team_graph, html.Hr(),
+
+                                html.H5('Recommended Picks'),
+                                player_selection_graph
+
+                            ], className="four columns")
 
                 ], className="row2") ,        
                     
                 ])
 
-
+# update the app based on the above layout
 app.layout = app_layout
 
 
 #============================
 # Update Functions
 #============================
-
-def update_to_drop(df):
-    '''
-    INPUT: Dataframe containing players + salaries to be dropped from selection
-
-    OUTPUT: Dictionary containing dropped player + salaries for passing into simulation
-    '''
-    to_drop = {}
-    to_drop['players'] = []
-    to_drop['salaries'] = []
-    for _, row in df.iterrows():
-        if row.Salary > 0:
-            to_drop['players'].append(row.Player)
-            to_drop['salaries'].append(row.Salary)
-
-    return to_drop
-
-
-def update_to_add(df):
-    '''
-    INPUT: Dataframe containing players + salaries to be added to my team
-
-    OUTPUT: Dictionary containing my team player + salaries for passing into simulation
-    '''
-    to_add = {}
-    to_add['players'] = []
-    to_add['salaries'] = []
-    for _, row in df.iterrows():
-        if row.Player is not None and row.Player!='' and row.Salary > 0:
-            to_add['players'].append(row.Player)
-            to_add['salaries'].append(row.Salary)
-
-    return to_add
-
 
 def team_fill(df, df2):
     '''
@@ -388,17 +335,129 @@ def team_fill(df, df2):
             if min_idx is not np.nan:
                 df.loc[min_idx, ['Player', 'Salary']] = [row.Player, row.Salary]
 
-            # otherwise, fill in the Bench
-            else:
-                bench = pd.DataFrame(['Bench', row.Player, row.Salary]).T
-                bench.columns = ['Position', 'Player', 'Salary']
-                df = pd.concat([df, bench], axis=0)
     return df
 
 
+def convert_dash_to_df(player_data, player_columns):
+
+    # get the list of drafted players
+    df = pd.DataFrame(player_data, columns=[c['name'] for c in player_columns])
+    df.Salary = df.Salary.astype('int')
+
+    return df
+
+
+def create_my_team(df, pos_require):
+    
+    # create a template of all team positions and players current selected for my team
+    my_team_template = init_my_team_df(pos_require)
+    my_team = df[df['My Team']=='Yes'].reset_index(drop=True)
+    my_team_dash = team_fill(my_team_template.copy(), my_team)
+    num_players_selected = my_team.shape[0]
+
+    return my_team, my_team_dash, num_players_selected
+
+
+def create_players_removed(df):
+
+    return df[df['My Team']!='Yes'].reset_index(drop=True)
+
+def update_add_drop_lists(df):
+    players = list(df.loc[df.Salary>0, 'Player'].values)
+    salaries = list(df.loc[df.Salary>0, 'Salary'].values)
+
+    return players, salaries
+
+
+def format_results(results, my_team_cnt):
+    
+    # get the results dataframe structured
+    results = results.sort_values(by='SelectionCounts').iloc[:25-my_team_cnt]
+    results.columns = ['Player', 'PercentDrafted', 'AverageSalary']
+
+    results = pd.merge(results, ownership, on='Player', how='left')
+    results.Ownership = results.Ownership.fillna(0)
+
+    return results
+
+
+def update_player_selection_chart(results):
+    # Creating subplots and merging into single figure
+    pick_bar = create_bar(results.PercentDrafted, results.Player, text=results.PercentDrafted)
+    sal_bar = create_bar(results.AverageSalary/1000, results.Player, color_str='rgba(237, 137, 117, 1)', text=results.AverageSalary/1000)
+    own_bar = create_bar(results.Ownership, results.Player, color_str='rgba(250, 190, 88, 1)', text=results.Ownership)
+    player_pick_dash_fig = create_fig_layout([own_bar, sal_bar, pick_bar])
+
+    return player_pick_dash_fig
+
+
+def update_top_team_chart(max_team_cnt):
+
+    team_bar = create_bar(max_team_cnt.high_team_score, max_team_cnt.team, max_team_cnt.high_team_score)
+    team_pick_dash_fig = create_fig_layout([team_bar])
+    return team_pick_dash_fig
+
+def update_team_info(my_team, my_team_dash, remain_sal):
+
+    selected = list(my_team.Player)
+    if len(selected) > 0:
+        my_player_pts = sim.player_data.loc[(sim.player_data.player.isin(selected)), ['player', 'pred_fp_per_game']]
+        my_player_pts.columns = ['Player', 'Points Added']
+        my_player_pts['Points Added'] = my_player_pts['Points Added'].apply(lambda x: np.round(x, 1))
+
+        my_team_dash = pd.merge(my_team_dash.drop('Points Added', axis=1), my_player_pts, on='Player', how='left')
+        my_team_dash['Points Added'] = my_team_dash['Points Added'].fillna(0)
+
+    remain_sal_per = np.round(remain_sal / (total_pos - len(selected)),0)
+
+    # update team information table
+    team_info_update = pd.DataFrame({'Mean Points': np.round(my_team_dash['Points Added'].sum(), 1), 
+                                     'Remaining Salary Per': [remain_sal_per],
+                                     'Remaining Salary': [remain_sal]})
+
+    return team_info_update, my_team_dash, remain_sal_per
+
+
+
+
+def create_database_output(my_team):
+
+    ids = dm.read(f"SELECT * FROM Player_Ids WHERE year={year} AND league={week}", "Simulation")
+    my_team_ids = my_team.rename(columns={'Player': 'player'}).copy()
+    dk_output = pd.merge(my_team_ids, ids, on='player')
+
+    for pstn, num_req in zip(['WR', 'RB', 'TE'], [4, 3, 2]):
+        if len(dk_output[dk_output.Position == pstn]) == num_req:
+            idx_last = dk_output[dk_output.Position == pstn].index[-1]
+            dk_output.loc[dk_output.index==idx_last, 'Position'] = 'FLEX'
+
+    pos_map = {
+        'QB': 'aQB', 
+        'RB': 'bRB',
+        'WR': 'cWR',
+        'TE': 'dTE',
+        'FLEX': 'eFLEX',
+        'DST': 'fDST'
+    }
+    dk_output.Position = dk_output.Position.map(pos_map)
+    dk_output = dk_output.sort_values(by='Position').reset_index(drop=True)
+    pos_map_rev = {v: k for k,v in pos_map.items()}
+    dk_output.Position = dk_output.Position.map(pos_map_rev)
+
+    dk_output_ids = dk_output[['Position', 'player_id']].T.reset_index(drop=True)
+    dk_output_players = dk_output[['Position', 'player']].T.reset_index(drop=True)
+    dk_output = pd.concat([dk_output_players, dk_output_ids], axis=1)
+
+    dk_output.columns = range(dk_output.shape[1])
+    dk_output = pd.DataFrame(dk_output.iloc[1,:]).T
+
+    dk_output['year'] = year
+    dk_output['week'] = week
+    
+    dm.write_to_db(dk_output, 'Results', 'Best_Lineups', 'append')
+
 
 @app.callback([Output('draft-results-graph', 'figure'),
-             #  Output('team-points-graph', 'figure'),
                Output('my-team-table', 'data'),
                Output('team-info-table', 'data'),
                Output("download", "data")],
@@ -408,112 +467,43 @@ def team_fill(df, df2):
                State('draft-results-table', 'columns')],
                prevent_initial_call=True,
 )
-def update_output(n_clicks, n_clicks_csv, drafted_data, drafted_columns):
+def update_output(n_clicks, n_clicks_csv, player_dash_table_data, player_dash_table_columns):
 
-    # get the list of drafted players
-    drafted_df = pd.DataFrame(drafted_data, columns=[c['name'] for c in drafted_columns])
-    drafted_df.Salary = drafted_df.Salary.astype('int')
-
-    # create a template of all team positions and players current selected for my team
-    my_team_template = my_team_df.copy()
-    my_team_select = drafted_df[drafted_df['My Team']=='Yes'].reset_index(drop=True)
-    my_team_update = team_fill(my_team_template.copy(), my_team_select)
-
-    # create a dataset of all other players that have been drafted
-    drafted_df = drafted_df[drafted_df['My Team']!='Yes'].reset_index(drop=True)
+    # extract the player data with yes / no selections and turn into my team and non-drafted players
+    player_data_df = convert_dash_to_df(player_dash_table_data, player_dash_table_columns)
+    my_team, my_team_dash, my_team_player_cnt = create_my_team(player_data_df, pos_require_flex)
+    players_removed = create_players_removed(player_data_df)
 
     # get lists of to_drop and to_add players and remaining salary
-    to_drop = update_to_drop(drafted_df)
-    to_add = update_to_add(my_team_update)
-    remain_sal = league_info['salary_cap'] - np.sum(to_add['salaries'])
+    to_drop_players, _ = update_add_drop_lists(players_removed)
+    to_add_players, added_salaries = update_add_drop_lists(my_team)
+    remain_sal = salary_cap - np.sum(added_salaries)
 
     # run the simulation
-    if my_team_select.shape[0] < total_pos:
-        _, _ = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
-    
-    # get the results dataframe structured
-    avg_sal = sim.show_most_selected(to_add, iterations, num_show=30)
-    avg_sal = avg_sal.sort_values(by='Percent Drafted').reset_index()
-    avg_sal.columns = ['Player', 'PercentDrafted', 'AverageSalary', 'ExpectedSalaryDiff']
+    if my_team_player_cnt <= total_pos:
+        min_players_same_team = 3
+        set_max_team = None
+        results, max_team_cnt = sim.run_sim(to_add_players, to_drop_players, min_players_same_team, set_max_team)
+        results = format_results(results, my_team_player_cnt)
+        print(max_team_cnt)
+        player_select_graph = update_player_selection_chart(results)
+        top_team__graph = update_player_selection_chart(max_team_cnt)
 
-    avg_sal = pd.merge(avg_sal, ownership, on='Player', how='left')
-    avg_sal.Ownership = avg_sal.Ownership.fillna(0)
-
-    # Creating two subplots and merging into single figure
-    (pl, pc_dr, av_sl, own) = avg_sal.Player, avg_sal.PercentDrafted,  avg_sal.AverageSalary/1000, avg_sal.Ownership
-    pick_bar = create_bar(pc_dr, pl, text=pc_dr)
-    sal_bar = create_bar(av_sl, pl, color_str='rgba(237, 137, 117, 1)', text=av_sl)
-    own_bar = create_bar(own, pl, color_str='rgba(250, 190, 88, 1)', text=own)
-
-    gr_fig = create_fig_layout(own_bar, sal_bar, pick_bar)
- 
-    # hist_fig = create_hist(cur_team_dist)
-
-    if my_team_select.shape[0] > 0:
-        selected = list(my_team_select.Player)
-        my_player_pts = sim.data[(sim.data.index.isin(selected)) & (sim.data.pos!='eFLEX')].drop(['pos', 'salary'], axis=1)
-        
-        my_player_mean = my_player_pts.copy().mean(axis=1).reset_index()
-        my_player_mean.columns = ['Player', 'Points Added']
-        my_player_mean['Points Added'] = my_player_mean['Points Added'].apply(lambda x: np.round(x, 1))
-
-        my_team_update = pd.merge(my_team_update.drop('Points Added', axis=1), my_player_mean, on='Player', how='left')
-        my_team_update['Points Added'] = my_team_update['Points Added'].fillna(0)
-
-        remain_sal_per = np.round(remain_sal / (total_pos - len(selected)),0)
-
+    if my_team_player_cnt > 0:
+        team_info_update, my_team_dash = update_team_info(my_team, my_team_dash, remain_sal)
     else:
         remain_sal_per = np.round(remain_sal / total_pos,0)
 
-    # update team information table
-    team_info_update = pd.DataFrame({'Mean Points': np.round(my_team_update['Points Added'].sum(), 1), 
-                                     'Remaining Salary Per': [remain_sal_per],
-                                     'Remaining Salary': [remain_sal]})
-    
-    # save out csv of status
-    # drafted_df.to_csv('c:/Users/mborysia/Desktop/Status_Save.csv', index=False)
+    # trigger for if database button is pushed
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
     if 'download-button' in changed_id:
 
-        ids = dm.read(f"SELECT * FROM Player_Ids WHERE year={set_year} AND league={league}", "Simulation")
-        my_team_ids = my_team_select.rename(columns={'Player': 'player'}).copy()
-        dk_output = pd.merge(my_team_ids, ids, on='player')
-
-        for pstn, num_req in zip(['WR', 'RB', 'TE'], [4, 3, 2]):
-            if len(dk_output[dk_output.Position == pstn]) == num_req:
-                idx_last = dk_output[dk_output.Position == pstn].index[-1]
-                dk_output.loc[dk_output.index==idx_last, 'Position'] = 'FLEX'
-
-        pos_map = {
-            'QB': 'aQB', 
-            'RB': 'bRB',
-            'WR': 'cWR',
-            'TE': 'dTE',
-            'FLEX': 'eFLEX',
-            'DST': 'fDST'
-        }
-        dk_output.Position = dk_output.Position.map(pos_map)
-        dk_output = dk_output.sort_values(by='Position').reset_index(drop=True)
-        pos_map_rev = {v: k for k,v in pos_map.items()}
-        dk_output.Position = dk_output.Position.map(pos_map_rev)
-
-        dk_output_ids = dk_output[['Position', 'player_id']].T.reset_index(drop=True)
-        dk_output_players = dk_output[['Position', 'player']].T.reset_index(drop=True)
-        dk_output = pd.concat([dk_output_players, dk_output_ids], axis=1)
-
-        dk_output.columns = range(dk_output.shape[1])
-        dk_output = pd.DataFrame(dk_output.iloc[1,:]).T
-
-        dk_output['year'] = set_year
-        dk_output['week'] = league
-        
-
-        dm.write_to_db(dk_output, 'Results', 'Best_Lineups', 'append')
-
-        return gr_fig, my_team_update.to_dict('records'), team_info_update.to_dict('records'), None
+        # create database output if button is pushed
+        create_database_output(my_team)
+        return player_select_graph, my_team_dash.to_dict('records'), team_info_update.to_dict('records'), None
 
     else:
-        return gr_fig, my_team_update.to_dict('records'), team_info_update.to_dict('records'), None
+        return player_select_graph, my_team_dash.to_dict('records'), team_info_update.to_dict('records'), None
 
 
 #%%

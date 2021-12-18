@@ -45,7 +45,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 14
+set_week = 15
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -333,7 +333,8 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['MIN', 'PIT', 'CHI', 'GB', 'LAR', 'ARI']
+drop_teams = ['KC', 'LAC', 'IND', 'NE', 'NO', 'TB', 
+              'LVR', 'CLE', 'MIN', 'CHI', 'LAR', 'SEA', 'WAS', 'PHI']
 
 teams = dm.read(f'''SELECT * FROM Player_Teams''', 'Simulation')
 preds = pd.merge(preds, teams, on=['player'])

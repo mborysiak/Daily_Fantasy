@@ -275,9 +275,11 @@ class FootballSimulation:
 
     @staticmethod
     def solve_ilp(c, G, h, A, b):
-            
-        # solve the integer LP problem
-        (status, x) = ilp(c, G, h, A=A, b=b, B=set(range(0, len(c))))
+
+        opts = {'glpk': {'msg_lev':'GLP_MSG_OFF'},
+                'show_progress': False}
+    
+        (status, x) = ilp(c, G, h, A=A, b=b, B=set(range(0, len(c))), options=opts)
 
         return status, x
 
@@ -389,24 +391,21 @@ class FootballSimulation:
 
 # %%
 
-week = 14
-year = 2021
-salary_cap = 50000
-pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_iters = 500
+# week = 14
+# year = 2021
+# salary_cap = 50000
+# pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
+# num_iters = 500
 
-sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters)
+# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters)
 
 
-min_players_same_team = 3
-set_max_team = 'KC'
-to_add = ['Patrick Mahomes', 'Tyreek Hill', 'Clyde Edwards Helaire', 'Antonio Gibson',
-          'CLE', 'Austin Hooper', 'Jeff Wilson', 'Brandin Cooks', 'Cole Beasley']
-to_drop = ['Jared Cook']
-results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team)
-results
+# min_players_same_team = 3
+# set_max_team = None
+# to_add = []
+# to_drop = []
+# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team)
+# results
 
-# %%
 
-max_team_cnt
 # %%

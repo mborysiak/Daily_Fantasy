@@ -37,7 +37,7 @@ class FootballSimulation():
 
         self.sal = salaries
         self.data = pd.merge(self.data, salaries, how='left', left_on='player', right_on='player')
-        self.data.salary = self.data.salary.fillna(3000)
+        self.data.salary = self.data.salary.fillna(10000)
         
         # add flex data
         flex = self.data[self.data.pos.isin(['bRB', 'cWR', 'dTE'])]

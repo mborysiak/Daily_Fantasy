@@ -547,8 +547,8 @@ k_points = k_points.loc[k_points.Position=='K', ['Name', 'AvgPointsPerGame']].dr
 k_points.columns = ['player', 'pred_fp_per_game']
 k_points.player = k_points.player.apply(dc.name_clean)
 
-k_points['std_dev'] = k_points.pred_fp_per_game / 2
-k_points['max_score'] = k_points.pred_fp_per_game * 2.5
+k_points['std_dev'] = k_points.pred_fp_per_game / 1.5
+k_points['max_score'] = k_points.pred_fp_per_game * 3
 k_points['min_score'] = 0
 k_points['week'] = set_week
 k_points['year'] = set_year
