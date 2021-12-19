@@ -20,7 +20,7 @@ dm = DataManage(db_path)
 
 year = 2021
 week = 15
-num_iters = 5
+num_iters = 500
 
 #--------
 # League Settings
@@ -129,6 +129,40 @@ def init_player_table_dash(pick_df):
                                         'if': {'column_editable': False},
                                         'backgroundColor': 'rgb(230, 230, 230)',
                                     }],
+                            style_header={
+                                        'backgroundColor': main_color_rgb,
+                                        'fontWeight': 'bold',
+                                        'color': 'white'
+                                    }
+                        )
+
+def init_possible_teams(df):
+    possible_teams = ['Auto']
+    possible_teams.extend(list(df.team.unique()))
+    return possible_teams
+
+def init_stack_table_dash(possible_teams):
+    return dash_table.DataTable(
+                            id='stack-selection-table',
+
+                            columns=[{'id': 'Stack Team', 'name': 'Stack Team', 'presentation': 'dropdown', 'editable': True},
+                                     {'id': 'Stack Number', 'name': 'Stack Number','presentation': 'dropdown', 'editable': True}],
+                            data=pd.DataFrame({'Stack Team': ['Auto'], 'Stack Number': 3}).to_dict('records'),
+                            style_table={
+                                            'height': '75px'
+                                        },
+                            style_cell={'textAlign': 'left', 'fontSize':14, 'font-family':'sans-serif'},
+                            dropdown={
+                                    'Stack Team': {
+                                        'options': [
+                                            {'label': i, 'value': i} for i in possible_teams
+                                        ]},
+                                    'Stack Number': {
+                                        'options': [
+                                            {'label': str(i), 'value': str(i)} for i in range(1, 5)
+                                        ]
+                                        }
+                                    },
                             style_header={
                                         'backgroundColor': main_color_rgb,
                                         'fontWeight': 'bold',
@@ -255,6 +289,9 @@ def app_layout():
     my_team_df = init_my_team_df(pos_require_flex)
     my_team_dash_table = basic_dash_table('my-team-table', my_team_df)
 
+    possible_teams = init_possible_teams(d)
+    stack_selection_dash_table = init_stack_table_dash(possible_teams)
+
     # get the interface for tracking overal team information (points, salary, etc)
     team_info_df = init_team_info_df(salary_cap, total_pos)
     team_info_dash_table = basic_dash_table('team-info-table', team_info_df, text_align='center')
@@ -271,18 +308,21 @@ def app_layout():
                 html.Div([
                             # first column of viz with player data
                             html.Div([
-                                html.H5("Enter Draft Pick Information"),
+                                html.H6("Enter Draft Pick Information"),
                                 player_data_dash_table,
                                 ], className="four columns"),
 
                             # second column of viz with my team, team info, and refresh buttons
                             html.Div([
-                                html.H5('My Team'),
-                                my_team_dash_table, html.Hr(),
+                                html.H6('My Team'),
+                                my_team_dash_table, 
+
+                                html.H6('Stack Selection'),
+                                stack_selection_dash_table, html.Hr(),
 
                                 submit_button, html.Hr(),
 
-                                html.H5('Team Information'),
+                                html.H6('Team Information'),
                                 team_info_dash_table, html.Hr(),
 
                                 download_button, file_download, html.Hr(),
@@ -290,10 +330,10 @@ def app_layout():
 
                             # third column of viz with player recommendation graph
                             html.Div([
-                                html.H5('Top Scoring Teams'),
-                                best_team_graph, html.Hr(),
+                                html.H6('Top Scoring Teams'),
+                                best_team_graph, 
 
-                                html.H5('Recommended Picks'),
+                                html.H6('Recommended Picks'),
                                 player_selection_graph
 
                             ], className="four columns")
@@ -359,7 +399,6 @@ def create_my_team(df, pos_require):
 
 
 def create_players_removed(df):
-
     return df[df['My Team']!='Yes'].reset_index(drop=True)
 
 def update_add_drop_lists(df):
@@ -368,11 +407,24 @@ def update_add_drop_lists(df):
 
     return players, salaries
 
+def update_stack_data(stack_data):
+    # extract the max team and number of players to pull from max team
+    set_max_team = stack_data[0]['Stack Team']
+    min_players_same_team = int(stack_data[0]['Stack Number'])
+    
+    # if auto set the max team, then convert to None for sim argument
+    if set_max_team=='Auto': set_max_team=None
+    return set_max_team, min_players_same_team
+
 
 def format_results(results, my_team_cnt):
-    
+
+    len_results = len(results)
+    max_idx = len_results - my_team_cnt
+    min_idx = len_results - 20 - my_team_cnt
+
     # get the results dataframe structured
-    results = results.sort_values(by='SelectionCounts').iloc[:25-my_team_cnt]
+    results = results.sort_values(by='SelectionCounts').iloc[min_idx:max_idx]
     results.columns = ['Player', 'PercentDrafted', 'AverageSalary']
 
     results = pd.merge(results, ownership, on='Player', how='left')
@@ -386,27 +438,28 @@ def update_player_selection_chart(results):
     pick_bar = create_bar(results.PercentDrafted, results.Player, text=results.PercentDrafted)
     sal_bar = create_bar(results.AverageSalary/1000, results.Player, color_str='rgba(237, 137, 117, 1)', text=results.AverageSalary/1000)
     own_bar = create_bar(results.Ownership, results.Player, color_str='rgba(250, 190, 88, 1)', text=results.Ownership)
-    player_pick_dash_fig = create_fig_layout([own_bar, sal_bar, pick_bar])
+    player_pick_dash_fig = create_fig_layout([own_bar, sal_bar, pick_bar], height=1200)
 
     return player_pick_dash_fig
 
 
 def update_top_team_chart(max_team_cnt):
 
-    team_bar = create_bar(max_team_cnt.high_team_score, max_team_cnt.team, max_team_cnt.high_team_score)
-    team_pick_dash_fig = create_fig_layout([team_bar])
+    max_team_cnt = max_team_cnt.sort_values(by='high_score_team').iloc[-8:]
+    team_bar = create_bar(max_team_cnt.high_score_team, max_team_cnt.team, text=max_team_cnt.high_score_team)
+    team_pick_dash_fig = create_fig_layout([team_bar], height=200)
     return team_pick_dash_fig
 
-def update_team_info(my_team, my_team_dash, remain_sal):
+
+def update_team_info_table(my_team, my_team_dash, remain_sal):
 
     selected = list(my_team.Player)
-    if len(selected) > 0:
-        my_player_pts = sim.player_data.loc[(sim.player_data.player.isin(selected)), ['player', 'pred_fp_per_game']]
-        my_player_pts.columns = ['Player', 'Points Added']
-        my_player_pts['Points Added'] = my_player_pts['Points Added'].apply(lambda x: np.round(x, 1))
+    my_player_pts = sim.player_data.loc[(sim.player_data.player.isin(selected)), ['player', 'pred_fp_per_game']]
+    my_player_pts.columns = ['Player', 'Points Added']
+    my_player_pts['Points Added'] = my_player_pts['Points Added'].apply(lambda x: np.round(x, 1))
 
-        my_team_dash = pd.merge(my_team_dash.drop('Points Added', axis=1), my_player_pts, on='Player', how='left')
-        my_team_dash['Points Added'] = my_team_dash['Points Added'].fillna(0)
+    my_team_dash = pd.merge(my_team_dash.drop('Points Added', axis=1), my_player_pts, on='Player', how='left')
+    my_team_dash['Points Added'] = my_team_dash['Points Added'].fillna(0)
 
     remain_sal_per = np.round(remain_sal / (total_pos - len(selected)),0)
 
@@ -415,9 +468,7 @@ def update_team_info(my_team, my_team_dash, remain_sal):
                                      'Remaining Salary Per': [remain_sal_per],
                                      'Remaining Salary': [remain_sal]})
 
-    return team_info_update, my_team_dash, remain_sal_per
-
-
+    return team_info_update, my_team_dash
 
 
 def create_database_output(my_team):
@@ -458,16 +509,18 @@ def create_database_output(my_team):
 
 
 @app.callback([Output('draft-results-graph', 'figure'),
+               Output('best-team-graph', 'figure'),
                Output('my-team-table', 'data'),
                Output('team-info-table', 'data'),
                Output("download", "data")],
               [Input('submit-button-state', 'n_clicks'),
                Input("download-button", "n_clicks")],
               [State('draft-results-table', 'data'),
-               State('draft-results-table', 'columns')],
+               State('draft-results-table', 'columns'),
+               State('stack-selection-table', 'data')],
                prevent_initial_call=True,
 )
-def update_output(n_clicks, n_clicks_csv, player_dash_table_data, player_dash_table_columns):
+def update_output(nc, nc2, player_dash_table_data, player_dash_table_columns, stack_data):
 
     # extract the player data with yes / no selections and turn into my team and non-drafted players
     player_data_df = convert_dash_to_df(player_dash_table_data, player_dash_table_columns)
@@ -481,29 +534,28 @@ def update_output(n_clicks, n_clicks_csv, player_dash_table_data, player_dash_ta
 
     # run the simulation
     if my_team_player_cnt <= total_pos:
-        min_players_same_team = 3
-        set_max_team = None
+        set_max_team, min_players_same_team = update_stack_data(stack_data)
+        
         results, max_team_cnt = sim.run_sim(to_add_players, to_drop_players, min_players_same_team, set_max_team)
         results = format_results(results, my_team_player_cnt)
-        print(max_team_cnt)
+        
         player_select_graph = update_player_selection_chart(results)
-        top_team__graph = update_player_selection_chart(max_team_cnt)
+        top_team_graph = update_top_team_chart(max_team_cnt)
 
-    if my_team_player_cnt > 0:
-        team_info_update, my_team_dash = update_team_info(my_team, my_team_dash, remain_sal)
-    else:
-        remain_sal_per = np.round(remain_sal / total_pos,0)
+    team_info_update, my_team_dash = update_team_info_table(my_team, my_team_dash, remain_sal)
+
+    # convert my team and the team info tables to dictionary records for Output
+    my_team_dash = my_team_dash.to_dict('records')
+    team_info_update = team_info_update.to_dict('records')
 
     # trigger for if database button is pushed
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
     if 'download-button' in changed_id:
-
-        # create database output if button is pushed
         create_database_output(my_team)
-        return player_select_graph, my_team_dash.to_dict('records'), team_info_update.to_dict('records'), None
+        return player_select_graph, top_team_graph, my_team_dash, team_info_update, None
 
     else:
-        return player_select_graph, my_team_dash.to_dict('records'), team_info_update.to_dict('records'), None
+        return player_select_graph, top_team_graph, my_team_dash, team_info_update, None
 
 
 #%%

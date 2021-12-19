@@ -303,7 +303,7 @@ class FootballSimulation:
     
     def final_results(self, player_selections):
         results = pd.DataFrame(player_selections, index=['SelectionCounts']).T
-        results = results.sort_values(by='SelectionCounts', ascending=False).iloc[:25]
+        results = results.sort_values(by='SelectionCounts', ascending=False).iloc[:29]
         salaries = self.player_data[['player', 'salary']].set_index('player')
         results = pd.merge(results, salaries, left_index=True, right_index=True)
         results = results.reset_index().rename(columns={'index': 'player'})
@@ -362,7 +362,7 @@ class FootballSimulation:
             self.labels, self.c_points = self.sample_c_points(predictions, num_options)
             
             if remaining_pos_cnt > min_players_same_team and max_added_team_cnt < min_players_same_team:
-            
+             
                 h_teams, max_team = self.create_h_teams(team_map, added_teams, set_max_team, min_players_same_team)
                 max_team_cnt.append(max_team)
                 G = np.concatenate([G_salaries, G_teams, G_players])
@@ -380,7 +380,8 @@ class FootballSimulation:
 
             if len(to_add) < 9:
                 status, x = self.solve_ilp(c, G, h, A, b)
-                player_selections = self.tally_player_selections(predictions, player_selections, x)
+                if status=='optimal':
+                    player_selections = self.tally_player_selections(predictions, player_selections, x)
             
         results = self.final_results(player_selections)
         team_cnts = self.final_team_cnts(max_team_cnt)

@@ -348,32 +348,5 @@ mean_points.loc[mean_points.pos=='Defense', 'pos'] = 'DEF'
 dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
 dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
 
-#%%
 
-import scipy.stats as ss
-dist = ss.multivariate_normal(mean=mean_points.pred_fp_per_game.values, 
-                              cov=pred_cov_final.drop('player', axis=1), allow_singular=True)
-predictions = pd.DataFrame(dist.rvs(1000)).T
-predictions.index = pred_cov_final.index
-
-# predictions = pd.merge(preds[['pos']], predictions, left_index=True, right_index=True)
-# predictions = predictions.reset_index().rename(columns={'index': 'player'})
-# %%
-dm.write_to_db(predictions, 'Simulation', f'week{set_week}_year{set_year}', 'replace')
-
-# %%
-xx = predictions.copy()
-xx = xx.T
-xx.plot.scatter(x='Justin Herbert', y='Mike Williams')
-# %%
-yy = predictions.copy()
-yy = yy[~yy.pos.str.contains('FLEX')].drop(['pos'], axis=1).set_index('player').T
-std_dev = pd.DataFrame(yy.std(axis=0))
-
-yy = yy.corr() 
-name = 'Justin Herbert'
-yy = yy[[name]].sort_values(by=name, ascending=False).iloc[:25]
-yy = pd.merge(yy, std_dev, left_index=True, right_index=True)
-yy['cov'] = yy['Justin Herbert'] * yy[0] * 10
-yy
 # %%
