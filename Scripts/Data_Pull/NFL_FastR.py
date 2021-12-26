@@ -67,6 +67,13 @@ def calc_fp(df, pts_dict):
     return df
 
 
+def calc_fp_qb(df, pts_dict, rush_pass):
+    cols = list(pts_dict.keys())
+    pts = list(pts_dict.values())
+    df[f'fantasy_pts_{rush_pass}'] = (df[cols] * pts).sum(axis=1)
+    return df
+
+
 #%%
 
 #---------------
@@ -307,6 +314,19 @@ fp_cols = {'pass_yards_gained_sum': 0.04,
            'rush_yd_100_bonus': 3,
            'pass_yd_300_bonus': 3}
 qb = calc_fp(qb, fp_cols)
+
+rush_fp_cols = {'rush_yards_gained_sum': 0.1, 
+                'rush_rush_touchdown_sum': 6,
+                'rush_yd_100_bonus': 3}
+
+pass_fp_cols = {'pass_yards_gained_sum': 0.04, 
+                'pass_pass_touchdown_sum': 4, 
+                'pass_interception_sum': -1,
+                'fumble_lost': -1,
+                'pass_yd_300_bonus': 3}
+
+qb = calc_fp_qb(qb, rush_fp_cols, 'rush')
+qb = calc_fp_qb(qb, pass_fp_cols, 'pass')
 
 qb = qb.sort_values(by=['player', 'season', 'week']).reset_index(drop=True)
 

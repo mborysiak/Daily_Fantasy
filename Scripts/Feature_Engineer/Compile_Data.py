@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 15
+WEEK = 16
 
 #%%
 import pandas as pd 
@@ -426,6 +426,7 @@ def get_player_data(df, pos, YEAR, prev_years=1):
                       ''', 'FastR')
     if pos=='QB':
         rcols_player = [c for c in player_data.columns if 'pass_' in c]
+        rcols_player = [c for c in rcols_player if c not in ('y_act_rush', 'y_act_pass')]
     else:
         rcols_player = [c for c in player_data.columns if 'rec_' in c]
 
@@ -1146,13 +1147,21 @@ def projected_pts_vs_predicted(df, pos):
 
 
 
-def attach_y_act(df, pos, defense=False):
+def attach_y_act(df, pos, defense=False, rush_or_pass=''):
     if defense:
         y_act = dm.read(f'''SELECT defTeam player, week, season year, fantasy_pts y_act
-                        FROM {pos}_Stats
-                        WHERE season >= 2020''', 'FastR')
+                            FROM {pos}_Stats
+                            WHERE season >= 2020''', 'FastR')
     
         df = pd.merge(df, y_act, on=['player',  'week', 'year'], how='left')
+    
+    elif pos=='QB':
+        y_act = dm.read(f'''SELECT player, team, week, season year,
+                                   fantasy_pts{rush_or_pass} y_act
+                            FROM {pos}_Stats
+                            WHERE season >= 2020''', 'FastR')
+    
+        df = pd.merge(df, y_act, on=['player', 'team', 'week', 'year'], how='left')
     
     else:
         y_act = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
@@ -1166,8 +1175,11 @@ def attach_y_act(df, pos, defense=False):
 
 
 def drop_y_act_except_current(df, week, year):
+    
+    
     df = df[~(df.y_act.isnull()) | ((df.week==week) & (df.year==year))].reset_index(drop=True)
     df.loc[((df.week==week) & (df.year==year)), 'y_act'] = 0
+
     return df
 
 def remove_non_uniques(df):
@@ -1225,62 +1237,70 @@ defense = defense.rename(columns={'def_team': 'defTeam', 'def_week': 'week', 'de
 
 pos = 'QB'
 
-# pre-game data
-df = fantasy_pros(pos); print(df.shape[0])
-df = add_injuries(df, pos); print(df.shape[0])
-df = add_fp_rolling(df, pos); print(df.shape[0])
-df = fantasy_pros_rolling(df); print(df.shape[0])
-df = get_salaries(df, pos); print(df.shape[0])
-df = get_experts(df, pos); print(df.shape[0])
-df = add_pfr_matchup(df); print(df.shape[0])
-df = add_gambling_lines(df); print(df.shape[0])
-df = add_weather(df); print(df.shape[0])
-dst = add_team_matchups().drop('offTeam', axis=1)
-df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
+def qb_pull(rush_or_pass):
+
+    # pre-game data
+    df = fantasy_pros(pos); print(df.shape[0])
+    df = add_injuries(df, pos); print(df.shape[0])
+    df = add_fp_rolling(df, pos); print(df.shape[0])
+    df = fantasy_pros_rolling(df); print(df.shape[0])
+    df = get_salaries(df, pos); print(df.shape[0])
+    df = get_experts(df, pos); print(df.shape[0])
+    df = add_pfr_matchup(df); print(df.shape[0])
+    df = add_gambling_lines(df); print(df.shape[0])
+    df = add_weather(df); print(df.shape[0])
+    dst = add_team_matchups().drop('offTeam', axis=1)
+    df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
 
 
-# post-game data
-df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
+    # post-game data
+    df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
 
-team_stats = get_team_stats(YEAR)
-df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
+    team_stats = get_team_stats(YEAR)
+    df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
 
-df = add_rz_stats_qb(df); print(df.shape[0])
-df = add_qbr(df); print(df.shape[0])
-df = add_qb_adv(df); print(df.shape[0])
+    df = add_rz_stats_qb(df); print(df.shape[0])
+    df = add_qbr(df); print(df.shape[0])
+    df = add_qb_adv(df); print(df.shape[0])
 
-# get the positional values for the team
-pos_values = positional_values()
-df = pd.merge(df, pos_values, on=['team', 'week', 'year']); print(df.shape[0])
+    # get the positional values for the team
+    pos_values = positional_values()
+    df = pd.merge(df, pos_values, on=['team', 'week', 'year']); print(df.shape[0])
 
-df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
-df = def_pts_allowed(df); print(df.shape[0])
+    df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
+    df = def_pts_allowed(df); print(df.shape[0])
 
-pff_def = pff_defense_rollup().rename(columns={'team': 'defTeam'})
-df = pd.merge(df, pff_def, on=['defTeam', 'week', 'year']); print(df.shape[0])
+    pff_def = pff_defense_rollup().rename(columns={'team': 'defTeam'})
+    df = pd.merge(df, pff_def, on=['defTeam', 'week', 'year']); print(df.shape[0])
 
-pff_oline = pff_oline_rollup()
-df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
+    pff_oline = pff_oline_rollup()
+    df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
 
-df = attach_y_act(df, pos)
-df = drop_y_act_except_current(df, WEEK, YEAR); print(df.shape[0])
-df = projected_pts_vs_predicted(df, pos); print(df.shape[0])
+    df = attach_y_act(df, pos, rush_or_pass=rush_or_pass)
+    df = drop_y_act_except_current(df, WEEK, YEAR); print(df.shape[0])
+    df = projected_pts_vs_predicted(df, pos); print(df.shape[0])
 
-# fill in missing data and drop any remaining rows
-df = forward_fill(df)
-df = df.dropna().reset_index(drop=True); print(df.shape[0])
+    # fill in missing data and drop any remaining rows
+    df = forward_fill(df)
+    df = df.dropna().reset_index(drop=True); print(df.shape[0])
 
-df = one_qb_per_week(df); print(df.shape[0])
+    df = one_qb_per_week(df); print(df.shape[0])
 
-print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
-print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
+    print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
+    print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
 
-df = remove_non_uniques(df)
-df = df[(df.ProjPts > 10) & (df.projected_points > 10)].reset_index(drop=True)
+    df = remove_non_uniques(df)
+    df = df[(df.ProjPts > 10) & (df.projected_points > 10)].reset_index(drop=True)
 
-dm.write_to_db(df.iloc[:,:2000], 'Model_Features', 'QB_Data', if_exist='replace')
-if df.shape[1] > 2000:
-    dm.write_to_db(df.iloc[:,2000:], 'Model_Features', 'QB_Data2', if_exist='replace')
+    dm.write_to_db(df.iloc[:,:2000], 'Model_Features', f'QB_Data{rush_or_pass}', if_exist='replace')
+    if df.shape[1] > 2000:
+        dm.write_to_db(df.iloc[:,2000:], 'Model_Features', f'QB_Data{rush_or_pass}2', if_exist='replace')
+
+    return df
+
+qb_both = qb_pull('')
+# qb_rush = qb_pull('_rush')
+# qb_pass = qb_pull('_pass')
 
 #%%
 for pos in [

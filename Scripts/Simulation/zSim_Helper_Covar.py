@@ -1,27 +1,14 @@
 #%%
 
 # core packages
-from os import stat
-from numpy.core.fromnumeric import size
 import pandas as pd
 import numpy as np
-import random
-import matplotlib.pyplot as plt
-import seaborn as sns
 import copy
 from collections import Counter
 
 # linear optimization
 from cvxopt import matrix
 from cvxopt.glpk import ilp
-
-from ff.db_operations import DataManage   
-import ff.general as ffgeneral 
-
-# set the root path and database management object
-root_path = ffgeneral.get_main_path('Daily_Fantasy')
-db_path = f'{root_path}/Data/Databases/'
-dm = DataManage(db_path)
 
 class FootballSimulation:
 
@@ -32,10 +19,11 @@ class FootballSimulation:
         self.pos_require_start = pos_require_start
         self.num_iters = num_iters
         self.salary_cap = salary_cap
+        self.dm = dm
 
         # pull in the player data (means, team, position) and covariance matrix
-        player_data = dm.read('''SELECT * FROM Covar_Means''', 'Simulation')
-        self.covar = dm.read('''SELECT * FROM Covar_Matrix''', 'Simulation')
+        player_data = self.dm .read('''SELECT * FROM Covar_Means''', 'Simulation')
+        self.covar = self.dm .read('''SELECT * FROM Covar_Matrix''', 'Simulation')
 
         # extract the top players for each team
         self.top_team_players = self.get_top_players_from_team(player_data)
@@ -46,7 +34,7 @@ class FootballSimulation:
     def join_salary(self, df):
 
         # add salaries to the dataframe and set index to player
-        salaries = dm.read(f'''SELECT player, salary
+        salaries = self.dm .read(f'''SELECT player, salary
                                 FROM Salaries
                                 WHERE year={self.set_year}
                                     AND league={self.week} ''', 'Simulation')
@@ -94,7 +82,7 @@ class FootballSimulation:
 
         chk_flex = [p for p,v in open_pos_require.items() if v == -1]
         if len(chk_flex) == 0:
-            flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[0.38, 0.49, 0.13])
+            flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[0.39, 0.48, 0.13])
         else:
             flex_pos = chk_flex[0]
 
@@ -275,11 +263,8 @@ class FootballSimulation:
 
     @staticmethod
     def solve_ilp(c, G, h, A, b):
-
-        opts = {'glpk': {'msg_lev':'GLP_MSG_OFF'},
-                'show_progress': False}
     
-        (status, x) = ilp(c, G, h, A=A, b=b, B=set(range(0, len(c))), options=opts)
+        (status, x) = ilp(c, G, h, A=A, b=b, B=set(range(0, len(c))))
 
         return status, x
 
@@ -328,36 +313,37 @@ class FootballSimulation:
 
         for i in range(self.num_iters):
 
-            if i % 100 == 0:
-
+            if i ==0:
                 # pull out current add players and added teams
                 h_player_add, open_pos_require = self.add_players(to_add)
                 remaining_pos_cnt = np.sum(list(open_pos_require.values()))
                 added_teams, max_added_team_cnt = self.get_current_team_cnts(to_add)
 
-                # append the flex position to position requirements
-                cur_pos_require = self.add_flex(open_pos_require)
+            # append the flex position to position requirements
+            cur_pos_require = self.add_flex(open_pos_require)
+            b_position = self.create_b_matrix(cur_pos_require)
 
+            if i % 100 == 0:
                 # get predictions and remove to drop players
                 predictions = self.get_predictions(num_options=num_options)
                 predictions = self.drop_players(predictions, to_drop)
 
-                if i == 0:
-                    position_map = self.position_matrix_mapping(cur_pos_require)
-                    idx_player_map, player_idx_map = self.player_matrix_mapping(predictions)
-                    team_map = self.team_matrix_mapping(predictions)
+            if i == 0:
 
-                    A_position = self.create_A_position(position_map, idx_player_map)
-                    b_position = self.create_b_matrix(cur_pos_require)
+                position_map = self.position_matrix_mapping(cur_pos_require)
+                idx_player_map, player_idx_map = self.player_matrix_mapping(predictions)
+                team_map = self.team_matrix_mapping(predictions)
 
-                    G_salaries = self.create_G_salaries(predictions)
-                    h_salaries = self.create_h_salaries()
+                A_position = self.create_A_position(position_map, idx_player_map)
 
-                    G_players = self.create_G_players(player_idx_map)
-                    h_players = self.create_h_players(player_idx_map, h_player_add)
+                G_salaries = self.create_G_salaries(predictions)
+                h_salaries = self.create_h_salaries()
 
-                    G_teams = self.create_G_team(team_map, idx_player_map)
-                
+                G_players = self.create_G_players(player_idx_map)
+                h_players = self.create_h_players(player_idx_map, h_player_add)
+
+                G_teams = self.create_G_team(team_map, idx_player_map)
+        
             # generate the c matrix with the point values to be optimized
             self.labels, self.c_points = self.sample_c_points(predictions, num_options)
             
@@ -392,21 +378,38 @@ class FootballSimulation:
 
 # %%
 
-# week = 14
+# # set the root path and database management object
+# from ff.db_operations import DataManage
+# from ff import general as ffgeneral
+
+# root_path = ffgeneral.get_main_path('Daily_Fantasy')
+# db_path = f'{root_path}/Data/Databases/'
+# dm = DataManage(db_path)
+
+# week = 15
 # year = 2021
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-# num_iters = 500
+# num_iters = 1
 
+# import time
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters)
-
-
 # min_players_same_team = 3
 # set_max_team = None
-# to_add = []
+# to_add = ['Matthew Stafford', 
+#           'Antonio Gibson',
+#           'Cooper Kupp', 'Dk Metcalf', 'Van Jefferson', 'Freddie Swain',
+#           'Dallas Goedert']
 # to_drop = []
+# start = time.time()
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team)
+# print(time.time()-start)
+
 # results
 
 
-# %%
+# # %%
+# df = sim.get_predictions().drop(['pos', 'team', 'salary'], axis=1)
+# df = df[df.player.isin(['Russell Wilson', 'Dk Metcalf'])]
+# df = df.iloc[:, 1:].T
+# df.plot.scatter(x=df.columns[0], y=df.columns[1])

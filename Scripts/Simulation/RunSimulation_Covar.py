@@ -10,6 +10,7 @@ import seaborn as sns
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
 
+# root_path = '/Users/sammyers/Desktop/Daily/'
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
@@ -19,7 +20,7 @@ dm = DataManage(db_path)
 #===============
 
 year = 2021
-week = 15
+week = 16
 num_iters = 500
 
 #--------
@@ -531,7 +532,7 @@ def update_output(nc, nc2, player_dash_table_data, player_dash_table_columns, st
     to_drop_players, _ = update_add_drop_lists(players_removed)
     to_add_players, added_salaries = update_add_drop_lists(my_team)
     remain_sal = salary_cap - np.sum(added_salaries)
-
+    
     # run the simulation
     if my_team_player_cnt <= total_pos:
         set_max_team, min_players_same_team = update_stack_data(stack_data)
@@ -542,6 +543,7 @@ def update_output(nc, nc2, player_dash_table_data, player_dash_table_columns, st
         player_select_graph = update_player_selection_chart(results)
         top_team_graph = update_top_team_chart(max_team_cnt)
 
+    print(my_team_player_cnt, total_pos)
     team_info_update, my_team_dash = update_team_info_table(my_team, my_team_dash, remain_sal)
 
     # convert my team and the team info tables to dictionary records for Output

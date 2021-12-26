@@ -93,92 +93,6 @@ def projection_data(pos):
     return proj
 
 
-def get_std_splines(pos, show_plot=False, k=2, s=2000):
-    
-
-    proj = projection_data(pos)
-
-    if pos=='QB':
-        proj = proj[(proj.ProjPts > 8) & (proj.projected_points > 8)].reset_index(drop=True)
-
-    # get the rolling stats data    
-    stats, _ = rolling_max_std(pos)
-
-    # join together and calculate sd and max metrics
-    df = pd.merge(proj, stats, on=['player', 'team', 'week', 'year'])
-    df = create_sd_max_metrics(df)
-
-    # create the groups    
-    df = df.dropna()
-    min_grps = int(df.shape[0] / 100)
-    max_grps = int(df.shape[0] / 40)
-
-    splines = {}
-    X_max = {}
-    y_max = {}
-    max_r2 = {}
-    for x_val, met in zip(['sd_metric', 'max_metric'], ['std_dev', 'perc_99']):
-        
-        df = df.sort_values(by=x_val).reset_index(drop=True)
-
-        max_r2[met] = 0
-        for num_grps in range(min_grps, max_grps, 1):
-
-            # create equal sizes groups going down the dataframe ordered by each metric
-            df_len = len(df)
-            repeats = math.ceil(df.shape[0] / num_grps)
-            grps = np.repeat([i for i in range(num_grps)], repeats)
-            df['grps'] = grps[:df_len]
-
-            # calculate the standard deviations of each group
-            std_devs = df.groupby('grps').agg({'y_act': [np.std, lambda x: np.percentile(x, 99)],
-                                               'sd_metric': 'mean',
-                                               'max_metric': 'mean',
-                                               'player': 'count'})
-            std_devs.columns = ['std_dev', 'perc_99', 'sd_metric', 'max_metric', 'player_cnts']
-
-            # fit a spline to the group datasets
-            X = std_devs[[x_val]]
-            y = std_devs[[met]]
-            spl = UnivariateSpline(X, y, k=k, s=s)
-
-            r2 = r2_score(y, spl(X))
-            if r2 > max_r2[met]:
-                max_r2[met] = r2
-                splines[met] = spl
-                X_max[met] = X
-                y_max[met] = y
-
-        if show_plot:
-
-            print(met)
-            X_pred = list(range(int(X_max[met].min()), int(X_max[met].max()+3), 1))
-            plt.scatter(X, y)
-            plt.scatter(X_max[met], y_max[met])
-            plt.plot(X_pred, splines[met](X_pred), 'g', lw=3)
-            plt.show()
-
-
-    return splines['std_dev'], splines['perc_99'] 
-
-
-#%%
-
-from ff.db_operations import DataManage   
-import ff.general as ffgeneral 
-import math
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.interpolate import UnivariateSpline
-import matplotlib.pyplot as plt
-import pandas as pd
-from sklearn.metrics import r2_score
-
-# set the root path and database management object
-root_path = ffgeneral.get_main_path('Daily_Fantasy')
-db_path = f'{root_path}/Data/Databases/'
-dm = DataManage(db_path)
-
 
 def get_max_metrics():
 
@@ -204,12 +118,19 @@ def get_max_metrics():
     return corr_data
 
 
-def create_pos_rank(df):
+def create_pos_rank(df, opponent=False):
+
+    if opponent:
+        df = df.drop('team', axis=1).rename(columns={'defTeam': 'team'})
+        prefix = 'Opp'
+    else:
+        prefix = ''
 
     df = df.sort_values(by=['team', 'pos', 'year', 'week', 'max_metric'],
                         ascending=[True, True, True, True, False]).reset_index(drop=True)
 
-    df['pos_rank'] = df.pos + df.groupby(['team', 'pos', 'year', 'week']).cumcount().apply(lambda x: str(x))
+    df['pos_rank'] = prefix + df.pos + df.groupby(['team', 'pos', 'year', 'week']).cumcount().apply(lambda x: str(x))
+
 
     return df
 
@@ -224,12 +145,16 @@ def get_team_totals(df, col):
 
 player_data = get_max_metrics()
 corr_data = create_pos_rank(player_data)
+opp_corr_data = create_pos_rank(player_data, opponent=True)
+opp_corr_data = opp_corr_data[~opp_corr_data.team.isnull()].reset_index(drop=True)
+
+corr_data = pd.concat([corr_data, opp_corr_data], axis=0)
 corr_data = get_team_totals(corr_data, 'pos_rank')
 corr_data = corr_data[['team', 'week', 'year', 'pos_rank', 'max_metric', 'y_act', 'team_total']]
 
 # %%
 matrices = pd.DataFrame()
-percs = np.percentile(corr_data.team_total, [0, 25, 50, 75, 100])
+percs = np.percentile(corr_data.team_total, [0, 20, 40, 60, 80, 100])
 for i in range(len(percs) - 1): 
     perc_low = percs[i]
     perc_high =  percs[i+1]
@@ -250,11 +175,11 @@ for i in range(len(percs) - 1):
 
 # set year to analyze
 set_year = 2021
-set_week = 15
+set_week = 16
 
 vers = 'standard'
-drop_teams = ['KC', 'LAC', 'IND', 'NE', 'NO', 'TB', 
-              'LVR', 'CLE', 'MIN', 'CHI', 'LAR', 'SEA', 'WAS', 'PHI']
+# drop_teams = ['SF', 'TEN', 'ARI', 'GB','CLE', 'IND', 'WAS', 'DAL', 'MIA', 'NO']
+drop_teams = ['GB', 'CLE', 'ARI', 'IND']
 
 
 def get_predictions(drop_teams, vers, set_week, set_year):
@@ -270,45 +195,67 @@ def get_predictions(drop_teams, vers, set_week, set_year):
     preds['weighting'] = 1
     preds.loc[preds.model_type=='full_model', 'weighting'] = 1
 
-    score_cols = ['pred_fp_per_game', 'std_dev']
+    score_cols = ['pred_fp_per_game', 'std_dev', 'max_metric']
     for c in score_cols: preds[c] = preds[c] * preds.weighting
 
     # Groupby and aggregate with namedAgg [1]:
     preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game': 'sum', 
                                                                   'std_dev': 'sum',
-                                                                  'weighting': 'sum'})
+                                                                  'weighting': 'sum',
+                                                                  'max_metric': 'sum'})
 
     for c in score_cols: preds[c] = preds[c] / preds.weighting
     preds = preds.drop('weighting', axis=1)
 
     teams = dm.read("SELECT * FROM Player_Teams", 'Simulation')
     preds = pd.merge(preds, teams, on=['player'])
-    preds = preds[~preds.team.isin(drop_teams)].reset_index(drop=True)
+    preds = preds[preds.team.isin(drop_teams)].reset_index(drop=True)
+
+    preds = preds.assign(week=set_week, year=set_year)
     
     return preds
 
 
-def create_player_matches(preds):
+def create_player_matches(preds, opponent=False):
 
     preds = create_pos_rank(preds)
 
-    pred_cov = preds[['player', 'team', 'pos_rank', 'std_dev', 'max_metric']]
-    pred_cov = pd.merge(pred_cov.drop(['std_dev', 'max_metric'], axis=1), pred_cov, on='team')
-    pred_cov.columns = ['player1', 'team', 'pos_rank1', 'player2', 'pos_rank2', 'std_dev', 'max_metric']
-    pred_cov = pred_cov[['player1', 'player2', 'team', 'pos_rank1', 'pos_rank2', 'std_dev', 'max_metric']]
-    pred_cov['week'] = set_week
-    pred_cov['year'] = set_year
+    pred_cov1 = preds[['player', 'team', 'pos_rank']]
+    pred_cov2 = preds[['player', 'team', 'pos_rank', 'std_dev', 'max_metric', 'week', 'year']]
+
+    if opponent:
+        matchups = get_matchups()
+        pred_cov2 = pd.merge(pred_cov2, matchups, on=['team','week', 'year'])
+        pred_cov2 = pred_cov2.drop('team', axis=1).rename(columns={'defTeam': 'team'})
+        pred_cov2.pos_rank = pred_cov2.pos_rank.apply(lambda x: 'Opp'+x)
+
+    pred_cov = pd.merge(pred_cov1, pred_cov2, on='team')
+    pred_cov.columns = ['player1', 'team', 'pos_rank1', 'player2', 'pos_rank2', 'std_dev', 'max_metric', 'week', 'year']
+    pred_cov = pred_cov[['player1', 'player2', 'team', 'pos_rank1', 'pos_rank2', 'std_dev', 'max_metric', 'week', 'year']]
+
 
     return pred_cov
 
 
+def get_matchups():
+    return dm.read('''SELECT offTeam team, defTeam, week, year
+                      FROM (
+                            SELECT *, 
+                                    row_number() OVER (PARTITION BY offTeam, week, year 
+                                                        ORDER BY cnts DESC) AS rnk
+                            FROM (
+                                    SELECT offTeam, defTeam, week, year, count(*) cnts
+                                    FROM PFF_Expert_Ranks
+                                    GROUP BY offTeam, defTeam, week, year
+                                 )
+                       )
+                      WHERE rnk=1''', 'Pre_PlayerData')
+
+
 preds = get_predictions(drop_teams, vers, set_week, set_year)
-max_metrics = player_data.loc[(player_data.week==set_week) & (player_data.year==set_year), 
-                             ['player', 'pos', 'week', 'year', 'max_metric']]
-preds = pd.merge(preds, max_metrics, on=['player', 'pos'], how='left')
-preds.max_metric = preds.max_metric.fillna(np.percentile(preds.max_metric, 25))
-preds = preds.assign(week=set_week).assign(year=set_year)
-pred_cov = create_player_matches(preds)
+pred_cov = create_player_matches(preds, opponent=False)
+opp_pred_cov = create_player_matches(preds, opponent=True)
+pred_cov = pd.concat([pred_cov, opp_pred_cov], axis=0).reset_index(drop=True)
 pred_cov = get_team_totals(pred_cov, 'pos_rank2')
 
 pred_cov['perc'] = 0
@@ -319,8 +266,7 @@ for i in range(len(percs) - 1):
     pred_cov.loc[(pred_cov.team_total > perc_low) & (pred_cov.team_total <= perc_high), ['perc']] = i
 
 pred_cov.loc[(pred_cov.team_total > perc_high), ['perc']] = i
-
-pred_cov = pd.merge(pred_cov, matrices, on=['pos_rank1', 'pos_rank2', 'perc'])
+pred_cov = pd.merge(pred_cov, matrices, on=['pos_rank1', 'pos_rank2', 'perc'], how='left')
 
 pred_cov.loc[pred_cov.player1==pred_cov.player2, 'covariance'] = pred_cov.loc[pred_cov.player1==pred_cov.player2, 'std_dev']**2
 pred_cov = pd.pivot_table(pred_cov, index='player1', columns='player2', values='covariance').fillna(0)
@@ -340,6 +286,9 @@ pred_cov_final.columns = pred_cov.columns
 pred_cov_final.index = pred_cov.index
 pred_cov_final = pred_cov_final.reset_index().rename(columns={'index': 'player'})
 
+for c in pred_cov_final.columns[1:]:
+    pred_cov_final.loc[abs(pred_cov_final[c]) < 0.00001, c] = 0
+
 preds = preds.set_index('player').rename_axis(None)
 mean_points = preds.loc[pred_cov.index.values, ['pos', 'team', 'pred_fp_per_game']].reset_index()
 mean_points = mean_points.rename(columns={'index': 'player'})
@@ -347,6 +296,5 @@ mean_points.loc[mean_points.pos=='Defense', 'pos'] = 'DEF'
 
 dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
 dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
-
 
 # %%

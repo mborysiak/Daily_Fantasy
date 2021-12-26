@@ -73,7 +73,7 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['NE','IND']
+drop_teams = ['TB', 'NO']
 
 teams = dm.read(f'''SELECT player, team
                     FROM (
@@ -86,7 +86,7 @@ teams = dm.read(f'''SELECT player, team
 
 preds = pd.merge(preds, teams, on=['player'], how='left')
 preds = preds[(preds.team.isin(drop_teams)) | \
-    (preds.player.isin(['Nick Folk', 'Michael Badgley']))].drop('team', axis=1).reset_index(drop=True)
+    (preds.player.isin(['Ryan Succop', 'Jose Borregales']))].drop('team', axis=1).reset_index(drop=True)
 
 captain = preds.copy()
 captain.pos = 'CPT'
@@ -108,8 +108,8 @@ def create_distribution(player_data, num_samples=1000):
 
     # create truncated distribution
     lower, upper = player_data.min_score,  player_data.max_score
-    lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
-    upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
+    lower_bound = (lower - player_data.pred_fp_per_game) / (player_data.std_dev+1)
+    upper_bound = (upper - player_data.pred_fp_per_game) / (player_data.std_dev+1)
     trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
     
     estimates = trunc_dist.rvs(num_samples)
@@ -120,6 +120,7 @@ def create_distribution(player_data, num_samples=1000):
 def create_sim_output(output, num_samples=1000):
     sim_out = pd.DataFrame()
     for _, row in output.iterrows():
+        print(row.player)
         cur_out = pd.DataFrame([row.player, row.pos]).T
         cur_out.columns=['player', 'pos']
         dists = pd.DataFrame(create_distribution(row, num_samples)).T
