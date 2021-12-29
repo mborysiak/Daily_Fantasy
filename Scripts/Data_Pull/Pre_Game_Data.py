@@ -69,10 +69,12 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
 teams = dm.read(f'''SELECT player, team
                     FROM (
                     SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
-                        team,
-                        row_number() OVER (PARTITION BY player ORDER BY projected_points DESC) rn 
+                                team,
+                                row_number() OVER (PARTITION BY player 
+                                                   ORDER BY year DESC, 
+                                                            week DESC, 
+                                                            projected_points DESC) rn 
                     FROM FantasyPros
-                    WHERE week={set_week} AND year={set_year}
                     ) WHERE rn=1''', 'Pre_PlayerData')
 
 dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'replace')

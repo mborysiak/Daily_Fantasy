@@ -39,6 +39,9 @@ def read_in_csv(extract_path):
 
 def entries_ownership(df):
 
+    df.Player = df.Player.fillna('Missing').reset_index(drop=True)
+    df.Player = df.Player.apply(dc.name_clean)
+
     full_entries = df[['Rank', 'Points', 'Lineup', 'week', 'year']].dropna().reset_index(drop=True)
 
     player_ownership = df[['Player', 'Roster Position','%Drafted', 'FPTS', 'week', 'year']].dropna().reset_index(drop=True)
@@ -187,6 +190,7 @@ def get_best_lineups(full_entries, min_place, max_place):
     best_lineups = full_entries[(full_entries.Rank >= min_place) & (full_entries.Rank <= max_place)].copy().reset_index(drop=True)
     best_lineups = best_lineups.sort_values(by=['year', 'week', 'Points'], ascending=[True, True, False]).reset_index(drop=True)
     best_lineups['Rank'] = best_lineups.groupby(['year', 'week']).cumcount()
+
     return best_lineups
 
 
@@ -271,11 +275,13 @@ def evaluate_metrics(best_results, set_pos, metric, base_place):
 # evaluate_metrics(best_results, 'QB', 'SumPred')
 # %%
 
-for base_place, places in zip([0, 50000, 100000, 150000], [250, 1000, 1000, 1000]):
+for base_place, places in zip([0, 50000, 100000, 150000], [25, 1000, 1000, 1000]):
     print(base_place)
 
     player_pos = dm.read('''SELECT DISTINCT player, pos FROM FantasyPros''', 'Pre_PlayerData')
     df_lineups = format_lineups(min_place=base_place, max_place=base_place+places)
+    df_lineups.player = df_lineups.player.apply(dc.name_clean)
+
     # df_lineups = pd.merge(df_lineups, player_ownership, on=['player', 'week', 'year'])
     # df = pd.merge(df_lineups, val_df, on=['player', 'week', 'year'])
     # evaluate_metrics(df, 'WR', 'SumPred', base_place)
@@ -284,5 +290,27 @@ for base_place, places in zip([0, 50000, 100000, 150000], [250, 1000, 1000, 1000
     print(df_lineups.loc[df_lineups.lineup_position=='FLEX', 'pos'].value_counts() / \
         df_lineups.loc[df_lineups.lineup_position=='FLEX', 'pos'].shape[0])
     
+
+# %%
+
+full_entries, player_ownership = entries_ownership(all_data)
+
+#%%
+df = format_lineups(min_place=0, max_place=10)
+df.player = df.player.apply(dc.name_clean)
+teams = dm.read('''SELECT * FROM Player_Teams''', 'Simulation')
+player_pos = dm.read('''SELECT DISTINCT player, pos FROM FantasyPros''', 'Pre_PlayerData')
+
+df = pd.merge(df, teams, on='player')
+df = pd.merge(df, player_pos, on=['player'])
+
+team_cnts = df.groupby(['place', 'team', 'week', 'year']).agg(player_cnts=('player', 'count')).reset_index()
+max_cnts = team_cnts.groupby(['place', 'week', 'year']).agg(player_cnts=('player_cnts', 'max')).reset_index()
+team_cnts = pd.merge(team_cnts, max_cnts, on=['place', 'week','year', 'player_cnts'])
+team_cnts.player_cnts.value_counts() / team_cnts.shape[0]
+# %%
+
+pos_cnts = pd.merge(df, team_cnts, on=['place', 'week', 'year', 'team'])
+pos_cnts.pos.value_counts() / pos_cnts.shape[0]
 
 # %%

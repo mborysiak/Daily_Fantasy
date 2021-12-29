@@ -82,7 +82,7 @@ class FootballSimulation:
 
         chk_flex = [p for p,v in open_pos_require.items() if v == -1]
         if len(chk_flex) == 0:
-            flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[0.39, 0.48, 0.13])
+            flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[0.40, 0.48, 0.12])
         else:
             flex_pos = chk_flex[0]
 
@@ -304,7 +304,7 @@ class FootballSimulation:
 
         return df
 
-    def run_sim(self, to_add, to_drop, min_players_same_team, set_max_team):
+    def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team):
         
         # can set as argument, but static set for now
         num_options=500
@@ -312,6 +312,11 @@ class FootballSimulation:
         max_team_cnt = []
 
         for i in range(self.num_iters):
+
+            if min_players_same_team_input=='Auto': 
+                min_players_same_team= np.random.choice([2, 3], p=[0.68, 0.32])
+            else:
+                min_players_same_team = min_players_same_team_input
 
             if i ==0:
                 # pull out current add players and added teams
@@ -376,34 +381,31 @@ class FootballSimulation:
 
 
 
-# %%
+#%%
 
-# # set the root path and database management object
-# from ff.db_operations import DataManage
-# from ff import general as ffgeneral
+# set the root path and database management object
+from ff.db_operations import DataManage
+from ff import general as ffgeneral
 
-# root_path = ffgeneral.get_main_path('Daily_Fantasy')
-# db_path = f'{root_path}/Data/Databases/'
-# dm = DataManage(db_path)
+root_path = ffgeneral.get_main_path('Daily_Fantasy')
+db_path = f'{root_path}/Data/Databases/'
+dm = DataManage(db_path)
 
-# week = 15
-# year = 2021
-# salary_cap = 50000
-# pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-# num_iters = 1
+week = 16
+year = 2021
+salary_cap = 50000
+pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
+num_iters = 100
 
-# import time
-# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters)
-# min_players_same_team = 3
-# set_max_team = None
-# to_add = ['Matthew Stafford', 
-#           'Antonio Gibson',
-#           'Cooper Kupp', 'Dk Metcalf', 'Van Jefferson', 'Freddie Swain',
-#           'Dallas Goedert']
-# to_drop = []
-# start = time.time()
-# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team)
-# print(time.time()-start)
+import time
+sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters)
+min_players_same_team = 'Auto'
+set_max_team = None
+to_add = ['Matthew Stafford', 'Cooper Kupp']
+to_drop = []
+start = time.time()
+results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team)
+print(time.time()-start)
 
 # results
 
@@ -413,3 +415,4 @@ class FootballSimulation:
 # df = df[df.player.isin(['Russell Wilson', 'Dk Metcalf'])]
 # df = df.iloc[:, 1:].T
 # df.plot.scatter(x=df.columns[0], y=df.columns[1])
+# %%

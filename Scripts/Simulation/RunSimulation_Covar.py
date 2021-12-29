@@ -142,13 +142,16 @@ def init_possible_teams(df):
     possible_teams.extend(list(df.team.unique()))
     return possible_teams
 
+
 def init_stack_table_dash(possible_teams):
+    possible_stacks = ['Auto']
+    possible_stacks.extend([str(i) for i in range(1, 5)])
     return dash_table.DataTable(
                             id='stack-selection-table',
 
                             columns=[{'id': 'Stack Team', 'name': 'Stack Team', 'presentation': 'dropdown', 'editable': True},
                                      {'id': 'Stack Number', 'name': 'Stack Number','presentation': 'dropdown', 'editable': True}],
-                            data=pd.DataFrame({'Stack Team': ['Auto'], 'Stack Number': 3}).to_dict('records'),
+                            data=pd.DataFrame({'Stack Team': ['Auto'], 'Stack Number': ['Auto']}).to_dict('records'),
                             style_table={
                                             'height': '75px'
                                         },
@@ -160,7 +163,7 @@ def init_stack_table_dash(possible_teams):
                                         ]},
                                     'Stack Number': {
                                         'options': [
-                                            {'label': str(i), 'value': str(i)} for i in range(1, 5)
+                                            {'label': i, 'value': i} for i in possible_stacks
                                         ]
                                         }
                                     },
@@ -409,9 +412,13 @@ def update_add_drop_lists(df):
     return players, salaries
 
 def update_stack_data(stack_data):
+
     # extract the max team and number of players to pull from max team
     set_max_team = stack_data[0]['Stack Team']
-    min_players_same_team = int(stack_data[0]['Stack Number'])
+    min_players_same_team = stack_data[0]['Stack Number']
+    
+    if min_players_same_team != 'Auto':
+        min_players_same_team = int(min_players_same_team)    
     
     # if auto set the max team, then convert to None for sim argument
     if set_max_team=='Auto': set_max_team=None

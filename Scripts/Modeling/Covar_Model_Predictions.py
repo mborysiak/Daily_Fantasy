@@ -178,8 +178,8 @@ set_year = 2021
 set_week = 16
 
 vers = 'standard'
-# drop_teams = ['SF', 'TEN', 'ARI', 'GB','CLE', 'IND', 'WAS', 'DAL', 'MIA', 'NO']
-drop_teams = ['GB', 'CLE', 'ARI', 'IND']
+drop_teams = ['SF', 'TEN', 'ARI', 'GB','CLE', 'IND', 'WAS', 'DAL', 'MIA', 'NO']
+# drop_teams = ['GB', 'CLE', 'ARI', 'IND']
 
 
 def get_predictions(drop_teams, vers, set_week, set_year):
@@ -209,7 +209,7 @@ def get_predictions(drop_teams, vers, set_week, set_year):
 
     teams = dm.read("SELECT * FROM Player_Teams", 'Simulation')
     preds = pd.merge(preds, teams, on=['player'])
-    preds = preds[preds.team.isin(drop_teams)].reset_index(drop=True)
+    preds = preds[~preds.team.isin(drop_teams)].reset_index(drop=True)
 
     preds = preds.assign(week=set_week, year=set_year)
     
@@ -240,7 +240,7 @@ def create_player_matches(preds, opponent=False):
 def get_matchups():
     return dm.read('''SELECT offTeam team, defTeam, week, year
                       FROM (
-                            SELECT *, 
+                            SELECT  *, 
                                     row_number() OVER (PARTITION BY offTeam, week, year 
                                                         ORDER BY cnts DESC) AS rnk
                             FROM (

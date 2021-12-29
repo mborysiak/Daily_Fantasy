@@ -34,7 +34,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 15
+set_week = 16
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -73,7 +73,7 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['TB', 'NO']
+drop_teams = ['DAL', 'WAS']
 
 teams = dm.read(f'''SELECT player, team
                     FROM (
@@ -86,7 +86,7 @@ teams = dm.read(f'''SELECT player, team
 
 preds = pd.merge(preds, teams, on=['player'], how='left')
 preds = preds[(preds.team.isin(drop_teams)) | \
-    (preds.player.isin(['Ryan Succop', 'Jose Borregales']))].drop('team', axis=1).reset_index(drop=True)
+    (preds.player.isin(['Greg Zuerlein', 'Joey Slye']))].drop('team', axis=1).reset_index(drop=True)
 
 captain = preds.copy()
 captain.pos = 'CPT'
