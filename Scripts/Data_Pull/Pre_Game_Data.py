@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 16
+set_week = 17
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -75,7 +75,7 @@ teams = dm.read(f'''SELECT player, team
                                                             week DESC, 
                                                             projected_points DESC) rn 
                     FROM FantasyPros
-                    ) WHERE rn=1''', 'Pre_PlayerData')
+                    ) WHERE rn=1''', 'Pre_PlayerData').drop_duplicates()
 
 dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'replace')
 
@@ -479,6 +479,10 @@ salary.loc[salary.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
 ids = salary_id[['player', 'player_id']]
 ids = ids.assign(year=set_year).assign(league=set_week)
 ids.loc[ids.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
+ids.loc[ids.player=='JAX', 'player'] = 'JAC'
+ids.loc[ids.player=='LV', 'player'] = 'LVR'
+ids.loc[ids.player=='Dee Eskridge', 'player'] = "D'Wayne Eskridge"
+ids.loc[ids.player=='Eli Penny', 'player'] = "Elijhaa Penny"
 
 dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
 dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')

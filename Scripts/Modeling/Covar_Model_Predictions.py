@@ -38,12 +38,12 @@ def rolling_max_std(pos):
         df = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
                         FROM {pos}_Stats
                         WHERE season >= 2020
-                            AND week < 17 ''', 'FastR')
+                            ''', 'FastR')
     else:
         df = dm.read(f'''SELECT defTeam player, defTeam team, week, season year, fantasy_pts y_act
                          FROM {pos}_Stats
                          WHERE season >= 2020
-                                AND week < 17 ''', 'FastR')
+                             ''', 'FastR')
 
     df = df.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
     df['roll_pts'] = df.y_act#df.groupby(['player'])['y_act'].shift(1)
@@ -67,7 +67,7 @@ def projection_data(pos):
         proj = dm.read('''SELECT team player, team, week, year, projected_points
                             FROM FantasyPros
                             WHERE pos='DST'
-                                  AND week < 17 ''', 'Pre_PlayerData')
+                                   ''', 'Pre_PlayerData')
 
         proj_2 = dm.read('''SELECT offteam player, offTeam team, defTeam, week, year, fantasyPoints, `Proj Pts` ProjPts 
                             FROM PFF_Expert_Ranks
@@ -86,8 +86,7 @@ def projection_data(pos):
                             JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts 
                                   FROM PFF_Expert_Ranks)
                                   USING (player, offTeam, week, year)
-                            WHERE week < 17
-                                  AND position='{pos.lower()}' 
+                            WHERE position='{pos.lower()}' 
                                   ''', 'Pre_PlayerData')
 
     return proj
@@ -152,8 +151,17 @@ corr_data = pd.concat([corr_data, opp_corr_data], axis=0)
 corr_data = get_team_totals(corr_data, 'pos_rank')
 corr_data = corr_data[['team', 'week', 'year', 'pos_rank', 'max_metric', 'y_act', 'team_total']]
 
+
+#%%
+corr_data = pd.merge(corr_data, clusters, on=['team', 'week', 'year'])
+
+
 # %%
 matrices = pd.DataFrame()
+
+# for i in range(5):
+#     cor_matrix = corr_data[corr_data.label == i]
+
 percs = np.percentile(corr_data.team_total, [0, 20, 40, 60, 80, 100])
 for i in range(len(percs) - 1): 
     perc_low = percs[i]
@@ -175,11 +183,10 @@ for i in range(len(percs) - 1):
 
 # set year to analyze
 set_year = 2021
-set_week = 16
+set_week = 17
 
 vers = 'standard'
-drop_teams = ['SF', 'TEN', 'ARI', 'GB','CLE', 'IND', 'WAS', 'DAL', 'MIA', 'NO']
-# drop_teams = ['GB', 'CLE', 'ARI', 'IND']
+drop_teams = ['GB', 'CLE', 'MIN', 'PIT']
 
 
 def get_predictions(drop_teams, vers, set_week, set_year):
@@ -297,4 +304,37 @@ mean_points.loc[mean_points.pos=='Defense', 'pos'] = 'DEF'
 dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
 dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
 
+# %%
+
+
+df = corr_data.copy()
+col = 'pos_rank'
+
+df = df[df[col].isin(['QB0', 'RB0', 'RB1', 'WR0', 'WR1', 'WR2', 'TE0', 'Defense0', 'OppQB0', 'OppWR0', 'OppDefense0'])]
+df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='max_metric').fillna(0)
+df = df[(df.QB0 > 5) & (df.OppQB0 > 5)]
+
+from sklearn.metrics import davies_bouldin_score
+from sklearn.model_selection import GridSearchCV
+from sklearn.cluster import KMeans
+
+X = df.values
+
+for n in range(3, 8):
+    km = KMeans(n_clusters=n, random_state=1234)
+    km.fit(X)
+    print(davies_bouldin_score(X, km.labels_))
+
+km = KMeans(n_clusters=5, random_state=1234)
+km.fit(X)
+df['label'] = km.labels_
+
+from collections import Counter
+import seaborn as sns
+
+print(Counter(km.labels_))
+sns.heatmap(df.groupby('label').agg('mean'), center=True)
+# %%
+
+clusters = df[['label']].reset_index()
 # %%

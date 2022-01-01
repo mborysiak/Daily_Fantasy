@@ -28,12 +28,12 @@ def rolling_max_std(pos):
         df = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
                         FROM {pos}_Stats
                         WHERE season >= 2020
-                            AND week < 17 ''', 'FastR')
+                            ''', 'FastR')
     else:
         df = dm.read(f'''SELECT defTeam player, defTeam team, week, season year, fantasy_pts y_act
                          FROM {pos}_Stats
                          WHERE season >= 2020
-                                AND week < 17 ''', 'FastR')
+                             ''', 'FastR')
 
   
     df = df.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
@@ -72,7 +72,7 @@ def get_std_splines(pos, show_plot=False, k=2, s=2000):
         proj = dm.read('''SELECT team player, team, week, year, projected_points
                             FROM FantasyPros
                             WHERE pos='DST'
-                                    AND week < 17 ''', 'Pre_PlayerData')
+                                   ''', 'Pre_PlayerData')
 
         proj_2 = dm.read('''SELECT offteam player, offTeam team, week, year, fantasyPoints, `Proj Pts` ProjPts 
                             FROM PFF_Expert_Ranks
@@ -91,7 +91,7 @@ def get_std_splines(pos, show_plot=False, k=2, s=2000):
                             JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts 
                                   FROM PFF_Expert_Ranks)
                                   USING (player, offTeam, week, year)
-                            WHERE week < 17''', 'Pre_PlayerData')
+                            ''', 'Pre_PlayerData')
 
     if pos=='QB':
         proj = proj[(proj.ProjPts > 8) & (proj.projected_points > 8)].reset_index(drop=True)
@@ -107,7 +107,7 @@ def get_std_splines(pos, show_plot=False, k=2, s=2000):
     # create the groups    
     df = df.dropna()
     min_grps = int(df.shape[0] / 100)
-    max_grps = int(df.shape[0] / 45)
+    max_grps = int(df.shape[0] / 60)
 
     splines = {}
     X_max = {}
@@ -156,5 +156,3 @@ def get_std_splines(pos, show_plot=False, k=2, s=2000):
 
 
     return splines['std_dev'], splines['perc_99'] 
-
-# %%

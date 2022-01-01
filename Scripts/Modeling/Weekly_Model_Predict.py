@@ -45,7 +45,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 16
+set_week = 17
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -54,7 +54,7 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-model_type = 'full_model'
+model_type = 'backfill'
 vers = 'standard'
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
@@ -333,7 +333,7 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['SF', 'TEN', 'ARI', 'GB','CLE', 'IND', 'WAS', 'DAL', 'MIA', 'NO']
+drop_teams = ['GB', 'CLE', 'MIN', 'PIT']
 
 teams = dm.read(f'''SELECT * FROM Player_Teams''', 'Simulation')
 preds = pd.merge(preds, teams, on=['player'])

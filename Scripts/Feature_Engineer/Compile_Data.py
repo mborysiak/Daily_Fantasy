@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 16
+WEEK = 17
 
 #%%
 import pandas as pd 
@@ -84,8 +84,16 @@ def add_rolling_stats(df, gcols, rcols, ):
 
 
 def switch_seasons(df):
-    df.loc[df.week==17, 'year'] = df.loc[df.week==17, 'year'] + 1
-    df.loc[df.week==17, 'week'] = 1 
+
+    # any seasons 2020 or earlier when it was a 17 week season, convert week 17 to the first week of the next year
+    # note that the year is +1 and week is set to one in a single step
+    df.loc[(df.week==17) & (df.year <= 2020), ['year', 'week']] = [df.loc[(df.week==17) & (df.year <= 2020), 'year'] + 1, 1]
+    
+    # for any seasons after 2020, set week 18 to the following year first week.
+    # however, don't do the conversion for the current year since you need to keep current week for this year's predictions
+    df.loc[(df.week==18) & (df.year >= 2021) & (df.year != YEAR), ['year', 'week']] = \
+        [df.loc[(df.week==18) & (df.year >= 2021) & (df.year != YEAR), 'year'] + 1, 1]
+
     return df
 
 def forward_fill(df, cols=None):
@@ -420,10 +428,11 @@ def get_max_qb():
 def get_player_data(df, pos, YEAR, prev_years=1):
 
     player_data = dm.read(f'''SELECT * 
-                FROM {pos}_Stats 
-                WHERE season >= 2020
-                      AND week != 17
-                      ''', 'FastR')
+                              FROM {pos}_Stats 
+                              WHERE (season >= 2020 AND week != 17)
+                                    OR (season >=2021 AND week != 18)
+                                ''', 'FastR')
+
     if pos=='QB':
         rcols_player = [c for c in player_data.columns if 'pass_' in c]
         rcols_player = [c for c in rcols_player if c not in ('y_act_rush', 'y_act_pass')]

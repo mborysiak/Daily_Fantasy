@@ -383,29 +383,29 @@ class FootballSimulation:
 
 #%%
 
-# set the root path and database management object
-from ff.db_operations import DataManage
-from ff import general as ffgeneral
+# # set the root path and database management object
+# from ff.db_operations import DataManage
+# from ff import general as ffgeneral
 
-root_path = ffgeneral.get_main_path('Daily_Fantasy')
-db_path = f'{root_path}/Data/Databases/'
-dm = DataManage(db_path)
+# root_path = ffgeneral.get_main_path('Daily_Fantasy')
+# db_path = f'{root_path}/Data/Databases/'
+# dm = DataManage(db_path)
 
-week = 16
-year = 2021
-salary_cap = 50000
-pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_iters = 100
+# week = 16
+# year = 2021
+# salary_cap = 50000
+# pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
+# num_iters = 100
 
-import time
-sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters)
-min_players_same_team = 'Auto'
-set_max_team = None
-to_add = ['Matthew Stafford', 'Cooper Kupp']
-to_drop = []
-start = time.time()
-results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team)
-print(time.time()-start)
+# import time
+# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters)
+# min_players_same_team = 'Auto'
+# set_max_team = None
+# to_add = ['Matthew Stafford', 'Cooper Kupp']
+# to_drop = []
+# start = time.time()
+# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team)
+# print(time.time()-start)
 
 # results
 
