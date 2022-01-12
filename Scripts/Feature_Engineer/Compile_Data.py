@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 17
+WEEK = 18
 
 #%%
 import pandas as pd 
@@ -747,7 +747,9 @@ def get_defense_stats(prev_years=1):
     d_stats = dm.read(f'''SELECT * 
                         FROM Defense_Stats 
                         WHERE season>={YEAR-prev_years}
-                                AND week != 17''', 'FastR')
+                              AND (season >= 2020 AND week != 17)
+                                    OR (season >=2021 AND week != 18)
+                              ''', 'FastR')
     d_stats = d_stats.rename(columns={'season': 'year', 'defteam': 'team' })
 
     d_stats['week'] = d_stats['week'] + 1

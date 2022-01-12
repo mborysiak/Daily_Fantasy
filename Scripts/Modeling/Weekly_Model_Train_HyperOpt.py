@@ -204,30 +204,31 @@ from hyperopt.pyll import scope
 
 bayes_rand = 'bayes'
 # set up the ADP model pipe
-pipe = skm.model_pipe([skm.piece('random_sample'),
+pipe = skm.model_pipe([#skm.piece('random_sample'),
                         skm.piece('std_scale'), 
                         skm.piece('k_best'),
                         skm.piece('lgbm')])
 
 params = skm.default_params(pipe, bayes_rand=bayes_rand)
 if bayes_rand=='bayes':
-    params['random_sample__frac'] = hp.uniform('frac', 0.1, 1)
-    params['random_sample__seed'] = scope.int(hp.quniform('seed', 1, 12345, 1))
+    # params['random_sample__frac'] = hp.uniform('frac', 0.5, 1)
+    # params['random_sample__seed'] = hp.choice('seed', [12, 123, 1234, 12345, 100, 200, 300, 400, 500])
     params['k_best__k'] = scope.int(hp.quniform('k', 20, 200, 1))
     # params['select_perc__percentile'] = hp.uniform('percentile', prc[set_pos][0],  prc[set_pos][1])
 
 
 elif bayes_rand=='rand':
-    params['random_sample__frac'] = np.arange(0.2, 1, 0.1)
-    params['k_best__k'] = range(20, 200, 25)
+    # params['random_sample__frac'] = np.arange(0.5, 1, 0.1)
+    # params['random_sample__seed'] = range(1, 1000, 50)
+    params['k_best__k'] = range(20, 200, 20)
     # params['select_perc__percentile'] = range(prc[set_pos][0],  prc[set_pos][1], prc[set_pos][2])
-
 
 # params['k_best__k'] = range(5)
 # params['feature_select__cols'] = [['ProjPts', 'dk_salary', 'fantasyPoints', 'year', 'week']]
 best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=48,
                                                 col_split='game_date', 
                                                 time_split=cv_time_input, bayes_rand=bayes_rand)
+
 
 #%%
 #%%

@@ -45,7 +45,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 17
+set_week = 18
 
 # set the earliest date to begin the validation set
 val_year_min = 2020

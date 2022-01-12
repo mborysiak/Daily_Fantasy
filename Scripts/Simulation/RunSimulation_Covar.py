@@ -20,7 +20,7 @@ dm = DataManage(db_path)
 #===============
 
 year = 2021
-week = 17
+week = 18
 num_iters = 500
 
 #--------

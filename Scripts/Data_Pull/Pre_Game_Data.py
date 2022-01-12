@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 17
+set_week = 18
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral

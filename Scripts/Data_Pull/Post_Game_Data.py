@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2021
-set_week = 16
+set_week = 17
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -289,8 +289,8 @@ snaps = pd.merge(snaps, snap_pct, how='inner',
 snaps['year'] = set_year
 snaps['week'] = set_week
 
-snaps.snap_pct = snaps.snap_pct.apply(lambda x: x.replace('%', ''))
-snaps.avg_snap_pct = snaps.avg_snap_pct.apply(lambda x: x.replace('%', ''))
+# snaps.snap_pct = snaps.snap_pct.apply(lambda x: x.replace('%', ''))
+# snaps.avg_snap_pct = snaps.avg_snap_pct.apply(lambda x: x.replace('%', ''))
 snaps = convert_float(snaps)
 
 #%%

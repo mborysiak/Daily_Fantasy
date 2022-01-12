@@ -38,7 +38,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 17
+set_week = 18
 
 model_type = 'backfill'
 vers = 'standard'
@@ -50,7 +50,7 @@ drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', '
 keep_words = ['def', 'qb', 'team']
 
 if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE', 'Defense']
-elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
+elif model_type == 'backfill': positions = [ 'WR', 'TE']
 
 for set_pos in positions:
 
