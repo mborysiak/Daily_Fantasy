@@ -1,20 +1,20 @@
-QB,RB,RB,WR,WR,WR,TE,FLEX,DST,,Instructions
-,,,,,,,,,,1. Locate the player you want to select in the list below 
-,,,,,,,,,,2. Copy the ID of your player (you can use the Name + ID column or the ID column) 
-,,,,,,,,,,3. Paste the ID into the roster position desired 
-,,,,,,,,,,4. You must include an ID for each player; you cannot use just the player's name 
-,,,,,,,,,,5. You can create up to 500 lineups per file 
- 
-,,,,,,,,,,Position,Name + ID,Name,ID,Roster Position,Salary,Game Info,TeamAbbrev,AvgPointsPerGame
-,,,,,,,,,,WR,Cooper Kupp (20692476),Cooper Kupp,20692476,WR/FLEX,9100,LAR@MIN 12/26/2021 01:00PM ET,LAR,28.36
-,,,,,,,,,,WR,Tyreek Hill (20692478),Tyreek Hill,20692478,WR/FLEX,8400,PIT@KC 12/26/2021 04:25PM ET,KC,20.8
+QB,RB,RB,WR,WR,WR,TE,FLEX,DST,,Instructions,,,,,,,,
+20692127,20692226,20692304,20692476,20692480,20692546,20692916,20692294,20693150,,1. Locate the player you want to select in the list below ,,,,,,,,
+20692130,20692206,20692220,20692480,20692524,20692546,20692898,20692304,20693152,,2. Copy the ID of your player (you can use the Name + ID column or the ID column) ,,,,,,,,
+20692125,20692220,20692240,20692482,20692500,20692546,20692894,20692294,20693149,,3. Paste the ID into the roster position desired ,,,,,,,,
+20692127,20692206,20692208,20692476,20692518,20692612,20692916,20692220,20693152,,4. You must include an ID for each player; you cannot use just the player's name ,,,,,,,,
+20692128,20692204,20692304,20692480,20692490,20692546,20692898,20692618,20693146,,5. You can create up to 500 lineups per file ,,,,,,,,
+20692125,20692220,20692304,20692476,20692500,20692618,20692890,20692294,20693150,,,,,,,,,,
+20692123,20692230,20692294,20692484,20692490,20692524,20692896,20692546,20693155,,Position,Name + ID,Name,ID,Roster Position,Salary,Game Info,TeamAbbrev,AvgPointsPerGame
+20692124,20692220,20692294,20692476,20692500,20692546,20692890,20692618,20693149,,WR,Cooper Kupp (20692476),Cooper Kupp,20692476,WR/FLEX,9100,LAR@MIN 12/26/2021 01:00PM ET,LAR,28.36
+20692127,20692220,20692242,20692476,20692524,20692546,20692898,20692304,20693150,,WR,Tyreek Hill (20692478),Tyreek Hill,20692478,WR/FLEX,8400,PIT@KC 12/26/2021 04:25PM ET,KC,20.8
 ,,,,,,,,,,RB,Dalvin Cook (20692196),Dalvin Cook,20692196,RB/FLEX,8300,LAR@MIN 12/26/2021 01:00PM ET,MIN,18.8
 ,,,,,,,,,,WR,Justin Jefferson (20692480),Justin Jefferson,20692480,WR/FLEX,8100,LAR@MIN 12/26/2021 01:00PM ET,MIN,20.92
 ,,,,,,,,,,RB,Austin Ekeler (20692198),Austin Ekeler,20692198,RB/FLEX,8100,LAC@HOU 12/26/2021 01:00PM ET,LAC,21.48
 ,,,,,,,,,,WR,Keenan Allen (20692482),Keenan Allen,20692482,WR/FLEX,7700,LAC@HOU 12/26/2021 01:00PM ET,LAC,18.21
 ,,,,,,,,,,QB,Patrick Mahomes (20692122),Patrick Mahomes,20692122,QB,7700,PIT@KC 12/26/2021 04:25PM ET,KC,23.16
 ,,,,,,,,,,WR,Stefon Diggs (20692484),Stefon Diggs,20692484,WR/FLEX,7600,BUF@NE 12/26/2021 01:00PM ET,BUF,16.91
-,,,,,,,,,,QB,Josh Allen (20692123),Josh Allen,20692123,QB,7500,BUF@NE 12/26/2021 01:00PM ET,BUF,25.70
+,,,,,,,,,,QB,Josh Allen (20692123),Josh Allen,20692123,QB,7500,BUF@NE 12/26/2021 01:00PM ET,BUF,25.7
 ,,,,,,,,,,WR,Diontae Johnson (20692486),Diontae Johnson,20692486,WR/FLEX,7500,PIT@KC 12/26/2021 04:25PM ET,PIT,18.47
 ,,,,,,,,,,QB,Tom Brady (20692124),Tom Brady,20692124,QB,7400,TB@CAR 12/26/2021 01:00PM ET,TB,24.57
 ,,,,,,,,,,RB,Najee Harris (20692200),Najee Harris,20692200,RB/FLEX,7400,PIT@KC 12/26/2021 04:25PM ET,PIT,18.19
@@ -45,7 +45,7 @@ QB,RB,RB,WR,WR,WR,TE,FLEX,DST,,Instructions
 ,,,,,,,,,,QB,Russell Wilson (20692129),Russell Wilson,20692129,QB,6100,CHI@SEA 12/26/2021 04:05PM ET,SEA,16.58
 ,,,,,,,,,,RB,Javonte Williams (20692216),Javonte Williams,20692216,RB/FLEX,6100,DEN@LV 12/26/2021 04:25PM ET,DEN,13.52
 ,,,,,,,,,,WR,DeVonta Smith (20692508),DeVonta Smith,20692508,WR/FLEX,6000,NYG@PHI 12/26/2021 01:00PM ET,PHI,11.29
-,,,,,,,,,,QB,Tyler Huntley (20692131),Tyler Huntley,20692131,QB,6000,BAL@CIN 12/26/2021 01:00PM ET,BAL,13.50
+,,,,,,,,,,QB,Tyler Huntley (20692131),Tyler Huntley,20692131,QB,6000,BAL@CIN 12/26/2021 01:00PM ET,BAL,13.5
 ,,,,,,,,,,RB,Josh Jacobs (20692214),Josh Jacobs,20692214,RB/FLEX,6000,DEN@LV 12/26/2021 04:25PM ET,LV,14.6
 ,,,,,,,,,,TE,Darren Waller (20692892),Darren Waller,20692892,TE/FLEX,6000,DEN@LV 12/26/2021 04:25PM ET,LV,13.53
 ,,,,,,,,,,RB,James Robinson (20692220),James Robinson,20692220,RB/FLEX,5900,JAX@NYJ 12/26/2021 01:00PM ET,JAX,13.68
@@ -68,7 +68,7 @@ QB,RB,RB,WR,WR,WR,TE,FLEX,DST,,Instructions
 ,,,,,,,,,,WR,Elijah Moore (20692520),Elijah Moore,20692520,WR/FLEX,5500,JAX@NYJ 12/26/2021 01:00PM ET,NYJ,12.84
 ,,,,,,,,,,QB,Davis Mills (20692136),Davis Mills,20692136,QB,5500,LAC@HOU 12/26/2021 01:00PM ET,HOU,12.17
 ,,,,,,,,,,RB,Rashaad Penny (20692234),Rashaad Penny,20692234,RB/FLEX,5500,CHI@SEA 12/26/2021 04:05PM ET,SEA,6.81
-,,,,,,,,,,QB,Ben Roethlisberger (20692135),Ben Roethlisberger,20692135,QB,5500,PIT@KC 12/26/2021 04:25PM ET,PIT,16.20
+,,,,,,,,,,QB,Ben Roethlisberger (20692135),Ben Roethlisberger,20692135,QB,5500,PIT@KC 12/26/2021 04:25PM ET,PIT,16.2
 ,,,,,,,,,,QB,Gardner Minshew II (20692139),Gardner Minshew II,20692139,QB,5400,NYG@PHI 12/26/2021 01:00PM ET,PHI,9.61
 ,,,,,,,,,,RB,Chuba Hubbard (20692236),Chuba Hubbard,20692236,RB/FLEX,5400,TB@CAR 12/26/2021 01:00PM ET,CAR,7.95
 ,,,,,,,,,,QB,Jared Goff (20692137),Jared Goff,20692137,QB,5400,DET@ATL 12/26/2021 01:00PM ET,DET,14.92
@@ -195,7 +195,7 @@ QB,RB,RB,WR,WR,WR,TE,FLEX,DST,,Instructions
 ,,,,,,,,,,RB,Reggie Gilliam (20692442),Reggie Gilliam,20692442,RB/FLEX,4000,BUF@NE 12/26/2021 01:00PM ET,BUF,0.29
 ,,,,,,,,,,WR,Emmanuel Sanders (20692572),Emmanuel Sanders,20692572,WR/FLEX,4000,BUF@NE 12/26/2021 01:00PM ET,BUF,9.82
 ,,,,,,,,,,QB,Matt Barkley (20692185),Matt Barkley,20692185,QB,4000,TB@CAR 12/26/2021 01:00PM ET,CAR,0
-,,,,,,,,,,QB,Sam Darnold (20692186),Sam Darnold,20692186,QB,4000,TB@CAR 12/26/2021 01:00PM ET,CAR,17.10
+,,,,,,,,,,QB,Sam Darnold (20692186),Sam Darnold,20692186,QB,4000,TB@CAR 12/26/2021 01:00PM ET,CAR,17.1
 ,,,,,,,,,,QB,Kyle Trask (20692187),Kyle Trask,20692187,QB,4000,TB@CAR 12/26/2021 01:00PM ET,TB,0
 ,,,,,,,,,,QB,Ryan Griffin (20692188),Ryan Griffin,20692188,QB,4000,TB@CAR 12/26/2021 01:00PM ET,TB,0
 ,,,,,,,,,,RB,Reggie Bonnafon (20692410),Reggie Bonnafon,20692410,RB/FLEX,4000,TB@CAR 12/26/2021 01:00PM ET,CAR,0

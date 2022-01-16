@@ -43,16 +43,195 @@ def entries_ownership(df):
     df.Player = df.Player.apply(dc.name_clean)
 
     full_entries = df[['Rank', 'Points', 'Lineup', 'week', 'year']].dropna().reset_index(drop=True)
+    full_entries = full_entries.sort_values(by=['year', 'week', 'Points'], 
+                                            ascending=[True, True, False]).reset_index(drop=True)
 
     player_ownership = df[['Player', 'Roster Position','%Drafted', 'FPTS', 'week', 'year']].dropna().reset_index(drop=True)
     player_ownership.columns = ['player', 'player_position', 'pct_drafted', 'player_points', 'week', 'year']
     player_ownership.pct_drafted = player_ownership.pct_drafted.apply(lambda x: float(x.replace('%', '')))
     player_ownership.player = player_ownership.player.apply(dc.name_clean)
     player_ownership = player_ownership.drop('player_position', axis=1)
+    
 
     return full_entries, player_ownership
 
 
+def add_pct_rank(full_entries):
+    
+    full_entries['Rank'] = full_entries.groupby(['year', 'week']).cumcount()+1
+    total_entries = full_entries.groupby(['year','week']).agg(TotalLineups=('Lineup', 'count')).reset_index()
+    full_entries = pd.merge(full_entries, total_entries, on=['year', 'week'])
+    full_entries['PctRank'] = full_entries.Rank / full_entries.TotalLineups
+    
+    return full_entries
+
+def get_prizes():
+    prizes = pd.DataFrame([[1,1000000],
+                            [1,125000],
+                            [1,75000],
+                            [1,50000],
+                            [1,30000],
+                            [1,20000],
+                            [2,15000],
+                            [2,10000],
+                            [5,7000],
+                            [5,5000],
+                            [10,3500],
+                            [10,2500],
+                            [20,1500],
+                            [30,1000],
+                            [35,750],
+                            [50,600],
+                            [50,500],
+                            [75,400],
+                            [100,300],
+                            [150,250],
+                            [200,200],
+                            [300,150],
+                            [450,125],
+                            [750,100],
+                            [1250,80],
+                            [3500,60],
+                            [9000,40],
+                            [30000,30]])
+                            
+    prizes.columns = ['num_finishes', 'prize']
+    prizes['Rank'] = prizes.num_finishes.cumsum()
+
+    fixed_prizes = prizes[prizes.Rank < 300].copy()
+    pct_prizes = prizes[prizes.Rank >= 300].copy().reset_index(drop=True)
+    pct_prizes['PctRank'] = pct_prizes.Rank / 206000
+    return fixed_prizes, pct_prizes
+
+#%%
+all_data = read_in_csv(extract_path)
+full_entries, player_ownership = entries_ownership(all_data)
+full_entries = add_pct_rank(full_entries)
+fixed_prizes, pct_prizes = get_prizes()
+
+
+# %%
+
+def get_best_lineups(full_entries, min_place, max_place):
+
+    best_lineups = full_entries[(full_entries.Rank >= min_place) & (full_entries.Rank <= max_place)].copy().reset_index(drop=True)
+    best_lineups = best_lineups.sort_values(by=['year', 'week', 'Points'], ascending=[True, True, False]).reset_index(drop=True)
+    best_lineups['Rank'] = best_lineups.groupby(['year', 'week']).cumcount()
+
+    return best_lineups
+
+
+def extract_players(lineup):
+    positions = ['QB', 'RB', 'WR', 'TE', 'DST', 'FLEX']
+    for p in positions:
+        lineup = lineup.replace(p, ',')
+    lineup = lineup.split(',')[1:]
+    lineup = [p.rstrip().lstrip() for p in lineup]
+
+    return lineup
+
+
+def extract_positions(lineup):
+    positions = ('QB', 'RB', 'WR', 'TE', 'DST', 'FLEX')
+    lineup = lineup.split(' ')
+    lineup = [p for p in lineup if p in positions]
+    return lineup
+
+
+
+def format_lineups(min_place, max_place):
+
+    best_lineups = get_best_lineups(full_entries, min_place=min_place, max_place=max_place)
+
+    players = [extract_players(l) for l in best_lineups.Lineup.values]
+    positions = [extract_positions(l) for l in best_lineups.Lineup.values]
+
+    players = pd.DataFrame(players)
+    positions = pd.DataFrame(positions)
+
+    df = pd.concat([players, positions], axis=1)
+    df = pd.concat([df, best_lineups.drop('Lineup', axis=1)], axis=1)
+
+    final_df = pd.DataFrame()
+    for i in range(9):
+        tmp_df = df[[i, 'Rank', 'Points', 'week', 'year']]
+        tmp_df.columns = ['player', 'lineup_position', 'place', 'team_points', 'week', 'year']
+        final_df = pd.concat([final_df, tmp_df], axis=0)
+  
+    return final_df
+
+
+
+
+#%%
+
+def evaluate_metrics(best_results, set_pos, metric, base_place):
+
+    if set_pos is not None:
+        total_drafted = best_results[best_results.lineup_position==set_pos]
+    else:
+        total_drafted = best_results.copy()
+
+    total_drafted = total_drafted.groupby(['place', 'week', 'year']).agg(SumPred=('MeanPred', 'sum'),
+                                                                        AvgPred=('MeanPred', 'mean'),
+                                                                        MaxPred=('MeanPred', 'max'),
+                                                                        MinPred=('MeanPred', 'min'),
+                                                                        lineup_cnts=('MeanPred', 'count')).reset_index()
+    # total_drafted = total_drafted[total_drafted.lineup_cnts == 8 ]
+    total_drafted = total_drafted.rename(columns={metric:base_place})
+    total_drafted[base_place].plot.hist(alpha=0.5, legend=True)
+
+    print(f'''
+    16th percentile: {round(np.percentile(total_drafted[base_place], 16), 1)},
+    Mean: {round(np.mean(total_drafted[base_place]), 1)},
+    84th percentile: {round(np.percentile(total_drafted[base_place], 84), 1)},
+    ''')
+
+
+# %%
+
+for base_place, places in zip([0, 50000, 100000, 150000], [25, 1000, 1000, 1000]):
+    print(base_place)
+
+    player_pos = dm.read('''SELECT DISTINCT player, pos FROM FantasyPros''', 'Pre_PlayerData')
+    df_lineups = format_lineups(min_place=base_place, max_place=base_place+places)
+    df_lineups.player = df_lineups.player.apply(dc.name_clean)
+
+    # df_lineups = pd.merge(df_lineups, player_ownership, on=['player', 'week', 'year'])
+    # df = pd.merge(df_lineups, val_df, on=['player', 'week', 'year'])
+    # evaluate_metrics(df, 'WR', 'SumPred', base_place)
+
+    df_lineups = pd.merge(df_lineups, player_pos, on='player')
+    print(df_lineups.loc[df_lineups.lineup_position=='FLEX', 'pos'].value_counts() / \
+        df_lineups.loc[df_lineups.lineup_position=='FLEX', 'pos'].shape[0])
+    
+
+# %%
+
+full_entries, player_ownership = entries_ownership(all_data)
+
+#%%
+df = format_lineups(min_place=0, max_place=10)
+df.player = df.player.apply(dc.name_clean)
+teams = dm.read('''SELECT * FROM Player_Teams''', 'Simulation')
+player_pos = dm.read('''SELECT DISTINCT player, pos FROM FantasyPros''', 'Pre_PlayerData')
+
+df = pd.merge(df, teams, on='player')
+df = pd.merge(df, player_pos, on=['player'])
+
+team_cnts = df.groupby(['place', 'team', 'week', 'year']).agg(player_cnts=('player', 'count')).reset_index()
+max_cnts = team_cnts.groupby(['place', 'week', 'year']).agg(player_cnts=('player_cnts', 'max')).reset_index()
+team_cnts = pd.merge(team_cnts, max_cnts, on=['place', 'week','year', 'player_cnts'])
+team_cnts.player_cnts.value_counts() / team_cnts.shape[0]
+# %%
+
+pos_cnts = pd.merge(df, team_cnts, on=['place', 'week', 'year', 'team'])
+pos_cnts.pos.value_counts() / pos_cnts.shape[0]
+
+# %%
+#%%
+
+# calculate ownership projections
 
 def add_proj(df):
 
@@ -142,9 +321,7 @@ def run_model_mean(val_predict, test_predict, time_split):
 
     return val_predict, test_predict
 
-#%%
 
-all_data = read_in_csv(extract_path)
 full_entries, player_ownership = entries_ownership(all_data)
 
 df = add_proj(player_ownership)
@@ -181,136 +358,3 @@ val_df = val_df.drop('pct_drafted', axis=1)
 test_df = pd.DataFrame(test_predict, index=range(len(test_predict['MeanPred'])))
 test_labels = df_test[['player', 'week', 'year']].reset_index(drop=True)
 test_df = pd.concat([test_labels, test_df], axis=1)
-
-
-# %%
-
-def get_best_lineups(full_entries, min_place, max_place):
-
-    best_lineups = full_entries[(full_entries.Rank >= min_place) & (full_entries.Rank <= max_place)].copy().reset_index(drop=True)
-    best_lineups = best_lineups.sort_values(by=['year', 'week', 'Points'], ascending=[True, True, False]).reset_index(drop=True)
-    best_lineups['Rank'] = best_lineups.groupby(['year', 'week']).cumcount()
-
-    return best_lineups
-
-
-def extract_players(lineup):
-    positions = ['QB', 'RB', 'WR', 'TE', 'DST', 'FLEX']
-    for p in positions:
-        lineup = lineup.replace(p, ',')
-    lineup = lineup.split(',')[1:]
-    lineup = [p.rstrip().lstrip() for p in lineup]
-
-    return lineup
-
-
-def extract_positions(lineup):
-    positions = ('QB', 'RB', 'WR', 'TE', 'DST', 'FLEX')
-    lineup = lineup.split(' ')
-    lineup = [p for p in lineup if p in positions]
-    return lineup
-
-
-
-def format_lineups(min_place, max_place):
-
-    best_lineups = get_best_lineups(full_entries, min_place=min_place, max_place=max_place)
-
-    players = [extract_players(l) for l in best_lineups.Lineup.values]
-    positions = [extract_positions(l) for l in best_lineups.Lineup.values]
-
-    players = pd.DataFrame(players)
-    positions = pd.DataFrame(positions)
-
-    df = pd.concat([players, positions], axis=1)
-    df = pd.concat([df, best_lineups.drop('Lineup', axis=1)], axis=1)
-
-    final_df = pd.DataFrame()
-    for i in range(9):
-        tmp_df = df[[i, 'Rank', 'Points', 'week', 'year']]
-        tmp_df.columns = ['player', 'lineup_position', 'place', 'team_points', 'week', 'year']
-        final_df = pd.concat([final_df, tmp_df], axis=0)
-  
-    return final_df
-
-
-def evaluate_metrics(best_results, set_pos, metric, base_place):
-
-    if set_pos is not None:
-        total_drafted = best_results[best_results.lineup_position==set_pos]
-    else:
-        total_drafted = best_results.copy()
-
-    total_drafted = total_drafted.groupby(['place', 'week', 'year']).agg(SumPred=('MeanPred', 'sum'),
-                                                                        AvgPred=('MeanPred', 'mean'),
-                                                                        MaxPred=('MeanPred', 'max'),
-                                                                        MinPred=('MeanPred', 'min'),
-                                                                        lineup_cnts=('MeanPred', 'count')).reset_index()
-    # total_drafted = total_drafted[total_drafted.lineup_cnts == 8 ]
-    total_drafted = total_drafted.rename(columns={metric:base_place})
-    total_drafted[base_place].plot.hist(alpha=0.5, legend=True)
-
-    print(f'''
-    16th percentile: {round(np.percentile(total_drafted[base_place], 16), 1)},
-    Mean: {round(np.mean(total_drafted[base_place]), 1)},
-    84th percentile: {round(np.percentile(total_drafted[base_place], 84), 1)},
-    ''')
-
-    from scipy.stats import gaussian_kde
-
-    # # Generate fake data
-    # x = total_drafted.place
-    # y = total_drafted[base_place]
-
-    # # Calculate the point density
-    # xy = np.vstack([x,y])
-    # z = gaussian_kde(xy)(xy)
-
-    # fig, ax = plt.subplots()
-    # ax.scatter(x, y, c=z, s=20)
-    # plt.show()
-
-
-
-# evaluate_metrics(best_results, 'QB', 'SumPred')
-# %%
-
-for base_place, places in zip([0, 50000, 100000, 150000], [25, 1000, 1000, 1000]):
-    print(base_place)
-
-    player_pos = dm.read('''SELECT DISTINCT player, pos FROM FantasyPros''', 'Pre_PlayerData')
-    df_lineups = format_lineups(min_place=base_place, max_place=base_place+places)
-    df_lineups.player = df_lineups.player.apply(dc.name_clean)
-
-    # df_lineups = pd.merge(df_lineups, player_ownership, on=['player', 'week', 'year'])
-    # df = pd.merge(df_lineups, val_df, on=['player', 'week', 'year'])
-    # evaluate_metrics(df, 'WR', 'SumPred', base_place)
-
-    df_lineups = pd.merge(df_lineups, player_pos, on='player')
-    print(df_lineups.loc[df_lineups.lineup_position=='FLEX', 'pos'].value_counts() / \
-        df_lineups.loc[df_lineups.lineup_position=='FLEX', 'pos'].shape[0])
-    
-
-# %%
-
-full_entries, player_ownership = entries_ownership(all_data)
-
-#%%
-df = format_lineups(min_place=0, max_place=10)
-df.player = df.player.apply(dc.name_clean)
-teams = dm.read('''SELECT * FROM Player_Teams''', 'Simulation')
-player_pos = dm.read('''SELECT DISTINCT player, pos FROM FantasyPros''', 'Pre_PlayerData')
-
-df = pd.merge(df, teams, on='player')
-df = pd.merge(df, player_pos, on=['player'])
-
-team_cnts = df.groupby(['place', 'team', 'week', 'year']).agg(player_cnts=('player', 'count')).reset_index()
-max_cnts = team_cnts.groupby(['place', 'week', 'year']).agg(player_cnts=('player_cnts', 'max')).reset_index()
-team_cnts = pd.merge(team_cnts, max_cnts, on=['place', 'week','year', 'player_cnts'])
-team_cnts.player_cnts.value_counts() / team_cnts.shape[0]
-# %%
-
-pos_cnts = pd.merge(df, team_cnts, on=['place', 'week', 'year', 'team'])
-pos_cnts.pos.value_counts() / pos_cnts.shape[0]
-
-# %%

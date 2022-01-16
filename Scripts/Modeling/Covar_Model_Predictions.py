@@ -183,10 +183,10 @@ for i in range(len(percs) - 1):
 
 # set year to analyze
 set_year = 2021
-set_week = 18
+set_week = 16
 
 vers = 'standard'
-drop_teams = ['KC', 'DAL', 'DEN', 'PHI', 'LAC', 'LVR']
+drop_teams = ['SF', 'TEN', 'CLE', 'GB', 'IND', 'ARI', 'WAS', 'DAL', 'MIA', 'NO']
 
 
 def get_predictions(drop_teams, vers, set_week, set_year):
