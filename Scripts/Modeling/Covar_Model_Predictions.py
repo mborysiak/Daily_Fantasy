@@ -2,16 +2,7 @@
 
 from ff.db_operations import DataManage   
 import ff.general as ffgeneral 
-import math
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.interpolate import UnivariateSpline
-import matplotlib.pyplot as plt
-import pandas as pd
-from sklearn.metrics import r2_score
-
-from ff.db_operations import DataManage   
-import ff.general as ffgeneral 
 import pandas as pd
 
 # set the root path and database management object
@@ -32,17 +23,27 @@ def create_sd_max_metrics(df):
     return df
 
 
-def rolling_max_std(pos):
+def rolling_max_std(pos, week, year):
 
     if pos != 'Defense':
         df = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
                         FROM {pos}_Stats
                         WHERE season >= 2020
+                              AND (
+                                    (week < {week} AND year = {year})
+                                    OR 
+                                    (year < {year})
+                                  )
                             ''', 'FastR')
     else:
         df = dm.read(f'''SELECT defTeam player, defTeam team, week, season year, fantasy_pts y_act
                          FROM {pos}_Stats
                          WHERE season >= 2020
+                              AND (
+                                    (week < {week} AND year = {year})
+                                    OR 
+                                    (year < {year})
+                                  )
                              ''', 'FastR')
 
     df = df.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
@@ -93,7 +94,7 @@ def projection_data(pos):
 
 
 
-def get_max_metrics():
+def get_max_metrics(week, year):
 
     corr_data = pd.DataFrame()
 
@@ -105,7 +106,7 @@ def get_max_metrics():
             proj = proj[(proj.ProjPts > 8) & (proj.projected_points > 8)].reset_index(drop=True)
 
         # get the rolling stats data    
-        stats, _ = rolling_max_std(pos)
+        stats, _ = rolling_max_std(pos, week, year)
 
         # join together and calculate sd and max metrics
         df = pd.merge(proj, stats, on=['player', 'team', 'week', 'year'])
@@ -142,65 +143,61 @@ def get_team_totals(df, col):
 
     return df
 
-player_data = get_max_metrics()
-corr_data = create_pos_rank(player_data)
-opp_corr_data = create_pos_rank(player_data, opponent=True)
-opp_corr_data = opp_corr_data[~opp_corr_data.team.isnull()].reset_index(drop=True)
 
-corr_data = pd.concat([corr_data, opp_corr_data], axis=0)
-corr_data = get_team_totals(corr_data, 'pos_rank')
-corr_data = corr_data[['team', 'week', 'year', 'pos_rank', 'max_metric', 'y_act', 'team_total']]
+def get_group_covars(corr_data):
 
+    matrices = pd.DataFrame()
+    percs = np.percentile(corr_data.team_total, [0, 20, 40, 60, 80, 100])
+    for i in range(len(percs) - 1): 
+        perc_low = percs[i]
+        perc_high =  percs[i+1]
 
-#%%
-corr_data = pd.merge(corr_data, clusters, on=['team', 'week', 'year'])
+        cor_matrix = corr_data[(corr_data.team_total > perc_low) & (corr_data.team_total <= perc_high)]
+        cor_matrix = cor_matrix.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='y_act').fillna(0)
 
+        # calculate covariance matrix and convert to long format
+        cov_matrix = cor_matrix.cov()
+        cov_matrix = cov_matrix.rename_axis(None).rename_axis(None, axis=1)
+        cov_matrix = cov_matrix.stack().reset_index()
+        cov_matrix.columns = ['pos_rank1', 'pos_rank2', 'covariance']
+        cov_matrix['perc'] = i
 
-# %%
-matrices = pd.DataFrame()
+        matrices = pd.concat([matrices, cov_matrix])
 
-# for i in range(5):
-#     cor_matrix = corr_data[corr_data.label == i]
+    return matrices, percs
 
-percs = np.percentile(corr_data.team_total, [0, 20, 40, 60, 80, 100])
-for i in range(len(percs) - 1): 
-    perc_low = percs[i]
-    perc_high =  percs[i+1]
+def get_drop_teams(week, year):
 
-    cor_matrix = corr_data[(corr_data.team_total > perc_low) & (corr_data.team_total <= perc_high)]
-    cor_matrix = cor_matrix.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='y_act').fillna(0)
+    import datetime as dt
 
-    # calculate covariance matrix and convert to long format
-    cov_matrix = cor_matrix.cov()
-    cov_matrix = cov_matrix.rename_axis(None).rename_axis(None, axis=1)
-    cov_matrix = cov_matrix.stack().reset_index()
-    cov_matrix.columns = ['pos_rank1', 'pos_rank2', 'covariance']
-    cov_matrix['perc'] = i
+    df = dm.read(f'''SELECT away_team, home_team, gametime 
+                    FROM Gambling_Lines 
+                    WHERE week={week} 
+                        and year={year} 
+                ''', 'Pre_TeamData')
+    df.gametime = pd.to_datetime(df.gametime)
+    df['day_of_week'] = df.gametime.apply(lambda x: x.weekday())
+    df['hour_in_day'] = df.gametime.apply(lambda x: x.hour)
+    df = df[(df.day_of_week!=6) | (df.hour_in_day > 16)]
+    drop_teams = list(df.away_team.values)
+    drop_teams.extend(list(df.home_team.values))
 
-    matrices = pd.concat([matrices, cov_matrix])
-
-# %%
-
-# set year to analyze
-set_year = 2021
-set_week = 16
-
-vers = 'standard'
-drop_teams = ['SF', 'TEN', 'CLE', 'GB', 'IND', 'ARI', 'WAS', 'DAL', 'MIA', 'NO']
+    return drop_teams
 
 
-def get_predictions(drop_teams, vers, set_week, set_year):
+def get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_weight):
 
     preds = dm.read(f'''SELECT * 
                         FROM Model_Predictions 
-                        WHERE version='{vers}'
+                        WHERE version='{pred_vers}'
                             AND week = '{set_week}'
                             AND year = '{set_year}' 
+
                             AND player != 'Ryan Griffin'
                 ''', 'Simulation')
 
     preds['weighting'] = 1
-    preds.loc[preds.model_type=='full_model', 'weighting'] = 1
+    preds.loc[preds.model_type=='full_model', 'weighting'] = full_model_rel_weight
 
     score_cols = ['pred_fp_per_game', 'std_dev', 'max_metric']
     for c in score_cols: preds[c] = preds[c] * preds.weighting
@@ -259,27 +256,23 @@ def get_matchups():
                       WHERE rnk=1''', 'Pre_PlayerData')
 
 
-preds = get_predictions(drop_teams, vers, set_week, set_year)
-pred_cov = create_player_matches(preds, opponent=False)
-opp_pred_cov = create_player_matches(preds, opponent=True)
-pred_cov = pd.concat([pred_cov, opp_pred_cov], axis=0).reset_index(drop=True)
-pred_cov = get_team_totals(pred_cov, 'pos_rank2')
+def apply_group_covar(pred_cov, matrices, percs):
+    pred_cov['perc'] = 0
+    for i in range(len(percs) - 1): 
 
-pred_cov['perc'] = 0
-for i in range(len(percs) - 1): 
+        perc_low = percs[i]
+        perc_high =  percs[i+1]
+        pred_cov.loc[(pred_cov.team_total > perc_low) & (pred_cov.team_total <= perc_high), ['perc']] = i
 
-    perc_low = percs[i]
-    perc_high =  percs[i+1]
-    pred_cov.loc[(pred_cov.team_total > perc_low) & (pred_cov.team_total <= perc_high), ['perc']] = i
+    pred_cov.loc[(pred_cov.team_total > perc_high), ['perc']] = i
+    pred_cov = pd.merge(pred_cov, matrices, on=['pos_rank1', 'pos_rank2', 'perc'], how='left')
 
-pred_cov.loc[(pred_cov.team_total > perc_high), ['perc']] = i
-pred_cov = pd.merge(pred_cov, matrices, on=['pos_rank1', 'pos_rank2', 'perc'], how='left')
+    pred_cov.loc[pred_cov.player1==pred_cov.player2, 'covariance'] = pred_cov.loc[pred_cov.player1==pred_cov.player2, 'std_dev']**2
+    pred_cov = pd.pivot_table(pred_cov, index='player1', columns='player2', values='covariance').fillna(0)
+    pred_cov = pred_cov.rename_axis(None).rename_axis(None, axis=1)
 
-pred_cov.loc[pred_cov.player1==pred_cov.player2, 'covariance'] = pred_cov.loc[pred_cov.player1==pred_cov.player2, 'std_dev']**2
-pred_cov = pd.pivot_table(pred_cov, index='player1', columns='player2', values='covariance').fillna(0)
-pred_cov = pred_cov.rename_axis(None).rename_axis(None, axis=1)
+    return pred_cov
 
-import numpy as np
 
 def get_near_psd(A):
     C = (A + A.T)/2
@@ -288,25 +281,86 @@ def get_near_psd(A):
 
     return eigvec.dot(np.diag(eigval)).dot(eigvec.T)
 
-pred_cov_final = pd.DataFrame(get_near_psd(pred_cov))
-pred_cov_final.columns = pred_cov.columns
-pred_cov_final.index = pred_cov.index
-pred_cov_final = pred_cov_final.reset_index().rename(columns={'index': 'player'})
 
-for c in pred_cov_final.columns[1:]:
-    pred_cov_final.loc[abs(pred_cov_final[c]) < 0.00001, c] = 0
+def cleanup_pred_covar(pred_cov):
 
-preds = preds.set_index('player').rename_axis(None)
-mean_points = preds.loc[pred_cov.index.values, ['pos', 'team', 'pred_fp_per_game']].reset_index()
-mean_points = mean_points.rename(columns={'index': 'player'})
-mean_points.loc[mean_points.pos=='Defense', 'pos'] = 'DEF' 
+    pred_cov_final = pd.DataFrame(get_near_psd(pred_cov))
+    pred_cov_final.columns = pred_cov.columns
+    pred_cov_final.index = pred_cov.index
+    pred_cov_final = pred_cov_final.reset_index().rename(columns={'index': 'player'})
 
-dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
-dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
+    for c in pred_cov_final.columns[1:]:
+        pred_cov_final.loc[abs(pred_cov_final[c]) < 0.00001, c] = 0
+
+    pred_cov_final = pd.melt(pred_cov_final, id_vars='player', var_name=['player_two'], value_name='covar')
+    pred_cov_final = pred_cov_final.assign(week=set_week, year=set_year,
+                                           pred_vers=pred_vers, covar_type=covar_type,
+                                           full_model_rel_weight=full_model_rel_weight)
+
+    return pred_cov_final
+
+
+def get_mean_points(preds):
+    preds = preds.set_index('player').rename_axis(None)
+    mean_points = preds.loc[pred_cov.index.values, ['pos', 'team', 'pred_fp_per_game']].reset_index()
+    mean_points = mean_points.rename(columns={'index': 'player'})
+    mean_points.loc[mean_points.pos=='Defense', 'pos'] = 'DEF' 
+    mean_points = mean_points.assign(week=set_week, year=set_year, 
+                                    pred_vers=pred_vers, covar_type=covar_type,
+                                    full_model_rel_weight=full_model_rel_weight)
+
+    return mean_points
+
+#%%
+
+# set year to analyze
+set_year = 2021
+set_week = 2
+pred_vers = 'standard'
+covar_type = 'team_points'
+full_model_rel_weight = 1
+
+# get the player and opposing player data to create correlation matrices
+player_data = get_max_metrics(set_week, set_year)
+corr_data = create_pos_rank(player_data)
+opp_corr_data = create_pos_rank(player_data, opponent=True)
+opp_corr_data = opp_corr_data[~opp_corr_data.team.isnull()].reset_index(drop=True)
+corr_data = pd.concat([corr_data, opp_corr_data], axis=0)
+
+# use  team level data to get the covariance for team-level groups
+corr_data = get_team_totals(corr_data, 'pos_rank')
+corr_data = corr_data[['team', 'week', 'year', 'pos_rank', 'max_metric', 'y_act', 'team_total']]
+matrices, percs = get_group_covars(corr_data)
+
+# pull in the prediction data and create player matches for position type
+drop_teams = get_drop_teams(set_week, set_year)
+preds = get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_weight)
+pred_cov = create_player_matches(preds, opponent=False)
+opp_pred_cov = create_player_matches(preds, opponent=True)
+pred_cov = pd.concat([pred_cov, opp_pred_cov], axis=0).reset_index(drop=True)
+pred_cov = get_team_totals(pred_cov, 'pos_rank2')
+
+pred_cov = apply_group_covar(pred_cov, matrices, percs)
+pred_cov_final = cleanup_pred_covar(pred_cov)
+mean_points = get_mean_points(preds)
+
+drop_str = f'''week={set_week} AND year={set_year} AND pred_vers='{pred_vers}' 
+               AND covar_type='{covar_type}' AND full_model_rel_weight={full_model_rel_weight}'''
+
+dm.delete_from_db('Simulation', 'Covar_Means', drop_str)
+dm.delete_from_db('Simulation', 'Covar_Matrix', drop_str)
+dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
+dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
 
 # %%
 
 
+sal = dm.read('''SELECT * FROM Salaries''', 'Simulation')
+sal.groupby(['year', 'league']).agg('count')
+
+#%%
+
+# Kmeans for covariance grouping
 df = corr_data.copy()
 col = 'pos_rank'
 

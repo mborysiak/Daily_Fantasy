@@ -22,7 +22,7 @@ download_path = '//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/W
 extract_path = download_path + 'Results/'
 
 set_year = 2021
-set_week = 14
+set_week = 18
 
 def read_in_csv(extract_path):
 
@@ -51,6 +51,8 @@ def entries_ownership(df):
     player_ownership.pct_drafted = player_ownership.pct_drafted.apply(lambda x: float(x.replace('%', '')))
     player_ownership.player = player_ownership.player.apply(dc.name_clean)
     player_ownership = player_ownership.drop('player_position', axis=1)
+    # player_ownership = player_ownership.sort_values(by=['year', 'week', 'player_points'],
+    #                                                 ascending=[True, True, False]).reset_index(drop=True)
     
 
     return full_entries, player_ownership
@@ -97,18 +99,32 @@ def get_prizes():
                             
     prizes.columns = ['num_finishes', 'prize']
     prizes['Rank'] = prizes.num_finishes.cumsum()
-
-    fixed_prizes = prizes[prizes.Rank < 300].copy()
-    pct_prizes = prizes[prizes.Rank >= 300].copy().reset_index(drop=True)
-    pct_prizes['PctRank'] = pct_prizes.Rank / 206000
-    return fixed_prizes, pct_prizes
+    prizes['PctRank'] = prizes.Rank / 206000
+    return prizes
 
 #%%
 all_data = read_in_csv(extract_path)
 full_entries, player_ownership = entries_ownership(all_data)
 full_entries = add_pct_rank(full_entries)
-fixed_prizes, pct_prizes = get_prizes()
+prizes = get_prizes()
 
+full_entries['prize'] = 0
+for i in range(len(prizes)):
+    if i == 0: 
+        full_entries.loc[full_entries.Rank==1, 'prize'] = 1000000
+    else:
+        score_i = prizes.iloc[i]
+        score_i_minus = prizes.iloc[i-1]
+        if prizes.loc[i, 'Rank'] < 10:
+            full_entries.loc[(full_entries.Rank > score_i_minus.Rank) & \
+                            (full_entries.Rank <= score_i.Rank), 'prize'] = score_i.prize
+        else:
+            full_entries.loc[(full_entries.PctRank > score_i_minus.PctRank) & \
+                            (full_entries.PctRank <= score_i.PctRank), 'prize'] = score_i.prize
+
+#%%
+dm.write_to_db(full_entries, 'DK_Results', 'Million_Results', 'replace')
+dm.write_to_db(player_ownership, 'DK_Results', 'Million_Ownership', 'replace')
 
 # %%
 

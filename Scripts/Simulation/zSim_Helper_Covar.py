@@ -10,9 +10,13 @@ from collections import Counter
 from cvxopt import matrix
 from cvxopt.glpk import ilp
 
+import cvxopt
+cvxopt.glpk.options['msg_lev'] = 'GLP_MSG_OFF'
+
 class FootballSimulation:
 
-    def __init__(self, dm, week, set_year, salary_cap, pos_require_start, num_iters):
+    def __init__(self, dm, week, set_year, salary_cap, pos_require_start, num_iters, 
+                 pred_vers='standard', covar_type='team_points', full_model_rel_weight=1):
 
         self.week = week
         self.set_year = set_year
@@ -20,10 +24,21 @@ class FootballSimulation:
         self.num_iters = num_iters
         self.salary_cap = salary_cap
         self.dm = dm
+        self.pred_vers = pred_vers
+        self.covar_type = covar_type
+        self.full_model_rel_weight = full_model_rel_weight
 
         # pull in the player data (means, team, position) and covariance matrix
-        player_data = self.dm .read('''SELECT * FROM Covar_Means''', 'Simulation')
-        self.covar = self.dm .read('''SELECT * FROM Covar_Matrix''', 'Simulation')
+        player_data = self.dm.read(f'''SELECT * 
+                                       FROM Covar_Means
+                                       WHERE week={week}
+                                             AND year={set_year}
+                                             AND pred_vers='{self.pred_vers}'
+                                             AND covar_type='{self.covar_type}' 
+                                             AND full_model_rel_weight={self.full_model_rel_weight}''', 
+                                             'Simulation')
+
+        self.covar = self.pull_covar()
 
         # extract the top players for each team
         self.top_team_players = self.get_top_players_from_team(player_data)
@@ -31,13 +46,28 @@ class FootballSimulation:
         # join in salary data to player data
         self.player_data = self.join_salary(player_data)
 
+
+    def pull_covar(self):
+        covar = self.dm.read(f'''SELECT player, player_two, covar
+                                 FROM Covar_Matrix
+                                 WHERE week={self.week}
+                                       AND year={self.set_year}
+                                       AND pred_vers='{self.pred_vers}'
+                                       AND covar_type='{self.covar_type}'
+                                       AND full_model_rel_weight={self.full_model_rel_weight} ''', 
+                                       'Simulation')
+        covar = pd.pivot_table(covar, index='player', columns='player_two').reset_index()
+        covar.columns = [c[1] if i!=0 else 'player' for i, c in enumerate(covar.columns)]
+        return covar
+
+
     def join_salary(self, df):
 
         # add salaries to the dataframe and set index to player
         salaries = self.dm .read(f'''SELECT player, salary
-                                FROM Salaries
-                                WHERE year={self.set_year}
-                                    AND league={self.week} ''', 'Simulation')
+                                     FROM Salaries
+                                     WHERE year={self.set_year}
+                                           AND league={self.week} ''', 'Simulation')
 
         df = pd.merge(df, salaries, how='left', left_on='player', right_on='player')
         df.salary = df.salary.fillna(10000)
@@ -304,7 +334,22 @@ class FootballSimulation:
 
         return df
 
-    def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team):
+    def adjust_select_perc(self, df, open_pos_require):
+        df = pd.merge(df, self.player_data[['player', 'pos']], on='player')
+
+        pos_require_df = pd.DataFrame(open_pos_require, index=[0]).T.reset_index()
+        pos_require_df.columns = ['pos', 'num_required']
+        pos_require_df.num_required = pos_require_df.num_required + [0, 0.5, 0.5, 0.5, 1]
+
+        df = pd.merge(df, pos_require_df, on='pos')
+        df.loc[df.SelectionCounts < self.num_iters, 'SelectionCounts'] = \
+            df.loc[df.SelectionCounts < self.num_iters, 'SelectionCounts'] / \
+                df.loc[df.SelectionCounts < self.num_iters, 'num_required']
+        df = df.sort_values(by='SelectionCounts', ascending=False).reset_index(drop=True)
+        df = df.drop(['pos', 'num_required'], axis=1)
+        return df
+
+    def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team, adjust_select=False):
         
         # can set as argument, but static set for now
         num_options=500
@@ -375,13 +420,15 @@ class FootballSimulation:
                     player_selections = self.tally_player_selections(predictions, player_selections, x)
             
         results = self.final_results(player_selections)
+        if adjust_select:
+            results = self.adjust_select_perc(results, open_pos_require)
         team_cnts = self.final_team_cnts(max_team_cnt)
 
         return results, team_cnts
 
 
 
-#%%
+# #%%
 
 # # set the root path and database management object
 # from ff.db_operations import DataManage
@@ -391,28 +438,18 @@ class FootballSimulation:
 # db_path = f'{root_path}/Data/Databases/'
 # dm = DataManage(db_path)
 
-# week = 16
+# week = 13
 # year = 2021
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-# num_iters = 100
+# num_iters = 200
 
-# import time
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters)
 # min_players_same_team = 'Auto'
 # set_max_team = None
-# to_add = ['Matthew Stafford', 'Cooper Kupp']
+# to_add = []
 # to_drop = []
-# start = time.time()
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team)
-# print(time.time()-start)
-
-# results
-
-
+# print(results)
 # # %%
-# df = sim.get_predictions().drop(['pos', 'team', 'salary'], axis=1)
-# df = df[df.player.isin(['Russell Wilson', 'Dk Metcalf'])]
-# df = df.iloc[:, 1:].T
-# df.plot.scatter(x=df.columns[0], y=df.columns[1])
 # %%
