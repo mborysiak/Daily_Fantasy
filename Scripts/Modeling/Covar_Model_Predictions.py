@@ -192,7 +192,6 @@ def get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_we
                         WHERE version='{pred_vers}'
                             AND week = '{set_week}'
                             AND year = '{set_year}' 
-
                             AND player != 'Ryan Griffin'
                 ''', 'Simulation')
 
@@ -315,7 +314,7 @@ def get_mean_points(preds):
 
 # set year to analyze
 set_year = 2021
-set_week = 2
+set_week = 15
 pred_vers = 'standard'
 covar_type = 'team_points'
 full_model_rel_weight = 1
@@ -355,8 +354,13 @@ dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
 # %%
 
 
-sal = dm.read('''SELECT * FROM Salaries''', 'Simulation')
-sal.groupby(['year', 'league']).agg('count')
+# sal = dm.read('''SELECT * FROM Salaries''', 'Simulation')
+# sal.groupby(['year', 'league']).agg('count')
+
+# df = dm.read("SELECT player, salary FROM PFF_Proj_Ranks WHERE week=15 and year=2021 AND salary>0", 'Pre_PlayerData')
+# dm.delete_from_db('Simulation', 'Salaries', 'league=15 and year=2021')
+# df = df.assign(year=2021, league=15)
+# dm.write_to_db(df, 'Simulation', 'Salaries', 'append')
 
 #%%
 

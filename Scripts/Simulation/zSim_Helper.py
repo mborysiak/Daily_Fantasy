@@ -18,7 +18,7 @@ class FootballSimulation():
     # Creating Player Distributions for Given Settings
     #==========
     
-    def __init__(self, conn_sim, set_year, week):
+    def __init__(self, dm, set_year, week):
 
         self.week = week
         self.set_year = set_year

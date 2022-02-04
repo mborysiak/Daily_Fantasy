@@ -38,10 +38,10 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 18
+set_week = 2
 
-model_type = 'backfill'
-vers = 'standard'
+model_type = 'full_model'
+vers = 'standard_proba'
 
 n_iters = 25
 to_keep = 25
@@ -49,14 +49,14 @@ to_keep = 25
 drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
 keep_words = ['def', 'qb', 'team']
 
-if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE', 'Defense']
-elif model_type == 'backfill': positions = [ 'WR', 'TE']
+if model_type == 'full_model': positions = ['WR']#'RB', 'WR', 'TE', 'Defense']
+elif model_type == 'backfill': positions = ['QB']#, 'RB', 'WR', 'TE']
 
 for set_pos in positions:
 
     # set the earliest date to begin the validation set
     val_year_min = 2020
-    if set_pos in ('WR', 'TE'): val_week_min = 12
+    if set_pos in ('WR', 'TE'): val_week_min = 10
     else: val_week_min = 10
 
     kbs = {
@@ -184,7 +184,7 @@ for set_pos in positions:
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
     print('Shape of Train Set', df_train.shape)
-
+#%%
     #===========================================================================================
 
     # set up blank dictionaries for all metrics
@@ -226,7 +226,7 @@ for set_pos in positions:
     #---------------
 
     # loop through each potential model
-    model_list = ['lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']
+    model_list = ['lgbm',  'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']
     for m in model_list:
 
         print('\n============\n')
@@ -307,7 +307,6 @@ for set_pos in positions:
                                    skm.feature_union([
                                                 skm.piece('agglomeration'), 
                                                 skm.piece('k_best_c'),
-                                                # skm.piece('pca')
                                                 ]),
                                     skm.piece('k_best_c'),
                                     skm.piece(m)])
@@ -333,7 +332,8 @@ for set_pos in positions:
             best_models, score_results, oof_data = skm_class.time_series_cv(pipe, X_class, y_class, 
                                                                             params, n_iter=n_iters,
                                                                             col_split='game_date',
-                                                                            time_split=cv_time_input)
+                                                                            time_split=cv_time_input,
+                                                                            proba=True)
 
             # append the results and the best models for each fold
             pred[f'class_{m}_{cut}'] = oof_data['hold']
@@ -350,6 +350,25 @@ for set_pos in positions:
 
 
     #=============================================================================================
+#%%
+
+    def show_scatter_plot(y_pred, y, label='Total', r2=True):
+        plt.scatter(y_pred, y)
+        plt.xlabel('predictions');plt.ylabel('actual')
+        plt.show()
+
+        from sklearn.metrics import r2_score
+        if r2: print(f'{label} R2:', r2_score(y, y_pred))
+        else: print(f'{label} Corr:', np.corrcoef(y, y_pred)[0][1])
+
+    
+    def top_predictions(y_pred, y, r2=False):
+
+        val_high_score = pd.concat([pd.Series(y_pred), pd.Series(y)], axis=1)
+        val_high_score.columns = ['predictions','y_act']
+        val_high_score = val_high_score[val_high_score.predictions >= \
+                                        np.percentile(val_high_score.predictions, 75)]
+        show_scatter_plot(val_high_score.predictions, val_high_score.y_act, label='Top', r2=r2)
 
     #------------
     # Make the Class Predictions
@@ -360,237 +379,109 @@ for set_pos in positions:
     models_class = load_pickle(model_output_path, 'class_models')
     scores_class = load_pickle(model_output_path, 'class_scores')
 
-    # create the full stack pipe with meta estimators followed by stacked model
-    X_predict_class = pd.DataFrame()
-    for cut in cuts:
-
-        print(f"\n--------------\nPercentile {cut}\n--------------\n")
-
-        df_train_class, df_predict_class = get_class_data(df, cut)
-
-        skm_class_final = SciKitModel(df_train_class, model_obj='class')
-        X_stack_class, y_stack_class = skm_class_final.X_y_stack('class', pred_class, actual_class)
-        X_class_final, y_class_final = skm_class_final.Xy_split(y_metric='y_act', to_drop=drop_cols)
-        
     pred = load_pickle(model_output_path, 'reg_pred')
     actual = load_pickle(model_output_path, 'reg_actual')
     models = load_pickle(model_output_path, 'reg_models')
     scores = load_pickle(model_output_path, 'reg_scores')
 
-    #------------
-    # Make the Regression Predictions
-    #------------
-
-    output = output_start[['player', 'dk_salary']].copy()
-
-    df_predict_stack = df_predict.copy()
-    df_predict_stack = df_predict_stack.drop('y_act', axis=1).fillna(0)
-    skm_stack = SciKitModel(df_train)
-
+    # load the class predictions
+    df_train_class, _ = get_class_data(df, 0)
+    skm_class_final = SciKitModel(df_train_class, model_obj='class')
+    X_stack_class, y_stack_class = skm_class_final.X_y_stack('class', pred_class, actual_class)
+    
     # get the X and y values for stack trainin for the current metric
+    skm_stack = SciKitModel(df_train, model_obj='quantile')
     X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
     X_stack = pd.concat([X_stack, X_stack_class], axis=1)
 
     best_models = []
     final_models = [
-                    'ridge',
-                    'lasso',
-                    'lgbm', 
-                    'xgb', 
-                    'rf', 
-                    'bridge'
+                    # 'ridge',
+                    # 'lasso',
+                    # 'lgbm', 
+                    # 'xgb', 
+                    # 'rf', 
+                    # 'bridge',
+                    'gbm'
                     ]
+    from sklearn.linear_model import QuantileRegressor
+    preds = pd.DataFrame()
+    scores = []
     for final_m in final_models:
 
         print(f'\n{final_m}')
 
         # get the model pipe for stacking setup and train it on meta features
         stack_pipe = skm_stack.model_pipe([
-                                skm_stack.feature_union([
-                                                skm_stack.piece('agglomeration'), 
-                                                skm_stack.piece('k_best'),
-                                                skm_stack.piece('pca')
-                                                ]),
-                                skm_stack.piece('k_best'), 
+                                # skm_stack.feature_union([
+                                #                 skm_stack.piece('agglomeration'), 
+                                #                 skm_stack.piece('k_best'),
+                                #                 skm_stack.piece('pca')
+                                #                 ]),
+                                # skm_stack.piece('k_best'), 
+                                # skm_stack.piece(final_m)
+                                # ('qr', QuantileRegressor(quantile=0.95))
                                 skm_stack.piece(final_m)
                             ])
+        
+        # stack_params = {'qr__alpha': np.arange(0.5,5, 0.1)}
         stack_params = skm_stack.default_params(stack_pipe)
-        stack_params['k_best__k'] = range(1, X_stack.shape[1])
+        # stack_params['k_best__k'] = range(1, X_stack.shape[1])
+        
+        stack_pipe.steps[-1][-1].alpha = 0.84
+        stack_pipe.steps[-1][-1].loss = 'quantile'
+        # stack_pipe.steps[-1][-1].metric = 'quantile'
 
-        best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
-                                                                X_stack, y_stack, n_iter=50, 
-                                                                run_adp=True, print_coef=False)
+        best_model, stack_scores, stack_pred = skm_stack.best_stack(stack_pipe, stack_params,
+                                                                    X_stack, y_stack, n_iter=50, 
+                                                                    run_adp=True, print_coef=True)
         best_models.append(best_model)
-        db_output = add_result_db_output('final', final_m, [adp_score, stack_score], db_output)
+        scores.append(stack_scores['stack_score'])
+        preds = pd.concat([preds, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
+        
+        show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=False)
+        top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=False)
+
+    #     # db_output = add_result_db_output('final', final_m, 
+    #     #                                 [stack_scores['adp_score'], stack_scores['stack_score']], 
+    #     #                                 db_output)
+
+    # print('\nShowing Ensemble\n===============\n')
+    # top_3 = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:3]
+    # model_idx = np.array(final_models)[top_3]
+    # show_scatter_plot(preds.mean(axis=1), stack_pred['y'])
+    # top_predictions(preds.mean(axis=1), stack_pred['y'])
 
 
-        # get the final output:
-        X_fp, y_fp = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
-
-        val_predictions = pd.DataFrame()
-        for bm, fm in zip(best_models, final_models):
-            val_predict = pd.Series(skm_stack.cv_predict(bm, X_fp, y_fp), name=f'pred_{met}_{fm}')
-            val_predictions = pd.concat([val_predictions, val_predict], axis=1)
-
-        #------------
-        # Scatter and Metrics for Overall Results
-        #------------
-        plt.scatter(val_predict, y_fp)
-        plt.xlabel('predictions');plt.ylabel('actual')
-        plt.show()
-        from sklearn.metrics import r2_score
-        print('Total R2:', r2_score(y_fp, val_predict))
-
-        val_high_score = pd.concat([val_predict, y_fp], axis=1)
-        val_high_score.columns = ['predictions','y_act']
-        val_high_score = val_high_score[val_high_score.predictions >= \
-                                        np.percentile(val_high_score.predictions, 75)]
-
-        val_high_score.plot.scatter(x='predictions', y='y_act')
-        plt.show()
-        print('High Score R2:', r2_score(val_high_score.y_act, val_high_score.predictions))
+    # # write out tracking results to tracking DB
+    # db_output_pd = pd.DataFrame(db_output)
+    # db_output_pd = db_output_pd.assign(perc_low=prc[set_pos][0]).assign(perc_high=prc[set_pos][1]).assign(perc_range=prc[set_pos][2])
+    # db_output_pd = db_output_pd.assign(kb_low=kbs[set_pos][0]).assign(kb_high=kbs[set_pos][1]).assign(kb_range=kbs[set_pos][2])
+    # db_output_pd = db_output_pd.assign(n_iters=n_iters).assign(to_keep=to_keep).assign(val_week=val_week_min).assign(val_year=val_year_min)
+    # dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
+    # dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
 
 
-    #------------
-    # Scatter and Metrics for Overall Results
-    #------------
-    plt.scatter(val_predictions.mean(axis=1), y_fp)
-    plt.xlabel('predictions');plt.ylabel('actual')
-    plt.show()
-    from sklearn.metrics import r2_score
-    print('Total R2:', r2_score(y_fp, val_predictions.mean(axis=1)))
-
-    val_high_score = pd.concat([val_predictions.mean(axis=1), y_fp], axis=1)
-    val_high_score.columns = ['predictions','y_act']
-    val_high_score = val_high_score[val_high_score.predictions >= \
-                                    np.percentile(val_high_score.predictions, 75)]
-
-    val_high_score.plot.scatter(x='predictions', y='y_act')
-    plt.show()
-    print('High Score R2:', r2_score(val_high_score.y_act, val_high_score.predictions))
-
-
-    # write out tracking results to tracking DB
-    db_output_pd = pd.DataFrame(db_output)
-    db_output_pd = db_output_pd.assign(perc_low=prc[set_pos][0]).assign(perc_high=prc[set_pos][1]).assign(perc_range=prc[set_pos][2])
-    db_output_pd = db_output_pd.assign(kb_low=kbs[set_pos][0]).assign(kb_high=kbs[set_pos][1]).assign(kb_range=kbs[set_pos][2])
-    db_output_pd = db_output_pd.assign(n_iters=n_iters).assign(to_keep=to_keep).assign(val_week=val_week_min).assign(val_year=val_year_min)
-    dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
-    dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
-
-
-#%%
-
-#=====================================================
-
-
-# df_train_subset = df_train[df_train.ProjPts > np.percentile(df_train.ProjPts, 20)].reset_index(drop=True)
-df_train_subset = df_train[df_train.y_act > 0.5].reset_index(drop=True)
-
-skm = SciKitModel(df_train_subset)
-X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
-
-plt.hist(y)
-plt.show()
-
-# y = y + abs(y.min()) + 1
-plt.hist(np.log1p(y))
-plt.show()
-
-# y = np.log1p(y)
-
-#%%
-from sklearn.compose import TransformedTargetRegressor
-from sklearn.preprocessing import QuantileTransformer
-from sklearn.linear_model import PoissonRegressor
-from lightgbm import LGBMRegressor
-from xgboost import XGBRegressor
-import matplotlib.pyplot as plt
-
-np.random.seed(1234)
-
-# set up the model pipe and get the default search parameters
-m = 'ridge'
-pipe = skm.model_pipe([
-                        skm.piece('feature_drop'),
-                        skm.piece('std_scale'), 
-                        skm.piece('select_perc'),
-                        skm.feature_union([
-                                    skm.piece('agglomeration'), 
-                                    skm.piece('k_best'),
-                                    # skm.piece('pca')
-                                    ]),
-                        skm.piece('k_best'),
-                        # ('ridge', PoissonRegressor())
-                        # ('lgbm', LGBMRegressor(n_jobs=1, objective='tweedie'))
-                        # ('xgb', XGBRegressor(n_jobs=1, objective='reg:tweedie'))
-                        skm.piece(m)
-                        ])
-
-
-# set params
-params = skm.default_params(pipe, 'rand')
-params['select_perc__percentile'] = range(prc[set_pos][0],  prc[set_pos][1], prc[set_pos][2])
-params['k_best__k'] = range(kbs[set_pos][0],kbs[set_pos][1], kbs[set_pos][2])
-if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
-
-if model_type=='backfill':
-    params['feature_drop__col'] = [[None]]
-
-if set_pos in ('QB', 'RB'):
-    params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
-else:
-    to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
-    params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(10)]
-
-transform = False
-
-if transform:
-    print('yes_transform')
-    pipe = TransformedTargetRegressor(pipe, func=np.log1p, inverse_func=np.expm1)
-    # pipe = TransformedTargetRegressor(pipe, transformer=QuantileTransformer(output_distribution="normal"))
-    from sklearn.pipeline import Pipeline
-    pipe = Pipeline([('full_pipe', pipe)])
-    params = {'full_pipe__regressor__'+k: v for k, v in params.items()}
-else:
-    print('no_transform')
-
-# fit and append the ADP model
-best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
-                                                col_split='game_date', 
-                                                time_split=cv_time_input)
-
-
-from sklearn.metrics import r2_score, mean_squared_error
-
-try: del oof_data['val']
-except: pass
-# results = np.log1p(pd.DataFrame(oof_data))
-# results = np.exp(pd.DataFrame(oof_data))
-results = pd.DataFrame(oof_data)
-
-# oof_data['actual'] = np.exp(oof_data['actual'])
-# oof_data['hold'] = np.exp(oof_data['hold'])
-# oof_data['actual'] = np.log1p(oof_data['actual'])
-# oof_data['hold'] = np.log1p(oof_data['hold'])
-
-print(r2_score(oof_data['actual'], oof_data['hold']))
-plt.scatter(oof_data['hold'], oof_data['actual'])
-
-high_pred = results[results.hold > np.percentile(results.hold, 85)]
-print(r2_score(high_pred.actual, high_pred.hold))
-plt.scatter(high_pred.hold,high_pred.actual)
-plt.show()
-
-print(np.sqrt(mean_squared_error(high_pred.actual, high_pred.hold)))
-results['resid'] = results.actual - results.hold
-plt.scatter(results.hold, results.resid)
-
-#%%
-i = 4
-try: coefs = best_models[i].named_steps[m].coef_
-except: coefs = best_models[i].named_steps[m].feature_importances_
-try:cols = X.drop(best_models[i].named_steps['feature_drop'].col, axis=1).columns[best_models[i].named_steps['k_best'].get_support()]
-except: cols = X.columns[best_models[i].named_steps['k_best'].get_support()]
-pd.Series(coefs, index=cols).sort_values().plot.barh(figsize=(5,10))
 # %%
+def trunc_normal(player_data, num_samples=1000):
+
+    import scipy.stats as stats
+
+    # create truncated distribution
+    lower, upper = player_data.min_score,  player_data.max_score
+    lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
+    upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
+    trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
+    
+    estimates = trunc_dist.rvs(num_samples)
+
+    return estimates
+
+
+def trunc_normal_dist(self, num_options=500):
+    predictions = pd.DataFrame()
+    for _, row in self.player_data.iterrows():
+        dists = pd.DataFrame(self.trunc_normal(row, num_options)).T
+        predictions = pd.concat([predictions, dists], axis=0)
+    
+    return predictions.reset_index(drop=True)

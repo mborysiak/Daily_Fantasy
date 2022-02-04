@@ -16,7 +16,8 @@ cvxopt.glpk.options['msg_lev'] = 'GLP_MSG_OFF'
 class FootballSimulation:
 
     def __init__(self, dm, week, set_year, salary_cap, pos_require_start, num_iters, 
-                 pred_vers='standard', covar_type='team_points', full_model_rel_weight=1):
+                 pred_vers='standard', covar_type='team_points', full_model_rel_weight=1,
+                 use_covar=True):
 
         self.week = week
         self.set_year = set_year
@@ -27,24 +28,82 @@ class FootballSimulation:
         self.pred_vers = pred_vers
         self.covar_type = covar_type
         self.full_model_rel_weight = full_model_rel_weight
+        self.use_covar = use_covar
 
-        # pull in the player data (means, team, position) and covariance matrix
-        player_data = self.dm.read(f'''SELECT * 
-                                       FROM Covar_Means
-                                       WHERE week={week}
-                                             AND year={set_year}
-                                             AND pred_vers='{self.pred_vers}'
-                                             AND covar_type='{self.covar_type}' 
-                                             AND full_model_rel_weight={self.full_model_rel_weight}''', 
-                                             'Simulation')
-
-        self.covar = self.pull_covar()
+        if self.use_covar: 
+            player_data = self.get_covar_means()
+            self.covar = self.pull_covar()
+        else:
+            player_data = self.get_model_predictions()
 
         # extract the top players for each team
         self.top_team_players = self.get_top_players_from_team(player_data)
 
         # join in salary data to player data
         self.player_data = self.join_salary(player_data)
+
+
+    def get_covar_means(self):
+        # pull in the player data (means, team, position) and covariance matrix
+        player_data = self.dm.read(f'''SELECT * 
+                                       FROM Covar_Means
+                                       WHERE week={self.week}
+                                             AND year={self.set_year}
+                                             AND pred_vers='{self.pred_vers}'
+                                             AND covar_type='{self.covar_type}' 
+                                             AND full_model_rel_weight={self.full_model_rel_weight}''', 
+                                             'Simulation')
+        return player_data
+
+    def get_drop_teams(self):
+
+        import datetime as dt
+
+        df = self.dm.read(f'''SELECT away_team, home_team, gametime 
+                        FROM Gambling_Lines 
+                        WHERE week={self.week} 
+                            and year={self.set_year} 
+                    ''', 'Pre_TeamData')
+        df.gametime = pd.to_datetime(df.gametime)
+        df['day_of_week'] = df.gametime.apply(lambda x: x.weekday())
+        df['hour_in_day'] = df.gametime.apply(lambda x: x.hour)
+        df = df[(df.day_of_week!=6) | (df.hour_in_day > 16)]
+        drop_teams = list(df.away_team.values)
+        drop_teams.extend(list(df.home_team.values))
+
+        return drop_teams
+
+    def get_model_predictions(self):
+        df = self.dm.read(f'''SELECT * 
+                         FROM Model_Predictions
+                         WHERE week={self.week}
+                               AND year={self.set_year}
+                               AND version='{self.pred_vers}'
+                               AND pos !='K'
+                               AND pos IS NOT NULL
+                               AND player!='Ryan Griffin'
+                                ''', 'Simulation')
+        df['weighting'] = 1
+        df.loc[df.model_type=='full_model', 'weighting'] = self.full_model_rel_weight
+
+        score_cols = ['pred_fp_per_game', 'std_dev', 'min_score', 'max_score']
+        for c in score_cols: df[c] = df[c] * df.weighting
+
+        # Groupby and aggregate with namedAgg [1]:
+        df = df.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game': 'sum', 
+                                                                'std_dev': 'sum',
+                                                                'weighting': 'sum',
+                                                                'min_score': 'sum',
+                                                                'max_score': 'sum'})
+
+        for c in score_cols: df[c] = df[c] / df.weighting
+        df.loc[df.pos=='Defense', 'pos'] = 'DEF'
+        teams = self.dm.read("SELECT * FROM Player_Teams", 'Simulation')
+        df = pd.merge(df, teams, on=['player'])
+        drop_teams = self.get_drop_teams()
+        df = df[~df.team.isin(drop_teams)].reset_index(drop=True)
+
+        return df.drop('weighting', axis=1)
 
 
     def pull_covar(self):
@@ -86,13 +145,46 @@ class FootballSimulation:
         return df
 
 
-    def get_predictions(self, num_options=500):
+    @staticmethod
+    def trunc_normal(player_data, num_samples=1000):
 
+        import scipy.stats as stats
+
+        # create truncated distribution
+        lower, upper = player_data.min_score,  player_data.max_score
+        lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
+        upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
+        trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
+        
+        estimates = trunc_dist.rvs(num_samples)
+
+        return estimates
+
+
+    def trunc_normal_dist(self, num_options=500):
+        predictions = pd.DataFrame()
+        for _, row in self.player_data.iterrows():
+            dists = pd.DataFrame(self.trunc_normal(row, num_options)).T
+            predictions = pd.concat([predictions, dists], axis=0)
+        
+        return predictions.reset_index(drop=True)
+
+
+    def covar_dist(self, num_options=500):
         import scipy.stats as ss
         dist = ss.multivariate_normal(mean=self.player_data.pred_fp_per_game.values, 
                                       cov=self.covar.drop('player', axis=1).values, 
                                       allow_singular=True)
         predictions = pd.DataFrame(dist.rvs(num_options)).T
+        return predictions
+
+
+    def get_predictions(self, num_options=500):
+
+        if self.use_covar: 
+            predictions = self.covar_dist(num_options)
+        else: 
+            predictions = self.trunc_normal_dist(num_options)
         labels = self.player_data[['player', 'pos', 'team', 'salary']]
         predictions = pd.concat([labels, predictions], axis=1)
 
@@ -344,7 +436,7 @@ class FootballSimulation:
         df = pd.merge(df, pos_require_df, on='pos')
         df.loc[df.SelectionCounts < self.num_iters, 'SelectionCounts'] = \
             df.loc[df.SelectionCounts < self.num_iters, 'SelectionCounts'] / \
-                df.loc[df.SelectionCounts < self.num_iters, 'num_required']
+                (df.loc[df.SelectionCounts < self.num_iters, 'num_required']+1)
         df = df.sort_values(by='SelectionCounts', ascending=False).reset_index(drop=True)
         df = df.drop(['pos', 'num_required'], axis=1)
         return df
@@ -428,7 +520,7 @@ class FootballSimulation:
 
 
 
-# #%%
+#%%
 
 # # set the root path and database management object
 # from ff.db_operations import DataManage
@@ -444,12 +536,13 @@ class FootballSimulation:
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 # num_iters = 200
 
-# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters)
+# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, use_covar=False)
 # min_players_same_team = 'Auto'
 # set_max_team = None
 # to_add = []
 # to_drop = []
-# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team)
-# print(results)
-# # %%
-# %%
+# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select=True)
+# results
+
+
+#%%

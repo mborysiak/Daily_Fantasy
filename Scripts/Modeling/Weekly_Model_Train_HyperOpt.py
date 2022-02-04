@@ -38,10 +38,10 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 17
+set_week = 1
 
 model_type = 'full_model'
-vers = 'standard'
+vers = 'standard_proba'
 
 n_iters = 25
 to_keep = 25
