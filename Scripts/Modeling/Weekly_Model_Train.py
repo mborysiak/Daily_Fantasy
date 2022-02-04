@@ -1,5 +1,6 @@
 #%%
 # core packages
+from operator import mod
 from random import Random
 import pandas as pd
 import numpy as np
@@ -40,7 +41,7 @@ np.random.seed(1234)
 set_year = 2021
 set_week = 2
 
-model_type = 'full_model'
+model_type = 'backfill'
 vers = 'standard_proba'
 
 n_iters = 25
@@ -50,7 +51,7 @@ drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', '
 keep_words = ['def', 'qb', 'team']
 
 if model_type == 'full_model': positions = ['WR']#'RB', 'WR', 'TE', 'Defense']
-elif model_type == 'backfill': positions = ['QB']#, 'RB', 'WR', 'TE']
+elif model_type == 'backfill': positions = ['WR']#, 'RB', 'WR', 'TE']
 
 for set_pos in positions:
 
@@ -349,8 +350,63 @@ for set_pos in positions:
         save_pickle(scores, model_output_path, 'class_scores')
 
 
+#%%
+    # set up blank dictionaries for all metrics
+    pred = {}; actual = {}; scores = {}; models = {}
+
+    for alpha in [0.8, 0.95]:
+
+        print(f"\n--------------\nAlpha {alpha}\n--------------\n")
+
+        skm_quantile = SciKitModel(df_train, model_obj='quantile')
+        X_quant, y_quant = skm_quantile.Xy_split(y_metric='y_act',  to_drop=drop_cols)
+
+        # loop through each potential model
+        model_list = ['lgbm_q', 'gbm_q']
+        for m in model_list:
+
+            print('\n============\n')
+            print(m)
+
+            # set up the model pipe and get the default search parameters
+            pipe = skm_quantile.model_pipe([
+                                            skm_quantile.piece('random_sample'),
+                                            skm_quantile.piece(m)
+                                            ])
+            
+            # set params
+            pipe.steps[-1][-1].alpha = alpha
+            params = skm_quantile.default_params(pipe, 'rand')
+
+            # run the model with parameter search
+            best_models, score_results, oof_data = skm_quantile.time_series_cv(pipe, X_quant, y_quant, 
+                                                                               params, n_iter=n_iters,
+                                                                               col_split='game_date',
+                                                                               time_split=cv_time_input)
+
+            # append the results and the best models for each fold
+            pred[f'quant_{m}_{alpha}'] = oof_data['hold']
+            actual[f'quant_{m}_{alpha}'] = oof_data['actual']
+            scores[f'quant_{m}_{alpha}'] = score_results 
+            models[f'quant_{m}_{alpha}'] = best_models
+
+        #     db_output = add_result_db_output(f'class_{cut}', m, score_results, db_output)
+
+        save_pickle(pred, model_output_path, 'quant_pred')
+        save_pickle(actual, model_output_path, 'quant_actual')
+        save_pickle(models, model_output_path, 'quant_models')
+        save_pickle(scores, model_output_path, 'quant_scores')
+
+
     #=============================================================================================
 #%%
+
+    def load_all_pickles(model_output_path, label):
+        pred = load_pickle(model_output_path, f'{label}_pred')
+        actual = load_pickle(model_output_path, f'{label}_actual')
+        models = load_pickle(model_output_path, f'{label}_models')
+        scores = load_pickle(model_output_path, f'{label}_scores')
+        return pred, actual, models, scores
 
     def show_scatter_plot(y_pred, y, label='Total', r2=True):
         plt.scatter(y_pred, y)
@@ -374,37 +430,34 @@ for set_pos in positions:
     # Make the Class Predictions
     #------------
 
-    pred_class = load_pickle(model_output_path, 'class_pred')
-    actual_class = load_pickle(model_output_path, 'class_actual')
-    models_class = load_pickle(model_output_path, 'class_models')
-    scores_class = load_pickle(model_output_path, 'class_scores')
-
-    pred = load_pickle(model_output_path, 'reg_pred')
-    actual = load_pickle(model_output_path, 'reg_actual')
-    models = load_pickle(model_output_path, 'reg_models')
-    scores = load_pickle(model_output_path, 'reg_scores')
-
     # load the class predictions
+    pred_class, actual_class, _, _ = load_all_pickles(model_output_path, 'class')
     df_train_class, _ = get_class_data(df, 0)
     skm_class_final = SciKitModel(df_train_class, model_obj='class')
     X_stack_class, y_stack_class = skm_class_final.X_y_stack('class', pred_class, actual_class)
+
+    # load the class predictions
+    pred_quant, actual_quant, _, _ = load_all_pickles(model_output_path, 'quant')
+    skm_quant_final = SciKitModel(df_train, model_obj='quantile')
+    X_stack_quant, y_stack_quant = skm_quant_final.X_y_stack('quant', pred_quant, actual_quant)
     
     # get the X and y values for stack trainin for the current metric
-    skm_stack = SciKitModel(df_train, model_obj='quantile')
+    pred, actual, _, _ = load_all_pickles(model_output_path, 'reg')
+    skm_stack = SciKitModel(df_train, model_obj='reg')
     X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
-    X_stack = pd.concat([X_stack, X_stack_class], axis=1)
+    X_stack = pd.concat([X_stack, X_stack_class, X_stack_quant], axis=1)
 
     best_models = []
     final_models = [
-                    # 'ridge',
-                    # 'lasso',
-                    # 'lgbm', 
-                    # 'xgb', 
-                    # 'rf', 
-                    # 'bridge',
+                    'ridge',
+                    'lasso',
+                    'lgbm', 
+                    'xgb', 
+                    'rf', 
+                    'bridge',
                     'gbm'
                     ]
-    from sklearn.linear_model import QuantileRegressor
+
     preds = pd.DataFrame()
     scores = []
     for final_m in final_models:
@@ -413,24 +466,12 @@ for set_pos in positions:
 
         # get the model pipe for stacking setup and train it on meta features
         stack_pipe = skm_stack.model_pipe([
-                                # skm_stack.feature_union([
-                                #                 skm_stack.piece('agglomeration'), 
-                                #                 skm_stack.piece('k_best'),
-                                #                 skm_stack.piece('pca')
-                                #                 ]),
-                                # skm_stack.piece('k_best'), 
-                                # skm_stack.piece(final_m)
-                                # ('qr', QuantileRegressor(quantile=0.95))
+                                skm_stack.piece('k_best'), 
                                 skm_stack.piece(final_m)
                             ])
         
-        # stack_params = {'qr__alpha': np.arange(0.5,5, 0.1)}
         stack_params = skm_stack.default_params(stack_pipe)
-        # stack_params['k_best__k'] = range(1, X_stack.shape[1])
-        
-        stack_pipe.steps[-1][-1].alpha = 0.84
-        stack_pipe.steps[-1][-1].loss = 'quantile'
-        # stack_pipe.steps[-1][-1].metric = 'quantile'
+        stack_params['k_best__k'] = range(1, X_stack.shape[1])
 
         best_model, stack_scores, stack_pred = skm_stack.best_stack(stack_pipe, stack_params,
                                                                     X_stack, y_stack, n_iter=50, 
@@ -439,18 +480,40 @@ for set_pos in positions:
         scores.append(stack_scores['stack_score'])
         preds = pd.concat([preds, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
         
-        show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=False)
-        top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=False)
+        show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=True)
+        top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=True)
 
     #     # db_output = add_result_db_output('final', final_m, 
     #     #                                 [stack_scores['adp_score'], stack_scores['stack_score']], 
     #     #                                 db_output)
 
-    # print('\nShowing Ensemble\n===============\n')
-    # top_3 = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:3]
-    # model_idx = np.array(final_models)[top_3]
-    # show_scatter_plot(preds.mean(axis=1), stack_pred['y'])
-    # top_predictions(preds.mean(axis=1), stack_pred['y'])
+    print('\nShowing Ensemble\n===============\n')
+    top_3 = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:3]
+    model_idx = np.array(final_models)[top_3]
+    show_scatter_plot(preds[model_idx].mean(axis=1), stack_pred['y'])
+    top_predictions(preds[model_idx].mean(axis=1), stack_pred['y'])
+
+    skm_stack.model_obj = 'quantile'
+    for alpha in [0.01, 0.16, 0.84, 0.99]:
+        for final_m in ['gbm_q', 'lgbm_q']:
+
+            print(f'\n{alpha}_{final_m}')
+
+            # get the model pipe for stacking setup and train it on meta features
+            stack_pipe = skm_stack.model_pipe([skm_stack.piece(final_m)])
+            
+            stack_params = skm_stack.default_params(stack_pipe)
+            stack_pipe.steps[-1][-1].alpha = alpha
+
+            best_model, stack_scores, stack_pred = skm_stack.best_stack(stack_pipe, stack_params,
+                                                                        X_stack.drop(['quant_lgbm_q_0.8', 'quant_gbm_q_0.8', 'quant_lgbm_q_0.95', 'quant_gbm_q_0.95'], axis=1), y_stack, n_iter=50, 
+                                                                        run_adp=False, print_coef=True)
+            best_models.append(best_model)
+            scores.append(stack_scores['stack_score'])
+            preds = pd.concat([preds, pd.Series(stack_pred['stack_pred'], name=f'{final_m}_{alpha}')], axis=1)
+            
+            show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=False)
+            top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=False)
 
 
     # # write out tracking results to tracking DB
@@ -468,20 +531,36 @@ def trunc_normal(player_data, num_samples=1000):
     import scipy.stats as stats
 
     # create truncated distribution
-    lower, upper = player_data.min_score,  player_data.max_score
+    lower, upper = 0, 50# player_data.min_score,  player_data.max_score
     lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
     upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
     trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
     
     estimates = trunc_dist.rvs(num_samples)
-
     return estimates
 
 
-def trunc_normal_dist(self, num_options=500):
+def trunc_normal_dist(preds, num_options=500):
     predictions = pd.DataFrame()
-    for _, row in self.player_data.iterrows():
-        dists = pd.DataFrame(self.trunc_normal(row, num_options)).T
+    for _, row in preds.iterrows():
+        dists = pd.DataFrame(trunc_normal(row, num_options)).T
         predictions = pd.concat([predictions, dists], axis=0)
     
     return predictions.reset_index(drop=True)
+
+
+
+preds['pred_fp_per_game'] = preds[model_idx].mean(axis=1)
+preds['std_dev'] = preds['gbm_q_0.84'] - preds['gbm_q_0.16']
+preds['min_score'] = preds['gbm_q_0.01']
+preds['max_score'] = preds['gbm_q_0.99']
+
+dists = trunc_normal_dist(preds)
+# %%
+idx = 118
+dists.iloc[idx, :].plot.hist()
+print(pd.Series(actual['y_act_rf'])[idx])
+
+# %%
+preds['pred_fp_per_game'].sort_values()
+# %%
