@@ -148,6 +148,14 @@ for set_pos in positions:
         return df_train, df_predict, output_start, min_samples
 
 
+    def load_all_pickles(model_output_path, label):
+        pred = load_pickle(model_output_path, f'{label}_pred')
+        actual = load_pickle(model_output_path, f'{label}_actual')
+        models = load_pickle(model_output_path, f'{label}_models')
+        scores = load_pickle(model_output_path, f'{label}_scores')
+        return pred, actual, models, scores
+
+
     def get_class_predictions(df, models_class):
 
         # create the full stack pipe with meta estimators followed by stacked model
@@ -159,7 +167,7 @@ for set_pos in positions:
             df_train_class, df_predict_class = get_class_data(df, cut)
 
             skm_class_final = SciKitModel(df_train_class, model_obj='class')
-            X_stack_class, y_stack_class = skm_class_final.X_y_stack('class', pred_class, actual_class)
+            X_stack_class, _ = skm_class_final.X_y_stack('class', pred_class, actual_class)
             X_class_final, y_class_final = skm_class_final.Xy_split(y_metric='y_act', to_drop=drop_cols)
             
             for k, v in models_class.items():
@@ -173,6 +181,7 @@ for set_pos in positions:
 
 
     def optimize_reg_model(final_m, X_stack, y_stack):
+
         # get the model pipe for stacking setup and train it on meta features
         stack_pipe = skm_stack.model_pipe([
                                 skm_stack.feature_union([
@@ -183,6 +192,7 @@ for set_pos in positions:
                                 skm_stack.piece('k_best'), 
                                 skm_stack.piece(final_m)
                             ])
+
         stack_params = skm_stack.default_params(stack_pipe)
         stack_params['k_best__k'] = range(1, X_stack.shape[1])
 
@@ -193,10 +203,90 @@ for set_pos in positions:
         return best_model, stack_score, adp_score
 
 
+    def get_reg_predict_features(models, X, y):
+
+        # create the full stack pipe with meta estimators followed by stacked model
+        X_predict = pd.DataFrame()
+        for k, v in models.items():
+            m = skm_stack.ensemble_pipe(v)
+            m.fit(X, y)
+            reg_predict = m.predict(df_predict[X_fp.columns])
+            X_predict = pd.concat([X_predict, pd.Series(reg_predict, name=k)], axis=1)
+        return X_predict
+
+
+    def stack_predictions(X_predict, best_models, final_models):
+        predictions = pd.DataFrame()
+        for bm, fm in zip(best_models, final_models):
+            cur_prediction = np.round(bm.predict(X_predict), 2)
+            cur_prediction = pd.Series(cur_prediction, name=f'pred_{met}_{fm}')
+            predictions = pd.concat([predictions, cur_prediction], axis=1)
+
+        return predictions
+
+
+    def spline_std_max(output, splines, set_pos):
+
+        _, recent = rolling_max_std(set_pos)
+        output = pd.merge(output, recent, on='player', how='left')
+        output.roll_std = output.roll_std.fillna(recent.roll_std.median())
+        output.roll_max = output.roll_max.fillna(recent.roll_std.median())
+
+        output = create_sd_max_metrics(output)
+
+        output['std_dev'] = splines[set_pos][0](output.sd_metric)
+        output['max_score'] = splines[set_pos][1](output.max_metric)
+
+        return
+
+    
+    def show_scatter_plot(y_pred, y, label='Total', r2=True):
+        plt.scatter(y_pred, y)
+        plt.xlabel('predictions');plt.ylabel('actual')
+        plt.show()
+
+        from sklearn.metrics import r2_score
+        if r2: print(f'{label} R2:', r2_score(y, y_pred))
+        else: print(f'{label} Corr:', np.corrcoef(y, y_pred)[0][1])
+
+    
+    def top_predictions(y_pred, y, r2=False):
+
+        val_high_score = pd.concat([pd.Series(y_pred), pd.Series(y)], axis=1)
+        val_high_score.columns = ['predictions','y_act']
+        val_high_score = val_high_score[val_high_score.predictions >= \
+                                        np.percentile(val_high_score.predictions, 75)]
+        show_scatter_plot(val_high_score.predictions, val_high_score.y_act, label='Top', r2=r2)
+
+    def save_output_to_db(output):
+
+        output['pos'] = set_pos
+        output['version'] = vers
+        output['model_type'] = model_type
+        output['min_score'] = df_train.y_act.min()
+        output['week'] = set_week
+        output['year'] = set_year
+
+        output = output[['player', 'dk_salary', 'sd_metric', 'max_metric', 'pred_fp_per_game', 'std_dev',
+                        'dk_rank', 'pos', 'version', 'model_type', 'max_score', 'min_score',
+                        'week', 'year']]
+
+        del_str = f'''pos='{set_pos}' 
+                    AND version='{vers}' 
+                    AND week={set_week} 
+                    AND year={set_year}
+                    AND model_type='{model_type}'
+                    '''
+        dm.delete_from_db('Simulation', 'Model_Predictions', del_str)
+        dm.write_to_db(output, 'Simulation', f'Model_Predictions', 'append')
+
+
+    #================================================================================================================================
+
+
     #==========
     # Pull and clean compiled data
     #==========
-
     
     df, drop_cols = load_data(model_type, set_pos)
     df, cv_time_input, train_time_split = create_game_date(df)
@@ -206,123 +296,66 @@ for set_pos in positions:
     # Make the Class Predictions
     #------------
 
-    pred_class = load_pickle(model_output_path, 'class_pred')
-    actual_class = load_pickle(model_output_path, 'class_actual')
-    models_class = load_pickle(model_output_path, 'class_models')
-    scores_class = load_pickle(model_output_path, 'class_scores')
-
+    pred_class, actual_class, models_class, scores_class = load_all_pickles(model_output_path, 'class')
     X_stack_class, X_predict_class = get_class_predictions(df, models_class)
 
-    pred = load_pickle(model_output_path, 'reg_pred')
-    actual = load_pickle(model_output_path, 'reg_actual')
-    models = load_pickle(model_output_path, 'reg_models')
-    scores = load_pickle(model_output_path, 'reg_scores')
-#%%
+    #------------
+    # Mkae Regression Predictions
+    #------------
+
     # get the X and y values for stack training for the current metric
+    pred, actual, models, scores = load_all_pickles(model_output_path, 'reg')
     skm_stack = SciKitModel(df_train)
     X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
     X_stack = pd.concat([X_stack, X_stack_class], axis=1)
 
-    # df_predict_stack = df_predict.copy()
-    # df_predict_stack = df_predict_stack.drop('y_act', axis=1).fillna(0)
+    best_models = []; stack_val_pred = pd.DataFrame(); scores = []
+    final_models = ['ridge', 'lasso', 'bridge','lgbm', 'xgb', 'rf', 'gbm']
 
-    best_models = []
-    final_models = ['ridge',
-                    'lasso',
-                    'bridge',
-                    'lgbm', 
-                    'xgb', 
-                    'rf', 
-                    # 'gbm' ,
-                    # 'knn'
-                    ]
     for final_m in final_models:
 
         print(f'\n{final_m}')
-        best_model, stack_score, adp_score = optimize_reg_model(final_m, X_stack, y_stack)
+        best_model, stack_scores, stack_pred = optimize_reg_model(final_m, X_stack, y_stack)
         
         best_models.append(best_model)
+        scores.append(stack_scores['stack_score'])
+        stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
 
     # get the final output:
-    X_fp, y_fp = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
+    X_full, y_full = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
 
-    # create the full stack pipe with meta estimators followed by stacked model
-    X_predict = pd.DataFrame()
-    for k, v in models.items():
-        m = skm_stack.ensemble_pipe(v)
-        m.fit(X_fp, y_fp)
-        X_predict = pd.concat([X_predict, pd.Series(m.predict(df_predict[X_fp.columns]), name=k)], axis=1)
-
+    X_predict = get_reg_predict_features(models, X_full, y_full)
     X_predict = pd.concat([X_predict, X_predict_class], axis=1)
 
-    predictions = pd.DataFrame()
-    val_predictions = pd.DataFrame()
-    for bm, fm in zip(best_models, final_models):
-        val_predict = pd.Series(skm_stack.cv_predict(bm, X_fp, y_fp), name=f'pred_{met}_{fm}')
-        val_predictions = pd.concat([val_predictions, val_predict], axis=1)
-        prediction = pd.Series(np.round(bm.predict(X_predict), 2), name=f'pred_{met}_{fm}')
-        predictions = pd.concat([predictions, prediction], axis=1)
+    predictions = stack_predictions(X_predict, best_models, final_models)
 
     #------------
     # Scatter and Metrics for Overall Results
     #------------
-    plt.scatter(val_predictions.mean(axis=1), y_fp)
-    plt.xlabel('predictions');plt.ylabel('actual')
-    plt.show()
-    from sklearn.metrics import r2_score
-    print('Total R2:', r2_score(y_fp, val_predictions.mean(axis=1)))
 
-    val_high_score = pd.concat([val_predictions.mean(axis=1), y_fp], axis=1)
-    val_high_score.columns = ['predictions','y_act']
-    val_high_score = val_high_score[val_high_score.predictions >= \
-                                    np.percentile(val_high_score.predictions, 75)]
+    print('\nShowing Ensemble\n===============\n')
+    top_3 = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:3]
+    model_idx = np.array(final_models)[top_3]
 
-    val_high_score.plot.scatter(x='predictions', y='y_act')
-    plt.show()
-    print('High Score R2:', r2_score(val_high_score.y_act, val_high_score.predictions))
+    show_scatter_plot(stack_val_pred[model_idx].mean(axis=1), stack_pred['y'], r2=True)
+    top_predictions(stack_val_pred[model_idx].mean(axis=1), stack_pred['y'], r2=True)
 
     #===================
     # Create Outputs
     #===================
 
     output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points']].copy()
-
-    # output = pd.concat([output, predictions], axis=1)
     output['pred_fp_per_game'] = predictions.mean(axis=1)
-    _, recent = rolling_max_std(set_pos)
-    output = pd.merge(output, recent, on='player', how='left')
-    output.roll_std = output.roll_std.fillna(recent.roll_std.median())
-    output.roll_max = output.roll_max.fillna(recent.roll_std.median())
-
-    output = create_sd_max_metrics(output)
-
-    output['std_dev'] = splines[set_pos][0](output.sd_metric)
-    output['max_score'] = splines[set_pos][1](output.max_metric)
+    output = spline_std_max(output, splines, set_pos)
+    
+    
 
     output = output.sort_values(by='dk_salary', ascending=False)
     output['dk_rank'] = range(len(output))
     output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
     print(output.iloc[:50])
 
-    output['pos'] = set_pos
-    output['version'] = vers
-    output['model_type'] = model_type
-    output['min_score'] = df_train.y_act.min()
-    output['week'] = set_week
-    output['year'] = set_year
-
-    output = output[['player', 'dk_salary', 'sd_metric', 'max_metric', 'pred_fp_per_game', 'std_dev',
-                     'dk_rank', 'pos', 'version', 'model_type', 'max_score', 'min_score',
-                     'week', 'year']]
-
-    del_str = f'''pos='{set_pos}' 
-                AND version='{vers}' 
-                AND week={set_week} 
-                AND year={set_year}
-                AND model_type='{model_type}'
-                '''
-    dm.delete_from_db('Simulation', 'Model_Predictions', del_str)
-    dm.write_to_db(output, 'Simulation', f'Model_Predictions', 'append')
+    save_output_to_db(output)
 
 # %%
 

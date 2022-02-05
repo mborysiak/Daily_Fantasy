@@ -14,6 +14,7 @@ from ff.db_operations import DataManage
 from ff import general as ffgeneral
 import ff.data_clean as dc
 from skmodel import SciKitModel
+import sys
 
 import pandas_bokeh
 pandas_bokeh.output_notebook()
@@ -23,7 +24,6 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=UserWarning) 
 
 pd.set_option('display.max_columns', 999)
-
 # from sklearn import set_config
 # set_config(display='diagram')
 
@@ -39,7 +39,8 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 2
+set_week = 16
+# set_week = int(sys.argv[1])
 
 model_type = 'backfill'
 vers = 'standard_proba'
@@ -50,8 +51,8 @@ to_keep = 25
 drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
 keep_words = ['def', 'qb', 'team']
 
-if model_type == 'full_model': positions = ['WR']#'RB', 'WR', 'TE', 'Defense']
-elif model_type == 'backfill': positions = ['WR']#, 'RB', 'WR', 'TE']
+if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE', 'Defense']
+elif model_type == 'backfill': positions = ['QB', 'RB', 'WR', 'TE']
 
 for set_pos in positions:
 
@@ -172,10 +173,6 @@ for set_pos in positions:
     train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
 
 
-    # # test log
-    # df = df[df.y_act > 1].reset_index(drop=True)
-
-
     # # get the train / predict dataframes and output dataframe
     df_train = df[df.game_date < train_time_split].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
@@ -185,7 +182,7 @@ for set_pos in positions:
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
     print('Shape of Train Set', df_train.shape)
-#%%
+
     #===========================================================================================
 
     # set up blank dictionaries for all metrics
@@ -349,8 +346,6 @@ for set_pos in positions:
         save_pickle(models, model_output_path, 'class_models')
         save_pickle(scores, model_output_path, 'class_scores')
 
-
-#%%
     # set up blank dictionaries for all metrics
     pred = {}; actual = {}; scores = {}; models = {}
 
@@ -377,6 +372,7 @@ for set_pos in positions:
             # set params
             pipe.steps[-1][-1].alpha = alpha
             params = skm_quantile.default_params(pipe, 'rand')
+            params['random_sample__frac'] = np.arange(0.02, 0.1, 0.01)
 
             # run the model with parameter search
             best_models, score_results, oof_data = skm_quantile.time_series_cv(pipe, X_quant, y_quant, 
@@ -399,7 +395,6 @@ for set_pos in positions:
 
 
     #=============================================================================================
-#%%
 
     def load_all_pickles(model_output_path, label):
         pred = load_pickle(model_output_path, f'{label}_pred')
@@ -483,37 +478,37 @@ for set_pos in positions:
         show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=True)
         top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=True)
 
-    #     # db_output = add_result_db_output('final', final_m, 
-    #     #                                 [stack_scores['adp_score'], stack_scores['stack_score']], 
-    #     #                                 db_output)
+        # db_output = add_result_db_output('final', final_m, 
+        #                                 [stack_scores['adp_score'], stack_scores['stack_score']], 
+        #                                 db_output)
 
     print('\nShowing Ensemble\n===============\n')
     top_3 = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:3]
     model_idx = np.array(final_models)[top_3]
-    show_scatter_plot(preds[model_idx].mean(axis=1), stack_pred['y'])
-    top_predictions(preds[model_idx].mean(axis=1), stack_pred['y'])
+    show_scatter_plot(preds[model_idx].mean(axis=1), stack_pred['y'], r2=True)
+    top_predictions(preds[model_idx].mean(axis=1), stack_pred['y'], r2=True)
 
-    skm_stack.model_obj = 'quantile'
-    for alpha in [0.01, 0.16, 0.84, 0.99]:
-        for final_m in ['gbm_q', 'lgbm_q']:
+    # skm_stack.model_obj = 'quantile'
+    # for alpha in [0.01, 0.16, 0.84, 0.99]:
+    #     for final_m in ['gbm_q', 'lgbm_q']:
 
-            print(f'\n{alpha}_{final_m}')
+    #         print(f'\n{alpha}_{final_m}')
 
-            # get the model pipe for stacking setup and train it on meta features
-            stack_pipe = skm_stack.model_pipe([skm_stack.piece(final_m)])
+    #         # get the model pipe for stacking setup and train it on meta features
+    #         stack_pipe = skm_stack.model_pipe([skm_stack.piece(final_m)])
             
-            stack_params = skm_stack.default_params(stack_pipe)
-            stack_pipe.steps[-1][-1].alpha = alpha
+    #         stack_params = skm_stack.default_params(stack_pipe)
+    #         stack_pipe.steps[-1][-1].alpha = alpha
 
-            best_model, stack_scores, stack_pred = skm_stack.best_stack(stack_pipe, stack_params,
-                                                                        X_stack.drop(['quant_lgbm_q_0.8', 'quant_gbm_q_0.8', 'quant_lgbm_q_0.95', 'quant_gbm_q_0.95'], axis=1), y_stack, n_iter=50, 
-                                                                        run_adp=False, print_coef=True)
-            best_models.append(best_model)
-            scores.append(stack_scores['stack_score'])
-            preds = pd.concat([preds, pd.Series(stack_pred['stack_pred'], name=f'{final_m}_{alpha}')], axis=1)
+    #         best_model, stack_scores, stack_pred = skm_stack.best_stack(stack_pipe, stack_params,
+    #                                                                     X_stack.drop(['quant_lgbm_q_0.8', 'quant_gbm_q_0.8', 'quant_lgbm_q_0.95', 'quant_gbm_q_0.95'], axis=1), y_stack, n_iter=50, 
+    #                                                                     run_adp=False, print_coef=True)
+    #         best_models.append(best_model)
+    #         scores.append(stack_scores['stack_score'])
+    #         preds = pd.concat([preds, pd.Series(stack_pred['stack_pred'], name=f'{final_m}_{alpha}')], axis=1)
             
-            show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=False)
-            top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=False)
+    #         show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=False)
+    #         top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=False)
 
 
     # # write out tracking results to tracking DB
@@ -525,42 +520,44 @@ for set_pos in positions:
     # dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
 
 
-# %%
-def trunc_normal(player_data, num_samples=1000):
+# # %%
+# def trunc_normal(player_data, num_samples=1000):
 
-    import scipy.stats as stats
+#     import scipy.stats as stats
 
-    # create truncated distribution
-    lower, upper = 0, 50# player_data.min_score,  player_data.max_score
-    lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
-    upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
-    trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
+#     # create truncated distribution
+#     lower, upper = 0, 50# player_data.min_score,  player_data.max_score
+#     lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
+#     upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
+#     trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
     
-    estimates = trunc_dist.rvs(num_samples)
-    return estimates
+#     estimates = trunc_dist.rvs(num_samples)
+#     return estimates
 
 
-def trunc_normal_dist(preds, num_options=500):
-    predictions = pd.DataFrame()
-    for _, row in preds.iterrows():
-        dists = pd.DataFrame(trunc_normal(row, num_options)).T
-        predictions = pd.concat([predictions, dists], axis=0)
+# def trunc_normal_dist(preds, num_options=500):
+#     predictions = pd.DataFrame()
+#     for _, row in preds.iterrows():
+#         dists = pd.DataFrame(trunc_normal(row, num_options)).T
+#         predictions = pd.concat([predictions, dists], axis=0)
     
-    return predictions.reset_index(drop=True)
+#     return predictions.reset_index(drop=True)
 
 
 
-preds['pred_fp_per_game'] = preds[model_idx].mean(axis=1)
-preds['std_dev'] = preds['gbm_q_0.84'] - preds['gbm_q_0.16']
-preds['min_score'] = preds['gbm_q_0.01']
-preds['max_score'] = preds['gbm_q_0.99']
+# preds['pred_fp_per_game'] = preds[model_idx].mean(axis=1)
+# preds['std_dev'] = preds['gbm_q_0.84'] - preds['gbm_q_0.16']
+# preds['min_score'] = preds['gbm_q_0.01']
+# preds['max_score'] = preds['gbm_q_0.99']
 
-dists = trunc_normal_dist(preds)
-# %%
-idx = 118
-dists.iloc[idx, :].plot.hist()
-print(pd.Series(actual['y_act_rf'])[idx])
+# dists = trunc_normal_dist(preds)
+# # %%
+# idx = 118
+# dists.iloc[idx, :].plot.hist()
+# print(pd.Series(actual['y_act_rf'])[idx])
 
-# %%
-preds['pred_fp_per_game'].sort_values()
+# # %%
+# preds['pred_fp_per_game'].sort_values()
+# # %%
+
 # %%
