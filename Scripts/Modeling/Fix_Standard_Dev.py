@@ -13,7 +13,7 @@ def create_sd_max_metrics(df):
     return df
 
 
-def rolling_max_std(pos):
+def rolling_max_std(pos, week, year):
 
     from ff.db_operations import DataManage   
     import ff.general as ffgeneral 
@@ -28,11 +28,21 @@ def rolling_max_std(pos):
         df = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
                         FROM {pos}_Stats
                         WHERE season >= 2020
+                              AND (
+                                    (week < {week} AND year = {year})
+                                    OR 
+                                    (year < {year})
+                                  )
                             ''', 'FastR')
     else:
         df = dm.read(f'''SELECT defTeam player, defTeam team, week, season year, fantasy_pts y_act
                          FROM {pos}_Stats
                          WHERE season >= 2020
+                                AND (
+                                    (week < {week} AND year = {year})
+                                    OR 
+                                    (year < {year})
+                                  )
                              ''', 'FastR')
 
   
@@ -49,7 +59,7 @@ def rolling_max_std(pos):
     return df, most_recent
 
 
-def get_std_splines(pos, show_plot=False, k=2, s=2000):
+def get_std_splines(pos, week, year, show_plot=False, k=2, s=2000):
     
     from ff.db_operations import DataManage   
     import ff.general as ffgeneral 
@@ -98,7 +108,7 @@ def get_std_splines(pos, show_plot=False, k=2, s=2000):
 
 
     # get the rolling stats data    
-    stats, _ = rolling_max_std(pos)
+    stats, _ = rolling_max_std(pos, week, year)
 
     # join together and calculate sd and max metrics
     df = pd.merge(proj, stats, on=['player', 'team', 'week', 'year'])

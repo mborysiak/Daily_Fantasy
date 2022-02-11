@@ -16,7 +16,8 @@ cvxopt.glpk.options['msg_lev'] = 'GLP_MSG_OFF'
 class FootballSimulation:
 
     def __init__(self, dm, week, set_year, salary_cap, pos_require_start, num_iters, 
-                 pred_vers='standard', covar_type='team_points', full_model_rel_weight=1,
+                 pred_vers='standard', ensemble_vers='no_weight',
+                 covar_type='team_points', full_model_rel_weight=1,
                  use_covar=True):
 
         self.week = week
@@ -26,6 +27,7 @@ class FootballSimulation:
         self.salary_cap = salary_cap
         self.dm = dm
         self.pred_vers = pred_vers
+        self.ensemble_vers = ensemble_vers
         self.covar_type = covar_type
         self.full_model_rel_weight = full_model_rel_weight
         self.use_covar = use_covar
@@ -50,28 +52,26 @@ class FootballSimulation:
                                        WHERE week={self.week}
                                              AND year={self.set_year}
                                              AND pred_vers='{self.pred_vers}'
+                                             AND ensemble_vers='{self.ensemble_vers}'
                                              AND covar_type='{self.covar_type}' 
                                              AND full_model_rel_weight={self.full_model_rel_weight}''', 
                                              'Simulation')
         return player_data
 
-    def get_drop_teams(self):
+    def pull_covar(self):
+        covar = self.dm.read(f'''SELECT player, player_two, covar
+                                 FROM Covar_Matrix
+                                 WHERE week={self.week}
+                                       AND year={self.set_year}
+                                       AND pred_vers='{self.pred_vers}'
+                                       AND ensemble_vers='{self.ensemble_vers}'
+                                       AND covar_type='{self.covar_type}'
+                                       AND full_model_rel_weight={self.full_model_rel_weight} ''', 
+                                       'Simulation')
+        covar = pd.pivot_table(covar, index='player', columns='player_two').reset_index()
+        covar.columns = [c[1] if i!=0 else 'player' for i, c in enumerate(covar.columns)]
+        return covar
 
-        import datetime as dt
-
-        df = self.dm.read(f'''SELECT away_team, home_team, gametime 
-                        FROM Gambling_Lines 
-                        WHERE week={self.week} 
-                            and year={self.set_year} 
-                    ''', 'Pre_TeamData')
-        df.gametime = pd.to_datetime(df.gametime)
-        df['day_of_week'] = df.gametime.apply(lambda x: x.weekday())
-        df['hour_in_day'] = df.gametime.apply(lambda x: x.hour)
-        df = df[(df.day_of_week!=6) | (df.hour_in_day > 16)]
-        drop_teams = list(df.away_team.values)
-        drop_teams.extend(list(df.home_team.values))
-
-        return drop_teams
 
     def get_model_predictions(self):
         df = self.dm.read(f'''SELECT * 
@@ -79,6 +79,7 @@ class FootballSimulation:
                          WHERE week={self.week}
                                AND year={self.set_year}
                                AND version='{self.pred_vers}'
+                               AND ensemble_vers='{self.ensemble_vers}'
                                AND pos !='K'
                                AND pos IS NOT NULL
                                AND player!='Ryan Griffin'
@@ -106,18 +107,21 @@ class FootballSimulation:
         return df.drop('weighting', axis=1)
 
 
-    def pull_covar(self):
-        covar = self.dm.read(f'''SELECT player, player_two, covar
-                                 FROM Covar_Matrix
-                                 WHERE week={self.week}
-                                       AND year={self.set_year}
-                                       AND pred_vers='{self.pred_vers}'
-                                       AND covar_type='{self.covar_type}'
-                                       AND full_model_rel_weight={self.full_model_rel_weight} ''', 
-                                       'Simulation')
-        covar = pd.pivot_table(covar, index='player', columns='player_two').reset_index()
-        covar.columns = [c[1] if i!=0 else 'player' for i, c in enumerate(covar.columns)]
-        return covar
+    def get_drop_teams(self):
+
+        df = self.dm.read(f'''SELECT away_team, home_team, gametime 
+                        FROM Gambling_Lines 
+                        WHERE week={self.week} 
+                            and year={self.set_year} 
+                    ''', 'Pre_TeamData')
+        df.gametime = pd.to_datetime(df.gametime)
+        df['day_of_week'] = df.gametime.apply(lambda x: x.weekday())
+        df['hour_in_day'] = df.gametime.apply(lambda x: x.hour)
+        df = df[(df.day_of_week!=6) | (df.hour_in_day > 16)]
+        drop_teams = list(df.away_team.values)
+        drop_teams.extend(list(df.home_team.values))
+
+        return drop_teams
 
 
     def join_salary(self, df):
@@ -522,27 +526,27 @@ class FootballSimulation:
 
 #%%
 
-# # set the root path and database management object
-# from ff.db_operations import DataManage
-# from ff import general as ffgeneral
+# set the root path and database management object
+from ff.db_operations import DataManage
+from ff import general as ffgeneral
 
-# root_path = ffgeneral.get_main_path('Daily_Fantasy')
-# db_path = f'{root_path}/Data/Databases/'
-# dm = DataManage(db_path)
+root_path = ffgeneral.get_main_path('Daily_Fantasy')
+db_path = f'{root_path}/Data/Databases/'
+dm = DataManage(db_path)
 
-# week = 13
-# year = 2021
-# salary_cap = 50000
-# pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-# num_iters = 200
+week = 13
+year = 2021
+salary_cap = 50000
+pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
+num_iters = 200
 
-# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, use_covar=False)
-# min_players_same_team = 'Auto'
-# set_max_team = None
-# to_add = []
-# to_drop = []
-# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select=True)
-# results
+sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, use_covar=False)
+min_players_same_team = 'Auto'
+set_max_team = None
+to_add = []
+to_drop = []
+results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select=True)
+results
 
 
 #%%

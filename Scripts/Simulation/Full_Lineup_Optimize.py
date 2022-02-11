@@ -12,26 +12,21 @@ dm = DataManage(db_path)
 #===============
 # Settings and User Inputs
 #===============
-import sys
 
-for week in range(16, 19):
+for week in [8]:
 
     print(f'Week {week}\n===============\n')
+    
     year = 2021
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
     num_iters = 100
 
-    pred_vers = 'standard'
-    covar_type = 'no_covar'
-    full_model_rel_weight = 1
-    use_covar=False
-
-    adjust_select = True
+    pred_vers = 'standard_proba_sweight'
+    ensemble_vers = 'all_weight'
     TOTAL_LINEUPS = 10
-    TEAM_DROP_FRAC = 0.2 # percent of teams to drop from each iteration
-    PLAYER_DROP_MULTIPLIER = 0 # higher is more likely to drop previous selected players
-    min_players_same_team = 1
+
+    min_players_same_team = 2
     set_max_team = None
     
 
@@ -97,13 +92,12 @@ for week in range(16, 19):
         return list(player_teams.loc[player_teams.team.isin(drop_teams), 'player'].values)
 
 
-    player_teams = dm.read(f'''SELECT player, team 
-                            FROM Covar_Means
-                            WHERE week={week}
-                                    AND year={year}
-                                    AND pred_vers='{pred_vers}'
-                                    AND covar_type='{covar_type}'
-                                    AND full_model_rel_weight={full_model_rel_weight} ''', 'Simulation')
+    player_teams = dm.read(f'''SELECT DISTINCT player, team 
+                               FROM Covar_Means
+                               WHERE week={week}
+                                     AND year={year}
+                                     AND pred_vers='{pred_vers}'
+                                     ''', 'Simulation')
     unique_teams = player_teams.team.unique()
 
     points = pd.DataFrame()
@@ -134,10 +128,11 @@ for week in range(16, 19):
 
     G = {
         'adjust_pos_counts': [True, False], 
-        'drop_player_multiple': [0, 2], 
+        'drop_player_multiple': [0, 4], 
         'drop_team_frac': [0, 0.1],
         'top_n_choices': [0, 4],
-        'full_model_rel_weight': [0.2, 5],
+        'full_model_rel_weight': [0.2, 1, 5],
+        'covar_type': ['team_points', 'no_covar'],
         'iter': [0, 1, 2],
         }
 
@@ -146,10 +141,15 @@ for week in range(16, 19):
         params.append(list(config.values()))
 
 
-    def sim_winnings(adjust_select, player_drop_multiplier, team_drop_frac, top_n_choices, full_model_rel_weight):
+    def sim_winnings(adjust_select, player_drop_multiplier, team_drop_frac, top_n_choices, full_model_rel_weight, covar_type):
+
+        if covar_type=='team_points': use_covar=True
+        elif covar_type=='no_covar': use_covar=False
 
         sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-                                 pred_vers, covar_type, full_model_rel_weight, use_covar=use_covar)
+                                 pred_vers, ensemble_vers=ensemble_vers,
+                                 covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
+                                 use_covar=use_covar)
 
         winnings = []
         points_record = []
@@ -178,10 +178,12 @@ for week in range(16, 19):
 
         return list(sim_results.values)
 
+    # sim_winnings(True, 2, 0, 3, 1, 'team_points')
+
 #%%
     from joblib import Parallel, delayed
 
-    results = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(adj, pdm, tdf, tn, fmw) for adj, pdm, tdf, tn, fmw, i in params)
+    results = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(adj, pdm, tdf, tn, fmw, ct) for adj, pdm, tdf, tn, fmw, ct, i in params)
     results = [r[0] for r in results]
 
     output = pd.concat([pd.DataFrame(params), pd.DataFrame(results)], axis=1)
@@ -194,12 +196,12 @@ for week in range(16, 19):
     print(output)
 
     output = output.assign(min_prize_points=min_prize_pts, mean_prize_points=mean_prize_pts, max_prize_points=max_prize_pts,
-                           week=week, year=year, pred_vers=pred_vers, 
-                           covar_type=covar_type, min_player_same_team=min_players_same_team)
+                           week=week, year=year, pred_vers=pred_vers, ensemble_vers=ensemble_vers,
+                           min_player_same_team=min_players_same_team)
 
    
     output.loc[:, 'std_dev_type'] = 'spline'
-    output.loc[output.week < 6, 'std_dev_type'] = 'bridge'
+    output.loc[(output.week < 6) & (output.pred_vers=='stanard'), 'std_dev_type'] = 'bridge'
 
     # drop_str = f'''week={week} 
     #                AND year={year} 
@@ -227,15 +229,18 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
-df = dm.read("SELECT * FROM Winnings_Optimize ORDER BY year, week", 'Simulation')
+df = dm.read('''SELECT * 
+                FROM Winnings_Optimize
+                WHERE week > 2
+                ORDER BY year, week''', 'Simulation')
 df.loc[:, 'std_dev_type'] = 'spline'
 df.loc[df.week < 6, 'std_dev_type'] = 'bridge'
 
 X = df[['adjust_pos_counts', 'drop_player_multiple',  'drop_team_frac', 'top_n_choices', 
-        'week', 'pred_vers', 'covar_type', 'full_model_rel_weight', 'std_dev_type']]
+        'week', 'pred_vers', 'ensemble_vers', 'covar_type', 'full_model_rel_weight', 'std_dev_type']]
 
 def one_hot(X):
-    for c in ['week', 'pred_vers', 'covar_type', 'std_dev_type']:
+    for c in ['week', 'pred_vers', 'ensemble_vers', 'covar_type', 'std_dev_type']:
         X = pd.concat([X, pd.get_dummies(X[c], prefix=c, drop_first=True)], axis=1)
     
         if c!='week':
@@ -247,9 +252,9 @@ def one_hot(X):
 X = one_hot(X)
 y = df.total_winnings
 
-m = Ridge(alpha=100)
+# m = Ridge(alpha=100)
 # m = RandomForestRegressor(n_estimators=100, max_depth=3, min_samples_leaf=2)
-# m = LGBMRegressor(n_estimators=25, max_depth=5, min_samples_leaf=1)
+m = LGBMRegressor(n_estimators=25, max_depth=5, min_samples_leaf=1)
 
 if type(m) == sklearn.linear_model._ridge.Ridge:
     sc = StandardScaler()
@@ -262,12 +267,12 @@ print(scores)
 m.fit(X,y)
 
 try:
-    pd.Series(m.coef_, index=X.columns).sort_values().plot.barh()
+    pd.Series(m.coef_, index=X.columns).sort_values().plot.barh(figsize=(10,10))
 
 except:
     import shap
     shap_values = shap.TreeExplainer(m).shap_values(X)
-    shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(20,10), max_display=30, show=False)
+    shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(8,10), max_display=20, show=False)
 
 
 # %%
@@ -279,7 +284,7 @@ X_pred = pd.DataFrame({
  'top_n_choices': [0], 
  'week': [18], 
  'full_model_rel_weight': [0], 
- 'week_3': [0], 
+#  'week_3': [0], 
  'week_4': [0],
  'week_5': [0], 
  'week_6': [0], 
@@ -295,14 +300,16 @@ X_pred = pd.DataFrame({
  'week_16': [0], 
  'week_17': [0],
  'week_18': [1], 
+ 'pred_vers_standard_proba': [1],
  'covar_type_team_points': [0], 
- 'std_dev_type_spline': [1]
+ 'std_dev_type_spline': [1],
  }, index=[0])
+
+if type(m) == sklearn.linear_model._ridge.Ridge:
+    X_pred = pd.DataFrame(sc.transform(X_pred), columns=X_pred.columns)
 
 print('Optimal Avg Winnings:', m.predict(X_pred)[0])
 
 my_avg_winnings = dm.read('''SELECT DISTINCT week, year, my_total_winnings 
                              FROM Winnings_Optimize''', 'Simulation').my_total_winnings.mean()
 print('My Avg Winnings:', my_avg_winnings)
-
-# %%

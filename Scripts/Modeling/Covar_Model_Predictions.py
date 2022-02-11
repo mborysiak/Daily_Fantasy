@@ -190,9 +190,10 @@ def get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_we
     preds = dm.read(f'''SELECT * 
                         FROM Model_Predictions 
                         WHERE version='{pred_vers}'
-                            AND week = '{set_week}'
-                            AND year = '{set_year}' 
-                            AND player != 'Ryan Griffin'
+                              AND ensemble_vers='{ensemble_vers}'
+                              AND week = '{set_week}'
+                              AND year = '{set_year}' 
+                              AND player != 'Ryan Griffin'
                 ''', 'Simulation')
 
     preds['weighting'] = 1
@@ -293,7 +294,9 @@ def cleanup_pred_covar(pred_cov):
 
     pred_cov_final = pd.melt(pred_cov_final, id_vars='player', var_name=['player_two'], value_name='covar')
     pred_cov_final = pred_cov_final.assign(week=set_week, year=set_year,
-                                           pred_vers=pred_vers, covar_type=covar_type,
+                                           pred_vers=pred_vers, 
+                                           ensemble_vers=ensemble_vers,
+                                           covar_type=covar_type,
                                            full_model_rel_weight=full_model_rel_weight)
 
     return pred_cov_final
@@ -305,7 +308,8 @@ def get_mean_points(preds):
     mean_points = mean_points.rename(columns={'index': 'player'})
     mean_points.loc[mean_points.pos=='Defense', 'pos'] = 'DEF' 
     mean_points = mean_points.assign(week=set_week, year=set_year, 
-                                    pred_vers=pred_vers, covar_type=covar_type,
+                                    pred_vers=pred_vers, ensemble_vers=ensemble_vers,
+                                    covar_type=covar_type,
                                     full_model_rel_weight=full_model_rel_weight)
 
     return mean_points
@@ -314,45 +318,51 @@ def get_mean_points(preds):
 
 # set year to analyze
 set_year = 2021
-set_week = 15
-pred_vers = 'standard'
+pred_vers = 'standard_proba_sweight'
+ensemble_vers = 'all_weight'
 covar_type = 'team_points'
-full_model_rel_weight = 1
 
-# get the player and opposing player data to create correlation matrices
-player_data = get_max_metrics(set_week, set_year)
-corr_data = create_pos_rank(player_data)
-opp_corr_data = create_pos_rank(player_data, opponent=True)
-opp_corr_data = opp_corr_data[~opp_corr_data.team.isnull()].reset_index(drop=True)
-corr_data = pd.concat([corr_data, opp_corr_data], axis=0)
+for set_week in [8]:
 
-# use  team level data to get the covariance for team-level groups
-corr_data = get_team_totals(corr_data, 'pos_rank')
-corr_data = corr_data[['team', 'week', 'year', 'pos_rank', 'max_metric', 'y_act', 'team_total']]
-matrices, percs = get_group_covars(corr_data)
+    for full_model_rel_weight in [0.2, 1, 5]:
 
-# pull in the prediction data and create player matches for position type
-drop_teams = get_drop_teams(set_week, set_year)
-preds = get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_weight)
-pred_cov = create_player_matches(preds, opponent=False)
-opp_pred_cov = create_player_matches(preds, opponent=True)
-pred_cov = pd.concat([pred_cov, opp_pred_cov], axis=0).reset_index(drop=True)
-pred_cov = get_team_totals(pred_cov, 'pos_rank2')
+        # get the player and opposing player data to create correlation matrices
+        player_data = get_max_metrics(set_week, set_year)
+        corr_data = create_pos_rank(player_data)
+        opp_corr_data = create_pos_rank(player_data, opponent=True)
+        opp_corr_data = opp_corr_data[~opp_corr_data.team.isnull()].reset_index(drop=True)
+        corr_data = pd.concat([corr_data, opp_corr_data], axis=0)
 
-pred_cov = apply_group_covar(pred_cov, matrices, percs)
-pred_cov_final = cleanup_pred_covar(pred_cov)
-mean_points = get_mean_points(preds)
+        # use  team level data to get the covariance for team-level groups
+        corr_data = get_team_totals(corr_data, 'pos_rank')
+        corr_data = corr_data[['team', 'week', 'year', 'pos_rank', 'max_metric', 'y_act', 'team_total']]
+        matrices, percs = get_group_covars(corr_data)
 
-drop_str = f'''week={set_week} AND year={set_year} AND pred_vers='{pred_vers}' 
-               AND covar_type='{covar_type}' AND full_model_rel_weight={full_model_rel_weight}'''
+        # pull in the prediction data and create player matches for position type
+        drop_teams = get_drop_teams(set_week, set_year)
+        preds = get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_weight)
+        pred_cov = create_player_matches(preds, opponent=False)
+        opp_pred_cov = create_player_matches(preds, opponent=True)
+        pred_cov = pd.concat([pred_cov, opp_pred_cov], axis=0).reset_index(drop=True)
+        pred_cov = get_team_totals(pred_cov, 'pos_rank2')
 
-dm.delete_from_db('Simulation', 'Covar_Means', drop_str)
-dm.delete_from_db('Simulation', 'Covar_Matrix', drop_str)
-dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
-dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
+        pred_cov = apply_group_covar(pred_cov, matrices, percs)
+        pred_cov_final = cleanup_pred_covar(pred_cov)
+        mean_points = get_mean_points(preds)
+
+        drop_str = f'''week={set_week} 
+                    AND year={set_year} 
+                    AND pred_vers='{pred_vers}' 
+                    AND ensemble_vers='{ensemble_vers}'
+                    AND covar_type='{covar_type}' 
+                    AND full_model_rel_weight={full_model_rel_weight}'''
+
+        dm.delete_from_db('Simulation', 'Covar_Means', drop_str)
+        dm.delete_from_db('Simulation', 'Covar_Matrix', drop_str)
+        dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
+        dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
 
 # %%
-
 
 # sal = dm.read('''SELECT * FROM Salaries''', 'Simulation')
 # sal.groupby(['year', 'league']).agg('count')
