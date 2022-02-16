@@ -44,7 +44,7 @@ set_week = 10
 # set_week = int(sys.argv[1])
 
 # model_type = 'full_model'
-vers = 'standard_proba_sweight'
+vers = 'standard_proba'
 use_sample_weight = False
 
 n_iters = 30
@@ -189,7 +189,7 @@ for model_type in ['full_model']:#, 'backfill']:
         print('Shape of Train Set', df_train.shape)
 
         #===========================================================================================
-#%%
+
         # set up blank dictionaries for all metrics
         pred = {}; actual = {}; scores = {}; models = {}; full_hold={}
         met = 'y_act'
@@ -238,14 +238,14 @@ for model_type in ['full_model']:#, 'backfill']:
             print(m)
 
             # set up the model pipe and get the default search parameters
-            pipe = skm.model_pipe([ skm.piece('random_sample'),
+            pipe = skm.model_pipe([ skm.piece('feature_drop'),
                                     skm.piece('std_scale'), 
                                     skm.piece('select_perc'),
-                                    # skm.feature_union([
-                                    #             skm.piece('agglomeration'), 
-                                    #             skm.piece('k_best'),
-                                    #             # skm.piece('pca')
-                                    #             ]),
+                                    skm.feature_union([
+                                                skm.piece('agglomeration'), 
+                                                skm.piece('k_best'),
+                                                # skm.piece('pca')
+                                                ]),
                                     skm.piece('k_best'),
                                     skm.piece(m)])
             
@@ -255,14 +255,14 @@ for model_type in ['full_model']:#, 'backfill']:
             params['k_best__k'] = range(kbs[set_pos][0],kbs[set_pos][1], kbs[set_pos][2])
             if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
         
-            # if model_type=='backfill':
-            #     params['feature_drop__col'] = [[None]]
+            if model_type=='backfill':
+                params['feature_drop__col'] = [[None]]
 
-            # if set_pos in ('QB', 'RB'):
-            #     params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
-            # else:
-            #     to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
-            #     params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(10)]
+            if set_pos in ('QB', 'RB'):
+                params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
+            else:
+                to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+                params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(10)]
 
             # run the model with parameter search
             best_models, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=n_iters,
@@ -286,7 +286,6 @@ for model_type in ['full_model']:#, 'backfill']:
         save_pickle(scores, model_output_path, 'reg_scores')
         save_pickle(full_hold, model_output_path, 'reg_full_hold')
 
-#%%
         #===========================================================================================
 
         # set up blank dictionaries for all metrics
@@ -340,7 +339,7 @@ for model_type in ['full_model']:#, 'backfill']:
                     
 
                 # run the model with parameter search
-                best_models, score_results, oof_data = skm_class.time_series_cv(pipe, X_class, y_class, 
+                best_models, oof_data = skm_class.time_series_cv(pipe, X_class, y_class, 
                                                                                 params, n_iter=n_iters,
                                                                                 col_split='game_date',
                                                                                 time_split=cv_time_input,
@@ -396,7 +395,7 @@ for model_type in ['full_model']:#, 'backfill']:
                 params['random_sample__frac'] = np.arange(0.02, 0.1, 0.01)
 
                 # run the model with parameter search
-                best_models, score_results, oof_data = skm_quantile.time_series_cv(pipe, X_quant, y_quant, 
+                best_models, oof_data = skm_quantile.time_series_cv(pipe, X_quant, y_quant, 
                                                                                 params, n_iter=n_iters,
                                                                                 col_split='game_date',
                                                                                 time_split=cv_time_input)
@@ -418,7 +417,7 @@ for model_type in ['full_model']:#, 'backfill']:
         save_pickle(full_hold, model_output_path, 'quant_full_hold')
 
     #     #=============================================================================================
-#%%
+
         def load_all_pickles(model_output_path, label):
             pred = load_pickle(model_output_path, f'{label}_pred')
             actual = load_pickle(model_output_path, f'{label}_actual')
