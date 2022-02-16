@@ -100,16 +100,41 @@ def load_all_pickles(model_output_path, label):
     actual = load_pickle(model_output_path, f'{label}_actual')
     models = load_pickle(model_output_path, f'{label}_models')
     scores = load_pickle(model_output_path, f'{label}_scores')
-    return pred, actual, models, scores
+    try: full_hold = load_pickle(model_output_path, f'{label}_full_hold')
+    except: full_hold = None
+    return pred, actual, models, scores, full_hold
 
 
-def X_y_stack(met, pred, actual):
+def X_y_stack_old(met, pred, actual):
 
     X = pd.DataFrame([v for k,v in pred.items() if met in k]).T
     X.columns = [k for k,_ in pred.items() if met in k]
     y = pd.Series(actual[X.columns[0]], name='y_act')
 
     return X, y
+
+def X_y_stack_full(full_hold):
+    i = 0
+    for k, v in full_hold.items():
+        if i == 0:
+            df = v.copy()
+            df = df.rename(columns={'pred': k})
+        else:
+            df_cur = v.rename(columns={'pred': k}).drop('y_act', axis=1)
+            df = pd.merge(df, df_cur, on=['player', 'team', 'week','year'])
+        i+=1
+
+    X = df[[c for c in df.columns if 'y_act_' in c]]
+    y = df[['y_act']]
+    return X, y, df
+
+def X_y_stack(met, full_hold, pred, actual):
+    if full_hold is not None:
+        X_stack, y_stack, _ = X_y_stack_full(full_hold)
+    else:
+        X_stack, y_stack = X_y_stack(met, pred, actual)
+
+    return X_stack, y_stack
 
 
 def get_class_predictions(df, models_class):
@@ -211,7 +236,7 @@ def get_reg_predict_features(models, X, y):
 
         for m in ind_models:
 
-            if sample_weight_models[m] and set_pos != 'Defense':
+            if 'sweight' in vers:
                 sweight = f'{m.steps[-1][0]}__sample_weight'
                 wts = np.where(y > 0, y, 0)
                 fit_params = {sweight: wts}
@@ -362,16 +387,16 @@ met = 'y_act'
 
 # set the model version
 vers = 'standard_proba_sweight'
-ensemble_vers = 'all_weight'
+ensemble_vers = 'no_weight'
 
-sample_weight_models = {'adp': True,
-                        'ridge': True,
-                        'lasso': True,
-                        'bridge': True,
-                        'lgbm': True,
-                        'xgb': True,
-                        'rf': True,
-                        'gbm': True}
+sample_weight_models = {'adp': False,
+                        'ridge': False,
+                        'lasso': False,
+                        'bridge': False,
+                        'lgbm': False,
+                        'xgb': False,
+                        'rf': False,
+                        'gbm': False}
 
 splines = {}
 for k, p in zip([1, 2, 2, 2, 2], ['QB', 'RB', 'WR', 'TE', 'Defense']):

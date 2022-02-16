@@ -23,7 +23,7 @@ for week in [8]:
     num_iters = 100
 
     pred_vers = 'standard_proba_sweight'
-    ensemble_vers = 'all_weight'
+    ensemble_vers = 'no_weight'
     TOTAL_LINEUPS = 10
 
     min_players_same_team = 2
@@ -282,7 +282,7 @@ X_pred = pd.DataFrame({
  'drop_player_multiple': [0], 
  'drop_team_frac': [0],
  'top_n_choices': [0], 
- 'week': [18], 
+ 'week': [19], 
  'full_model_rel_weight': [0], 
 #  'week_3': [0], 
  'week_4': [0],
@@ -294,13 +294,17 @@ X_pred = pd.DataFrame({
  'week_10': [0], 
  'week_11': [0],
  'week_12': [0], 
- 'week_13': [0], 
+ 'week_13': [1], 
  'week_14': [0], 
  'week_15': [0], 
  'week_16': [0], 
  'week_17': [0],
- 'week_18': [1], 
- 'pred_vers_standard_proba': [1],
+ 'week_18': [0], 
+ 'pred_vers_standard_proba': [0],
+ 'pred_vers_standard_proba_quant': [0],
+ 'pred_vers_standard_proba_sweight': [1],
+ 'ensemble_vers_linear_weight': [0],
+ 'ensemble_vers_no_weight': [0],
  'covar_type_team_points': [0], 
  'std_dev_type_spline': [1],
  }, index=[0])
@@ -313,3 +317,5 @@ print('Optimal Avg Winnings:', m.predict(X_pred)[0])
 my_avg_winnings = dm.read('''SELECT DISTINCT week, year, my_total_winnings 
                              FROM Winnings_Optimize''', 'Simulation').my_total_winnings.mean()
 print('My Avg Winnings:', my_avg_winnings)
+
+# %%

@@ -40,22 +40,22 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 17
+set_week = 10
 # set_week = int(sys.argv[1])
 
 # model_type = 'full_model'
 vers = 'standard_proba_sweight'
-use_sample_weight = True
+use_sample_weight = False
 
-n_iters = 25
+n_iters = 30
 to_keep = 25
 
 drop_words = ['ProjPts', 'recv', 'fantasyPoints', 'expert', 'fp_rank', 'proj', 'projected_points', 'salary']
 keep_words = ['def', 'qb', 'team']
 
-for model_type in ['full_model', 'backfill']:
+for model_type in ['full_model']:#, 'backfill']:
 
-    if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE', 'Defense' ]
+    if model_type == 'full_model': positions = ['QB']#, 'RB', 'WR', 'TE', 'Defense' ]
     elif model_type == 'backfill': positions =  ['QB', 'RB', 'WR','TE']
 
     for set_pos in positions:
@@ -164,6 +164,7 @@ for model_type in ['full_model', 'backfill']:
         if df.shape[1]==2000:
             df2 = dm.read(f'''SELECT * FROM {set_pos}_Data2''', 'Model_Features')
             df = pd.concat([df, df2], axis=1)
+        df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
 
         drop_cols = list(df.dtypes[df.dtypes=='object'].index)
         print(drop_cols)
@@ -188,9 +189,9 @@ for model_type in ['full_model', 'backfill']:
         print('Shape of Train Set', df_train.shape)
 
         #===========================================================================================
-
+#%%
         # set up blank dictionaries for all metrics
-        pred = {}; actual = {}; scores = {}; models = {}
+        pred = {}; actual = {}; scores = {}; models = {}; full_hold={}
         met = 'y_act'
 
         print(f'\nRunning Metric {met}\n=========================\n')
@@ -198,7 +199,6 @@ for model_type in ['full_model', 'backfill']:
 
         skm = SciKitModel(df_train)
         X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
-
 
         # set up the ADP model pipe
         pipe = skm.model_pipe([skm.piece('feature_select'), 
@@ -210,39 +210,42 @@ for model_type in ['full_model', 'backfill']:
         params['feature_select__cols'] = [['ProjPts', 'dk_salary', 'fantasyPoints', 'year', 'week']]
 
         # fit and append the ADP model
-        best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
-                                                    col_split='game_date', 
-                                                        time_split=cv_time_input,
-                                                        sample_weight=use_sample_weight)
+        best_models, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=25,
+                                                   col_split='game_date', time_split=cv_time_input,
+                                                   sample_weight=use_sample_weight, 
+                                                   random_seed=1234)
 
         # append all of the metric outputs
         pred[f'{met}_adp'] = oof_data['hold']
         actual[f'{met}_adp'] = oof_data['actual']
-        scores[f'{met}_adp'] = r2
+        scores[f'{met}_adp'] = oof_data['scores']
         models[f'{met}_adp'] = best_models
+        full_hold[f'{met}_adp'] = oof_data['full_hold']
 
-        db_output = add_result_db_output('reg', 'adp', r2, db_output)
+
+        db_output = add_result_db_output('reg', 'adp', oof_data['scores'], db_output)
+
         #---------------
         # Model Training loop
         #---------------
 
         # loop through each potential model
         model_list = ['lgbm',  'ridge', 'svr', 'lasso', 'enet', 'xgb',# 'knn', 
-                    'gbm', 'rf']
-        for m in model_list:
+                      'gbm', 'rf']
+        for i, m in enumerate(model_list):
 
             print('\n============\n')
             print(m)
 
             # set up the model pipe and get the default search parameters
-            pipe = skm.model_pipe([ skm.piece('feature_drop'),
+            pipe = skm.model_pipe([ skm.piece('random_sample'),
                                     skm.piece('std_scale'), 
                                     skm.piece('select_perc'),
-                                    skm.feature_union([
-                                                skm.piece('agglomeration'), 
-                                                skm.piece('k_best'),
-                                                # skm.piece('pca')
-                                                ]),
+                                    # skm.feature_union([
+                                    #             skm.piece('agglomeration'), 
+                                    #             skm.piece('k_best'),
+                                    #             # skm.piece('pca')
+                                    #             ]),
                                     skm.piece('k_best'),
                                     skm.piece(m)])
             
@@ -252,38 +255,42 @@ for model_type in ['full_model', 'backfill']:
             params['k_best__k'] = range(kbs[set_pos][0],kbs[set_pos][1], kbs[set_pos][2])
             if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
         
-            if model_type=='backfill':
-                params['feature_drop__col'] = [[None]]
+            # if model_type=='backfill':
+            #     params['feature_drop__col'] = [[None]]
 
-            if set_pos in ('QB', 'RB'):
-                params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
-            else:
-                to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
-                params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(10)]
+            # if set_pos in ('QB', 'RB'):
+            #     params['feature_drop__col'] = [list(np.random.choice(X.columns, int(0.5*X.shape[1]), replace=False)) for _ in range(10)]
+            # else:
+            #     to_drop = [c for c in X.columns if any(dw in c for dw in drop_words) and not any(kw in c for kw in keep_words)]
+            #     params['feature_drop__col'] = [list(np.random.choice(to_drop, len(to_drop)-to_keep, replace=False)) for _ in range(10)]
 
             # run the model with parameter search
-            best_models, r2, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=n_iters,
-                                                            col_split='game_date', time_split=cv_time_input,
-                                                            sample_weight=use_sample_weight)
+            best_models, oof_data = skm.time_series_cv(pipe, X, y, params, n_iter=n_iters,
+                                                       col_split='game_date', time_split=cv_time_input,
+                                                       sample_weight=use_sample_weight,
+                                                       random_seed=(i+7)*19+(i*12)+6)
 
             # append the results and the best models for each fold
             pred[f'{met}_{m}'] = oof_data['hold']
             actual[f'{met}_{m}'] = oof_data['actual']
-            scores[f'{met}_{m}'] = r2
+            scores[f'{met}_{m}'] = oof_data['scores']
             models[f'{met}_{m}'] = best_models
+            full_hold[f'{met}_{m}'] = oof_data['full_hold']
 
-            db_output = add_result_db_output('reg', m, r2, db_output)
+            db_output = add_result_db_output('reg', m, oof_data['scores'], db_output)
             gc.collect()
 
         save_pickle(pred, model_output_path, 'reg_pred')
         save_pickle(actual, model_output_path, 'reg_actual')
         save_pickle(models, model_output_path, 'reg_models')
         save_pickle(scores, model_output_path, 'reg_scores')
+        save_pickle(full_hold, model_output_path, 'reg_full_hold')
 
+#%%
         #===========================================================================================
 
         # set up blank dictionaries for all metrics
-        pred = {}; actual = {}; scores = {}; models = {}
+        pred = {}; actual = {}; scores = {}; models = {}; full_hold={}
 
         for cut in cuts:
 
@@ -306,9 +313,9 @@ for model_type in ['full_model', 'backfill']:
 
                 # set up the model pipe and get the default search parameters
                 pipe = skm.model_pipe([skm.piece('feature_drop'),
-                                    skm.piece('std_scale'), 
-                                    skm.piece('select_perc_c'),
-                                    skm.feature_union([
+                                       skm.piece('std_scale'), 
+                                       skm.piece('select_perc_c'),
+                                       skm.feature_union([
                                                     skm.piece('agglomeration'), 
                                                     skm.piece('k_best_c'),
                                                     ]),
@@ -337,13 +344,15 @@ for model_type in ['full_model', 'backfill']:
                                                                                 params, n_iter=n_iters,
                                                                                 col_split='game_date',
                                                                                 time_split=cv_time_input,
-                                                                                proba=True)
+                                                                                proba=True,
+                                                                                random_seed=(i+7)*19+(i*12)+6)
 
                 # append the results and the best models for each fold
                 pred[f'class_{m}_{cut}'] = oof_data['hold']
                 actual[f'class_{m}_{cut}'] = oof_data['actual']
-                scores[f'class_{m}_{cut}'] = score_results 
+                scores[f'class_{m}_{cut}'] = oof_data['scores']
                 models[f'class_{m}_{cut}'] = best_models
+                full_hold[f'class_{m}_{cut}'] = oof_data['full_hold']
 
                 db_output = add_result_db_output(f'class_{cut}', m, score_results, db_output)
                 gc.collect()
@@ -352,13 +361,14 @@ for model_type in ['full_model', 'backfill']:
         save_pickle(actual, model_output_path, 'class_actual')
         save_pickle(models, model_output_path, 'class_models')
         save_pickle(scores, model_output_path, 'class_scores')
+        save_pickle(full_hold, model_output_path, 'class_full_hold')
 
 
     #=====================================================================================
 
 
         # set up blank dictionaries for all metrics
-        pred = {}; actual = {}; scores = {}; models = {}
+        pred = {}; actual = {}; scores = {}; models = {}; full_hold = {}
 
         for alpha in [0.8, 0.95]:
 
@@ -394,8 +404,9 @@ for model_type in ['full_model', 'backfill']:
                 # append the results and the best models for each fold
                 pred[f'quant_{m}_{alpha}'] = oof_data['hold']
                 actual[f'quant_{m}_{alpha}'] = oof_data['actual']
-                scores[f'quant_{m}_{alpha}'] = score_results 
+                scores[f'quant_{m}_{alpha}'] = oof_data['scores'] 
                 models[f'quant_{m}_{alpha}'] = best_models
+                full_hold[f'quant_{m}_{alpha}'] = oof_data['full_hold']
                 gc.collect()
 
             #     db_output = add_result_db_output(f'class_{cut}', m, score_results, db_output)
@@ -404,16 +415,50 @@ for model_type in ['full_model', 'backfill']:
         save_pickle(actual, model_output_path, 'quant_actual')
         save_pickle(models, model_output_path, 'quant_models')
         save_pickle(scores, model_output_path, 'quant_scores')
-
+        save_pickle(full_hold, model_output_path, 'quant_full_hold')
 
     #     #=============================================================================================
-
+#%%
         def load_all_pickles(model_output_path, label):
             pred = load_pickle(model_output_path, f'{label}_pred')
             actual = load_pickle(model_output_path, f'{label}_actual')
             models = load_pickle(model_output_path, f'{label}_models')
             scores = load_pickle(model_output_path, f'{label}_scores')
-            return pred, actual, models, scores
+            try: full_hold = load_pickle(model_output_path, f'{label}_full_hold')
+            except: full_hold = None
+            return pred, actual, models, scores, full_hold
+
+        def X_y_stack_old(met, pred, actual):
+
+            X = pd.DataFrame([v for k,v in pred.items() if met in k]).T
+            X.columns = [k for k,_ in pred.items() if met in k]
+            y = pd.Series(actual[X.columns[0]], name='y_act')
+
+            return X, y
+
+        def X_y_stack_full(full_hold):
+            i = 0
+            for k, v in full_hold.items():
+                if i == 0:
+                    df = v.copy()
+                    df = df.rename(columns={'pred': k})
+                else:
+                    df_cur = v.rename(columns={'pred': k}).drop('y_act', axis=1)
+                    df = pd.merge(df, df_cur, on=['player', 'team', 'week','year'])
+                i+=1
+
+            X = df[[c for c in df.columns if 'y_act_' in c]]
+            y = df[['y_act']]
+            return X, y, df
+
+        def X_y_stack(met, full_hold, pred, actual):
+            if full_hold is not None:
+                X_stack, y_stack, _ = X_y_stack_full(full_hold)
+            else:
+                X_stack, y_stack = X_y_stack(met, pred, actual)
+
+            return X_stack, y_stack
+
 
         def show_scatter_plot(y_pred, y, label='Total', r2=True):
             plt.scatter(y_pred, y)
@@ -438,21 +483,17 @@ for model_type in ['full_model', 'backfill']:
         #------------
 
         # load the class predictions
-        pred_class, actual_class, _, _ = load_all_pickles(model_output_path, 'class')
-        df_train_class, _ = get_class_data(df, 0)
-        skm_class_final = SciKitModel(df_train_class, model_obj='class')
-        X_stack_class, y_stack_class = skm_class_final.X_y_stack('class', pred_class, actual_class)
+        pred_class, actual_class, _, _, full_hold_class = load_all_pickles(model_output_path, 'class')
+        X_stack_class, y_stack_class = X_y_stack('class', full_hold_class, pred_class, actual_class)
 
         # load the class predictions
-        pred_quant, actual_quant, _, _ = load_all_pickles(model_output_path, 'quant')
-        skm_quant_final = SciKitModel(df_train, model_obj='quantile')
-        X_stack_quant, y_stack_quant = skm_quant_final.X_y_stack('quant', pred_quant, actual_quant)
+        pred_quant, actual_quant, _, _, full_hold_quant = load_all_pickles(model_output_path, 'quant')
+        X_stack_quant, y_stack_quant = X_y_stack('quant', full_hold_quant, pred_quant, actual_quant)
         
         # get the X and y values for stack trainin for the current metric
-        pred, actual, _, _ = load_all_pickles(model_output_path, 'reg')
-        skm_stack = SciKitModel(df_train, model_obj='reg')
-        X_stack, y_stack = skm_stack.X_y_stack(met, pred, actual)
-        X_stack = pd.concat([X_stack, X_stack_class, X_stack_quant], axis=1)
+        pred, actual, _, _, full_hold_reg = load_all_pickles(model_output_path, 'reg')
+        X_stack, y_stack = skm_stack.X_y_stack('reg', full_hold_reg, pred, actual)
+        # X_stack = pd.concat([X_stack, skm_stack, X_stack_quant], axis=1)
 
         best_models = []
         final_models = [
@@ -464,7 +505,7 @@ for model_type in ['full_model', 'backfill']:
                         'bridge',
                         'gbm'
                         ]
-
+        skm_stack = SciKitModel(df_train, model_obj='reg')
         preds = pd.DataFrame()
         scores = []
         for final_m in final_models:
@@ -483,46 +524,24 @@ for model_type in ['full_model', 'backfill']:
             best_model, stack_scores, stack_pred = skm_stack.best_stack(stack_pipe, stack_params,
                                                                         X_stack, y_stack, n_iter=50, 
                                                                         run_adp=True, print_coef=True,
-                                                                        sample_weight=True)
+                                                                        sample_weight=use_sample_weight)
             best_models.append(best_model)
             scores.append(stack_scores['stack_score'])
             preds = pd.concat([preds, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
             
-            # show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=False)
-            # top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=False)
+            show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=False)
+            top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=False)
 
-            # db_output = add_result_db_output('final', final_m, 
-            #                                 [stack_scores['adp_score'], stack_scores['stack_score']], 
-            #                                 db_output)
+            db_output = add_result_db_output('final', final_m, 
+                                            [stack_scores['adp_score'], stack_scores['stack_score']], 
+                                            db_output)
 
-        # print('\nShowing Ensemble\n===============\n')
-        # top_3 = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:3]
-        # model_idx = np.array(final_models)[top_3]
-        # show_scatter_plot(preds[model_idx].mean(axis=1), stack_pred['y'], r2=False)
-        # top_predictions(preds[model_idx].mean(axis=1), stack_pred['y'], r2=False)
+        print('\nShowing Ensemble\n===============\n')
+        top_3 = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:3]
+        model_idx = np.array(final_models)[top_3]
+        show_scatter_plot(preds[model_idx].mean(axis=1), stack_pred['y'], r2=False)
+        top_predictions(preds[model_idx].mean(axis=1), stack_pred['y'], r2=False)
         gc.collect()
-
-        # skm_stack.model_obj = 'quantile'
-        # for alpha in [0.01, 0.16, 0.84, 0.99]:
-        #     for final_m in ['gbm_q', 'lgbm_q']:
-
-        #         print(f'\n{alpha}_{final_m}')
-
-        #         # get the model pipe for stacking setup and train it on meta features
-        #         stack_pipe = skm_stack.model_pipe([skm_stack.piece(final_m)])
-                
-        #         stack_params = skm_stack.default_params(stack_pipe)
-        #         stack_pipe.steps[-1][-1].alpha = alpha
-
-        #         best_model, stack_scores, stack_pred = skm_stack.best_stack(stack_pipe, stack_params,
-        #                                                                     X_stack.drop(['quant_lgbm_q_0.8', 'quant_gbm_q_0.8', 'quant_lgbm_q_0.95', 'quant_gbm_q_0.95'], axis=1), y_stack, n_iter=50, 
-        #                                                                     run_adp=False, print_coef=True)
-        #         best_models.append(best_model)
-        #         scores.append(stack_scores['stack_score'])
-        #         preds = pd.concat([preds, pd.Series(stack_pred['stack_pred'], name=f'{final_m}_{alpha}')], axis=1)
-                
-        #         show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=False)
-        #         top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=False)
 
 
         # write out tracking results to tracking DB
@@ -534,7 +553,41 @@ for model_type in ['full_model', 'backfill']:
         dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
 
 
-# # %%
+# %%
+
+def load_all_pickles(model_output_path, label):
+    pred = load_pickle(model_output_path, f'{label}_pred')
+    actual = load_pickle(model_output_path, f'{label}_actual')
+    models = load_pickle(model_output_path, f'{label}_models')
+    scores = load_pickle(model_output_path, f'{label}_scores')
+    try: full_hold = load_pickle(model_output_path, f'{label}_full_hold')
+    except: full_hold = None
+    return pred, actual, models, scores, full_hold
+
+def X_y_stack_full(full_hold):
+    i = 0
+    for k, v in full_hold.items():
+        if i == 0:
+            df = v.copy()
+            df = df.rename(columns={'pred': k})
+        else:
+            df_cur = v.rename(columns={'pred': k}).drop('y_act', axis=1)
+            df = pd.merge(df, df_cur, on=['player', 'team', 'week','year'])
+        i+=1
+    return df
+
+_, _, _, _, full_hold = load_all_pickles(model_output_path, 'reg')
+df = X_y_stack_full(full_hold)
+
+df['mean_pred'] = df.iloc[:, 5:].mean(axis=1)
+df['pred_diff'] = df.mean_pred - df.y_act
+df.plot.scatter(x='mean_pred', y='y_act')
+from sklearn.metrics import r2_score, mean_squared_error
+print(r2_score(df.y_act, df.mean_pred), mean_squared_error(df.y_act, df.mean_pred))
+df.sort_values(by='pred_diff')
+
+#%%
+
 # def trunc_normal(player_data, num_samples=1000):
 
 #     import scipy.stats as stats
@@ -574,4 +627,304 @@ for model_type in ['full_model', 'backfill']:
 # preds['pred_fp_per_game'].sort_values()
 # # %%
 
+# %%
+
+from sklearn.model_selection import StratifiedKFold
+
+time_split = cv_time_input
+col_split = 'game_date'
+n_splits = 5
+random_seed = 1234
+
+
+df_train_v2 = df_train.sort_values(by=['year','week']).reset_index(drop=True)
+df_val = df_train_v2.loc[df_train_v2.game_date >= cv_time_input, 
+                        ['player', 'team','week', 'year', 'y_act', 'projected_points']
+                        ].copy().reset_index(drop=True)
+
+skm = SciKitModel(df_train_v2)
+X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
+
+
+def cv_time_splits(col, X, val_start):
+
+        ts = X[col].unique()
+        ts = ts[ts>=val_start]
+
+        cv_time = []
+        for t in ts:
+            train_idx = list(X[X[col] < t].index)
+            test_idx = list(X[X[col] == t].index)
+            cv_time.append((train_idx, test_idx))
+
+        return cv_time
+
+ # split into the train only and val/holdout datasets
+X_train_only, X_val_hold, y_train_only, y_val_hold = skm.train_test_split_time(X, y, col_split, time_split)
+
+#--------------
+# Set up place holders for metrics
+#--------------
+
+# list to store accuracy metrics
+mean_val_sc = []
+mean_hold_sc = []
+
+val_predictions = np.array([])
+hold_results = pd.DataFrame()
+
+# list to hold the best models
+best_models = []
+
+#----------------
+# Run the KFold train-prediction loop
+#----------------
+
+skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+for val_idx, hold_idx in skf.split(X_val_hold, X_val_hold[col_split]):
+    
+    print('-------')
+
+    # split the val/hold dataset into random validation and holdout sets
+    X_val, X_hold = X_val_hold.loc[val_idx,:], X_val_hold.loc[hold_idx,:]
+    y_val, y_hold = y_val_hold.loc[val_idx], y_val_hold.loc[hold_idx]
+
+    # concat the current training set using train and validation folds
+    X_train = pd.concat([X_train_only, X_val], axis=0)
+    y_train = pd.concat([y_train_only, y_val], axis=0)
+
+    # get the CV time splits and find the best model
+    cv_time = cv_time_splits(col_split, X_train, time_split)
+    
+    # score the best model on validation and holdout sets
+    cv_time_hold = cv_time_splits(col_split, X_hold, time_split)
+# %%
+
+pd.merge(df_val, 
+         X_hold[['week', 'year', 'projected_points']], left_index=True, right_index=True)
+# %%
+
+
+def train_split_time(X, y, X_labels, col, time_split):
+
+    X_train_only = X[X[col] < time_split]
+    y_train_only = y[X_train_only.index].reset_index(drop=True)
+    X_train_only.reset_index(drop=True, inplace=True)
+
+    X_val = X[X[col] >= time_split]
+    X_labels = X_labels.loc[X_labels.index.isin(X_val.index)]
+
+    y_val = y[X_val.index].reset_index(drop=True)
+    X_val.reset_index(drop=True, inplace=True)
+    X_labels.reset_index(drop=True, inplace=True)
+
+    return X_train_only, X_val, y_train_only, y_val, X_labels
+
+
+def get_fold_data(X, y, X_labels, time_col, val_cut, n_splits=5, shuffle=True, random_state=1234):
+  
+    # split the X and y data into purely Train vs Holdout / Validation
+    X_train_only, X_val_hold, y_train_only, y_val_hold, X_labels = train_split_time(X, y, X_labels, time_col, val_cut)
+
+    # stratify split the Holdout / Validation data and append to dictionary for each fold
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=shuffle, random_state=random_state)
+    folds = {}; i=-1
+    for val_idx, hold_idx in skf.split(X_val_hold, X_val_hold[time_col]):
+
+        i+=1; folds[i] = {}
+
+        # split the val/hold dataset into random validation and holdout sets
+        X_val, X_hold = X_val_hold.loc[val_idx,:], X_val_hold.loc[hold_idx,:]
+        y_val, y_hold = y_val_hold.loc[val_idx], y_val_hold.loc[hold_idx]
+
+        # concat the current training set using train and validation folds
+        X_train = pd.concat([X_train_only, X_val], axis=0).reset_index(drop=True)
+        y_train = pd.concat([y_train_only, y_val], axis=0).reset_index(drop=True)
+
+        folds[i]['X_train'] = X_train
+        folds[i]['y_train'] = y_train
+
+        folds[i]['X_hold'] = X_hold
+        folds[i]['y_hold'] = y_hold
+        
+        folds[i]['X_val_labels'] = X_labels.loc[val_idx].reset_index(drop=True)
+        folds[i]['X_hold_labels'] = X_labels.loc[hold_idx].reset_index(drop=True)
+        
+    return folds
+
+
+def unpack_fold(folds, i):
+    return folds[i]['X_train'], folds[i]['y_train'], folds[i]['X_hold'], folds[i]['y_hold'], folds[i]['X_val_labels'], folds[i]['X_hold_labels']
+
+
+def cv_time_splits(X, col, val_start):
+      
+    ts = X[col].unique()
+    ts = ts[ts>=val_start]
+
+    cv_time = []
+    for t in ts:
+        train_idx = list(X[X[col] < t].index)
+        test_idx = list(X[X[col] == t].index)
+        cv_time.append((train_idx, test_idx))
+
+    return cv_time
+
+
+def weight_params(model, wt_col, sample_weight=False):
+    if sample_weight:
+        sweight = f'{model.steps[-1][0]}__sample_weight'
+        wts = np.where(wt_col > 0, wt_col, 0)
+        fit_params={sweight: wts}
+    else:
+        fit_params = {}
+    return fit_params
+
+def metrics_weights(sample_weight):
+    if sample_weight:
+        val_wts = get_y_val()
+        hold_wts = skm.y_hold
+    else:
+        val_wts = None
+        hold_wts = None
+    return val_wts, hold_wts
+
+def get_y_val():
+    return skm.y_train[skm.cv_time_train[0][1][0]:]
+
+
+def model_predict(model, X, predictions_list):
+    if skm.proba: pred_val = model.predict_proba(X)[:,1]
+    else: pred_val = model.predict(X)
+    predictions_list.extend(pred_val)
+    
+    return predictions_list
+
+
+def cv_predict_time_holdout(model, sample_weight=False):
+
+    """Perform a rolling time-series prediction for both validation data in a training set
+        plus predictions on a holdout test set
+
+        For example, train on slices 1-5 and predict slice 6a for the validation data that will
+        be added to training and also predict 6b for holdout test data. Next train on slices
+        1-6a and predict 7a + 7b, while storing 6b, 7b, etc. separately.
+
+        Args:
+            model (sklearn.Model or Pipe): Model or pipeline to be trained
+            X_train (pandas.DataFrame or numpy.array): Set of samples and features for training data with time component
+            y_train (pandas.Series or numpy.array): Target to be predicted
+            X_hold (pandas.Series or numpy.array): Subset of X data held-out to only be predicted
+            cv_time_train (tuple): Indices of data to be trained / validated on the X_train/y_trian datasets for rolling time
+            cv_time_hold (tuple): Indices of data to be predicted on holdout dataset for rolling time
+
+        Returns:
+            list: In fold predictions for validation data
+            list: Out of fold predictions for holdout data
+        """ 
+
+    # set up list to store validation and holdout predictions + dataframe indices
+    val_predictions = []
+    hold_predictions = []
+
+    # iterate through both the training and holdout time series indices
+    for (tr_train, te_train), (_, te_hold) in zip(skm.cv_time_train, skm.cv_time_hold):
+
+        # extract out the training and validation datasets from the training folds
+        X_train_cur, y_train_cur = skm.X_train.loc[tr_train, :], skm.y_train[tr_train]
+        X_val = skm.X_train.loc[te_train, :]
+        X_hold = skm.X_hold.loc[te_hold, :]
+
+        # fit and predict the validation dataset
+        fit_params = weight_params(model, y_train_cur, sample_weight)
+        model.fit(X_train_cur, y_train_cur, **fit_params)
+
+        # predict the holdout dataset for the current time period
+        val_predictions = model_predict(model, X_val, val_predictions)
+        hold_predictions = model_predict(model, X_hold, hold_predictions)
+
+    return val_predictions, hold_predictions
+
+
+df_train_v2 = df_train.sort_values(by=['year','week']).reset_index(drop=True)
+
+skm = SciKitModel(df_train_v2)
+X, y = skm.Xy_split(y_metric='y_act', to_drop=drop_cols)
+
+
+# %%
+
+sample_weight=False
+proba = False
+
+ # set up the ADP model pipe
+model = skm.model_pipe([skm.piece('feature_select'), 
+                    skm.piece('std_scale'), 
+                    skm.piece('k_best'),
+                    skm.piece('lr')])
+params = skm.default_params(model)
+params['k_best__k'] = range(1,5)
+params['feature_select__cols'] = [['ProjPts', 'dk_salary', 'fantasyPoints', 'year', 'week']]
+
+
+
+#==================================
+
+X_labels = skm.data[['player', 'team', 'week', 'year', 'y_act']].copy()
+folds = get_fold_data(X, y, X_labels, time_col='game_date', val_cut=cv_time_input, random_state=2834256)
+hold_results = pd.DataFrame()
+val_results = pd.DataFrame()
+for fold in range(5):
+
+    print('-------')
+
+    # get the train and holdout data
+    X_train, y_train, X_hold, y_hold, X_val_labels, X_hold_labels = unpack_fold(folds, fold)
+    cv_time_train = cv_time_splits(X_train, 'game_date', cv_time_input)
+    cv_time_hold = cv_time_splits(X_hold, 'game_date', cv_time_input)
+
+    fit_params = weight_params(model, y_train, False)
+    best_model = skm.random_search(model, X_train, y_train, params, cv=cv_time, n_iter=25, fit_params=fit_params)
+
+    # for var in [X_train, y_train, X_hold, y_hold, cv_time_train, cv_time_hold, proba]:
+    #     skm.var = var
+    skm.X_train = X_train
+    skm.y_train = y_train
+    skm.X_hold = X_hold
+    skm.y_hold = y_hold
+    skm.cv_time_train = cv_time_train
+    skm.cv_time_hold = cv_time_hold
+    skm.proba=False
+
+    val_pred_cur, hold_pred = cv_predict_time_holdout(best_model, sample_weight)
+
+    val_wts, hold_wts = metrics_weights(sample_weight)
+    y_val = get_y_val()
+    val_sc, _ = skm.test_scores(y_val, val_pred_cur, val_wts)
+    hold_sc, _ = skm.test_scores(y_hold, hold_pred, hold_wts)
+
+    hold_results_cur = pd.Series(hold_pred, name='pred')
+    hold_results_cur = pd.concat([X_hold_labels, hold_results_cur], axis=1)
+    hold_results = pd.concat([hold_results, hold_results_cur], axis=0)
+
+    val_results_cur = pd.Series(val_pred_cur, name='pred')
+    val_results_cur = pd.concat([X_val_labels, val_results_cur], axis=1)
+    val_results = pd.concat([val_results, val_results_cur], axis=0)
+
+print('\nOverall\n---------------')
+_, _ = skm.test_scores(hold_results.y_act, hold_results.pred, None)
+    
+
+# %%
+
+hold_results
+# hold_results.plot.scatter(x='pred', y='y_act')
+# hold_results[(hold_results.y_act< 5)]
+# hold_results.sort_values(by='y_act')
+# %%
+
+df_train[(df_train.pass_complete_pass_sum + df_train.pass_incomplete_pass_sum) < 20]
+# %%
+
+df_train.loc[df_train.player=='Tua Tagovailoa',['week', 'pass_complete_pass_sum', 'pass_incomplete_pass_sum', 'y_act']]
 # %%

@@ -319,7 +319,7 @@ def get_mean_points(preds):
 # set year to analyze
 set_year = 2021
 pred_vers = 'standard_proba_sweight'
-ensemble_vers = 'all_weight'
+ensemble_vers = 'no_weight'
 covar_type = 'team_points'
 
 for set_week in [8]:
@@ -350,17 +350,17 @@ for set_week in [8]:
         pred_cov_final = cleanup_pred_covar(pred_cov)
         mean_points = get_mean_points(preds)
 
-        drop_str = f'''week={set_week} 
-                    AND year={set_year} 
-                    AND pred_vers='{pred_vers}' 
-                    AND ensemble_vers='{ensemble_vers}'
-                    AND covar_type='{covar_type}' 
-                    AND full_model_rel_weight={full_model_rel_weight}'''
-
-        dm.delete_from_db('Simulation', 'Covar_Means', drop_str)
-        dm.delete_from_db('Simulation', 'Covar_Matrix', drop_str)
-        dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
-        dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
+        # drop_str = f'''week={set_week} 
+        #             AND year={set_year} 
+        #             AND pred_vers='{pred_vers}' 
+        #             AND ensemble_vers='{ensemble_vers}'
+        #             AND covar_type='{covar_type}' 
+        #             AND full_model_rel_weight={full_model_rel_weight}'''
+                    
+        # dm.delete_from_db('Simulation', 'Covar_Means', drop_str)
+        # dm.delete_from_db('Simulation', 'Covar_Matrix', drop_str)
+        dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
+        dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
 
 # %%
 
