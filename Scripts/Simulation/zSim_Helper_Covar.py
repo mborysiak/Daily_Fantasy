@@ -16,7 +16,7 @@ cvxopt.glpk.options['msg_lev'] = 'GLP_MSG_OFF'
 class FootballSimulation:
 
     def __init__(self, dm, week, set_year, salary_cap, pos_require_start, num_iters, 
-                 pred_vers='standard', ensemble_vers='no_weight',
+                 pred_vers='standard', ensemble_vers='no_weight', std_dev_type='spline',
                  covar_type='team_points', full_model_rel_weight=1,
                  use_covar=True):
 
@@ -28,6 +28,7 @@ class FootballSimulation:
         self.dm = dm
         self.pred_vers = pred_vers
         self.ensemble_vers = ensemble_vers
+        self.std_dev_type = std_dev_type
         self.covar_type = covar_type
         self.full_model_rel_weight = full_model_rel_weight
         self.use_covar = use_covar
@@ -53,6 +54,7 @@ class FootballSimulation:
                                              AND year={self.set_year}
                                              AND pred_vers='{self.pred_vers}'
                                              AND ensemble_vers='{self.ensemble_vers}'
+                                             AND std_dev_type='{self.std_dev_type}'
                                              AND covar_type='{self.covar_type}' 
                                              AND full_model_rel_weight={self.full_model_rel_weight}''', 
                                              'Simulation')
@@ -65,6 +67,7 @@ class FootballSimulation:
                                        AND year={self.set_year}
                                        AND pred_vers='{self.pred_vers}'
                                        AND ensemble_vers='{self.ensemble_vers}'
+                                       AND std_dev_type='{self.std_dev_type}'
                                        AND covar_type='{self.covar_type}'
                                        AND full_model_rel_weight={self.full_model_rel_weight} ''', 
                                        'Simulation')
@@ -80,6 +83,7 @@ class FootballSimulation:
                                AND year={self.set_year}
                                AND version='{self.pred_vers}'
                                AND ensemble_vers='{self.ensemble_vers}'
+                               AND std_dev_type='{self.std_dev_type}'
                                AND pos !='K'
                                AND pos IS NOT NULL
                                AND player!='Ryan Griffin'
@@ -526,27 +530,27 @@ class FootballSimulation:
 
 #%%
 
-# set the root path and database management object
-from ff.db_operations import DataManage
-from ff import general as ffgeneral
+# # set the root path and database management object
+# from ff.db_operations import DataManage
+# from ff import general as ffgeneral
 
-root_path = ffgeneral.get_main_path('Daily_Fantasy')
-db_path = f'{root_path}/Data/Databases/'
-dm = DataManage(db_path)
+# root_path = ffgeneral.get_main_path('Daily_Fantasy')
+# db_path = f'{root_path}/Data/Databases/'
+# dm = DataManage(db_path)
 
-week = 13
-year = 2021
-salary_cap = 50000
-pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_iters = 200
+# week = 13
+# year = 2021
+# salary_cap = 50000
+# pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
+# num_iters = 200
 
-sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, use_covar=False)
-min_players_same_team = 'Auto'
-set_max_team = None
-to_add = []
-to_drop = []
-results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select=True)
-results
+# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, use_covar=False)
+# min_players_same_team = 'Auto'
+# set_max_team = None
+# to_add = []
+# to_drop = []
+# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select=True)
+# results
 
 
 #%%

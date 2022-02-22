@@ -60,6 +60,7 @@ def load_data(model_type, set_pos):
     if df.shape[1]==2000:
         df2 = dm.read(f'''SELECT * FROM {set_pos}_Data2''', 'Model_Features')
         df = pd.concat([df, df2], axis=1)
+    df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
 
     drop_cols = list(df.dtypes[df.dtypes=='object'].index)
     print(drop_cols)
@@ -113,7 +114,8 @@ def X_y_stack_old(met, pred, actual):
 
     return X, y
 
-def X_y_stack_full(full_hold):
+
+def X_y_stack_full(met, full_hold):
     i = 0
     for k, v in full_hold.items():
         if i == 0:
@@ -124,13 +126,14 @@ def X_y_stack_full(full_hold):
             df = pd.merge(df, df_cur, on=['player', 'team', 'week','year'])
         i+=1
 
-    X = df[[c for c in df.columns if 'y_act_' in c]]
-    y = df[['y_act']]
+    X = df[[c for c in df.columns if met in c or 'y_act_' in c]].reset_index(drop=True)
+    y = df['y_act'].reset_index(drop=True)
     return X, y, df
+
 
 def X_y_stack(met, full_hold, pred, actual):
     if full_hold is not None:
-        X_stack, y_stack, _ = X_y_stack_full(full_hold)
+        X_stack, y_stack, _ = X_y_stack_full(met, full_hold)
     else:
         X_stack, y_stack = X_y_stack(met, pred, actual)
 
@@ -182,45 +185,57 @@ def get_quant_predictions(df_train, df_predict, models_quant):
     return X_predict_quant
 
 
-def optimize_reg_model(final_m, skm_stack, X_stack, y_stack):
+def optimize_reg_model(final_m, skm_stack, X_stack, y_stack, rs=1234):
 
+    if 'yes_kbest' in ensemble_vers:
+        feature_piece = skm_stack.piece('k_best')
+    elif 'randsample' in ensemble_vers:
+        feature_piece = skm_stack.piece('random_sample')
     # get the model pipe for stacking setup and train it on meta features
     stack_pipe = skm_stack.model_pipe([
+                            feature_piece,
                             # skm_stack.feature_union([
                             #                 skm_stack.piece('agglomeration'), 
                             #                 skm_stack.piece('k_best'),
                             #                 skm_stack.piece('pca')
                             #                 ]),
-                            skm_stack.piece('k_best'), 
+                            # skm_stack.piece('k_best'), 
                             skm_stack.piece(final_m)
                         ])
 
     stack_params = skm_stack.default_params(stack_pipe)
-    stack_params['k_best__k'] = range(1, X_stack.shape[1])
+    if 'yes_kbest' in ensemble_vers:
+        stack_params['k_best__k'] = range(1, int(X_stack.shape[1]))
 
     if set_pos != 'Defense': use_sample_weight = sample_weight_models[final_m]
     else: use_sample_weight = False
 
     best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
                                                                 X_stack, y_stack, n_iter=50, 
-                                                                run_adp=True, print_coef=True,
-                                                                sample_weight=use_sample_weight)
+                                                                run_adp=True, print_coef=False,
+                                                                sample_weight=use_sample_weight,
+                                                                random_state=rs)
 
     return best_model, stack_score, adp_score
 
 
-def optimize_quant_model(final_m, skm_stack, X_stack, y_stack):
+def optimize_quant_model(df_train, X_stack, y_stack, alpha):
+
+    skm_stack = SciKitModel(df_train, model_obj='quantile')
 
     # get the model pipe for stacking setup and train it on meta features
     stack_pipe = skm_stack.model_pipe([
-                            skm_stack.piece(final_m)
+                            skm_stack.piece('random_sample'),
+                            skm_stack.piece('gbm_q')
                         ])
 
     stack_params = skm_stack.default_params(stack_pipe)
-    stack_pipe.steps[-1][-1].alpha = 0.8
+    stack_params['random_sample__frac'] = np.arange(0.2, 1, 0.05)
+    stack_pipe.steps[-1][-1].alpha = alpha
     best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
-                                                                X_stack, y_stack, n_iter=50, 
-                                                                run_adp=False, print_coef=True)
+                                                              X_stack, y_stack, n_iter=50, 
+                                                              run_adp=False, print_coef=False,
+                                                              alpha=alpha)
 
     return best_model, stack_score, adp_score
 
@@ -279,6 +294,23 @@ def spline_std_max(output, splines, set_pos, week, year):
     return output
 
 
+def get_quantile_sd(output):
+
+    for alpha in [5, 16, 84, 95]:
+        print(f'\nRunning Percentile {alpha}\n=============')
+        perc_model, _, perc_pred = optimize_quant_model(df_train, X_stack, y_stack, alpha=alpha/100)
+        # show_scatter_plot(perc_pred['stack_pred'], perc_pred['y'], r2=False)
+        output[f'perc{alpha}'] = perc_model.predict(X_predict)
+
+    output['std_dev'] = (output.perc84 - output.perc16.mean()) / 2.5
+
+    ratio = (3.4*output.std_dev + output.pred_fp_per_game) / (1.96*output.std_dev + output.pred_fp_per_game)
+    output['max_score'] = output.perc95 * ratio
+    output['min_score'] = output.perc5 / ratio
+
+    return output
+
+
 def show_scatter_plot(y_pred, y, label='Total', r2=True):
     plt.scatter(y_pred, y)
     plt.xlabel('predictions');plt.ylabel('actual')
@@ -308,11 +340,11 @@ def best_average_models(scores, final_models, stack_val_pred, predictions, use_s
         model_idx = np.array(final_models)[top_n]
 
         if use_sample_weight and set_pos != 'Defense':
-            wts = stack_pred['y']
+            wts = y_stack
         else:
             wts = None
         
-        n_score = mean_squared_error(stack_pred['y'], stack_val_pred[model_idx].mean(axis=1), sample_weight=wts)
+        n_score = mean_squared_error(y_stack, stack_val_pred[model_idx].mean(axis=1), sample_weight=wts)
         n_scores.append(n_score)
 
     print('All Average Scores:', np.round(n_scores, 3))
@@ -332,6 +364,11 @@ def create_output(output_start, predictions, splines):
     output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points']].copy()
     output['pred_fp_per_game'] = predictions.mean(axis=1)
     output = spline_std_max(output, splines, set_pos, set_week, set_year)
+    output['min_score'] = df_train.y_act.min()
+
+    if 'quantile' in std_dev_type:
+        output = output.drop(['std_dev', 'max_score', 'min_score'], axis=1)
+        output = get_quantile_sd(output)
     
     output = output.sort_values(by='dk_salary', ascending=False)
     output['dk_rank'] = range(len(output))
@@ -340,23 +377,35 @@ def create_output(output_start, predictions, splines):
     return output
 
 
+def add_actual(df):
+    if set_pos=='Defense': pl = 'defTeam'
+    else: pl = 'player'
+    actual_pts = dm.read(f'''SELECT {pl} player, fantasy_pts actual_pts
+                            FROM {set_pos}_Stats 
+                            WHERE week={set_week} 
+                                and season={set_year}''', 'FastR')
+    df = pd.merge(df, actual_pts, on='player')
+    return df
+
+
 def save_output_to_db(output):
 
     output['pos'] = set_pos
     output['version'] = vers
     output['ensemble_vers'] = ensemble_vers
+    output['std_dev_type'] = std_dev_type
     output['model_type'] = model_type
-    output['min_score'] = df_train.y_act.min()
     output['week'] = set_week
     output['year'] = set_year
 
     output = output[['player', 'dk_salary', 'sd_metric', 'max_metric', 'pred_fp_per_game', 'std_dev',
                         'dk_rank', 'pos', 'version', 'model_type', 'max_score', 'min_score',
-                        'week', 'year', 'ensemble_vers']]
+                        'week', 'year', 'ensemble_vers', 'std_dev_type']]
 
     del_str = f'''pos='{set_pos}' 
                 AND version='{vers}'
                 AND ensemble_vers='{ensemble_vers}' 
+                AND std_dev_type='{std_dev_type}'
                 AND week={set_week} 
                 AND year={set_year}
                 AND model_type='{model_type}'
@@ -377,7 +426,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 8
+set_week = 6
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -386,8 +435,9 @@ val_week_min = 10
 met = 'y_act'
 
 # set the model version
-vers = 'standard_proba_sweight'
-ensemble_vers = 'no_weight'
+vers = 'standard_proba_update'
+ensemble_vers = 'no_weight_no_kbest_randsample'
+std_dev_type = 'spline'
 
 sample_weight_models = {'adp': False,
                         'ridge': False,
@@ -447,17 +497,17 @@ for model_type in ['full_model', 'backfill']:
         # Make the Class Predictions
         #------------
 
-        pred_class, actual_class, models_class, scores_class = load_all_pickles(model_output_path, 'class')
+        pred_class, actual_class, models_class, scores_class, full_hold_class = load_all_pickles(model_output_path, 'class')
         X_predict_class = get_class_predictions(df, models_class)
-        X_stack_class, _ = X_y_stack('class', pred_class, actual_class)
+        X_stack_class, _ = X_y_stack('class', full_hold_class, pred_class, actual_class)
 
         #------------
         # Get Regression Data
         #------------
 
         # get the X and y values for stack training for the current metric
-        pred, actual, models, scores = load_all_pickles(model_output_path, 'reg')
-        X_stack, y_stack = X_y_stack(met, pred, actual)
+        pred, actual, models, scores, full_hold_reg = load_all_pickles(model_output_path, 'reg')
+        X_stack, y_stack = X_y_stack('reg', full_hold_reg, pred, actual)
         X_stack = pd.concat([X_stack, X_stack_class], axis=1)
 
         #------------
@@ -465,9 +515,9 @@ for model_type in ['full_model', 'backfill']:
         #------------
         
         try:
-            pred_quant, actual_quant, models_quant, scores_quant = load_all_pickles(model_output_path, 'quant')
+            pred_quant, actual_quant, models_quant, scores_quant, full_hold_quant = load_all_pickles(model_output_path, 'quant')
             X_predict_quant = get_quant_predictions(df_train, df_predict, models_quant)
-            X_stack_quant, _ = X_y_stack('quant', pred_quant, actual_quant)
+            X_stack_quant, _ = X_y_stack('quant', full_hold_quant, pred_quant, actual_quant)
             X_stack = pd.concat([X_stack, X_stack_quant], axis=1)
         except:
             print('No Quantile Data Available')
@@ -477,20 +527,18 @@ for model_type in ['full_model', 'backfill']:
 
         best_models = []; stack_val_pred = pd.DataFrame(); scores = []
         final_models = ['ridge', 'lasso', 'bridge','lgbm', 'xgb', 'rf', 'gbm']
-        # final_models = ['gbm_q']
         skm_stack = SciKitModel(df_train, model_obj='reg')
+
+        i = 0
         for final_m in final_models:
 
             print(f'\n{final_m}')
-            best_model, stack_scores, stack_pred = optimize_reg_model(final_m, skm_stack, X_stack, y_stack)
-            # best_model, stack_scores, stack_pred = optimize_quant_model(final_m, skm_stack, X_stack, y_stack)
+            best_model, stack_scores, stack_pred = optimize_reg_model(final_m, skm_stack, X_stack, y_stack, rs=(i+7)*19+(i*12)+6)
             
             best_models.append(best_model)
             scores.append(stack_scores['stack_score'])
             stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
-
-        # scores.append(stack_scores['adp_score'])
-        # stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['adp'], name='adp')], axis=1)
+            i+=1
 
         # get the final output:
         X_full, y_full = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
@@ -506,12 +554,11 @@ for model_type in ['full_model', 'backfill']:
         # Scatter and Metrics for Overall Results
         #------------
 
-        
-
         print('\nShowing Ensemble\n===============\n')
         
         best_val, best_predictions = best_average_models(scores, final_models, stack_val_pred, predictions, 
                                                          use_sample_weight=sample_weight_models['ridge'])
+
         show_scatter_plot(best_val.mean(axis=1), stack_pred['y'], r2=False)
         show_top_predictions(best_val.mean(axis=1), stack_pred['y'], r2=False)
 
@@ -520,42 +567,36 @@ for model_type in ['full_model', 'backfill']:
         #===================
 
         output = create_output(output_start, best_predictions, splines)
+        try:  
+            output = add_actual(output)
+            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'max_score']])
+            output = output.drop('actual_pts', axis=1)
+        except:
+            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'max_score']])
+        
         save_output_to_db(output)
-        print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'max_score']])
+
+
+#%%
+def trunc_normal(player_data, num_samples=1000):
+
+        import scipy.stats as stats
+
+        # create truncated distribution
+        lower, upper = player_data.min_score,  player_data.max_score
+        lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
+        upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
+        trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
+        
+        estimates = trunc_dist.rvs(num_samples)
+
+        return estimates
+
+import seaborn as sns
+
+sns.distplot(trunc_normal(output.iloc[0]))
+plt.xlim(0, 50);
 
 # %%
-
-preds = dm.read(f'''SELECT * 
-                    FROM Model_Predictions 
-                    WHERE version='{vers}'
-                          AND week = '{set_week}'
-                          AND year = '{set_year}' 
-                          AND player != 'Ryan Griffin'
-            ''', 'Simulation')
-
-preds['weighting'] = 1
-preds.loc[preds.model_type=='full_model', 'weighting'] = 1
-
-score_cols = ['pred_fp_per_game', 'std_dev', 'max_score']
-for c in score_cols: preds[c] = preds[c] * preds.weighting
-
-# Groupby and aggregate with namedAgg [1]:
-preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game': 'sum', 
-                                                              'std_dev': 'sum',
-                                                              'max_score': 'sum',
-                                                              'min_score': 'sum',
-                                                              'weighting': 'sum'})
-
-
-
-for c in score_cols: preds[c] = preds[c] / preds.weighting
-preds = preds.drop('weighting', axis=1)
-
-drop_teams = ['GB', 'CLE', 'MIN', 'PIT']
-
-teams = dm.read(f'''SELECT * FROM Player_Teams''', 'Simulation')
-preds = pd.merge(preds, teams, on=['player'])
-preds = preds[~preds.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)
-
-preds.sort_values(by='pred_fp_per_game', ascending=False).iloc[:50]
+x=2
 # %%

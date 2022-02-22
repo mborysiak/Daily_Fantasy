@@ -1179,6 +1179,20 @@ def attach_y_act(df, pos, defense=False, rush_or_pass=''):
         y_act = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
                             FROM {pos}_Stats
                             WHERE season >= 2020''', 'FastR')
+        snaps = dm.read('''SELECT player, pct_snaps, avg_snap_pct, week, year
+                        FROM Snap_Counts_V2''', 'Post_PlayerData')
+        proj = dm.read('''SELECT player, week, year, fantasyPoints
+                        FROM PFF_Proj_Ranks''', 'Pre_PlayerData')
+
+        snaps.player = snaps.player.apply(dc.name_clean)
+        snaps.week = snaps.week.apply(lambda x: int(x))
+        y_act = pd.merge(y_act, snaps, on=['player', 'week', 'year'], how='left')
+        y_act = pd.merge(y_act, proj, on=['player', 'week', 'year'], how='left')
+
+        y_act = y_act[~((y_act.fantasyPoints > 12) & \
+                        (y_act.pct_snaps < y_act.avg_snap_pct*0.4) & \
+                        (y_act.pct_snaps <= 0.3) & \
+                        (y_act.pct_snaps > 0))].drop(['pct_snaps', 'avg_snap_pct', 'fantasyPoints'], axis=1)
         
         df = pd.merge(df, y_act, on=['player', 'team', 'week', 'year'], how='left')
 
@@ -1234,6 +1248,7 @@ def add_fp_rolling(df, pos):
     df = df[~((df.week==1)  & (df.year==2020))]
 
     return df
+
 
 #%%
 
