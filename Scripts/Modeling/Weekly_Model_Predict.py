@@ -426,7 +426,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 6
+set_week = 10
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -435,8 +435,8 @@ val_week_min = 10
 met = 'y_act'
 
 # set the model version
-vers = 'standard_proba_update'
-ensemble_vers = 'no_weight_no_kbest_randsample'
+vers = 'standard_proba_sera_brier'
+ensemble_vers = 'no_weight_no_kbest_randsample_sera'
 std_dev_type = 'spline'
 
 sample_weight_models = {'adp': False,

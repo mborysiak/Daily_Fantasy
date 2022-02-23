@@ -321,12 +321,12 @@ def get_mean_points(preds):
 
 # set year to analyze
 set_year = 2021
-pred_vers = 'standard_proba_update'
-ensemble_vers = 'no_weight_no_kbest_randsample'
+pred_vers = 'standard_proba_sera_brier'
+ensemble_vers = 'no_weight_no_kbest_randsample_sera'
 covar_type = 'team_points'
 std_dev_type = 'spline'
 
-for set_week in [6]:
+for set_week in [10]:
 
     for i, full_model_rel_weight in enumerate([0.2, 1, 5]):
 

@@ -13,15 +13,15 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
-for week in [6]:
+for week in [10]:
 
     year = 2021
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
     num_iters = 100
 
-    pred_vers = 'standard_proba_update'
-    ensemble_vers = 'no_weight_no_kbest_randsample'
+    pred_vers = 'standard_proba_sera_brier'
+    ensemble_vers = 'no_weight_no_kbest_randsample_sera'
     std_dev_type = 'spline'
     TOTAL_LINEUPS = 10
 
