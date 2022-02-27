@@ -13,16 +13,16 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
-for week in [6]:
+for week, std_dev_type in zip([6, 7], ['bridge', 'spline']):
 
     year = 2021
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
     num_iters = 100
 
-    pred_vers = 'standard_proba_sera_brier_lowsample'
-    ensemble_vers = 'no_weight_yes_kbest_sera'
-    std_dev_type = 'spline'
+    pred_vers = 'standard'
+    ensemble_vers = 'no_weight_yes_kbest'
+    # std_dev_type = 'spline'
     TOTAL_LINEUPS = 10
 
     print(f'\nWeek {week} PredVer: {pred_vers} EnsVer: {ensemble_vers} SDType:{std_dev_type}\n===============\n')
@@ -181,6 +181,7 @@ for week in [6]:
 
         return list(sim_results.values), lineups
 
+    # print(sim_winnings(True, 0, 0, 4, 1, 'no_covar'))
 
 #%%
     from joblib import Parallel, delayed
@@ -231,6 +232,9 @@ for week in [6]:
     output['ens_sera'] = 0
     output.loc[output.ensemble_vers.str.contains('sera'), 'ens_sera'] = 1
 
+    output['bridge'] = 0
+    output.loc[output.std_dev_type.str.contains('bridge'), 'bridge'] = 1
+
     output['std_spline'] = 0
     output.loc[output.std_dev_type.str.contains('spline'), 'std_spline'] = 1
 
@@ -242,51 +246,54 @@ for week in [6]:
 
 #%%
 
-from zSim_Helper_Covar import *
-import pandas as pd
+# from zSim_Helper_Covar import *
+# import pandas as pd
 
-# set the root path and database management object
-from ff.db_operations import DataManage
-from ff import general as ffgeneral
+# # set the root path and database management object
+# from ff.db_operations import DataManage
+# from ff import general as ffgeneral
 
-root_path = ffgeneral.get_main_path('Daily_Fantasy')
-db_path = f'{root_path}/Data/Databases/'
-dm = DataManage(db_path)
+# root_path = ffgeneral.get_main_path('Daily_Fantasy')
+# db_path = f'{root_path}/Data/Databases/'
+# dm = DataManage(db_path)
 
 
-df = dm.read('''SELECT * FROM Winnings_Optimize''', 'Results')
-df.ensemble_vers.unique()
+# df = dm.read('''SELECT * FROM Winnings_Optimize''', 'Results')
+# df.ensemble_vers.unique()
 
-df['pred_proba'] = 0
-df.loc[df.pred_vers.str.contains('proba'), 'pred_proba'] = 1
+# df['pred_proba'] = 0
+# df.loc[df.pred_vers.str.contains('proba'), 'pred_proba'] = 1
 
-df['pred_sera'] = 0
-df.loc[df.pred_vers.str.contains('sera'), 'pred_sera'] = 1
+# df['pred_sera'] = 0
+# df.loc[df.pred_vers.str.contains('sera'), 'pred_sera'] = 1
 
-df['pred_brier'] = 0
-df.loc[df.pred_vers.str.contains('brier'), 'pred_brier'] = 1
+# df['pred_brier'] = 0
+# df.loc[df.pred_vers.str.contains('brier'), 'pred_brier'] = 1
 
-df['pred_lowsample'] = 0
-df.loc[df.pred_vers.str.contains('lowsample'), 'pred_lowsample'] = 1
+# df['pred_lowsample'] = 0
+# df.loc[df.pred_vers.str.contains('lowsample'), 'pred_lowsample'] = 1
 
-df['ens_sample_weights'] = 0
-df.loc[df.ensemble_vers.str.contains('yes_weight'), 'ens_sample_weights'] = 1
+# df['ens_sample_weights'] = 0
+# df.loc[df.ensemble_vers.str.contains('yes_weight'), 'ens_sample_weights'] = 1
 
-df['ens_kbest'] = 0
-df.loc[df.ensemble_vers.str.contains('yes_kbest'), 'ens_kbest'] = 1
+# df['ens_kbest'] = 0
+# df.loc[df.ensemble_vers.str.contains('yes_kbest'), 'ens_kbest'] = 1
 
-df['ens_randsample'] = 0
-df.loc[df.ensemble_vers.str.contains('randsample'), 'ens_randsample'] = 1
+# df['ens_randsample'] = 0
+# df.loc[df.ensemble_vers.str.contains('randsample'), 'ens_randsample'] = 1
 
-df['ens_sera'] = 0
-df.loc[df.ensemble_vers.str.contains('sera'), 'ens_sera'] = 1
+# df['ens_sera'] = 0
+# df.loc[df.ensemble_vers.str.contains('sera'), 'ens_sera'] = 1
 
-df['std_spline'] = 0
-df.loc[df.std_dev_type.str.contains('spline'), 'std_spline'] = 1
+# df['bridge'] = 0
+# df.loc[df.std_dev_type.str.contains('bridge'), 'bridge'] = 1
 
-df['std_quantile'] = 0
-df.loc[df.std_dev_type.str.contains('quantile'), 'std_quantile'] = 1
+# df['std_spline'] = 0
+# df.loc[df.std_dev_type.str.contains('spline'), 'std_spline'] = 1
 
-dm.write_to_db(df, 'Results', 'Winnings_Optimize', 'replace')
+# df['std_quantile'] = 0
+# df.loc[df.std_dev_type.str.contains('quantile'), 'std_quantile'] = 1
+
+# dm.write_to_db(df, 'Results', 'Winnings_Optimize', 'replace')
 
 # %%

@@ -61,7 +61,6 @@ def load_data(model_type, set_pos):
         df2 = dm.read(f'''SELECT * FROM {set_pos}_Data2''', 'Model_Features')
         df = pd.concat([df, df2], axis=1)
     df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
-    df = dc.convert_to_float(df)
 
     drop_cols = list(df.dtypes[df.dtypes=='object'].index)
     print(drop_cols)
@@ -223,7 +222,7 @@ def optimize_reg_model(final_m, skm_stack, X_stack, y_stack, rs=1234):
     return best_model, stack_score, adp_score
 
 
-def optimize_quant_model(df_train, X_stack, y_stack, alpha):
+def optimize_quant_model(df_train, X_stack, y_stack, alpha, rs=1234):
 
     skm_stack = SciKitModel(df_train, model_obj='quantile')
 
@@ -239,7 +238,7 @@ def optimize_quant_model(df_train, X_stack, y_stack, alpha):
     best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
                                                               X_stack, y_stack, n_iter=50, 
                                                               run_adp=False, print_coef=False,
-                                                              alpha=alpha)
+                                                              alpha=alpha, random_state=rs)
 
     return best_model, stack_score, adp_score
 
@@ -284,7 +283,7 @@ def stack_predictions(X_predict, best_models, final_models):
 
 
 def spline_std_max(output, splines, set_pos, week, year):
-
+    
     _, recent = rolling_max_std(set_pos, week, year)
     output = pd.merge(output, recent, on='player', how='left')
     output.roll_std = output.roll_std.fillna(recent.roll_std.median())
@@ -299,12 +298,12 @@ def spline_std_max(output, splines, set_pos, week, year):
 
 
 def get_quantile_sd(output):
-
+    
     for alpha in [5, 16, 84, 95]:
 
         print(f'\nRunning Percentile {alpha}\n=============')
         perc_model, _, perc_pred = optimize_quant_model(df_train, X_stack, y_stack, alpha=alpha/100)
-        show_scatter_plot(perc_pred['stack_pred'], perc_pred['y'], r2=False)
+        # show_scatter_plot(perc_pred['stack_pred'], perc_pred['y'], r2=False)
         output[f'perc{alpha}'] = perc_model.predict(X_predict)
 
     output['std_dev'] = (output.perc84 - output.perc16) / 2
@@ -368,11 +367,23 @@ def create_output(output_start, predictions, splines):
 
     output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points']].copy()
     output['pred_fp_per_game'] = predictions.mean(axis=1)
-    output = spline_std_max(output, splines, set_pos, set_week, set_year)
-    output['min_score'] = df_train.y_act.min()
 
-    if 'quantile' in std_dev_type:
-        output = output.drop(['std_dev', 'max_score', 'min_score'], axis=1)
+    if 'spline' in std_dev_type and 'quantile' in std_dev_type:
+        output = spline_std_max(output, splines, set_pos, set_week, set_year)
+        output['min_score'] = df_train.y_act.min()
+        output = output.rename(columns={'std_dev': 'std_dev_sp', 
+                                        'max_score': 'max_score_sp', 
+                                        'min_score': 'min_score_sp'})
+        output = get_quantile_sd(output)
+        output['std_dev'] = (output.std_dev + output.std_dev_sp) / 2
+        output['min_score'] = (output.min_score + output.min_score_sp) / 2
+        output['max_score'] = (output.max_score + output.max_score_sp) / 2
+
+    elif 'spline' in std_dev_type:
+        output = spline_std_max(output, splines, set_pos, set_week, set_year)
+        output['min_score'] = df_train.y_act.min()
+
+    elif 'quantile' in std_dev_type:
         output = get_quantile_sd(output)
     
     output = output.sort_values(by='dk_salary', ascending=False)
@@ -431,7 +442,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 6
+set_weeks = [8, 10, 11]
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -440,9 +451,10 @@ val_week_min = 10
 met = 'y_act'
 
 # set the model version
-vers = 'standard_proba_sera_brier_lowsample'
+vers = 'standard_proba_sera_brier'
 ensemble_vers = 'no_weight_yes_kbest_sera'
-std_dev_type = 'spline'
+std_dev_type = 'spline_quantile'
+show_plots = False
 
 sample_weight_models = {'adp': False,
                         'ridge': False,
@@ -453,133 +465,134 @@ sample_weight_models = {'adp': False,
                         'rf': False,
                         'gbm': False}
 
-splines = {}
-for k, p in zip([1, 2, 2, 2, 2], ['QB', 'RB', 'WR', 'TE', 'Defense']):
-    print(f'Checking Splines for {p}')
-    spl_sd, spl_perc = get_std_splines(p, set_week, set_year, show_plot=True, k=k)
-    splines[p] = [spl_sd, spl_perc]
+for set_week in set_weeks:
 
-#%%
+    splines = {}    
+    for k, p in zip([1, 2, 2, 2, 2], ['QB', 'RB', 'WR', 'TE', 'Defense']):
+        print(f'Checking Splines for {p}')
+        spl_sd, spl_perc = get_std_splines(p, set_week, set_year, show_plot=show_plots, k=k)
+        splines[p] = [spl_sd, spl_perc]
 
-for model_type in ['full_model', 'backfill']:
+    for model_type in ['full_model', 'backfill']:
 
-    if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
-    elif model_type == 'quantile': positions =  ['QB', 'RB', 'WR', 'TE']
+        if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
+        elif model_type == 'backfill': positions =  ['QB', 'RB', 'WR', 'TE']
 
-    for set_pos in positions:
+        for set_pos in positions:
 
-        def_cuts = [33, 75, 90]
-        off_cuts = [33, 80, 95]
-        if set_pos == 'Defense': cuts = def_cuts
-        else: cuts = off_cuts
+            def_cuts = [33, 75, 90]
+            off_cuts = [33, 80, 95]
+            if set_pos == 'Defense': cuts = def_cuts
+            else: cuts = off_cuts
 
-        #-------------
-        # Set up output dataset
-        #-------------
+            #-------------
+            # Set up output dataset
+            #-------------
 
-        all_vars = [set_pos, set_year, set_week]
+            all_vars = [set_pos, set_year, set_week]
 
-        pkey = f'{set_pos}_year{set_year}_week{set_week}_{model_type}{vers}'
-        db_output = {'set_pos': set_pos, 'set_year': set_year, 'set_week': set_week}
-        db_output['pkey'] = pkey
+            pkey = f'{set_pos}_year{set_year}_week{set_week}_{model_type}{vers}'
+            db_output = {'set_pos': set_pos, 'set_year': set_year, 'set_week': set_week}
+            db_output['pkey'] = pkey
 
-        model_output_path = f'{root_path}/Model_Outputs/{set_year}/{pkey}/'
-        if not os.path.exists(model_output_path): os.makedirs(model_output_path)
-
-
-        #================================================================================================================================
+            model_output_path = f'{root_path}/Model_Outputs/{set_year}/{pkey}/'
+            if not os.path.exists(model_output_path): os.makedirs(model_output_path)
 
 
-        #==========
-        # Pull and clean compiled data
-        #==========
-        
-        df, drop_cols = load_data(model_type, set_pos)
-        df, cv_time_input, train_time_split = create_game_date(df)
-        df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
-
-        #------------
-        # Make the Class Predictions
-        #------------
-
-        pred_class, actual_class, models_class, scores_class, full_hold_class = load_all_pickles(model_output_path, 'class')
-        X_predict_class = get_class_predictions(df, models_class)
-        X_stack_class, _ = X_y_stack('class', full_hold_class, pred_class, actual_class)
-
-        #------------
-        # Get Regression Data
-        #------------
-
-        # get the X and y values for stack training for the current metric
-        pred, actual, models, scores, full_hold_reg = load_all_pickles(model_output_path, 'reg')
-        X_stack, y_stack = X_y_stack('reg', full_hold_reg, pred, actual)
-        X_stack = pd.concat([X_stack, X_stack_class], axis=1)
-
-        #------------
-        # Make the Quantile Predictions
-        #------------
-        
-        try:
-            pred_quant, actual_quant, models_quant, scores_quant, full_hold_quant = load_all_pickles(model_output_path, 'quant')
-            X_predict_quant = get_quant_predictions(df_train, df_predict, models_quant)
-            X_stack_quant, _ = X_y_stack('quant', full_hold_quant, pred_quant, actual_quant)
-            X_stack = pd.concat([X_stack, X_stack_quant], axis=1)
-        except:
-            print('No Quantile Data Available')
-            X_stack_quant = None
-            X_predict_quant = None
+            #================================================================================================================================
 
 
-        best_models = []; stack_val_pred = pd.DataFrame(); scores = []
-        final_models = ['ridge', 'lasso', 'bridge','lgbm', 'xgb', 'rf', 'gbm']
-        skm_stack = SciKitModel(df_train, model_obj='reg')
-
-        i = 0
-        for final_m in final_models:
-
-            print(f'\n{final_m}')
-            best_model, stack_scores, stack_pred = optimize_reg_model(final_m, skm_stack, X_stack, y_stack, rs=(i+7)*19+(i*12)+6)
+            #==========
+            # Pull and clean compiled data
+            #==========
             
-            best_models.append(best_model)
-            scores.append(stack_scores['stack_score'])
-            stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
-            i+=1
+            df, drop_cols = load_data(model_type, set_pos)
+            df, cv_time_input, train_time_split = create_game_date(df)
+            df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
 
-        # get the final output:
-        X_full, y_full = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
+            #------------
+            # Make the Class Predictions
+            #------------
 
-        X_predict = get_reg_predict_features(models, X_full, y_full)
-        X_predict = pd.concat([X_predict, X_predict_class], axis=1)
-        try: X_predict = pd.concat([X_predict, X_predict_quant], axis=1)
-        except: print('No Quantile Data Available')
+            pred_class, actual_class, models_class, scores_class, full_hold_class = load_all_pickles(model_output_path, 'class')
+            X_predict_class = get_class_predictions(df, models_class)
+            X_stack_class, _ = X_y_stack('class', full_hold_class, pred_class, actual_class)
 
-        predictions = stack_predictions(X_predict, best_models, final_models)
+            #------------
+            # Get Regression Data
+            #------------
 
-        #------------
-        # Scatter and Metrics for Overall Results
-        #------------
+            # get the X and y values for stack training for the current metric
+            pred, actual, models, scores, full_hold_reg = load_all_pickles(model_output_path, 'reg')
+            X_stack, y_stack = X_y_stack('reg', full_hold_reg, pred, actual)
+            X_stack = pd.concat([X_stack, X_stack_class], axis=1)
 
-        print('\nShowing Ensemble\n===============\n')
-        
-        best_val, best_predictions = best_average_models(scores, final_models, stack_val_pred, predictions, 
-                                                         use_sample_weight=sample_weight_models['ridge'])
+            #------------
+            # Make the Quantile Predictions
+            #------------
+            
+            try:
+                pred_quant, actual_quant, models_quant, scores_quant, full_hold_quant = load_all_pickles(model_output_path, 'quant')
+                X_predict_quant = get_quant_predictions(df_train, df_predict, models_quant)
+                X_stack_quant, _ = X_y_stack('quant', full_hold_quant, pred_quant, actual_quant)
+                X_stack = pd.concat([X_stack, X_stack_quant], axis=1)
+            except:
+                print('No Quantile Data Available')
+                X_stack_quant = None
+                X_predict_quant = None
 
-        show_scatter_plot(best_val.mean(axis=1), stack_pred['y'], r2=False)
-        show_top_predictions(best_val.mean(axis=1), stack_pred['y'], r2=False)
 
-        #===================
-        # Create Outputs
-        #===================
+            best_models = []; stack_val_pred = pd.DataFrame(); scores = []
+            final_models = ['ridge', 'lasso', 'bridge','lgbm', 'xgb', 'rf', 'gbm']
+            skm_stack = SciKitModel(df_train, model_obj='reg')
 
-        output = create_output(output_start, best_predictions, splines)
-        try:  
-            output = add_actual(output)
-            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'max_score']])
-            output = output.drop('actual_pts', axis=1)
-        except:
-            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'max_score']])
-        
-        save_output_to_db(output)
+            i = 0
+            for final_m in final_models:
+
+                print(f'\n{final_m}')
+                best_model, stack_scores, stack_pred = optimize_reg_model(final_m, skm_stack, X_stack, y_stack, rs=(i+7)*19+(i*12)+6)
+                
+                best_models.append(best_model)
+                scores.append(stack_scores['stack_score'])
+                stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
+                i+=1
+
+            # get the final output:
+            X_full, y_full = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
+
+            X_predict = get_reg_predict_features(models, X_full, y_full)
+            X_predict = pd.concat([X_predict, X_predict_class], axis=1)
+            try: X_predict = pd.concat([X_predict, X_predict_quant], axis=1)
+            except: print('No Quantile Data Available')
+
+            predictions = stack_predictions(X_predict, best_models, final_models)
+
+            #------------
+            # Scatter and Metrics for Overall Results
+            #------------
+
+            print('\nShowing Ensemble\n===============\n')
+            
+            best_val, best_predictions = best_average_models(scores, final_models, stack_val_pred, predictions, 
+                                                            use_sample_weight=sample_weight_models['ridge'])
+
+            if show_plots:
+                show_scatter_plot(best_val.mean(axis=1), stack_pred['y'], r2=False)
+                show_top_predictions(best_val.mean(axis=1), stack_pred['y'], r2=False)
+
+            #===================
+            # Create Outputs
+            #===================
+
+            output = create_output(output_start, best_predictions, splines)
+            try:  
+                output = add_actual(output)
+                print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'max_score']])
+                output = output.drop('actual_pts', axis=1)
+            except:
+                print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'max_score']])
+            
+            save_output_to_db(output)
 
 
 #%%

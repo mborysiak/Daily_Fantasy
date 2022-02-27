@@ -183,11 +183,11 @@ def one_hot(X):
 
 
 X = one_hot(X)
-y = df.total_winnings
+y = df.lineups_placed
 
 # m = Ridge(alpha=100)
-m = RandomForestRegressor(n_estimators=100, max_depth=3, min_samples_leaf=2)
-# m = LGBMRegressor(n_estimators=25, max_depth=5, min_samples_leaf=1)
+# m = RandomForestRegressor(n_estimators=100, max_depth=3, min_samples_leaf=2)
+m = LGBMRegressor(n_estimators=25, max_depth=5, min_samples_leaf=1)
 
 if type(m) == sklearn.linear_model._ridge.Ridge:
     sc = StandardScaler()

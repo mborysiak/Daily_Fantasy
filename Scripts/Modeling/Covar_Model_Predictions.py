@@ -321,14 +321,15 @@ def get_mean_points(preds):
 
 # set year to analyze
 set_year = 2021
-pred_vers = 'standard_proba_sera_brier_lowsample'
-ensemble_vers = 'no_weight_yes_kbest_sera'
+pred_vers = 'standard'
+ensemble_vers = 'no_weight_yes_kbest'
 covar_type = 'team_points'
-std_dev_type = 'spline'
+# std_dev_type = 'spline'
 
-for set_week in [6]:
+i = 0
+for set_week, std_dev_type in zip([6, 7], ['bridge', 'spline']):
 
-    for i, full_model_rel_weight in enumerate([0.2, 1, 5]):
+    for full_model_rel_weight in [0.2, 1, 5]:
 
         # get the player and opposing player data to create correlation matrices
         player_data = get_max_metrics(set_week, set_year)
@@ -367,6 +368,7 @@ for set_week in [6]:
         if i == 0:
             dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
             dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
+            i += 1
         else:
             dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
             dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
