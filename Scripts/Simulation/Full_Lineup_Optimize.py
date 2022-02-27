@@ -1,6 +1,6 @@
 #%%
 from zSim_Helper_Covar import *
-#%%
+
 # set the root path and database management object
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -13,15 +13,15 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
-for week in [10]:
+for week in [6]:
 
     year = 2021
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
     num_iters = 100
 
-    pred_vers = 'standard_proba_sera_brier'
-    ensemble_vers = 'no_weight_no_kbest_randsample_sera'
+    pred_vers = 'standard_proba_sera_brier_lowsample'
+    ensemble_vers = 'no_weight_yes_kbest_sera'
     std_dev_type = 'spline'
     TOTAL_LINEUPS = 10
 
@@ -156,6 +156,7 @@ for week in [10]:
         points_record = []
         total_add = []
         to_drop_selected = []
+        lineups = []
         for _ in range(10):
             
             to_add = []
@@ -167,7 +168,8 @@ for week in [10]:
                 prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
                 selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
                 to_add.append(selected_player)
-            
+            lineups.append(to_add)
+
             total_pts, prize_money = calc_winnings(to_add)
             winnings.append(prize_money); points_record.append(total_pts)
 
@@ -177,134 +179,114 @@ for week in [10]:
         sim_results = summary_results(winnings, points_record)
         print(sim_results)
 
-        return list(sim_results.values)
+        return list(sim_results.values), lineups
 
-    # sim_winnings(True, 2, 0, 3, 1, 'team_points')
 
 #%%
     from joblib import Parallel, delayed
 
-    results = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(adj, pdm, tdf, tn, fmw, ct) for adj, pdm, tdf, tn, fmw, ct, i in params)
-    results = [r[0] for r in results]
+    par_out = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(adj, pdm, tdf, tn, fmw, ct) for adj, pdm, tdf, tn, fmw, ct, i in params)
+    
+    lineups = []
+    for o in par_out:
+        lineups.extend(o[1])
+    lineups = pd.DataFrame(lineups)
+    lineups = lineups.assign(week=week, year=year, pred_vers=pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type)
 
+    results = [list(o[0][0]) for o in par_out]
     output = pd.concat([pd.DataFrame(params), pd.DataFrame(results)], axis=1)
     output = pd.concat([output, actual_results], axis=1).fillna(method='ffill')
 
     cols = list(G.keys())
     cols.extend(['lineups_placed', 'total_winnings', 'max_winnings', 'avg_points', 'max_points', 
                 'my_number_placed', 'my_total_winnings', 'my_max_winnings', 'my_mean_points', 'my_max_points'])
+    
     output.columns = cols
-    print(output)
-
     output = output.assign(min_prize_points=min_prize_pts, mean_prize_points=mean_prize_pts, max_prize_points=max_prize_pts,
                            week=week, year=year, pred_vers=pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
-                           min_player_same_team=min_players_same_team)
+                           min_player_same_team=min_players_same_team, num_iters=num_iters)
 
-    dm.write_to_db(output, 'Simulation', 'Winnings_Optimize', 'append')
+    
+    output['pred_proba'] = 0
+    output.loc[output.pred_vers.str.contains('proba'), 'pred_proba'] = 1
+
+    output['pred_sera'] = 0
+    output.loc[output.pred_vers.str.contains('sera'), 'pred_sera'] = 1
+
+    output['pred_brier'] = 0
+    output.loc[output.pred_vers.str.contains('brier'), 'pred_brier'] = 1
+
+    output['pred_lowsample'] = 0
+    output.loc[output.pred_vers.str.contains('lowsample'), 'pred_lowsample'] = 1
+
+    output['ens_sample_weights'] = 0
+    output.loc[output.ensemble_vers.str.contains('yes_weight'), 'ens_sample_weights'] = 1
+
+    output['ens_kbest'] = 0
+    output.loc[output.ensemble_vers.str.contains('yes_kbest'), 'ens_kbest'] = 1
+
+    output['ens_randsample'] = 0
+    output.loc[output.ensemble_vers.str.contains('randsample'), 'ens_randsample'] = 1
+
+    output['ens_sera'] = 0
+    output.loc[output.ensemble_vers.str.contains('sera'), 'ens_sera'] = 1
+
+    output['std_spline'] = 0
+    output.loc[output.std_dev_type.str.contains('spline'), 'std_spline'] = 1
+
+    output['std_quantile'] = 0
+    output.loc[output.std_dev_type.str.contains('quantile'), 'std_quantile'] = 1
+
+    dm.write_to_db(output, 'Results', 'Winnings_Optimize', 'append')
+    dm.write_to_db(lineups, 'Results', 'Lineups_Optimize', 'append')
 
 #%%
-# from sklearn.linear_model import Ridge
-# import sklearn
-# from sklearn.ensemble import RandomForestRegressor
-# from lightgbm import LGBMRegressor
-# from sklearn.preprocessing import StandardScaler
-# from sklearn.model_selection import cross_val_score
-# from ff.db_operations import DataManage
-# from ff import general as ffgeneral
-# import pandas as pd
-# import numpy as np
 
-# root_path = ffgeneral.get_main_path('Daily_Fantasy')
-# db_path = f'{root_path}/Data/Databases/'
-# dm = DataManage(db_path)
+from zSim_Helper_Covar import *
+import pandas as pd
 
-# df = dm.read('''SELECT * 
-#                 FROM Winnings_Optimize
-#                 WHERE week > 2
-#                 ORDER BY year, week''', 'Simulation')
-# df.loc[:, 'std_dev_type'] = 'spline'
-# df.loc[df.week < 6, 'std_dev_type'] = 'bridge'
+# set the root path and database management object
+from ff.db_operations import DataManage
+from ff import general as ffgeneral
 
-# X = df[['adjust_pos_counts', 'drop_player_multiple',  'drop_team_frac', 'top_n_choices', 
-#         'week', 'pred_vers', 'ensemble_vers', 'covar_type', 'full_model_rel_weight', 'std_dev_type']]
-
-# def one_hot(X):
-#     for c in ['week', 'pred_vers', 'ensemble_vers', 'covar_type', 'std_dev_type']:
-#         X = pd.concat([X, pd.get_dummies(X[c], prefix=c, drop_first=True)], axis=1)
-    
-#         if c!='week':
-#             X = X.drop(c, axis=1)
-    
-#     return X
+root_path = ffgeneral.get_main_path('Daily_Fantasy')
+db_path = f'{root_path}/Data/Databases/'
+dm = DataManage(db_path)
 
 
-# X = one_hot(X)
-# y = df.total_winnings
+df = dm.read('''SELECT * FROM Winnings_Optimize''', 'Results')
+df.ensemble_vers.unique()
 
-# # m = Ridge(alpha=100)
-# # m = RandomForestRegressor(n_estimators=100, max_depth=3, min_samples_leaf=2)
-# m = LGBMRegressor(n_estimators=25, max_depth=5, min_samples_leaf=1)
+df['pred_proba'] = 0
+df.loc[df.pred_vers.str.contains('proba'), 'pred_proba'] = 1
 
-# if type(m) == sklearn.linear_model._ridge.Ridge:
-#     sc = StandardScaler()
-#     sc.fit(X)
-#     X = pd.DataFrame(sc.transform(X), columns=X.columns)
+df['pred_sera'] = 0
+df.loc[df.pred_vers.str.contains('sera'), 'pred_sera'] = 1
 
-# scores = cross_val_score(m, X, y, cv=5, scoring='neg_mean_squared_error')
-# scores = np.sqrt(-np.mean(scores))
-# print(scores)
-# m.fit(X,y)
+df['pred_brier'] = 0
+df.loc[df.pred_vers.str.contains('brier'), 'pred_brier'] = 1
 
-# try:
-#     pd.Series(m.coef_, index=X.columns).sort_values().plot.barh(figsize=(10,10))
+df['pred_lowsample'] = 0
+df.loc[df.pred_vers.str.contains('lowsample'), 'pred_lowsample'] = 1
 
-# except:
-#     import shap
-#     shap_values = shap.TreeExplainer(m).shap_values(X)
-#     shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(8,10), max_display=20, show=False)
+df['ens_sample_weights'] = 0
+df.loc[df.ensemble_vers.str.contains('yes_weight'), 'ens_sample_weights'] = 1
 
+df['ens_kbest'] = 0
+df.loc[df.ensemble_vers.str.contains('yes_kbest'), 'ens_kbest'] = 1
 
-# # %%
+df['ens_randsample'] = 0
+df.loc[df.ensemble_vers.str.contains('randsample'), 'ens_randsample'] = 1
 
-# X_pred = pd.DataFrame({
-#  'adjust_pos_counts': [1], 
-#  'drop_player_multiple': [0], 
-#  'drop_team_frac': [0],
-#  'top_n_choices': [0], 
-#  'week': [19], 
-#  'full_model_rel_weight': [0], 
-# #  'week_3': [0], 
-#  'week_4': [0],
-#  'week_5': [0], 
-#  'week_6': [0], 
-#  'week_7': [0], 
-#  'week_8': [0], 
-#  'week_9': [0], 
-#  'week_10': [0], 
-#  'week_11': [0],
-#  'week_12': [0], 
-#  'week_13': [1], 
-#  'week_14': [0], 
-#  'week_15': [0], 
-#  'week_16': [0], 
-#  'week_17': [0],
-#  'week_18': [0], 
-#  'pred_vers_standard_proba': [0],
-#  'pred_vers_standard_proba_quant': [0],
-#  'pred_vers_standard_proba_sweight': [1],
-#  'ensemble_vers_linear_weight': [0],
-#  'ensemble_vers_no_weight': [0],
-#  'covar_type_team_points': [0], 
-#  'std_dev_type_spline': [1],
-#  }, index=[0])
+df['ens_sera'] = 0
+df.loc[df.ensemble_vers.str.contains('sera'), 'ens_sera'] = 1
 
-# if type(m) == sklearn.linear_model._ridge.Ridge:
-#     X_pred = pd.DataFrame(sc.transform(X_pred), columns=X_pred.columns)
+df['std_spline'] = 0
+df.loc[df.std_dev_type.str.contains('spline'), 'std_spline'] = 1
 
-# print('Optimal Avg Winnings:', m.predict(X_pred)[0])
+df['std_quantile'] = 0
+df.loc[df.std_dev_type.str.contains('quantile'), 'std_quantile'] = 1
 
-# my_avg_winnings = dm.read('''SELECT DISTINCT week, year, my_total_winnings 
-#                              FROM Winnings_Optimize''', 'Simulation').my_total_winnings.mean()
-# print('My Avg Winnings:', my_avg_winnings)
+dm.write_to_db(df, 'Results', 'Winnings_Optimize', 'replace')
 
-# # %%
+# %%

@@ -61,6 +61,7 @@ def load_data(model_type, set_pos):
         df2 = dm.read(f'''SELECT * FROM {set_pos}_Data2''', 'Model_Features')
         df = pd.concat([df, df2], axis=1)
     df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
+    df = dc.convert_to_float(df)
 
     drop_cols = list(df.dtypes[df.dtypes=='object'].index)
     print(drop_cols)
@@ -189,8 +190,11 @@ def optimize_reg_model(final_m, skm_stack, X_stack, y_stack, rs=1234):
 
     if 'yes_kbest' in ensemble_vers:
         feature_piece = skm_stack.piece('k_best')
+        print_coef = True
     elif 'randsample' in ensemble_vers:
         feature_piece = skm_stack.piece('random_sample')
+        print_coef = False
+
     # get the model pipe for stacking setup and train it on meta features
     stack_pipe = skm_stack.model_pipe([
                             feature_piece,
@@ -212,7 +216,7 @@ def optimize_reg_model(final_m, skm_stack, X_stack, y_stack, rs=1234):
 
     best_model, stack_score, adp_score = skm_stack.best_stack(stack_pipe, stack_params,
                                                                 X_stack, y_stack, n_iter=50, 
-                                                                run_adp=True, print_coef=False,
+                                                                run_adp=True, print_coef=print_coef,
                                                                 sample_weight=use_sample_weight,
                                                                 random_state=rs)
 
@@ -225,7 +229,7 @@ def optimize_quant_model(df_train, X_stack, y_stack, alpha):
 
     # get the model pipe for stacking setup and train it on meta features
     stack_pipe = skm_stack.model_pipe([
-                            skm_stack.piece('random_sample'),
+                           skm_stack.piece('random_sample'),
                             skm_stack.piece('gbm_q')
                         ])
 
@@ -297,12 +301,13 @@ def spline_std_max(output, splines, set_pos, week, year):
 def get_quantile_sd(output):
 
     for alpha in [5, 16, 84, 95]:
+
         print(f'\nRunning Percentile {alpha}\n=============')
         perc_model, _, perc_pred = optimize_quant_model(df_train, X_stack, y_stack, alpha=alpha/100)
-        # show_scatter_plot(perc_pred['stack_pred'], perc_pred['y'], r2=False)
+        show_scatter_plot(perc_pred['stack_pred'], perc_pred['y'], r2=False)
         output[f'perc{alpha}'] = perc_model.predict(X_predict)
 
-    output['std_dev'] = (output.perc84 - output.perc16.mean()) / 2.5
+    output['std_dev'] = (output.perc84 - output.perc16) / 2
 
     ratio = (3.4*output.std_dev + output.pred_fp_per_game) / (1.96*output.std_dev + output.pred_fp_per_game)
     output['max_score'] = output.perc95 * ratio
@@ -344,11 +349,11 @@ def best_average_models(scores, final_models, stack_val_pred, predictions, use_s
         else:
             wts = None
         
-        n_score = mean_squared_error(y_stack, stack_val_pred[model_idx].mean(axis=1), sample_weight=wts)
+        n_score = skm_stack.custom_score(y_stack, stack_val_pred[model_idx].mean(axis=1))
         n_scores.append(n_score)
 
     print('All Average Scores:', np.round(n_scores, 3))
-    best_n = np.argmax(n_scores)
+    best_n = np.argmin(n_scores)
     top_n = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:best_n+1]
     
     model_idx = np.array(final_models)[top_n]
@@ -426,7 +431,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 10
+set_week = 6
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -435,8 +440,8 @@ val_week_min = 10
 met = 'y_act'
 
 # set the model version
-vers = 'standard_proba_sera_brier'
-ensemble_vers = 'no_weight_no_kbest_randsample_sera'
+vers = 'standard_proba_sera_brier_lowsample'
+ensemble_vers = 'no_weight_yes_kbest_sera'
 std_dev_type = 'spline'
 
 sample_weight_models = {'adp': False,
@@ -459,7 +464,7 @@ for k, p in zip([1, 2, 2, 2, 2], ['QB', 'RB', 'WR', 'TE', 'Defense']):
 for model_type in ['full_model', 'backfill']:
 
     if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE',  'Defense']
-    elif model_type == 'backfill': positions =  ['QB', 'RB', 'WR', 'TE']
+    elif model_type == 'quantile': positions =  ['QB', 'RB', 'WR', 'TE']
 
     for set_pos in positions:
 
@@ -597,6 +602,4 @@ import seaborn as sns
 sns.distplot(trunc_normal(output.iloc[0]))
 plt.xlim(0, 50);
 
-# %%
-x=2
 # %%
