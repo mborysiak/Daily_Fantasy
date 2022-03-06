@@ -321,13 +321,22 @@ def get_mean_points(preds):
 
 # set year to analyze
 set_year = 2021
-pred_vers = 'standard'
-ensemble_vers = 'no_weight_yes_kbest'
+# pred_vers = 'standard_proba_sera_brier'
+# ensemble_vers = 'no_weight_yes_kbest_sera'
 covar_type = 'team_points'
-# std_dev_type = 'spline'
+std_dev_type = 'spline'
 
 i = 0
-for set_week, std_dev_type in zip([6, 7], ['bridge', 'spline']):
+# set the model version
+weeks = [15, 15]
+pred_versions = [
+                 'standard_proba_sera_brier_lowsample', 
+                 'standard']
+ensemble_versions = [
+                     'no_weight_yes_kbest',
+                     'no_weight_yes_kbest']
+
+for set_week, pred_vers, ensemble_vers in zip(weeks, pred_versions, ensemble_versions):
 
     for full_model_rel_weight in [0.2, 1, 5]:
 

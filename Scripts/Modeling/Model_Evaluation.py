@@ -113,9 +113,13 @@ df_train, df_predict, output_start, min_samples = train_predict_split(df, train_
 
 skm = SciKitModel(df_train, model_obj='reg')
 X_all, y = skm.Xy_split('y_act', drop_cols)
-X = X_all.sample(frac=0.25, axis=1)
+
+X = X_all.sample(frac=1, axis=1)
 if 'game_date' not in X.columns:
     X['game_date'] = X_all.game_date
+
+
+# y = y - X[['fantasyPoints', 'projected_points']].mean(axis=1)
 
 #------------
 # Get Regression Data
@@ -130,7 +134,9 @@ pipe = skm.model_pipe([skm.piece('std_scale'),
 
 # set params
 params = skm.default_params(pipe, 'rand')
-params['k_best__k'] = range(25, 200, 5)
+params['k_best__k'] = range(20, 200, 5)
+
+
 # run the model with parameter search
 best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=25,
                                                         col_split='game_date', 
@@ -139,6 +145,7 @@ best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_i
                                                         sample_weight=False,
                                                         random_seed=1234)
 
+#%%
 m = best_models[1]
 transformer = Pipeline(m.steps[:-1])
 X_shap = transformer.transform(X)
@@ -183,11 +190,11 @@ def one_hot(X):
 
 
 X = one_hot(X)
-y = df.lineups_placed
+y = df.total_winnings
 
 # m = Ridge(alpha=100)
 # m = RandomForestRegressor(n_estimators=100, max_depth=3, min_samples_leaf=2)
-m = LGBMRegressor(n_estimators=25, max_depth=5, min_samples_leaf=1)
+m = LGBMRegressor(n_estimators=25, max_depth=10, min_samples_leaf=5)
 
 if type(m) == sklearn.linear_model._ridge.Ridge:
     sc = StandardScaler()
@@ -260,11 +267,11 @@ except:
 #==================================================================
 
 reg_or_class = 'reg'
-model_type = 'lgbm'
+model_type = 'ridge'
 
 df = dm.read(f'''SELECT * 
                  FROM {reg_or_class}_{model_type}
-                 WHERE scores < 10000''', 'Results')
+                 WHERE scores < 200''', 'Results')
 df = df.drop(['model'], axis=1)
 
 if reg_or_class == 'reg':

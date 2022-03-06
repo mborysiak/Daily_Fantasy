@@ -13,16 +13,23 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
-for week, std_dev_type in zip([6, 7], ['bridge', 'spline']):
+# set the model version
+weeks = [ 15, 15]
+pred_versions = [
+                 'standard_proba_sera_brier_lowsample',
+                 'standard']
+ensemble_versions = [
+                     'no_weight_yes_kbest',
+                     'no_weight_yes_kbest']
+
+for week, pred_vers, ensemble_vers in zip(weeks, pred_versions, ensemble_versions):
 
     year = 2021
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
     num_iters = 100
 
-    pred_vers = 'standard'
-    ensemble_vers = 'no_weight_yes_kbest'
-    # std_dev_type = 'spline'
+    std_dev_type = 'spline'
     TOTAL_LINEUPS = 10
 
     print(f'\nWeek {week} PredVer: {pred_vers} EnsVer: {ensemble_vers} SDType:{std_dev_type}\n===============\n')
@@ -241,6 +248,8 @@ for week, std_dev_type in zip([6, 7], ['bridge', 'spline']):
     output['std_quantile'] = 0
     output.loc[output.std_dev_type.str.contains('quantile'), 'std_quantile'] = 1
 
+    output['min_best_models'] = 3
+
     dm.write_to_db(output, 'Results', 'Winnings_Optimize', 'append')
     dm.write_to_db(lineups, 'Results', 'Lineups_Optimize', 'append')
 
@@ -293,6 +302,8 @@ for week, std_dev_type in zip([6, 7], ['bridge', 'spline']):
 
 # df['std_quantile'] = 0
 # df.loc[df.std_dev_type.str.contains('quantile'), 'std_quantile'] = 1
+
+# df['min_best_models'] = 1
 
 # dm.write_to_db(df, 'Results', 'Winnings_Optimize', 'replace')
 

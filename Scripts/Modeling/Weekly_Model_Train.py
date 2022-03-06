@@ -41,7 +41,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 7
+set_week = 17
 # set_week = int(sys.argv[1])
 
 # model_type = 'full_model'
@@ -57,7 +57,7 @@ keep_words = ['def', 'qb', 'team']
 
 for model_type in ['full_model', 'backfill']:
 
-    if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE', 'Defense' ]
+    if model_type == 'full_model': positions = ['QB', 'RB', 'WR', 'TE', 'Defense']
     elif model_type == 'backfill': positions =  ['QB', 'RB', 'WR', 'TE']
 
     for set_pos in positions:
@@ -186,7 +186,9 @@ for model_type in ['full_model', 'backfill']:
 
         def save_param_scores(df, obj_type, model):
             df = df.assign(model=model, year=set_year, week=set_week, pos=set_pos, model_type=model_type)
-            dm.write_to_db(df, 'Results', f'{obj_type}_{model}', 'append')
+            exist = dm.read(f"SELECT * FROM {obj_type}_{model}", 'Results')
+            df = pd.concat([exist, df], axis=0, sort=False)
+            dm.write_to_db(df, 'Results', f'{obj_type}_{model}', 'replace')
 
 
         def update_output_dict(label, m, suffix, out_dict, oof_data, best_models):
@@ -249,8 +251,8 @@ for model_type in ['full_model', 'backfill']:
         df, drop_cols = load_data(model_type, set_pos)
         df, cv_time_input, train_time_split = create_game_date(df)
         df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
-#%%
-  #===========================================================================================
+
+        #===========================================================================================
 
         # set up blank dictionaries for all metrics
         out_dict = {'pred': {}, 'actual': {}, 'scores': {}, 'models': {}, 'full_hold':{}}
@@ -299,7 +301,7 @@ for model_type in ['full_model', 'backfill']:
             # set up the model pipe and get the default search parameters
             pipe = skm.model_pipe([ skm.piece('random_sample'),
                                     skm.piece('std_scale'), 
-                                #    skm.piece('select_perc'),
+                                    #skm.piece('select_perc'),
                                     skm.feature_union([
                                                 skm.piece('agglomeration'), 
                                                 skm.piece('k_best'),
@@ -309,9 +311,6 @@ for model_type in ['full_model', 'backfill']:
             
             # set params
             params = skm.default_params(pipe, 'rand')
-            # params['select_perc__percentile'] = range(prc[set_pos][0],  prc[set_pos][1], prc[set_pos][2])
-            # params['k_best__k'] = range(kbs[set_pos][0],kbs[set_pos][1], kbs[set_pos][2])
-            params['random_sample__frac'] = np.arange(0.05, 0.25, 0.02)
 
             # params = update_feature_drop(params)
             if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
@@ -350,7 +349,7 @@ for model_type in ['full_model', 'backfill']:
             print('Training Value Counts:', y_class.value_counts()[0], '|', y_class.value_counts()[1])
 
             # loop through each potential model
-            model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
+            model_list = ['lr_c', 'lgbm_c', 'xgb_c', 'gbm_c', 'rf_c', 'knn_c']
             for i, m in enumerate(model_list):
 
                 print('\n============\n')
@@ -359,7 +358,7 @@ for model_type in ['full_model', 'backfill']:
                 # set up the model pipe and get the default search parameters
                 pipe = skm_class.model_pipe([skm_class.piece('random_sample'),
                                             skm_class.piece('std_scale'), 
-                                        #    skm_class.piece('select_perc_c'),
+                                        #   skm_class.piece('select_perc_c'),
                                             skm_class.feature_union([
                                                             skm_class.piece('agglomeration'), 
                                                             skm_class.piece('k_best_c'),
@@ -369,12 +368,7 @@ for model_type in ['full_model', 'backfill']:
                 
                 # set params
                 params = skm_class.default_params(pipe, 'rand')
-                params['random_sample__frac'] = np.arange(0.05, 0.25, 0.02)
-
-            #    params['select_perc_c__percentile'] = range(prc[set_pos][0],  prc[set_pos][1], prc[set_pos][2])
-             #   params['k_best_c__k'] = range(kbs[set_pos][0], kbs[set_pos][1], kbs[set_pos][2])
                 if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
-                # params = update_feature_drop(params)
 
                 # run the model with parameter search
                 best_models, oof_data, param_scores = skm_class.time_series_cv(pipe, X_class, y_class, 
@@ -440,7 +434,7 @@ for model_type in ['full_model', 'backfill']:
         save_output_dict(out_dict, 'quant')
 
         #=============================================================================================
-
+#%%
         def load_all_pickles(model_output_path, label):
             pred = load_pickle(model_output_path, f'{label}_pred')
             actual = load_pickle(model_output_path, f'{label}_actual')

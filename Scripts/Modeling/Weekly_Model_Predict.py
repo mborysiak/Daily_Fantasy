@@ -335,8 +335,6 @@ def show_top_predictions(y_pred, y, r2=False):
 
 
 def best_average_models(scores, final_models, stack_val_pred, predictions, use_sample_weight=False):
-    
-    from sklearn.metrics import mean_squared_error
 
     n_scores = []
     for i in range(len(scores)):
@@ -352,8 +350,8 @@ def best_average_models(scores, final_models, stack_val_pred, predictions, use_s
         n_scores.append(n_score)
 
     print('All Average Scores:', np.round(n_scores, 3))
-    best_n = np.argmin(n_scores)
-    top_n = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:best_n+1]
+    best_n = np.argmin(n_scores[2:])
+    top_n = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:best_n+3]
     
     model_idx = np.array(final_models)[top_n]
     best_val = stack_val_pred[model_idx]
@@ -442,7 +440,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_weeks = [8, 10, 11]
+
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -451,10 +449,25 @@ val_week_min = 10
 met = 'y_act'
 
 # set the model version
-vers = 'standard_proba_sera_brier'
-ensemble_vers = 'no_weight_yes_kbest_sera'
-std_dev_type = 'spline_quantile'
-show_plots = False
+set_weeks = [7, 9, 12, 13, 14, 15, 15, 15]
+pred_versions = ['standard_proba_sera_brier_lowsample',
+                 'standard_proba_sera_brier',
+                 'standard_proba_sera_brier',
+                 'standard_proba_sera_brier',
+                 'standard_proba_sera_brier',
+                 'standard_proba_sera_brier_lowsample',
+                 'standard_proba_sera_brier_lowsample',
+                 'standard']
+ensemble_versions = ['no_weight_no_kbest_randsample_sera',
+                     'no_weight_no_kbest_randsample_sera',
+                     'no_weight_no_kbest_randsample_sera',
+                     'no_weight_no_kbest_randsample_sera',
+                     'no_weight_no_kbest_randsample_sera',
+                     'no_weight_no_kbest_randsample_sera',
+                     'no_weight_yes_kbest',
+                     'no_weight_yes_kbest']
+std_dev_type = 'spline'
+show_plots = True
 
 sample_weight_models = {'adp': False,
                         'ridge': False,
@@ -465,7 +478,7 @@ sample_weight_models = {'adp': False,
                         'rf': False,
                         'gbm': False}
 
-for set_week in set_weeks:
+for set_week, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
     splines = {}    
     for k, p in zip([1, 2, 2, 2, 2], ['QB', 'RB', 'WR', 'TE', 'Defense']):
@@ -598,17 +611,17 @@ for set_week in set_weeks:
 #%%
 def trunc_normal(player_data, num_samples=1000):
 
-        import scipy.stats as stats
+    import scipy.stats as stats
 
-        # create truncated distribution
-        lower, upper = player_data.min_score,  player_data.max_score
-        lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
-        upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
-        trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
-        
-        estimates = trunc_dist.rvs(num_samples)
+    # create truncated distribution
+    lower, upper = player_data.min_score,  player_data.max_score
+    lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
+    upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
+    trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
+    
+    estimates = trunc_dist.rvs(num_samples)
 
-        return estimates
+    return estimates
 
 import seaborn as sns
 
