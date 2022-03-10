@@ -154,7 +154,8 @@ def fantasy_pros(pos):
 
     fp = dm.read(f'''SELECT * 
                     FROM FantasyPros 
-                    WHERE pos='{pos}' ''', 'Pre_PlayerData')
+                    WHERE pos='{pos}' 
+                          AND team is NOT NULL''', 'Pre_PlayerData')
     fp = name_cleanup(fp)
     if pos == 'DST': fp = fp.drop('player', axis=1).rename(columns={'team': 'player'})
     
@@ -400,14 +401,15 @@ def get_max_qb():
     dk_sal = dm.read('''SELECT player, team, week, year, dk_salary
                         FROM Daily_Salaries''', "Pre_PlayerData")
 
-    pff = dm.read('''SELECT player, week, year, expertConsensus, fantasyPoints, `Proj Pts` ProjPts
+    pff = dm.read('''SELECT player, offTeam team, week, year, 
+                            expertConsensus, fantasyPoints, `Proj Pts` ProjPts
                      FROM PFF_Expert_Ranks
-                     JOIN (SELECT player, week, year, fantasyPoints
+                     JOIN (SELECT player, offTeam, week, year, fantasyPoints
                            FROM PFF_Proj_Ranks)
-                           USING (player, week, year) ''', "Pre_PlayerData")
+                           USING (player, offTeam, week, year) ''', "Pre_PlayerData")
 
     df = pd.merge(fp, dk_sal, on=['player', 'team', 'week', 'year'], how='inner')
-    df = pd.merge(df, pff, on=['player', 'week', 'year'], how='inner')
+    df = pd.merge(df, pff, on=['player', 'team', 'week', 'year'], how='inner')
 
     qb_cols = ['team', 'week', 'year', 'fp_rank', 'projected_points',
                 'fantasyPoints', 'ProjPts',
@@ -1357,7 +1359,7 @@ for pos in [
     
     dst = add_team_matchups().drop('offTeam', axis=1)
     df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
-
+ 
     #-----------------------
     # Post-Game Data
     #----------------------

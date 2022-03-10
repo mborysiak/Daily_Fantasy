@@ -252,6 +252,7 @@ for model_type in ['full_model', 'backfill']:
         df, cv_time_input, train_time_split = create_game_date(df)
         df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
 
+#%%
         #===========================================================================================
 
         # set up blank dictionaries for all metrics
@@ -389,7 +390,7 @@ for model_type in ['full_model', 'backfill']:
         # save all the outputs
         save_output_dict(out_dict, 'class')
         
-    #=====================================================================================
+        #=====================================================================================
 
         # set up blank dictionaries for all metrics
         out_dict = {'pred': {}, 'actual': {}, 'scores': {}, 'models': {}, 'full_hold':{}}
