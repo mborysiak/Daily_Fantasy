@@ -5,6 +5,7 @@ import ff.general as ffgeneral
 import numpy as np
 import pandas as pd
 
+
 # set the root path and database management object
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -321,22 +322,29 @@ def get_mean_points(preds):
 
 # set year to analyze
 set_year = 2021
-# pred_vers = 'standard_proba_sera_brier'
-# ensemble_vers = 'no_weight_yes_kbest_sera'
 covar_type = 'team_points'
-std_dev_type = 'spline'
 
 i = 0
 # set the model version
-weeks = [15, 15]
+weeks = [4, 4, 4]
 pred_versions = [
-                 'standard_proba_sera_brier_lowsample', 
-                 'standard']
+                 'standard_proba_sera_brier_lowsample',
+                  'standard_proba_sera_brier_lowsample',
+                  'standard'
+                 ]
 ensemble_versions = [
-                     'no_weight_yes_kbest',
-                     'no_weight_yes_kbest']
+                     'no_weight_yes_kbest_sera',
+                      'no_weight_no_kbest_randsample_sera',
+                      'no_weight_yes_kbest'
+                     ]
+std_devs = [
+            'spline',
+            'spline',
+            'bridge'
+           ]
 
-for set_week, pred_vers, ensemble_vers in zip(weeks, pred_versions, ensemble_versions):
+iter_cats = zip(weeks, pred_versions, ensemble_versions, std_devs)
+for set_week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
     for full_model_rel_weight in [0.2, 1, 5]:
 

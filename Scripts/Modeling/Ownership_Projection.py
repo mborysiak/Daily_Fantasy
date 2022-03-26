@@ -5,9 +5,8 @@ import os
 import zipfile
 import numpy as np
 from ff import data_clean as dc
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.metrics import make_scorer, mean_pinball_loss, mean_squared_error
 import matplotlib.pyplot as plt
+import datetime as dt
 
 from ff.db_operations import DataManage   
 import ff.general as ffgeneral 
@@ -248,7 +247,6 @@ pos_cnts.pos.value_counts() / pos_cnts.shape[0]
 #%%
 
 # calculate ownership projections
-
 def add_proj(df):
 
     # pull in the salary and actual results data
@@ -262,7 +260,7 @@ def add_proj(df):
                             USING (player, offTeam, week, year)
                     JOIN (SELECT player, team offTeam, week, year, dk_salary 
                             FROM Daily_Salaries) USING (player, offTeam, week, year)
-                        WHERE week < 17''', 'Pre_PlayerData')
+                ''', 'Pre_PlayerData')
 
     proj.pos = proj.pos.apply(lambda x: x.upper())
     df = pd.merge(proj, player_ownership.drop(['player_points'], axis=1), on=['player', 'week', 'year'])
@@ -296,81 +294,125 @@ def feature_engineering(df):
 
     return df
 
+def year_week_to_date(x):
+    return int(dt.datetime(x[0], 1, x[1]).strftime('%Y%m%d'))
+
+def create_game_date(df, val_year_min, val_week_min, year_week_to_date):
+            
+    # set up the date column for sorting
+    df['game_date'] = df[['year', 'week']].apply(year_week_to_date, axis=1)
+    cv_time_input = int(dt.datetime(val_year_min, 1, val_week_min).strftime('%Y%m%d'))
+    train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
+
+    return df, cv_time_input, train_time_split
+
 
 def run_model_alpha(val_predict, test_predict, alpha, time_split):
 
-    pipe = skm.model_pipe([skm.column_transform(num_pipe=[skm.piece('impute')], 
-                                                cat_pipe=[skm.piece('one_hot')]), 
-                        ('gbm', GradientBoostingRegressor(loss="quantile", alpha=alpha))
-    ])
+    skm = SciKitModel(df_train, model_obj='quantile')
+
+    # get the model pipe for stacking setup and train it on meta features
+    pipe = skm.model_pipe([
+                           skm.piece('random_sample'),
+                           skm.piece('gbm_q')
+                        ])
 
     params = skm.default_params(pipe)
+    params['random_sample__frac'] = np.arange(0.2, 1, 0.05)
+    pipe.steps[-1][-1].alpha = alpha
+    
+    # run the model with parameter search
+    best_models, oof_data, _ = skm.time_series_cv(pipe, X, y, 
+                                                             params, n_iter=25,
+                                                             bayes_rand='custom_rand',
+                                                             col_split='game_date',
+                                                             time_split=time_split)
 
-    pinball_loss_alpha = make_scorer(mean_pinball_loss, alpha=alpha, greater_is_better=False)
-    cv_time = skm.cv_time_splits('week', X, time_split)
+    val_predict[f'Perc{int(alpha*100)}'] = oof_data['full_hold']
 
-    best_model = skm.random_search(pipe, X, y, params, scoring=pinball_loss_alpha, cv=cv_time, n_iter=20)
-    print(skm.cv_score(best_model, X, y, scoring=pinball_loss_alpha))
-
-    predictions = skm.cv_predict_time(best_model, X, y, cv_time=cv_time)
-    val_predict[f'Perc{int(alpha*100)}'] = predictions
-    test_predict[f'Perc{int(alpha*100)}'] = best_model.predict(X_test)
+    predictions = pd.DataFrame()
+    for bm in best_models:
+        predictions = pd.concat([predictions, pd.Series(bm.predict(X_test))], axis=1)
+    
+    test_predict[f'Perc{int(alpha*100)}'] = predictions.mean(axis=1)
 
     return val_predict, test_predict
 
 
 def run_model_mean(val_predict, test_predict, time_split):
     
-    pipe = skm.model_pipe([skm.column_transform(num_pipe=[skm.piece('impute')], 
-                                                    cat_pipe=[skm.piece('one_hot')]), 
-                        skm.piece('gbm')])
+    skm = SciKitModel(df_train, model_obj='reg')
+
+    # get the model pipe for stacking setup and train it on meta features
+    pipe = skm.model_pipe([
+                           skm.piece('k_best'),
+                           skm.piece('lgbm')
+                        ])
 
     params = skm.default_params(pipe)
-
-    cv_time = skm.cv_time_splits('week', X, time_split)
-    best_model = skm.random_search(pipe, X, y, params,  cv=cv_time, n_iter=20)
-    print(np.sqrt(-skm.cv_score(best_model, X, y)))
     
-    predictions = skm.cv_predict_time(best_model, X, y, cv_time=cv_time)
-    val_predict[f'MeanPred'] = predictions
-    test_predict[f'MeanPred'] = best_model.predict(X_test)
+    # run the model with parameter search
+    best_model, oof_data, _ = skm.time_series_cv(pipe, X, y, 
+                                                 params, n_iter=25,
+                                                 bayes_rand='custom_rand',
+                                                 col_split='game_date',
+                                                 time_split=time_split)
+
+    val_predict['MeanPred'] = oof_data['full_hold']
+    test_predict['MeanPred'] = best_model.predict(X_test)
+
 
     return val_predict, test_predict
 
-
+#%%
+all_data = read_in_csv(extract_path)
 full_entries, player_ownership = entries_ownership(all_data)
+
+#%%
+
+val_week_min = 8
+val_year_min = 2021
 
 df = add_proj(player_ownership)
 drop_list = ['Dalvin Cook32021']
 df = drop_player_weeks(df, drop_list)
 df = add_injuries(df)
 df = feature_engineering(df)
+df = df.rename(columns={'pct_drafted': 'y_act'})
 
-df_train = df[df.week < set_week].reset_index(drop=True)
-df_test = df[df.week >= set_week].reset_index(drop=True)
+for c in ['pos', 'practice_status', 'game_status', 'practice_game']:
+    df = pd.concat([df, pd.get_dummies(df[c], drop_first=True)], axis=1).drop(c, axis=1)
+
+df, cv_time_input, train_time_split = create_game_date(df, val_year_min, val_week_min, year_week_to_date)
+
+df_train = df[df.game_date < train_time_split].reset_index(drop=True)
+df_test = df[df.game_date >= train_time_split].reset_index(drop=True)
 
 skm = SciKitModel(df_train)
-X, y = skm.Xy_split('pct_drafted', to_drop=['player', 'team'])
+X, y = skm.Xy_split('y_act', to_drop=['player', 'team'])
 
 skm_test = SciKitModel(df_test)
-X_test, y_test = skm_test.Xy_split('pct_drafted', to_drop=['player', 'team'])
+X_test, y_test = skm_test.Xy_split('y_act', to_drop=['player', 'team'])
 
 val_predict = {}
 test_predict = {}
-time_split = 4
 for alpha in [0.01, 0.16, 0.84, 0.99]:
-    print(f'Running alpha {int(alpha*100)}')
-    val_predict, test_predict = run_model_alpha(val_predict, test_predict, alpha, time_split)
+    print(f'\n===============Running alpha {int(alpha*100)}\n================')
+    val_predict, test_predict = run_model_alpha(val_predict, test_predict, alpha, cv_time_input)
 
-val_predict, test_predict = run_model_mean(val_predict, test_predict, time_split)
+#%%
+# val_predict, test_predict = run_model_mean(val_predict, test_predict, time_split)
 
 
-val_df = pd.DataFrame(val_predict, index=range(len(val_predict['MeanPred'])))
-val_labels = df_train.loc[df_train.week >= time_split, ['player', 'week', 'year', 'pct_drafted']].reset_index(drop=True)
-val_df = pd.concat([val_labels, val_df], axis=1)
-val_df['PredDiff'] = val_df.pct_drafted - val_df.MeanPred
-val_df = val_df.drop('pct_drafted', axis=1)
+i = 0
+for k, v in val_predict.items():
+    if i==0: val_df = v.rename(columns={'pred': k})
+    else: val_df = pd.merge(val_df, v.rename(columns={'pred': k}), on=['player', 'team', 'week', 'year', 'y_act'])
+    i+=1
+val_df[val_df.y_act >= val_df.Perc84]
 
-test_df = pd.DataFrame(test_predict, index=range(len(test_predict['MeanPred'])))
-test_labels = df_test[['player', 'week', 'year']].reset_index(drop=True)
-test_df = pd.concat([test_labels, test_df], axis=1)
+# test_df = pd.DataFrame(test_predict, index=range(len(test_predict['MeanPred'])))
+# test_labels = df_test[['player', 'week', 'year']].reset_index(drop=True)
+# test_df = pd.concat([test_labels, test_df], axis=1)
+
+# %%

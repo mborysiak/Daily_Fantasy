@@ -335,25 +335,6 @@ def best_average_models(scores, final_models, stack_val_pred, predictions, use_s
     return best_val, best_predictions
 
 
-def spline_std_max(output, splines, set_pos, week, year, sd_cols, max_cols):
-
-    # pull actual stats, rolling stats, and projections
-    actual_stats = pull_actual_stats(set_pos, week, year)
-    stats = rolling_max_std(actual_stats)
-    recent = recent_roll_stats(stats)
-
-    output = pd.merge(output, recent, on='player', how='left')
-    output.roll_std = output.roll_std.fillna(recent.roll_std.median())
-    output.roll_max = output.roll_max.fillna(recent.roll_std.median())
-    
-    output = create_sd_max_metrics(output, sd_cols, max_cols)
-
-    output['std_dev'] = splines[set_pos][0](output.sd_metric)
-    output['max_score'] = splines[set_pos][1](output.max_metric)
-
-    return output
-
-
 def get_quantile_sd(output):
     
     for alpha in [5, 16, 84, 95]:
@@ -368,39 +349,6 @@ def get_quantile_sd(output):
     ratio = (3.4*output.std_dev + output.pred_fp_per_game) / (1.96*output.std_dev + output.pred_fp_per_game)
     output['max_score'] = output.perc95 * ratio
     output['min_score'] = output.perc5 / ratio
-
-    return output
-
-
-def create_output(output_start, predictions, splines, sd_cols, max_cols):
-
-    output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points']].copy()
-    output['pred_fp_per_game'] = predictions.mean(axis=1)
-
-    if 'spline' in std_dev_type and 'quantile' in std_dev_type:
-        output = spline_std_max(output, splines, set_pos, set_week, set_year, sd_cols, max_cols)
-        output['min_score'] = df_train.y_act.min()
-        output = output.rename(columns={'std_dev': 'std_dev_sp', 
-                                        'max_score': 'max_score_sp', 
-                                        'min_score': 'min_score_sp'})
-        output = get_quantile_sd(output)
-        output['std_dev'] = (output.std_dev + output.std_dev_sp) / 2
-        output['min_score'] = (output.min_score + output.min_score_sp) / 2
-        output['max_score'] = (output.max_score + output.max_score_sp) / 2
-
-    elif 'spline' in std_dev_type:
-        output = spline_std_max(output, splines, set_pos, set_week, set_year, sd_cols, max_cols)
-        output['min_score'] = df_train.y_act.min()
-
-    elif 'quantile' in std_dev_type:
-        output = get_quantile_sd(output)
-
-    if 'pred' in std_dev_type and 'spline' in std_dev_type:
-        output['pred_fp_per_game'] = predictions.mean(axis=1)
-    
-    output = output.sort_values(by='dk_salary', ascending=False)
-    output['dk_rank'] = range(len(output))
-    output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
 
     return output
 
@@ -464,16 +412,15 @@ met = 'y_act'
 show_plots = True
 
 # set the model version
-set_weeks = [18, 18]
+set_weeks = [18]
 pred_versions = [
                  'standard_proba_sera_brier_lowsample',
-                  'standard_proba_sera_brier_lowsample'
                  ]
 ensemble_versions = [
                      'no_weight_yes_kbest_sera',
-                     'no_weight_no_kbest_randsample_sera'
                      ]
-std_dev_types = ['spline_pred_actuals', 'spline']
+
+std_dev_types = ['spline_pred_actuals']
 
 
 sample_weight_models = {'adp': False,
@@ -491,7 +438,8 @@ sample_weight_models = {'adp': False,
 sd_cols_choice = {
     'spline': ['fantasyPoints', 'ProjPts', 'projected_points', 'roll_std'],
     'spline_pred': ['pred_fp_per_game'],
-    'spline_pred_actuals': ['pred_fp_per_game', 'roll_std']
+    'spline_pred_actuals': ['pred_fp_per_game', 'roll_std'],
+    'spline_quantile': ['']
 }
 
 max_cols_choice = {
@@ -540,7 +488,6 @@ for set_week, vers, ensemble_vers, std_dev_type in zip(set_weeks, pred_versions,
 
             #================================================================================================================================
 
-
             #==========
             # Pull and clean compiled data
             #==========
@@ -549,90 +496,134 @@ for set_week, vers, ensemble_vers, std_dev_type in zip(set_weeks, pred_versions,
             df, cv_time_input, train_time_split = create_game_date(df)
             df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
 
-            #------------
-            # Make the Class Predictions
-            #------------
+            if 'quantile' in std_dev_type:
 
-            pred_class, actual_class, models_class, scores_class, full_hold_class = load_all_pickles(model_output_path, 'class')
-            X_predict_class = get_class_predictions(df, models_class)
-            X_stack_class, _ = X_y_stack('class', full_hold_class, pred_class, actual_class)
+                #------------
+                # Make the Class Predictions
+                #------------
 
-            #------------
-            # Get Regression Data
-            #------------
+                pred_class, actual_class, models_class, scores_class, full_hold_class = load_all_pickles(model_output_path, 'class')
+                X_predict_class = get_class_predictions(df, models_class)
+                X_stack_class, _ = X_y_stack('class', full_hold_class, pred_class, actual_class)
 
-            # get the X and y values for stack training for the current metric
-            pred, actual, models, scores, full_hold_reg = load_all_pickles(model_output_path, 'reg')
-            X_stack, y_stack = X_y_stack('reg', full_hold_reg, pred, actual)
-            X_stack = pd.concat([X_stack, X_stack_class], axis=1)
+                #------------
+                # Get Regression Data
+                #------------
 
-            #------------
-            # Make the Quantile Predictions
-            #------------
-            
-            try:
-                pred_quant, actual_quant, models_quant, scores_quant, full_hold_quant = load_all_pickles(model_output_path, 'quant')
-                X_predict_quant = get_quant_predictions(df_train, df_predict, models_quant)
-                X_stack_quant, _ = X_y_stack('quant', full_hold_quant, pred_quant, actual_quant)
-                X_stack = pd.concat([X_stack, X_stack_quant], axis=1)
-            except:
-                print('No Quantile Data Available')
-                X_stack_quant = None
-                X_predict_quant = None
+                # get the X and y values for stack training for the current metric
+                pred, actual, models, scores, full_hold_reg = load_all_pickles(model_output_path, 'reg')
+                X_stack, y_stack = X_y_stack('reg', full_hold_reg, pred, actual)
+                X_stack = pd.concat([X_stack, X_stack_class], axis=1)
 
-
-            best_models = []; stack_val_pred = pd.DataFrame(); scores = []
-            final_models = ['ridge', 'lasso', 'bridge','lgbm', 'xgb', 'rf', 'gbm']
-            skm_stack = SciKitModel(df_train, model_obj='reg')
-
-            i = 0
-            for final_m in final_models:
-
-                print(f'\n{final_m}')
-                best_model, stack_scores, stack_pred = optimize_reg_model(final_m, skm_stack, X_stack, y_stack, rs=(i+7)*19+(i*12)+6)
+                #------------
+                # Make the Quantile Predictions
+                #------------
                 
-                best_models.append(best_model)
-                scores.append(stack_scores['stack_score'])
-                stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
-                i+=1
+                try:
+                    pred_quant, actual_quant, models_quant, scores_quant, full_hold_quant = load_all_pickles(model_output_path, 'quant')
+                    X_predict_quant = get_quant_predictions(df_train, df_predict, models_quant)
+                    X_stack_quant, _ = X_y_stack('quant', full_hold_quant, pred_quant, actual_quant)
+                    X_stack = pd.concat([X_stack, X_stack_quant], axis=1)
+                except:
+                    print('No Quantile Data Available')
+                    X_stack_quant = None
+                    X_predict_quant = None
+#%%
+            # pull in the predictions from old runs
+            old_predictions = dm.read(f'''SELECT * 
+                                           FROM Model_Predictions 
+                                           WHERE version='{vers}'
+                                                 AND week={set_week}
+                                                 AND year={set_year}
+                                                 AND ensemble_vers='{ensemble_vers}'
+                                                 AND pos='{set_pos}'
+                                                 AND model_type='{model_type}'
+                                                 AND std_dev_type='spline'
+                                            ''', 'Simulation')
 
-            # get the final output:
-            X_full, y_full = skm_stack.Xy_split(y_metric='y_act', to_drop=drop_cols)
+            best_predictions = old_predictions[['player', 'pred_fp_per_game']]
+            output_start = pd.merge(output_start, best_predictions, on='player')
+            best_predictions = output_start[['pred_fp_per_game']]
+            output_start = output_start.drop('pred_fp_per_game', axis=1)
 
-            X_predict = get_reg_predict_features(models, X_full, y_full)
-            X_predict = pd.concat([X_predict, X_predict_class], axis=1)
-            try: X_predict = pd.concat([X_predict, X_predict_quant], axis=1)
-            except: print('No Quantile Data Available')
+#%%
 
-            predictions = stack_predictions(X_predict, best_models, final_models)
+def get_rolling_stats(output, set_pos, week, year):
 
-            #------------
-            # Scatter and Metrics for Overall Results
-            #------------
+    # pull actual stats, rolling stats, and projections
+    actual_stats = pull_actual_stats(set_pos, week, year)
+    stats = rolling_max_std(actual_stats)
+    recent = recent_roll_stats(stats)
 
-            print('\nShowing Ensemble\n===============\n')
-            
-            best_val, best_predictions = best_average_models(scores, final_models, stack_val_pred, predictions, 
-                                                            use_sample_weight=sample_weight_models['ridge'])
+    output = pd.merge(output, recent, on='player', how='left')
+    output.roll_std = output.roll_std.fillna(recent.roll_std.median())
+    output.roll_max = output.roll_max.fillna(recent.roll_std.median())
 
-            if show_plots:
-                show_scatter_plot(best_val.mean(axis=1), stack_pred['y'], r2=True)
-                show_top_predictions(best_val.mean(axis=1), stack_pred['y'], r2=True)
+    return output
 
-            #===================
-            # Create Outputs
-            #===================
 
-            output = create_output(output_start, best_predictions, splines, sd_cols, max_cols)
-            try:  
-                output = add_actual(output)
-                display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'max_score']])
-                show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
-                output = output.drop('actual_pts', axis=1)
-            except:
-                display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'max_score']])
-            
-            save_output_to_db(output)
+def spline_std_max(df, splines, set_pos, sd_cols, max_cols):
+
+    df = create_sd_max_metrics(df, sd_cols, max_cols)
+
+    df['std_dev'] = splines[set_pos][0](df.sd_metric)
+    df['max_score'] = splines[set_pos][1](df.max_metric)
+
+    return df
+
+
+def get_std_dev_features(output_start, predictions):
+
+    output = output_start[['player', 'dk_salary', 'fantasyPoints', 'ProjPts', 'projected_points']].copy()
+    output['pred_fp_per_game'] = predictions.mean(axis=1)
+    output = get_rolling_stats(output, set_pos, set_week, set_year)
+
+    return output
+
+std_dev_features = get_std_dev_features(output_start, best_predictions)
+spline_std_max(std_dev_features, splines, set_pos, sd_cols, max_cols)
+
+
+# if 'spline' in std_dev_type and 'quantile' in std_dev_type:
+    #     output = spline_std_max(output, splines, set_pos, set_week, set_year, sd_cols, max_cols)
+    #     output['min_score'] = df_train.y_act.min()
+    #     output = output.rename(columns={'std_dev': 'std_dev_sp', 
+    #                                     'max_score': 'max_score_sp', 
+    #                                     'min_score': 'min_score_sp'})
+    #     output = get_quantile_sd(output)
+    #     output['std_dev'] = (output.std_dev + output.std_dev_sp) / 2
+    #     output['min_score'] = (output.min_score + output.min_score_sp) / 2
+    #     output['max_score'] = (output.max_score + output.max_score_sp) / 2
+
+    # elif 'spline' in std_dev_type:
+    #     output = spline_std_max(output, splines, set_pos, set_week, set_year, sd_cols, max_cols)
+    #     output['min_score'] = df_train.y_act.min()
+
+    # elif 'quantile' in std_dev_type:
+    #     output = get_quantile_sd(output)
+
+    # if 'pred' in std_dev_type and 'spline' in std_dev_type:
+    #     output['pred_fp_per_game'] = predictions.mean(axis=1)
+    
+    # output = output.sort_values(by='dk_salary', ascending=False)
+    # output['dk_rank'] = range(len(output))
+    # output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
+
+#%%
+#===================
+# Create Outputs
+#===================
+
+output = create_output(output_start, best_predictions, splines, sd_cols, max_cols)
+try:  
+    output = add_actual(output)
+    display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'max_score']])
+    show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
+    output = output.drop('actual_pts', axis=1)
+except:
+    display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'max_score']])
+
+# save_output_to_db(output)
 
 
 #%%

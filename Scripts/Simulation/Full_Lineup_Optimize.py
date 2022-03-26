@@ -14,22 +14,30 @@ dm = DataManage(db_path)
 #===============
 
 # set the model version
-weeks = [ 15, 15]
+weeks = [4, 4, 4]
 pred_versions = [
                  'standard_proba_sera_brier_lowsample',
-                 'standard']
+                  'standard_proba_sera_brier_lowsample',
+                  'standard'
+                 ]
 ensemble_versions = [
-                     'no_weight_yes_kbest',
-                     'no_weight_yes_kbest']
+                     'no_weight_yes_kbest_sera',
+                      'no_weight_no_kbest_randsample_sera',
+                      'no_weight_yes_kbest'
+                     ]
+std_devs = [
+            'spline',
+            'spline',
+            'bridge'
+           ]
 
-for week, pred_vers, ensemble_vers in zip(weeks, pred_versions, ensemble_versions):
+iter_cats = zip(weeks, pred_versions, ensemble_versions, std_devs)
+for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
     year = 2021
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
     num_iters = 100
-
-    std_dev_type = 'spline'
     TOTAL_LINEUPS = 10
 
     print(f'\nWeek {week} PredVer: {pred_vers} EnsVer: {ensemble_vers} SDType:{std_dev_type}\n===============\n')
@@ -304,6 +312,7 @@ for week, pred_vers, ensemble_vers in zip(weeks, pred_versions, ensemble_version
 # df.loc[df.std_dev_type.str.contains('quantile'), 'std_quantile'] = 1
 
 # df['min_best_models'] = 1
+
 
 # dm.write_to_db(df, 'Results', 'Winnings_Optimize', 'replace')
 

@@ -41,7 +41,7 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2021
-set_week = 17
+set_week = 4
 # set_week = int(sys.argv[1])
 
 # model_type = 'full_model'

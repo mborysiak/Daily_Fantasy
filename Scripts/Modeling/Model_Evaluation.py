@@ -193,8 +193,8 @@ X = one_hot(X)
 y = df.total_winnings
 
 # m = Ridge(alpha=100)
-# m = RandomForestRegressor(n_estimators=100, max_depth=3, min_samples_leaf=2)
-m = LGBMRegressor(n_estimators=25, max_depth=10, min_samples_leaf=5)
+# m = RandomForestRegressor(n_estimators=250, max_depth=10, min_samples_leaf=10, n_jobs=-1)
+m = LGBMRegressor(n_estimators=50, max_depth=15, min_samples_leaf=10, n_jobs=-1)
 
 if type(m) == sklearn.linear_model._ridge.Ridge:
     sc = StandardScaler()
@@ -267,12 +267,13 @@ except:
 #==================================================================
 
 reg_or_class = 'reg'
-model_type = 'ridge'
+model_type = 'knn'
 
 df = dm.read(f'''SELECT * 
                  FROM {reg_or_class}_{model_type}
-                 WHERE scores < 200''', 'Results')
-df = df.drop(['model'], axis=1)
+                 WHERE scores < 200
+                       AND pos='TE' ''', 'Results')
+df = df.drop(['model'], axis=1).dropna()
 
 if reg_or_class == 'reg':
     df['input_features'] = df.feature_union__k_best__k + df.feature_union__agglomeration__n_clusters
@@ -284,6 +285,8 @@ else:
     df.loc[df.k_best_c__k < df.input_features, 'k_best_c__k'] = df.input_features
     # df.select_perc_c__percentile = df.select_perc_c__percentile.fillna(100)
 
+if model_type == 'knn':
+    df = pd.concat([df, pd.get_dummies(df.knn__weights), pd.get_dummies(df.knn__algorithm)], axis=1).drop(['knn__weights', 'knn__algorithm'], axis=1)
 
 df = df.drop([ 'week'], axis=1)
 
@@ -300,9 +303,9 @@ X = one_hot(df)
 X = X.drop('scores', axis=1)
 y = df.scores
 
-# m = Ridge(alpha=100)
+m = Ridge(alpha=100)
 # m = RandomForestRegressor(n_estimators=100, max_depth=3, min_samples_leaf=2)
-m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=1)
+# m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=1)
 
 if type(m) == sklearn.linear_model._ridge.Ridge:
     sc = StandardScaler()
