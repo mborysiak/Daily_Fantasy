@@ -85,7 +85,7 @@ def train_predict_split(df, train_time_split, cv_time_input):
 
 # set year to analyze
 set_year = 2021
-set_week = 10
+set_week = 17
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -111,15 +111,14 @@ df, drop_cols = load_data(model_type, set_pos)
 df, cv_time_input, train_time_split = create_game_date(df)
 df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
 
+df_train['y_act'] = ( df_train.dk_salary / (df_train.y_act+2.020403))
+
 skm = SciKitModel(df_train, model_obj='reg')
 X_all, y = skm.Xy_split('y_act', drop_cols)
 
 X = X_all.sample(frac=1, axis=1)
 if 'game_date' not in X.columns:
     X['game_date'] = X_all.game_date
-
-
-# y = y - X[['fantasyPoints', 'projected_points']].mean(axis=1)
 
 #------------
 # Get Regression Data
@@ -130,7 +129,7 @@ from sklearn.pipeline import Pipeline
 # set up the model pipe and get the default search parameters
 pipe = skm.model_pipe([skm.piece('std_scale'), 
                        skm.piece('k_best'),
-                       skm.piece('lgbm')])
+                       skm.piece('xgb')])
 
 # set params
 params = skm.default_params(pipe, 'rand')
@@ -144,6 +143,8 @@ best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_i
                                                         bayes_rand='custom_rand',
                                                         sample_weight=False,
                                                         random_seed=1234)
+
+oof_data['full_hold'].plot.scatter(x='pred', y='y_act')
 
 #%%
 m = best_models[1]
@@ -179,10 +180,11 @@ X = df[['adjust_pos_counts', 'drop_player_multiple',  'drop_team_frac', 'top_n_c
         'week', 'covar_type', 'full_model_rel_weight', 'min_player_same_team', 'num_iters',
         'pred_proba', 'pred_sera', 'pred_brier', 'pred_lowsample', 
         'ens_sample_weights', 'ens_kbest', 'ens_randsample', 'ens_sera', 
-        'std_spline', 'std_quantile']]
+        'std_dev_type',
+        'std_spline', 'std_quantile', 'std_experts', 'std_actuals', 'std_splquantile', 'std_predictions']]
 
 def one_hot(X):
-    for c in ['week', 'covar_type']:
+    for c in ['week', 'covar_type', 'std_dev_type']:
         X = pd.concat([X, pd.get_dummies(X[c], prefix=c, drop_first=True)], axis=1)
         if c!='week':
             X = X.drop(c, axis=1)
@@ -190,11 +192,11 @@ def one_hot(X):
 
 
 X = one_hot(X)
-y = df.total_winnings
+y = df.max_winnings
 
 # m = Ridge(alpha=100)
 # m = RandomForestRegressor(n_estimators=250, max_depth=10, min_samples_leaf=10, n_jobs=-1)
-m = LGBMRegressor(n_estimators=50, max_depth=15, min_samples_leaf=10, n_jobs=-1)
+m = LGBMRegressor(n_estimators=100, max_depth=10, min_samples_leaf=5, n_jobs=-1)
 
 if type(m) == sklearn.linear_model._ridge.Ridge:
     sc = StandardScaler()

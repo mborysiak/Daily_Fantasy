@@ -325,25 +325,51 @@ set_year = 2021
 covar_type = 'team_points'
 
 i = 0
-# set the model version
-weeks = [4, 4, 4]
-pred_versions = [
-                 'standard_proba_sera_brier_lowsample',
-                  'standard_proba_sera_brier_lowsample',
-                  'standard'
-                 ]
-ensemble_versions = [
-                     'no_weight_yes_kbest_sera',
-                      'no_weight_no_kbest_randsample_sera',
-                      'no_weight_yes_kbest'
-                     ]
-std_devs = [
-            'spline',
-            'spline',
-            'bridge'
-           ]
 
-iter_cats = zip(weeks, pred_versions, ensemble_versions, std_devs)
+# set the model version
+set_weeks = [
+            1, 1,
+            2, 2,
+            3, 3,
+            6, 7, 8
+
+        ]
+pred_versions = [
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier'
+]
+ensemble_versions = [
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_no_kbest_randsample_sera'
+ ]
+
+std_dev_types = [
+                'spline',
+                'spline_actuals',
+                'spline',
+                'spline_actuals',
+                'spline',
+                'spline_actuals',
+                'spline_actuals',
+                'spline_actuals',
+                'spline_actuals'
+                 ]
+
+iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types)
 for set_week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
     for full_model_rel_weight in [0.2, 1, 5]:

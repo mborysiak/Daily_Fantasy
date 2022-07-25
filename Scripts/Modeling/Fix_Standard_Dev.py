@@ -48,14 +48,20 @@ def pull_actual_stats(pos, week, year):
                   ''', 'FastR')
     return df
     
-def pull_projections(pos):
+def pull_projections(pos, week, year):
 
     if pos == 'Defense':
 
         # pull in the salary and actual results data
-        proj = dm.read('''SELECT team player, team, week, year, projected_points
+        proj = dm.read(f'''SELECT team player, team, week, year, projected_points
                             FROM FantasyPros
                             WHERE pos='DST'
+                                  AND year >= 2020
+                                  AND (
+                                        (week < {week} AND year = {year})
+                                        OR 
+                                        (year < {year})
+                                    )
                                    ''', 'Pre_PlayerData')
 
         proj_2 = dm.read('''SELECT offteam player, offTeam team, week, year, fantasyPoints, `Proj Pts` ProjPts 
@@ -67,7 +73,7 @@ def pull_projections(pos):
     
     else:
         # pull in the salary and actual results data
-        proj = dm.read('''SELECT player, offTeam team, week, year, projected_points, fantasyPoints, ProjPts
+        proj = dm.read(f'''SELECT player, offTeam team, week, year, projected_points, fantasyPoints, ProjPts
                             FROM PFF_Proj_Ranks
                             JOIN (SELECT player, team offTeam, week, year, projected_points 
                                   FROM FantasyPros)
@@ -75,6 +81,12 @@ def pull_projections(pos):
                             JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts 
                                   FROM PFF_Expert_Ranks)
                                   USING (player, offTeam, week, year)
+                            WHERE year >= 2020
+                                  AND (
+                                        (week < {week} AND year = {year})
+                                        OR 
+                                        (year < {year})
+                                    )
                             ''', 'Pre_PlayerData')
 
         if pos=='QB':
@@ -101,6 +113,23 @@ def model_predictions(pos, week, year):
                         ''', 'Simulation')
 
     return df
+
+
+def quantile_predictions(pos, week, year):
+    df = dm.read(f'''SELECT player, week, year, AVG(perc84) perc84, AVG(perc95) perc95
+                        FROM Pred_Quantiles
+                        WHERE year >= 2020
+                            AND (
+                                    (week < {week} AND year = {year})
+                                    OR 
+                                    (year < {year})
+                                    )
+                            AND pos='{pos}'
+                            AND player!='Ryan Griffin'
+                        GROUP BY player, week, year
+                            ''', 'Simulation')
+    return df
+
 
 def rolling_max_std(df):
 
@@ -139,13 +168,16 @@ def get_std_splines(pos, week, year, sd_cols, max_cols, show_plot=False, k=2, s=
     actual_stats = pull_actual_stats(pos, week, year)
     stats = rolling_max_std(actual_stats)
     
-    if 'pred_fp_per_game' in sd_cols:
-        proj = model_predictions(pos, week, year)
-    else:
-        proj = pull_projections(pos)
-
-    # join together and calculate sd and max metrics
-    df = pd.merge(proj, stats, on=['player', 'week', 'year'])
+    model_proj = model_predictions(pos, week, year)
+    expert_proj = pull_projections(pos, week, year)
+    quant_proj = quantile_predictions(pos, week, year)
+    proj = pd.merge(expert_proj, model_proj, on=['player', 'week', 'year'], how='left')
+    proj = pd.merge(proj, quant_proj, on=['player', 'week', 'year'], how='left')
+    
+    # join together and remove nulls rows
+    df = pd.merge(stats, proj, on=['player', 'week', 'year'], how='left')
+    all_cols = list(set(sd_cols + max_cols  + ['player', 'week', 'year', 'y_act']))
+    df = df[all_cols].dropna().reset_index(drop=True)
 
     # calculate sd and max metrics
     df = create_sd_max_metrics(df, sd_cols, max_cols)
@@ -190,3 +222,11 @@ def get_std_splines(pos, week, year, sd_cols, max_cols, show_plot=False, k=2, s=
             
     return splines['std_dev'], splines['perc_99'] 
 
+
+# %%
+
+# pos='QB'
+# sd_cols = ['fantasyPoints', 'ProjPts', 'projected_points', 'pred_fp_per_game', 'roll_max']
+# max_cols = ['fantasyPoints', 'ProjPts', 'projected_points', 'roll_std']
+
+# get_std_splines('QB', 10, 2021, sd_cols, max_cols, show_plot=True, k=2, s=2000)

@@ -538,13 +538,19 @@ class FootballSimulation:
 # db_path = f'{root_path}/Data/Databases/'
 # dm = DataManage(db_path)
 
-# week = 13
+# pred_vers = 'standard_proba_sera_brier_lowsample'
+# ens_vers = 'no_weight_yes_kbest_sera'
+# std_dev_type = 'spline_proj_only'
+# use_covar=False
+# week = 18
 # year = 2021
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 # num_iters = 200
 
-# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, use_covar=False)
+# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
+#                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
+#                          full_model_rel_weight=5, covar_type='no_covar', use_covar=use_covar)
 # min_players_same_team = 'Auto'
 # set_max_team = None
 # to_add = []

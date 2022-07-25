@@ -464,16 +464,18 @@ met = 'y_act'
 show_plots = True
 
 # set the model version
-set_weeks = [18, 18]
+set_weeks = [3, 2, 1]
 pred_versions = [
                  'standard_proba_sera_brier_lowsample',
+                  'standard_proba_sera_brier_lowsample',
                   'standard_proba_sera_brier_lowsample'
                  ]
 ensemble_versions = [
                      'no_weight_yes_kbest_sera',
-                     'no_weight_no_kbest_randsample_sera'
+                     'no_weight_yes_kbest_sera',
+                     'no_weight_yes_kbest_sera',
                      ]
-std_dev_types = ['spline_pred_actuals', 'spline']
+std_dev_types = ['spline', 'spline', 'spline']
 
 
 sample_weight_models = {'adp': False,
@@ -507,7 +509,7 @@ for set_week, vers, ensemble_vers, std_dev_type in zip(set_weeks, pred_versions,
     max_cols = max_cols_choice[std_dev_type]
 
     splines = {}    
-    for k, p in zip([1, 2, 2, 2, 2], ['QB', 'RB', 'WR', 'TE', 'Defense']):
+    for k, p in zip([1.5, 2, 2, 1.5, 1.5], ['QB', 'RB', 'WR', 'TE', 'Defense']):
         print(f'Checking Splines for {p}')
         spl_sd, spl_perc = get_std_splines(p, set_week, set_year, sd_cols, max_cols, show_plot=show_plots, k=k)
         splines[p] = [spl_sd, spl_perc]

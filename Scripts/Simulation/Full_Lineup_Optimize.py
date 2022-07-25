@@ -14,24 +14,44 @@ dm = DataManage(db_path)
 #===============
 
 # set the model version
-weeks = [4, 4, 4]
-pred_versions = [
-                 'standard_proba_sera_brier_lowsample',
-                  'standard_proba_sera_brier_lowsample',
-                  'standard'
-                 ]
-ensemble_versions = [
-                     'no_weight_yes_kbest_sera',
-                      'no_weight_no_kbest_randsample_sera',
-                      'no_weight_yes_kbest'
-                     ]
-std_devs = [
-            'spline',
-            'spline',
-            'bridge'
-           ]
+set_weeks = [
+            2, 2,
+            3, 3,
+            6, 7, 8
 
-iter_cats = zip(weeks, pred_versions, ensemble_versions, std_devs)
+        ]
+pred_versions = [
+
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier'
+]
+ensemble_versions = [
+         
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_no_kbest_randsample_sera'
+ ]
+
+std_dev_types = [
+                'spline',
+                'spline_actuals',
+                'spline',
+                'spline_actuals',
+                'spline_actuals',
+                'spline_actuals',
+                'spline_actuals'
+                 ]
+
+iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types)
 for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
     year = 2021
@@ -253,10 +273,39 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
     output['std_spline'] = 0
     output.loc[output.std_dev_type.str.contains('spline'), 'std_spline'] = 1
 
-    output['std_quantile'] = 0
-    output.loc[output.std_dev_type.str.contains('quantile'), 'std_quantile'] = 1
-
     output['min_best_models'] = 3
+
+    output.loc[output.std_dev_type=='spline', 'std_experts'] = 0.75
+    output.loc[output.std_dev_type=='spline', 'std_actuals'] = 0.25
+
+    output.loc[output.std_dev_type=='spline_actuals', 'std_experts'] = 0.5
+    output.loc[output.std_dev_type=='spline_actuals', 'std_actuals'] = 0.5
+
+    output.loc[output.std_dev_type=='spline_splquant_actuals', 'std_splquantile'] = 0.5
+    output.loc[output.std_dev_type=='spline_splquant_actuals', 'std_actuals'] = 0.5
+
+    output.loc[output.std_dev_type=='spline_pred_actuals', 'std_predictions'] = 0.5
+    output.loc[output.std_dev_type=='spline_pred_actuals', 'std_actuals'] = 0.5
+
+    output.loc[output.std_dev_type=='spline_pred', 'std_predictions'] = 1
+
+    output.loc[output.std_dev_type=='spline_quantile', 'std_splquantile'] = 1
+
+    output.loc[output.std_dev_type=='spline_proj_only', 'std_experts'] = 0.5
+    output.loc[output.std_dev_type=='spline_proj_only', 'std_splquantile'] = 0.33
+    output.loc[output.std_dev_type=='spline_proj_only', 'std_predictions'] = 0.17
+
+    output.loc[output.std_dev_type=='spline_all', 'std_experts'] = 0.33
+    output.loc[output.std_dev_type=='spline_all', 'std_splquantile'] = 0.22
+    output.loc[output.std_dev_type=='spline_all', 'std_predictions'] = 0.11
+    output.loc[output.std_dev_type=='spline_all', 'std_actuals'] = 0.33
+
+    output.loc[output.std_dev_type=='spline_all_no_perc', 'std_experts'] = 0.43
+    output.loc[output.std_dev_type=='spline_all_no_perc', 'std_predictions'] = 0.14
+    output.loc[output.std_dev_type=='spline_all_no_perc', 'std_actuals'] = 0.43
+
+    output.loc[output.std_dev_type=='spline_proj_only_no_perc', 'std_experts'] = 0.75
+    output.loc[output.std_dev_type=='spline_proj_only_no_perc', 'std_predictions'] = 0.25
 
     dm.write_to_db(output, 'Results', 'Winnings_Optimize', 'append')
     dm.write_to_db(lineups, 'Results', 'Lineups_Optimize', 'append')
@@ -274,9 +323,56 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 # db_path = f'{root_path}/Data/Databases/'
 # dm = DataManage(db_path)
 
-
 # df = dm.read('''SELECT * FROM Winnings_Optimize''', 'Results')
-# df.ensemble_vers.unique()
+# df.std_dev_type.unique()
+
+# df['std_spline'] = 0
+# df['std_experts'] = 0
+# df['std_actuals'] = 0
+# df['std_splquantile'] = 0
+# df['std_predictions'] = 0
+
+# df.loc[df.std_dev_type=='spline', 'std_spline'] = 1
+# df.loc[df.std_dev_type=='spline', 'std_experts'] = 0.75
+# df.loc[df.std_dev_type=='spline', 'std_actuals'] = 0.25
+
+# df.loc[df.std_dev_type=='spline_actuals', 'std_spline'] = 1
+# df.loc[df.std_dev_type=='spline_actuals', 'std_experts'] = 0.5
+# df.loc[df.std_dev_type=='spline_actuals', 'std_actuals'] = 0.5
+
+# df.loc[df.std_dev_type=='spline_splquant_actuals', 'std_spline'] = 1
+# df.loc[df.std_dev_type=='spline_splquant_actuals', 'std_splquantile'] = 0.5
+# df.loc[df.std_dev_type=='spline_splquant_actuals', 'std_actuals'] = 0.5
+
+# df.loc[df.std_dev_type=='spline_pred_actuals', 'std_spline'] = 1
+# df.loc[df.std_dev_type=='spline_pred_actuals', 'std_predictions'] = 0.5
+# df.loc[df.std_dev_type=='spline_pred_actuals', 'std_actuals'] = 0.5
+
+# df.loc[df.std_dev_type=='spline_pred', 'std_spline'] = 1
+# df.loc[df.std_dev_type=='spline_pred', 'std_predictions'] = 1
+
+# df.loc[df.std_dev_type=='spline_quantile', 'std_spline'] = 1
+# df.loc[df.std_dev_type=='spline_quantile', 'std_splquantile'] = 1
+
+# df.loc[df.std_dev_type=='spline_proj_only', 'std_spline'] = 1
+# df.loc[df.std_dev_type=='spline_proj_only', 'std_experts'] = 0.5
+# df.loc[df.std_dev_type=='spline_proj_only', 'std_splquantile'] = 0.33
+# df.loc[df.std_dev_type=='spline_proj_only', 'std_predictions'] = 0.17
+
+# df.loc[df.std_dev_type=='spline_all', 'std_spline'] = 1
+# df.loc[df.std_dev_type=='spline_all', 'std_experts'] = 0.33
+# df.loc[df.std_dev_type=='spline_all', 'std_splquantile'] = 0.22
+# df.loc[df.std_dev_type=='spline_all', 'std_predictions'] = 0.11
+# df.loc[df.std_dev_type=='spline_all', 'std_actuals'] = 0.33
+
+# df.loc[df.std_dev_type=='spline_all_no_perc', 'std_spline'] = 1
+# df.loc[df.std_dev_type=='spline_all_no_perc', 'std_experts'] = 0.43
+# df.loc[df.std_dev_type=='spline_all_no_perc', 'std_predictions'] = 0.14
+# df.loc[df.std_dev_type=='spline_all_no_perc', 'std_actuals'] = 0.43
+
+# df.loc[df.std_dev_type=='spline_proj_only_no_perc', 'std_spline'] = 1
+# df.loc[df.std_dev_type=='spline_proj_only_no_perc', 'std_experts'] = 0.75
+# df.loc[df.std_dev_type=='spline_proj_only_no_perc', 'std_predictions'] = 0.25
 
 # df['pred_proba'] = 0
 # df.loc[df.pred_vers.str.contains('proba'), 'pred_proba'] = 1
@@ -310,6 +406,15 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
 # df['std_quantile'] = 0
 # df.loc[df.std_dev_type.str.contains('quantile'), 'std_quantile'] = 1
+
+# df['std_actual'] = 0
+# df.loc[df.std_dev_type.str.contains('actual'), 'std_actual'] = 1
+
+# df['std_pred'] = 0
+# df.loc[df.std_dev_type.str.contains('pred'), 'std_pred'] = 1
+
+# df['splquant'] = 0
+# df.loc[df.std_dev_type.str.contains('splquant'), 'splquant'] = 1
 
 # df['min_best_models'] = 1
 
