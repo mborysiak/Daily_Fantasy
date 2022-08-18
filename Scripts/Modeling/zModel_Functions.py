@@ -74,24 +74,22 @@ def X_y_stack(met, full_hold, pred, actual):
     return X_stack, y_stack
 
 
-def get_quant_predictions(df_train, df_predict, models_quant):
+def get_quant_predictions(df_predict, models, X, y):
 
     # create the full stack pipe with meta estimators followed by stacked model
     X_predict_quant = pd.DataFrame()
-    for alpha in [0.8, 0.95]:
+    for k, ind_models in models.items():
 
-        print(f"\n--------------\nAlpha {alpha}\n--------------\n")
+        predictions = pd.DataFrame()
 
-        skm_quant = SciKitModel(df_train, model_obj='quantile')
-        X_quant_final, y_quant_final = skm_quant.Xy_split(y_metric='y_act', to_drop=['player', 'team', 'pos'])
-        
-        for k, v in models_quant.items():
-            if str(alpha) in k:
-                m = skm_quant.ensemble_pipe(v)
-                m.fit(X_quant_final, y_quant_final)
-                cur_pred = m.predict(df_predict[X_quant_final.columns])
-                cur_pred = pd.Series(cur_pred, name=k)
-                X_predict_quant = pd.concat([X_predict_quant, cur_pred], axis=1)
+        for m in ind_models:
+            m.fit(X, y)
+            cur_pred = m.predict(df_predict[X.columns])
+            predictions = pd.concat([predictions, pd.Series(cur_pred)], axis=1)
+            
+        predictions = predictions.mean(axis=1)
+        predictions = pd.Series(predictions, name=k)
+        X_predict_quant = pd.concat([X_predict_quant, predictions], axis=1)
     
     return X_predict_quant
 
@@ -207,7 +205,7 @@ def get_sd_cols(df_train, df_predict, X, best_models, num_cols=5):
     
     return sd_cols, df_train, df_predict
 
-def assign_sd_max(output, df_predict, sd_df, sd_cols, sd_spline, max_spline):
+def assign_sd_max(output, df_predict, sd_df, sd_cols, sd_spline, max_spline, min_spline):
     
     from sklearn.preprocessing import StandardScaler
 
@@ -220,7 +218,9 @@ def assign_sd_max(output, df_predict, sd_df, sd_cols, sd_spline, max_spline):
 
     pred_sd_max = pd.DataFrame(sc.transform(df_predict[list(sd_cols.keys())])) * list(sd_cols.values())
     pred_sd_max = pred_sd_max.mean(axis=1)
+
     output['std_dev'] = sd_spline(pred_sd_max)
     output['max_score'] = max_spline(pred_sd_max)
-
+    output['min_score'] = min_spline(pred_sd_max)
+    
     return output

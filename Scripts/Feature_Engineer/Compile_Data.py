@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2021
-WEEK = 18
+WEEK = 12
 
 #%%
 import pandas as pd 
@@ -1327,9 +1327,9 @@ def qb_pull(rush_or_pass):
 
     return df
 
-qb_both = qb_pull('')
-# qb_rush = qb_pull('_rush')
-# qb_pass = qb_pull('_pass')
+# qb_both = qb_pull('')
+qb_rush = qb_pull('_rush')
+qb_pass = qb_pull('_pass')
 
 #%%
 for pos in [

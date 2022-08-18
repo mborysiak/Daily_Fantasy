@@ -15,41 +15,19 @@ dm = DataManage(db_path)
 
 # set the model version
 set_weeks = [
-            2, 2,
-            3, 3,
-            6, 7, 8
-
+            12
         ]
 pred_versions = [
-
-                'standard_proba_sera_brier_lowsample',
-                'standard_proba_sera_brier_lowsample',
-                'standard_proba_sera_brier_lowsample',
-                'standard_proba_sera_brier_lowsample',
-                'standard_proba_sera_brier_lowsample',
-                'standard_proba_sera_brier_lowsample',
-                'standard_proba_sera_brier'
+                'fixed_model_clone',
 ]
 ensemble_versions = [
-         
-                    'no_weight_yes_kbest_sera',
-                    'no_weight_yes_kbest_sera',
-                    'no_weight_yes_kbest_sera',
-                    'no_weight_yes_kbest_sera',
-                    'no_weight_yes_kbest_sera',
-                    'no_weight_yes_kbest_sera',
-                    'no_weight_no_kbest_randsample_sera'
+                    'no_weight_yes_kbest'
  ]
 
 std_dev_types = [
-                'spline',
-                'spline_actuals',
-                'spline',
-                'spline_actuals',
-                'spline_actuals',
-                'spline_actuals',
-                'spline_actuals'
+                'spline_enet_coef'
                  ]
+
 
 iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types)
 for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:

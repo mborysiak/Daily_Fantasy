@@ -9,141 +9,34 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 # set the root path and database management object
-root_path = ffgeneral.get_main_path('Daily_Fantasy')
+root_path = ffgeneral.get_main_path('Fantasy_Football')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 # set the root path and database management object
-root_path = ffgeneral.get_main_path('Daily_Fantasy')
+root_path = ffgeneral.get_main_path('Fantasy_Football')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 
+def create_sd_max_metrics(df, metrics):
 
-def create_sd_max_metrics(df, sd_cols, max_cols):
+    sc = StandardScaler()
 
-    df['sd_metric'] = df[sd_cols].mean(axis=1)
-    df['max_metric'] = df[max_cols].mean(axis=1)
-    
-    df = df[[c for c in df.columns if c not in max_cols and c not in sd_cols]]
+    cols = list(metrics.keys())
+    wts = list(metrics.values())
+    sc_metrics = pd.DataFrame(sc.fit_transform(df[cols]), columns=cols) * wts
 
-    return df
+    df['sd_metric'] = sc_metrics.mean(axis=1)
+    df['max_metric'] = sc_metrics.mean(axis=1)
+    df['min_metric'] = sc_metrics.mean(axis=1)
 
-
-def pull_actual_stats(pos, week, year):
-    if pos=='Defense': player = 'defTeam'; team = 'defTeam'
-    else: player = 'player'; team = 'team'
-
-    df = dm.read(f'''SELECT {player} player, {team} team, week, season year, fantasy_pts y_act
-                     FROM {pos}_Stats
-                     WHERE season >= 2020
-                           AND (
-                                (week < {week} AND season = {year})
-                                OR 
-                                (season < {year})
-                                )
-                     ORDER BY {player}, year, week
-                  ''', 'FastR')
-    return df
-    
-def pull_projections(pos, week, year):
-
-    if pos == 'Defense':
-
-        # pull in the salary and actual results data
-        proj = dm.read(f'''SELECT team player, team, week, year, projected_points
-                            FROM FantasyPros
-                            WHERE pos='DST'
-                                  AND year >= 2020
-                                  AND (
-                                        (week < {week} AND year = {year})
-                                        OR 
-                                        (year < {year})
-                                    )
-                                   ''', 'Pre_PlayerData')
-
-        proj_2 = dm.read('''SELECT offteam player, offTeam team, week, year, fantasyPoints, `Proj Pts` ProjPts 
-                            FROM PFF_Expert_Ranks
-                            JOIN (SELECT offteam, week, year, fantasyPoints
-                                  FROM PFF_Proj_Ranks)
-                                  USING (offTeam, week, year)''', 'Pre_TeamData')
-        proj = pd.merge(proj, proj_2, on=['player', 'team', 'week', 'year'])
-    
-    else:
-        # pull in the salary and actual results data
-        proj = dm.read(f'''SELECT player, offTeam team, week, year, projected_points, fantasyPoints, ProjPts
-                            FROM PFF_Proj_Ranks
-                            JOIN (SELECT player, team offTeam, week, year, projected_points 
-                                  FROM FantasyPros)
-                                  USING (player, offTeam, week, year)
-                            JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts 
-                                  FROM PFF_Expert_Ranks)
-                                  USING (player, offTeam, week, year)
-                            WHERE year >= 2020
-                                  AND (
-                                        (week < {week} AND year = {year})
-                                        OR 
-                                        (year < {year})
-                                    )
-                            ''', 'Pre_PlayerData')
-
-        if pos=='QB':
-            proj = proj[(proj.ProjPts > 8) & (proj.projected_points > 8)].reset_index(drop=True)
-
-    return proj
-
-
-def model_predictions(pos, week, year):
-    
-    df = dm.read(f'''SELECT player, week, year, AVG(pred_fp_per_game) pred_fp_per_game
-                     FROM Model_Predictions
-                     WHERE year >= 2020
-                           AND (
-                                (week < {week} AND year = {year})
-                                OR 
-                                (year < {year})
-                                )
-                           AND version LIKE 'standard%'
-                           AND ensemble_vers LIKE 'no_weight%'
-                           AND pos='{pos}'
-                           AND player!='Ryan Griffin'
-                     GROUP BY player, week, year
-                        ''', 'Simulation')
+    df = df[[c for c in df.columns if c not in sc_metrics]]
 
     return df
-
-
-def quantile_predictions(pos, week, year):
-    df = dm.read(f'''SELECT player, week, year, AVG(perc84) perc84, AVG(perc95) perc95
-                        FROM Pred_Quantiles
-                        WHERE year >= 2020
-                            AND (
-                                    (week < {week} AND year = {year})
-                                    OR 
-                                    (year < {year})
-                                    )
-                            AND pos='{pos}'
-                            AND player!='Ryan Griffin'
-                        GROUP BY player, week, year
-                            ''', 'Simulation')
-    return df
-
-
-def rolling_max_std(df):
-
-    df['roll_pts'] = df.y_act
-    df['roll_max'] = df.groupby('player')['roll_pts'].rolling(8, min_periods=1).apply(lambda x: pd.Series(x).nlargest(2).iloc[-1]).values
-    df['roll_mean'] = df.groupby('player')['roll_pts'].rolling(9, min_periods=1).apply(lambda x: pd.Series(x).nlargest(5).iloc[-1]).values
-    df['roll_std'] = df.roll_max - df.roll_mean
-    df = df.drop(['roll_pts', 'roll_mean'], axis=1)
-    return df
-
-def recent_roll_stats(df):
-    most_recent = df.drop_duplicates(subset=['player'], keep='last')
-    most_recent = most_recent[['player', 'roll_max', 'roll_std']]
-    return most_recent
 
 
 def create_groups(df, num_grps):
@@ -156,39 +49,28 @@ def create_groups(df, num_grps):
 
 def show_spline_fit(splines, met, X, y, X_max, y_max):
     print(met)
-    X_pred = list(range(int(X_max[met].min()), int(X_max[met].max()+3), 1))
+    X_pred = list(np.arange(np.min(X.values), np.max(X.values), 0.1))
     plt.scatter(X, y)
     plt.scatter(X_max[met], y_max[met])
     plt.plot(X_pred, splines[met](X_pred), 'g', lw=3)
     plt.show()
 
-def get_std_splines(pos, week, year, sd_cols, max_cols, show_plot=False, k=2, s=2000):
+def get_std_splines(df, metrics, show_plot=False, k=2, s=2000, min_grps_den=100, max_grps_den=60):
     
-    # pull actual stats, rolling stats, and projections
-    actual_stats = pull_actual_stats(pos, week, year)
-    stats = rolling_max_std(actual_stats)
     
-    model_proj = model_predictions(pos, week, year)
-    expert_proj = pull_projections(pos, week, year)
-    quant_proj = quantile_predictions(pos, week, year)
-    proj = pd.merge(expert_proj, model_proj, on=['player', 'week', 'year'], how='left')
-    proj = pd.merge(proj, quant_proj, on=['player', 'week', 'year'], how='left')
-    
-    # join together and remove nulls rows
-    df = pd.merge(stats, proj, on=['player', 'week', 'year'], how='left')
-    all_cols = list(set(sd_cols + max_cols  + ['player', 'week', 'year', 'y_act']))
+    all_cols = list(set(list(metrics.keys()) + ['player', 'year', 'y_act']))
     df = df[all_cols].dropna().reset_index(drop=True)
 
     # calculate sd and max metrics
-    df = create_sd_max_metrics(df, sd_cols, max_cols)
+    df = create_sd_max_metrics(df, metrics)
 
     # create the groups    
     df = df.dropna()
-    min_grps = int(df.shape[0] / 100)
-    max_grps = int(df.shape[0] / 60)
+    min_grps = int(df.shape[0] / min_grps_den)
+    max_grps = int(df.shape[0] / max_grps_den)
 
     splines = {}; X_max = {}; y_max = {}; max_r2 = {}
-    for x_val, met in zip(['sd_metric', 'max_metric'], ['std_dev', 'perc_99']):
+    for x_val, met in zip(['sd_metric', 'max_metric', 'min_metric'], ['std_dev', 'perc_99', 'perc_1']):
         
         df = df.sort_values(by=x_val).reset_index(drop=True)
 
@@ -199,11 +81,12 @@ def get_std_splines(pos, week, year, sd_cols, max_cols, show_plot=False, k=2, s=
             df = create_groups(df, num_grps)
 
             # calculate the standard deviation and max of each group
-            Xy = df.groupby('grps').agg({'y_act': [np.std, lambda x: np.percentile(x, 99)],
+            Xy = df.groupby('grps').agg({'y_act': [np.std, lambda x: np.percentile(x, 99), lambda x: np.percentile(x, 1)],
                                          'sd_metric': 'mean',
                                          'max_metric': 'mean',
+                                         'min_metric': 'mean',
                                          'player': 'count'})
-            Xy.columns = ['std_dev', 'perc_99', 'sd_metric', 'max_metric', 'player_cnts']
+            Xy.columns = ['std_dev', 'perc_99', 'perc_1', 'sd_metric', 'max_metric', 'min_metric', 'player_cnts']
 
             # fit a spline to the group datasets
             X = Xy[[x_val]]
@@ -220,13 +103,4 @@ def get_std_splines(pos, week, year, sd_cols, max_cols, show_plot=False, k=2, s=
         if show_plot:
             show_spline_fit(splines, met, X, y, X_max, y_max)
             
-    return splines['std_dev'], splines['perc_99'] 
-
-
-# %%
-
-# pos='QB'
-# sd_cols = ['fantasyPoints', 'ProjPts', 'projected_points', 'pred_fp_per_game', 'roll_max']
-# max_cols = ['fantasyPoints', 'ProjPts', 'projected_points', 'roll_std']
-
-# get_std_splines('QB', 10, 2021, sd_cols, max_cols, show_plot=True, k=2, s=2000)
+    return splines['std_dev'], splines['perc_99'], splines['perc_1']

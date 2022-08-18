@@ -55,43 +55,55 @@ run_params = {
     'use_sample_weight': False,
     'opt_type': 'custom_rand',
     'cuts': [33, 80, 95],
-    'met': 'y_act'
+    'met': 'y_act',
+
+    'rush_pass': ''
 }
 
 # set position and model type
-set_pos = 'QB'
+set_pos = 'RB'
 model_type = 'full_model'
 
 # set version and iterations
 vers = 'fixed_model_clone'
 
-pkey = f"{set_pos}_year{run_params['set_year']}_week{run_params['set_week']}_{model_type}{vers}"
-db_output = {
-            'pkey': [], 
-            'set_pos': [], 
-            'set_year': [], 
-            'set_week':[], 
-            'model_type':[],
-            'model': [],
-            'validation_score': [],
-            'test_score': []
-            }
-
-model_output_path = f"{root_path}/Model_Outputs/{run_params['set_year']}/{pkey}/"
-if not os.path.exists(model_output_path): os.makedirs(model_output_path)
-
 #----------------
 # Data Loading
 #----------------
 
+def create_pkey_output_path(set_pos, run_params, model_type, vers):
+
+    pkey = f"{set_pos}_year{run_params['set_year']}_week{run_params['set_week']}_{model_type}{vers}{run_params['rush_pass']}"
+    db_output = {
+                'pkey': [], 
+                'set_pos': [], 
+                'set_year': [], 
+                'set_week':[], 
+                'model_type':[],
+                'model': [],
+                'validation_score': [],
+                'test_score': []
+                }
+
+    model_output_path = f"{root_path}/Model_Outputs/{run_params['set_year']}/{pkey}/"
+    if not os.path.exists(model_output_path): os.makedirs(model_output_path)
+    
+    return pkey, db_output, model_output_path
+
 def load_data(model_type, set_pos, run_params):
 
     # load data and filter down
-    if model_type=='full_model': df = dm.read(f'''SELECT * FROM {set_pos}_Data''', 'Model_Features')
-    elif model_type=='backfill': df = dm.read(f'''SELECT * FROM Backfill WHERE pos='{set_pos}' ''', 'Model_Features')
+    if model_type=='full_model': df = dm.read(f'''SELECT * 
+                                                  FROM {set_pos}_Data{run_params['rush_pass']}
+                                                ''', 'Model_Features')
+    elif model_type=='backfill': df = dm.read(f'''SELECT * 
+                                                  FROM Backfill 
+                                                  WHERE pos='{set_pos}' ''', 'Model_Features')
 
     if df.shape[1]==2000:
-        df2 = dm.read(f'''SELECT * FROM {set_pos}_Data2''', 'Model_Features')
+        df2 = dm.read(f'''SELECT * 
+                          FROM {set_pos}_Data{run_params['rush_pass']}2
+                       ''', 'Model_Features')
         df = pd.concat([df, df2], axis=1)
 
     df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
@@ -177,7 +189,7 @@ def update_output_dict(label, m, suffix, out_dict, oof_data, best_models):
     return out_dict
 
 
-def get_skm(skm_df, model_obj, to_drop=['player', 'team', 'pos']):
+def get_skm(skm_df, model_obj, to_drop):
     
     skm = SciKitModel(skm_df, model_obj=model_obj)
     X, y = skm.Xy_split(y_metric='y_act', to_drop=to_drop)
@@ -227,6 +239,8 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
     elif skm.model_obj == 'quantile':
         pipe = skm.model_pipe([
                                 skm.piece('random_sample'),
+                                skm.piece('std_scale'), 
+                                skm.piece('k_best'), 
                                 skm.piece(m)
                                 ])
         pipe.steps[-1][-1].alpha = alpha
@@ -240,7 +254,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
                                                 ]
     if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
     if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
-    if stack_model: params['k_best__k'] = range(2, 20)
+    if stack_model: params['k_best__k'] = range(2, 40)
 
     return pipe, params
 
@@ -356,18 +370,38 @@ def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores, stack_va
 
     return best_models, scores, stack_val_pred
     
+def create_stack_predict(df_predict, models, X, y, proba=False):
+
+    # create the full stack pipe with meta estimators followed by stacked model
+    X_predict = pd.DataFrame()
+    for k, ind_models in models.items():
+        
+        predictions = pd.DataFrame()
+        for m in ind_models:
+
+            m.fit(X, y)
+            if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
+            else: cur_predict = m.predict(df_predict[X.columns])
+            predictions = pd.concat([predictions, pd.Series(cur_predict)], axis=1)
+            
+        predictions = predictions.mean(axis=1)
+        predictions = pd.Series(predictions, name=k)
+        X_predict = pd.concat([X_predict, predictions], axis=1)
+
+    return X_predict
 
 def get_stack_predict_data(df_train, df_predict, df, run_params, 
                            models_reg, models_class, models_quant):
 
-    _, X, y = get_skm(df_train, 'reg')
-    X_predict = mf.get_reg_predict_features(df_predict, models_reg, X, y)
-    X_predict_quant = mf.get_quant_predictions(df_train, df_predict, models_quant)
+    _, X, y = get_skm(df_train, 'reg', to_drop=run_params['drop_cols'])
+    X_predict = create_stack_predict(df_predict, models_reg, X, y)
+    X_predict_quant = create_stack_predict(df_predict, models_quant, X, y)
     X_predict = pd.concat([X_predict, X_predict_quant], axis=1)
 
     for cut in run_params['cuts']:
         df_train_class, df_predict_class = get_class_data(df, cut, run_params)
-        X_predict_class = mf.get_class_predictions(models_class, df_train_class, df_predict_class)
+        _, X, y = get_skm(df_train_class, 'class', to_drop=run_params['drop_cols'])
+        X_predict_class = create_stack_predict(df_predict_class, models_class, X, y, proba=True)
         X_predict_class = X_predict_class[[c for c in X_predict_class.columns if str(cut) in c]]
         X_predict = pd.concat([X_predict, X_predict_class], axis=1)
 
@@ -376,7 +410,7 @@ def get_stack_predict_data(df_train, df_predict, df, run_params,
 
 def average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, predictions, show_plot=True):
     
-    skm_stack, _, _ = get_skm(df_train, 'reg')
+    skm_stack, _, _ = get_skm(df_train, 'reg', to_drop=[])
     best_val, best_predictions = mf.best_average_models(skm_stack, scores, final_models, y_stack, stack_val_pred, predictions)
     
     if show_plot:
@@ -425,8 +459,10 @@ def create_output(output_start, predictions):
 #     return output
 
 #%%
+for set_pos, rush_pass in zip(['QB'],
+                              [ '']):
 
-for set_pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+    run_params['rush_pass'] = rush_pass
 
     print(f"\n==================\n{set_pos} {model_type} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
 
@@ -435,6 +471,7 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
     #==========
 
     # load data and filter down
+    pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
     df, run_params = load_data(model_type, set_pos, run_params)
     df, run_params = create_game_date(df, run_params)
     df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
@@ -463,33 +500,35 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
 
     # run all other models
     for alph in [0.8, 0.95]:
-        out_quant, _, _ = get_model_output('gbm_q', df_train, 'quantile', out_quant, run_params, i, alpha=alph)
+        out_quant, _, _ = get_model_output('gbm_q', df_train, 'quantile', out_quant, run_params, i=1234, alpha=alph)
     save_output_dict(out_quant, model_output_path, 'quant')
 
-    #------------
-    # Run the Stacking Models and Generate Output
-    #------------
+#%%
+    # #------------
+    # # Run the Stacking Models and Generate Output
+    # #------------
 
-    # get the training data for stacking and prediction data after stacking
-    X_stack, y_stack, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path)
-    X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, 
-                                    models_reg, models_class, models_quant)
+    # # get the training data for stacking and prediction data after stacking
+    # X_stack, y_stack, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path)
+    # X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, 
+    #                                 models_reg, models_class, models_quant)
 
-    # create the stacking models
-    final_models = ['ridge', 'lasso', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm']
-    stack_val_pred = pd.DataFrame(); scores = []; best_models = []
-    for i, fm in enumerate(final_models):
-        best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, scores, stack_val_pred, show_plots=True)
+    # # create the stacking models
+    # final_models = ['ridge', 'lasso', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm']
+    # stack_val_pred = pd.DataFrame(); scores = []; best_models = []
+    # for i, fm in enumerate(final_models):
+    #     best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, scores, stack_val_pred, show_plots=True)
 
-    # get the best stack predictions and average
-    predictions = mf.stack_predictions(X_predict, best_models, final_models)
-    best_val, best_predictions = average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, predictions, show_plot=True)
+    # # get the best stack predictions and average
+    # predictions = mf.stack_predictions(X_predict, best_models, final_models)
+    # best_val, best_predictions = average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, predictions, show_plot=True)
 
-    # create the output and add standard devations / max scores
-    output = create_output(output_start, best_predictions)
-    output
+    # # create the output and add standard devations / max scores
+    # output = create_output(output_start, best_predictions)
+    # output
 
 #%%
+
 # db_output = add_result_db_output('final', final_m, 
 #                                 [stack_scores['adp_score'], stack_scores['stack_score']], 
 #                                 db_output)
@@ -501,3 +540,5 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
 # db_output_pd = db_output_pd.assign(n_iters=n_iters).assign(to_keep=to_keep).assign(val_week=val_week_min).assign(val_year=val_year_min)
 # dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
 # dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
+
+# %%
