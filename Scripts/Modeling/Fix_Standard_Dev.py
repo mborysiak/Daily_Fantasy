@@ -8,16 +8,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 import matplotlib.pyplot as plt
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, mean_squared_error
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.isotonic import IsotonicRegression
 
 # set the root path and database management object
-root_path = ffgeneral.get_main_path('Fantasy_Football')
-db_path = f'{root_path}/Data/Databases/'
-dm = DataManage(db_path)
-
-# set the root path and database management object
-root_path = ffgeneral.get_main_path('Fantasy_Football')
+root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
@@ -47,15 +43,20 @@ def create_groups(df, num_grps):
     df['grps'] = grps[:df_len]
     return df
 
-def show_spline_fit(splines, met, X, y, X_max, y_max):
+def show_spline_fit(m, met, X, y, X_max, y_max, iso_spline):
     print(met)
+    
     X_pred = list(np.arange(np.min(X.values), np.max(X.values), 0.1))
+    
+    if iso_spline=='spline': fitted = m[met](X_pred)
+    elif iso_spline=='iso': fitted = m[met].predict(X_pred)
+    
     plt.scatter(X, y)
     plt.scatter(X_max[met], y_max[met])
-    plt.plot(X_pred, splines[met](X_pred), 'g', lw=3)
+    plt.plot(X_pred, fitted, 'g', lw=3)
     plt.show()
 
-def get_std_splines(df, metrics, show_plot=False, k=2, s=2000, min_grps_den=100, max_grps_den=60):
+def get_std_splines(df, metrics, show_plot=False, k=2, s=2000, min_grps_den=100, max_grps_den=60, iso_spline='spline'):
     
     
     all_cols = list(set(list(metrics.keys()) + ['player', 'year', 'y_act']))
@@ -69,12 +70,12 @@ def get_std_splines(df, metrics, show_plot=False, k=2, s=2000, min_grps_den=100,
     min_grps = int(df.shape[0] / min_grps_den)
     max_grps = int(df.shape[0] / max_grps_den)
 
-    splines = {}; X_max = {}; y_max = {}; max_r2 = {}
+    models = {}; X_max = {}; y_max = {}; max_mse = {}
     for x_val, met in zip(['sd_metric', 'max_metric', 'min_metric'], ['std_dev', 'perc_99', 'perc_1']):
         
         df = df.sort_values(by=x_val).reset_index(drop=True)
 
-        max_r2[met] = 0
+        max_mse[met] = 10000
         for num_grps in range(min_grps, max_grps, 1):
 
             # create the groups to aggregate for std dev and max metrics
@@ -82,25 +83,33 @@ def get_std_splines(df, metrics, show_plot=False, k=2, s=2000, min_grps_den=100,
 
             # calculate the standard deviation and max of each group
             Xy = df.groupby('grps').agg({'y_act': [np.std, lambda x: np.percentile(x, 99), lambda x: np.percentile(x, 1)],
-                                         'sd_metric': 'mean',
-                                         'max_metric': 'mean',
-                                         'min_metric': 'mean',
+                                         'sd_metric': 'mean',# lambda x: np.percentile(x, 95),
+                                         'max_metric': 'mean',#lambda x: np.percentile(x, 95),
+                                         'min_metric': 'mean',# lambda x: np.percentile(x, 95),
                                          'player': 'count'})
             Xy.columns = ['std_dev', 'perc_99', 'perc_1', 'sd_metric', 'max_metric', 'min_metric', 'player_cnts']
 
             # fit a spline to the group datasets
-            X = Xy[[x_val]]
-            y = Xy[[met]]
-            spl = UnivariateSpline(X, y, k=k, s=s)
+            
 
-            r2 = r2_score(y, spl(X))
-            if r2 > max_r2[met]:
-                max_r2[met] = r2
-                splines[met] = spl
+            if iso_spline=='spline':
+                X = Xy[[x_val]]
+                y = Xy[[met]]
+                m = UnivariateSpline(X, y, k=k, s=s)
+                mse = mean_squared_error(y, m(X))
+            elif iso_spline=='iso': 
+                X = Xy[x_val]
+                y = Xy[met]
+                m = IsotonicRegression(out_of_bounds='clip').fit(X,y)
+                mse = mean_squared_error(y, m.predict(X))
+
+            if mse < max_mse[met]:
+                max_mse[met] = mse
+                models[met] = m
                 X_max[met] = X
                 y_max[met] = y
 
         if show_plot:
-            show_spline_fit(splines, met, X, y, X_max, y_max)
+            show_spline_fit(models, met, X, y, X_max, y_max, iso_spline)
             
-    return splines['std_dev'], splines['perc_99'], splines['perc_1']
+    return models['std_dev'], models['perc_99'], models['perc_1']

@@ -41,7 +41,7 @@ run_params = {
     
     # set year and week to analyze
     'set_year': 2021,
-    'set_week': 12,
+    'set_week': 15,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -458,9 +458,21 @@ def create_output(output_start, predictions):
 
 #     return output
 
+
 #%%
-for set_pos, rush_pass in zip(['QB'],
-                              [ '']):
+run_list = [
+            ['QB', '', 'full_model'],
+            ['RB', '', 'full_model'],
+            ['WR', '', 'full_model'],
+            ['TE', '', 'full_model'],
+            ['Defense', '', 'full_model'],
+            ['QB', '', 'backfill'],
+            ['RB', '', 'backfill'],
+            ['WR', '', 'backfill'],
+            ['TE', '', 'backfill'],
+]
+
+for set_pos, rush_pass, model_type in run_list:
 
     run_params['rush_pass'] = rush_pass
 

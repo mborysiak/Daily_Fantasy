@@ -212,7 +212,7 @@ class FootballSimulation:
 
         chk_flex = [p for p,v in open_pos_require.items() if v == -1]
         if len(chk_flex) == 0:
-            flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[0.40, 0.48, 0.12])
+            flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[0.40, 0.45, 0.15])
         else:
             flex_pos = chk_flex[0]
 
@@ -235,7 +235,8 @@ class FootballSimulation:
 
     def get_current_team_cnts(self, to_add):
 
-        added_teams = self.player_data.loc[self.player_data.player.isin(to_add), 
+        added_teams = self.player_data.loc[(self.player_data.player.isin(to_add)) & \
+                                           (self.player_data.pos.isin(['QB', 'WR', 'TE'])), 
                                            ['player', 'team']].drop_duplicates()
         added_teams = list(added_teams.team)
 
@@ -328,8 +329,11 @@ class FootballSimulation:
 
             cur_team = player_map[i]['team']
             cur_pos = player_map[i]['pos']
-            if cur_pos != 'DEF':
+            if cur_pos not in ('DEF', 'RB'):
                 G_teams[team_map[cur_team], i] = -1
+
+            if cur_pos == 'QB':
+                G_teams[team_map[cur_team], i] = -2
 
         return G_teams
 
@@ -459,9 +463,10 @@ class FootballSimulation:
         for i in range(self.num_iters):
 
             if min_players_same_team_input=='Auto': 
-                min_players_same_team= np.random.choice([2, 3], p=[0.68, 0.32])
+                min_players_same_team= np.random.choice([1, 2, 3], p=[0.24, 0.56, 0.2])
             else:
                 min_players_same_team = min_players_same_team_input
+            min_players_same_team += 1
 
             if i ==0:
                 # pull out current add players and added teams
@@ -538,11 +543,11 @@ class FootballSimulation:
 # db_path = f'{root_path}/Data/Databases/'
 # dm = DataManage(db_path)
 
-# pred_vers = 'standard_proba_sera_brier_lowsample'
-# ens_vers = 'no_weight_yes_kbest_sera'
-# std_dev_type = 'spline_proj_only'
+# pred_vers = 'fixed_model_clone'
+# ens_vers = 'no_weight_yes_kbest'
+# std_dev_type = 'spline_enet_coef'
 # use_covar=False
-# week = 18
+# week = 11
 # year = 2021
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -550,13 +555,12 @@ class FootballSimulation:
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
-#                          full_model_rel_weight=5, covar_type='no_covar', use_covar=use_covar)
+#                          full_model_rel_weight=5, covar_type='team_points', use_covar=True)
 # min_players_same_team = 'Auto'
 # set_max_team = None
 # to_add = []
 # to_drop = []
-# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select=True)
+# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select=False)
+# print(max_team_cnt)
 # results
 
-
-#%%

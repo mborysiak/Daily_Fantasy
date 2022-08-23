@@ -13,19 +13,43 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
+sim_type = 'v2'
+
+
 # set the model version
 set_weeks = [
-            12
+            10#, 16, 17, 11, 12, 13, 14, 15
         ]
 pred_versions = [
+                'standard_proba_sera_brier',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
                 'fixed_model_clone',
+                'fixed_model_clone',
+                'fixed_model_clone',
+                'fixed_model_clone',
+                'fixed_model_clone'
 ]
 ensemble_versions = [
-                    'no_weight_yes_kbest'
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest',
+                    'no_weight_no_kbest_randsample_sera',
+                    'no_weight_no_kbest_randsample_sera',
+                    'no_weight_no_kbest_randsample_sera',
+                    'no_weight_no_kbest_randsample_sera',
+                    'no_weight_no_kbest_randsample_sera',
+                    'no_weight_no_kbest_randsample_sera'
  ]
 
 std_dev_types = [
-                'spline_enet_coef'
+                'spline_proj_only',
+                'spline_all',
+                'spline',
+                'spline_enet_coef_isotonic',
+                'spline_enet_coef_isotonic',
+                'spline_enet_coef_isotonic',
+                'spline_enet_coef_isotonic',
+                'spline_enet_coef_isotonic'
                  ]
 
 
@@ -37,10 +61,11 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
     num_iters = 100
     TOTAL_LINEUPS = 10
+    
 
     print(f'\nWeek {week} PredVer: {pred_vers} EnsVer: {ensemble_vers} SDType:{std_dev_type}\n===============\n')
 
-    min_players_same_team = 2
+    min_players_same_team = 'Auto'
     set_max_team = None
     
 
@@ -72,7 +97,7 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         return to_drop
 
     def get_my_results(week):
-        path = f'//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/MBorysiak/DK/Results/week{week}.csv'
+        path = f'//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/MBorysiak/DK/Results/{year}/week{week}.csv'
         my_results = pd.read_csv(path, low_memory=False)
         my_results = my_results.loc[my_results.EntryName.str.contains('mborysi'), 'Points'].values
 
@@ -146,7 +171,7 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         'drop_team_frac': [0, 0.1],
         'top_n_choices': [0, 4],
         'full_model_rel_weight': [0.2, 1, 5],
-        'covar_type': ['team_points', 'no_covar'],
+        'covar_type': [ 'no_covar', 'team_points'],
         'iter': [0, 1, 2],
         }
 
@@ -205,7 +230,9 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
     for o in par_out:
         lineups.extend(o[1])
     lineups = pd.DataFrame(lineups)
-    lineups = lineups.assign(week=week, year=year, pred_vers=pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type)
+    lineups = lineups.assign(week=week, year=year, pred_vers=pred_vers, 
+                             ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
+                             sim_type=sim_type)
 
     results = [list(o[0][0]) for o in par_out]
     output = pd.concat([pd.DataFrame(params), pd.DataFrame(results)], axis=1)
@@ -220,7 +247,8 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
                            week=week, year=year, pred_vers=pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
                            min_player_same_team=min_players_same_team, num_iters=num_iters)
 
-    
+    output['sim_type'] = sim_type
+
     output['pred_proba'] = 0
     output.loc[output.pred_vers.str.contains('proba'), 'pred_proba'] = 1
 
@@ -285,8 +313,23 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
     output.loc[output.std_dev_type=='spline_proj_only_no_perc', 'std_experts'] = 0.75
     output.loc[output.std_dev_type=='spline_proj_only_no_perc', 'std_predictions'] = 0.25
 
+    output.loc[output.pred_vers.str.contains('fixed_model_clone'), 'proper_ensemble'] = 1
+    output.loc[output.std_dev_type.str.contains('enet'), 'std_coef'] = 1
+
+    output.loc[output.std_dev_type.str.contains('isotonic'), 'std_isotonic'] = 1
+
+    lineups['sim_type'] = sim_type
+
     dm.write_to_db(output, 'Results', 'Winnings_Optimize', 'append')
     dm.write_to_db(lineups, 'Results', 'Lineups_Optimize', 'append')
+
+
+#%%
+
+# df = dm.read('''SELECT * FROM Winnings_Optimize''', 'Results')
+# df['std_isotonic'] = 0
+# df.loc[df.std_dev_type=='spline_enet_coef_isotonic', ['std_dev_type', 'std_spline']] = ['enet_coef_isotonic', 0]
+# dm.write_to_db(df, 'Results', 'Winnings_Optimize', 'replace')
 
 #%%
 
@@ -397,6 +440,6 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 # df['min_best_models'] = 1
 
 
-# dm.write_to_db(df, 'Results', 'Winnings_Optimize', 'replace')
+
 
 # %%

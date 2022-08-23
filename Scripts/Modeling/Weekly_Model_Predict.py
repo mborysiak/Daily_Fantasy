@@ -15,6 +15,7 @@ from skmodel import SciKitModel
 from Fix_Standard_Dev import *
 from sklearn.metrics import r2_score
 import zModel_Functions as mf
+from joblib import Parallel, delayed
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
@@ -148,7 +149,7 @@ def get_skm(skm_df, model_obj, to_drop):
     return skm, X, y
 
 
-def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
+def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_samples=10):
 
     if m == 'adp':
         
@@ -159,8 +160,15 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
 
     elif stack_model:
         pipe = skm.model_pipe([
+                            skm.piece('random_sample'),
+                            skm.piece('std_scale'), 
+                            skm.piece(m)
+                        ])
+
+    elif std_model:
+        pipe = skm.model_pipe([
                             skm.piece('std_scale'),
-                            skm.piece('k_best'), 
+                            skm.piece('k_best'),
                             skm.piece(m)
                         ])
 
@@ -205,7 +213,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
                                                 ]
     if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
     if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
-    if stack_model: params['k_best__k'] = range(2, 40)
+    if stack_model: params['random_sample__frac'] = np.arange(0.02, 1, 0.05)
 
     return pipe, params
 
@@ -249,23 +257,22 @@ def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores, stack_va
         mf.top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=True)
 
     return best_models, scores, stack_val_pred
-    
+
+
+def fit_and_predict(m, df_predict, X, y, proba):
+    m.fit(X, y)
+    if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
+    else: cur_predict = m.predict(df_predict[X.columns])
+
+    return cur_predict
+
 def create_stack_predict(df_predict, models, X, y, proba=False):
 
     # create the full stack pipe with meta estimators followed by stacked model
     X_predict = pd.DataFrame()
     for k, ind_models in models.items():
-        
-        predictions = pd.DataFrame()
-        for m in ind_models:
-
-            m.fit(X, y)
-            if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
-            else: cur_predict = m.predict(df_predict[X.columns])
-            predictions = pd.concat([predictions, pd.Series(cur_predict)], axis=1)
-            
-        predictions = predictions.mean(axis=1)
-        predictions = pd.Series(predictions, name=k)
+        predictions = Parallel(n_jobs=-1, verbose=0)(delayed(fit_and_predict)(m, df_predict, X, y, proba) for m in ind_models)
+        predictions = pd.Series(pd.DataFrame(predictions).T.mean(axis=1), name=k)
         X_predict = pd.concat([X_predict, predictions], axis=1)
 
     return X_predict
@@ -274,10 +281,13 @@ def get_stack_predict_data(df_train, df_predict, df, run_params,
                            models_reg, models_class, models_quant):
 
     _, X, y = get_skm(df_train, 'reg', to_drop=run_params['drop_cols'])
+    print('Predicting Regression Models')
     X_predict = create_stack_predict(df_predict, models_reg, X, y)
+    print('Predicting Quant Models')
     X_predict_quant = create_stack_predict(df_predict, models_quant, X, y)
     X_predict = pd.concat([X_predict, X_predict_quant], axis=1)
 
+    print('Predicting Class Models')
     for cut in run_params['cuts']:
         df_train_class, df_predict_class = get_class_data(df, cut, run_params)
         _, X, y = get_skm(df_train_class, 'class', to_drop=run_params['drop_cols'])
@@ -322,7 +332,7 @@ def validation_compare_df(model_output_path, best_val):
 def std_dev_features(cur_df, model_name, run_params, show_plot=True):
 
     skm, X, y = get_skm(cur_df, 'reg', to_drop=run_params['drop_cols'])
-    pipe, params = get_full_pipe(skm, model_name, stack_model=True)
+    pipe, params = get_full_pipe(skm, model_name, std_model=True)
 
     # fit and append the ADP model
     best_models, _, _ = skm.time_series_cv(pipe, X, y, params, n_iter=run_params['n_iters'], n_splits=run_params['n_splits'],
@@ -337,20 +347,28 @@ def std_dev_features(cur_df, model_name, run_params, show_plot=True):
     return best_models, X
 
 
-def add_std_dev_max(df_train, df_predict, output, set_pos, num_cols=5):
+def add_std_dev_max(df_train, df_predict, output, run_params, num_cols=10, iso_spline='iso'):
 
-    std_dev_models, X = std_dev_features(df_train, 'enet', set_pos, show_plot=True)
+    std_dev_models, X = std_dev_features(df_train, 'enet', run_params, show_plot=True)
     sd_cols, df_train, df_predict = mf.get_sd_cols(df_train, df_predict, X, std_dev_models, num_cols=num_cols)
-    sd_spline, max_spline, min_spline = get_std_splines(df_train, sd_cols, show_plot=True, k=1, 
-                                                        min_grps_den=int(df_train.shape[0]*0.3), 
-                                                        max_grps_den=int(df_train.shape[0]*0.1))
+    
+    if iso_spline=='iso':
+        sd_m, max_m, min_m = get_std_splines(df_train, sd_cols, show_plot=True, k=2, 
+                                            min_grps_den=int(df_train.shape[0]*0.1), 
+                                            max_grps_den=int(df_train.shape[0]*0.05),
+                                            iso_spline=iso_spline)
+    elif iso_spline=='spline':
+        sd_m, max_m, min_m = get_std_splines(df_train, sd_cols, show_plot=True, k=2, 
+                                            min_grps_den=int(df_train.shape[0]*0.2), 
+                                            max_grps_den=int(df_train.shape[0]*0.05),
+                                            iso_spline=iso_spline)
 
-    output = assign_sd_max(output, df_predict, df_train, sd_cols, sd_spline, max_spline, min_spline)
+    output = assign_sd_max(output, df_predict, df_train, sd_cols, sd_m, max_m, min_m, iso_spline)
 
     return output
 
 
-def assign_sd_max(output, df_predict, sd_df, sd_cols, sd_spline, max_spline, min_spline):
+def assign_sd_max(output, df_predict, sd_df, sd_cols, sd_m, max_m, min_m, iso_spline):
     
     from sklearn.preprocessing import StandardScaler
 
@@ -364,9 +382,17 @@ def assign_sd_max(output, df_predict, sd_df, sd_cols, sd_spline, max_spline, min
     pred_sd_max = pd.DataFrame(sc.transform(df_predict[list(sd_cols.keys())])) * list(sd_cols.values())
     pred_sd_max = pred_sd_max.mean(axis=1)
 
-    output['std_dev'] = sd_spline(pred_sd_max)
-    output['max_score'] = max_spline(pred_sd_max)
-    output['min_score'] = min_spline(pred_sd_max)
+    if iso_spline=='spline':
+        output['std_dev'] = sd_m(pred_sd_max)
+        output['max_score'] = max_m(pred_sd_max)
+        output['min_score'] = min_m(pred_sd_max)
+    elif iso_spline=='iso':
+        output['std_dev'] = sd_m.predict(pred_sd_max)
+        output['max_score'] = max_m.predict(pred_sd_max)
+        output['min_score'] = min_m.predict(pred_sd_max)
+
+    output.loc[(output.max_score < output.pred_fp_per_game), 'max_score'] = \
+        output.loc[(output.max_score < output.pred_fp_per_game), 'pred_fp_per_game'] * 2
     
     return output
 
@@ -391,7 +417,6 @@ def save_output_to_db(output, run_params):
     output['model_type'] = model_type
     output['week'] = run_params['set_week']
     output['year'] = run_params['set_year']
-    output['min_score'] = 0
 
     output = output[['player', 'dk_salary', 'pred_fp_per_game', 'std_dev',
                         'dk_rank', 'pos', 'version', 'model_type', 'max_score', 'min_score',
@@ -446,58 +471,88 @@ run_params = {
 }
 
 # set position and model type
-set_pos = 'QB'
-model_type = 'backfill'
-std_dev_type = 'spline_enet_coef'
-ensemble_vers = 'no_weight_yes_kbest'
+std_dev_type = 'enet_coef_isotonic'
+ensemble_vers = 'no_weight_no_kbest_randsample_sera'
 
 # set version and iterations
-vers = 'fixed_model_clone'
+vers = 'standard_proba_sera_brier'
 
-for set_pos in ['QB', 'RB', 'WR', 'TE']:
+for w in [9, 10, 11, 12, 13, 14]:
+    run_params['set_week'] = w
+    runs = [
+        ['QB', 'full_model'],
+        ['RB', 'full_model'],
+        ['WR', 'full_model'],
+        ['TE', 'full_model'],
+        ['Defense', 'full_model'],
+        ['QB', 'backfill'],
+        ['RB', 'backfill'],
+        ['WR', 'backfill'],
+        ['TE', 'backfill']
+    ]
+    for set_pos, model_type in runs:
 
-    # load data and filter down
-    pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
-    df, run_params = load_data(model_type, set_pos, run_params)
-    df, run_params = create_game_date(df, run_params)
-    df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
+        if set_pos == 'Defense': run_params['cuts'] = [33, 75, 90]
+        else: run_params['cuts'] = [33, 80, 95]
 
-    #------------
-    # Run the Stacking Models and Generate Output
-    #------------
+        # load data and filter down
+        pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
+        df, run_params = load_data(model_type, set_pos, run_params)
+        df, run_params = create_game_date(df, run_params)
+        df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
-    # get the training data for stacking and prediction data after stacking
-    X_stack, y_stack, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path)
-    X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, 
-                                    models_reg, models_class, models_quant)
+        #------------
+        # Run the Stacking Models and Generate Output
+        #------------
 
-    # create the stacking models
-    final_models = ['ridge', 'lasso', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm']
-    stack_val_pred = pd.DataFrame(); scores = []; best_models = []
-    for i, fm in enumerate(final_models):
-        best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, scores, stack_val_pred, show_plots=True)
+        # get the training data for stacking and prediction data after stacking
+        X_stack, y_stack, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path)
+        X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, 
+                                        models_reg, models_class, models_quant)
 
-    # get the best stack predictions and average
-    predictions = mf.stack_predictions(X_predict, best_models, final_models)
-    best_val, best_predictions = average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, predictions, show_plot=True)
+        # create the stacking models
+        final_models = ['ridge', 'lasso', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm']
+        stack_val_pred = pd.DataFrame(); scores = []; best_models = []
+        for i, fm in enumerate(final_models):
+            best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, scores, stack_val_pred, show_plots=True)
 
-    # create the output and add standard devations / max scores
-    output = create_output(output_start, best_predictions)
-    output = add_std_dev_max(df_train, df_predict, output, run_params, num_cols=10)
+        # get the best stack predictions and average
+        predictions = mf.stack_predictions(X_predict, best_models, final_models)
+        best_val, best_predictions = average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, predictions, show_plot=True)
 
-    try:  
-        output = add_actual(output)
-        display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'max_score']])
-        mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
-        output = output.drop('actual_pts', axis=1)
-    except:
-        display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'max_score']])
+        # create the output and add standard devations / max scores
+        std_dev_type = 'enet_coef_isotonic'
+        output = create_output(output_start, best_predictions)
+        output = add_std_dev_max(df_train, df_predict, output, run_params, iso_spline='iso')
 
-    save_output_to_db(output, run_params)
+        try:  
+            output = add_actual(output)
+            display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
+            mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
+            output = output.drop('actual_pts', axis=1)
+        except:
+            display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score']])
+
+        save_output_to_db(output, run_params)
+
+
+        # create the output and add standard devations / max scores
+        std_dev_type = 'spline_enet_coef'
+        output = create_output(output_start, best_predictions)
+        output = add_std_dev_max(df_train, df_predict, output, run_params, iso_spline='spline')
+
+        try:  
+            output = add_actual(output)
+            display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
+            # mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
+            output = output.drop('actual_pts', axis=1)
+        except:
+            display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score']])
+
+        save_output_to_db(output, run_params)
 
 #%%
 
-# # save out final results
 
 
 #%%
@@ -527,64 +582,3 @@ for set_pos in ['QB', 'RB', 'WR', 'TE']:
 # print('\nRP Sera:', skm.sera_loss(rp.y_act, rp.rp_pred))
 # print('Both Sera:', skm.sera_loss(rp.y_act, rp.prediction), '\n')
 # print(rp[abs(rp.y_act - rp.rp_y_act) > 0.001])
-
-# %%
-
-def plot_distribution(estimates, player_name):
-
-    from IPython.core.pylabtools import figsize
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-
-    print('\n', player_name)
-
-    # Plot all the estimates
-    plt.figure(figsize(8, 8))
-    sns.distplot(estimates, hist = True, kde = True, bins = 19,
-                 hist_kws = {'edgecolor': 'k', 'color': 'darkblue'},
-                 kde_kws = {'linewidth' : 4},
-                 label = 'Estimated Dist.')
-
-    # Plot the mean estimate
-    plt.vlines(x = estimates.mean(), ymin = 0, ymax = 0.01, 
-                linestyles = '--', colors = 'red',
-                label = 'Pred Estimate',
-                linewidth = 2.5)
-
-    plt.legend(loc = 1)
-    plt.title('Density Plot for Test Observation');
-    plt.xlabel('Grade'); plt.ylabel('Density');
-
-    # Prediction information
-    sum_stats = (np.percentile(estimates, 5), np.percentile(estimates, 95), estimates.std() /estimates.mean())
-    print('Average Estimate = %0.4f' % estimates.mean())
-    print('5%% Estimate = %0.4f    95%% Estimate = %0.4f    Std Error = %0.4f' % sum_stats)
-
-def trunc_normal(player_data, num_samples=1000):
-
-    import scipy.stats as stats
-
-    # create truncated distribution
-    lower, upper = player_data.min_score,  player_data.max_score
-    lower_bound = (lower - player_data.pred_fp_per_game) / player_data.std_dev, 
-    upper_bound = (upper - player_data.pred_fp_per_game) / player_data.std_dev
-    trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc= player_data.pred_fp_per_game, scale= player_data.std_dev)
-    
-    estimates = trunc_dist.rvs(num_samples)
-
-    return estimates
-
-
-def trunc_normal_dist(self, num_options=500):
-    predictions = pd.DataFrame()
-    for _, row in self.player_data.iterrows():
-        dists = pd.DataFrame(self.trunc_normal(row, num_options)).T
-        predictions = pd.concat([predictions, dists], axis=0)
-    
-    return predictions.reset_index(drop=True)
-
-output['min_score'] = 8
-cur_player = output.iloc[0]
-estimates= trunc_normal(cur_player)
-plot_distribution(estimates, cur_player.player)
-# %%

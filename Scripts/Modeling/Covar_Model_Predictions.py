@@ -57,7 +57,7 @@ def rolling_max_std(pos, week, year):
     
     most_recent = df.drop_duplicates(subset=['player'], keep='last')
     most_recent = most_recent[['player', 'roll_max', 'roll_std']]
-
+    most_recent = most_recent.assign(week=week, year=year)
     return df, most_recent
 
 
@@ -98,6 +98,7 @@ def projection_data(pos):
 def get_max_metrics(week, year):
 
     corr_data = pd.DataFrame()
+    current_data = pd.DataFrame()
 
     for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
 
@@ -107,16 +108,20 @@ def get_max_metrics(week, year):
             proj = proj[(proj.ProjPts > 8) & (proj.projected_points > 8)].reset_index(drop=True)
 
         # get the rolling stats data    
-        stats, _ = rolling_max_std(pos, week, year)
+        stats, current = rolling_max_std(pos, week, year)
 
         # join together and calculate sd and max metrics
-        df = pd.merge(proj, stats, on=['player', 'team', 'week', 'year'])
-        df = create_sd_max_metrics(df)
+        past = pd.merge(proj, stats, on=['player', 'team', 'week', 'year'])
+        past = create_sd_max_metrics(past)
+        past['pos'] = pos
+        corr_data = pd.concat([corr_data, past], axis=0)
 
-        df['pos'] = pos
-        corr_data = pd.concat([corr_data, df], axis=0)
-
-    return corr_data
+        current = pd.merge(proj, current, on=['player', 'week', 'year'])
+        current = create_sd_max_metrics(current)
+        current['pos'] = pos
+        current_data = pd.concat([current_data, current], axis=0)
+    
+    return corr_data, current_data
 
 
 def create_pos_rank(df, opponent=False):
@@ -199,6 +204,9 @@ def get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_we
 
     preds['weighting'] = 1
     preds.loc[preds.model_type=='full_model', 'weighting'] = full_model_rel_weight
+
+    _, current = get_max_metrics(set_week, set_year)
+    preds = pd.merge(preds, current[['player', 'pos', 'max_metric']], on=['player', 'pos'])
 
     score_cols = ['pred_fp_per_game', 'std_dev', 'max_metric']
     for c in score_cols: preds[c] = preds[c] * preds.weighting
@@ -328,17 +336,38 @@ i = 0
 
 # set the model version
 set_weeks = [
-            12
+            10, 16, 17, 11, 12, 13, 14, 15
         ]
 pred_versions = [
+                'standard_proba_sera_brier',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample',
                 'fixed_model_clone',
+                'fixed_model_clone',
+                'fixed_model_clone',
+                'fixed_model_clone',
+                'fixed_model_clone'
 ]
 ensemble_versions = [
-                    'no_weight_yes_kbest'
+                    'no_weight_yes_kbest_sera',
+                    'no_weight_yes_kbest',
+                    'no_weight_no_kbest_randsample_sera',
+                    'no_weight_no_kbest_randsample_sera',
+                    'no_weight_no_kbest_randsample_sera',
+                    'no_weight_no_kbest_randsample_sera',
+                    'no_weight_no_kbest_randsample_sera',
+                    'no_weight_no_kbest_randsample_sera'
  ]
 
 std_dev_types = [
-                'spline_enet_coef'
+                'spline_proj_only',
+                'spline_all',
+                'spline',
+                'spline_enet_coef_isotonic',
+                'spline_enet_coef_isotonic',
+                'spline_enet_coef_isotonic',
+                'spline_enet_coef_isotonic',
+                'spline_enet_coef_isotonic'
                  ]
 
 iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types)
@@ -347,7 +376,7 @@ for set_week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
     for full_model_rel_weight in [0.2, 1, 5]:
 
         # get the player and opposing player data to create correlation matrices
-        player_data = get_max_metrics(set_week, set_year)
+        player_data, _ = get_max_metrics(set_week, set_year)
         corr_data = create_pos_rank(player_data)
         opp_corr_data = create_pos_rank(player_data, opponent=True)
         opp_corr_data = opp_corr_data[~opp_corr_data.team.isnull()].reset_index(drop=True)
@@ -370,16 +399,6 @@ for set_week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         pred_cov_final = cleanup_pred_covar(pred_cov)
         mean_points = get_mean_points(preds)
 
-        # drop_str = f'''week={set_week} 
-        #             AND year={set_year} 
-        #             AND pred_vers='{pred_vers}' 
-        #             AND ensemble_vers='{ensemble_vers}'
-        #             AND covar_type='{covar_type}' 
-        #             AND full_model_rel_weight={full_model_rel_weight}'''
-                    
-        # dm.delete_from_db('Simulation', 'Covar_Means', drop_str)
-        # dm.delete_from_db('Simulation', 'Covar_Matrix', drop_str)
-
         if i == 0:
             dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
             dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
@@ -387,23 +406,13 @@ for set_week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         else:
             dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
             dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
-# %%
-
-# sal = dm.read('''SELECT * FROM Salaries''', 'Simulation')
-# sal.groupby(['year', 'league']).agg('count')
-
-# df = dm.read("SELECT player, salary FROM PFF_Proj_Ranks WHERE week=15 and year=2021 AND salary>0", 'Pre_PlayerData')
-# dm.delete_from_db('Simulation', 'Salaries', 'league=15 and year=2021')
-# df = df.assign(year=2021, league=15)
-# dm.write_to_db(df, 'Simulation', 'Salaries', 'append')
 
 #%%
-
 # Kmeans for covariance grouping
 df = corr_data.copy()
 col = 'pos_rank'
 
-df = df[df[col].isin(['QB0', 'RB0', 'RB1', 'WR0', 'WR1', 'WR2', 'TE0', 'Defense0', 'OppQB0', 'OppWR0', 'OppDefense0'])]
+df = df[df[col].isin(['QB0', 'RB0', 'WR0', 'WR1', 'WR2', 'TE0', 'Defense0', 'OppQB0', 'OppWR0', 'OppDefense0'])]
 df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='max_metric').fillna(0)
 df = df[(df.QB0 > 5) & (df.OppQB0 > 5)]
 
@@ -418,16 +427,37 @@ for n in range(3, 8):
     km.fit(X)
     print(davies_bouldin_score(X, km.labels_))
 
-km = KMeans(n_clusters=5, random_state=1234)
+km = KMeans(n_clusters=4, random_state=1234)
 km.fit(X)
 df['label'] = km.labels_
-
+df_melt = pd.melt(df.reset_index(), id_vars=['team', 'week', 'year', 'label']).drop('value', axis=1)
+df_melt = pd.merge(df_melt, corr_data, on=['team','week', 'year', 'pos_rank'])
+df_melt
+#%%
 from collections import Counter
 import seaborn as sns
-
 print(Counter(km.labels_))
-sns.heatmap(df.groupby('label').agg('mean'), center=True)
+sns.heatmap(df.groupby('label').agg('mean'), center=True, annot=True)
+sns.set(rc={'figure.figsize':(10,12)})
+
 # %%
 
-clusters = df[['label']].reset_index()
+matrices = pd.DataFrame()
+for i in range(len(set(km.labels_))): 
+
+    cor_matrix = df_melt[df_melt.label == i]
+    cor_matrix = cor_matrix.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='y_act').fillna(0)
+
+    # calculate covariance matrix and convert to long format
+    cov_matrix = cor_matrix.cov()
+    cov_matrix = cov_matrix.rename_axis(None).rename_axis(None, axis=1)
+    cov_matrix = cov_matrix.stack().reset_index()
+    cov_matrix.columns = ['pos_rank1', 'pos_rank2', 'covariance']
+    cov_matrix['label'] = i
+
+    matrices = pd.concat([matrices, cov_matrix])
+# %%
+
+matrices[matrices.pos_rank1 != matrices.pos_rank2].sort_values(by='covariance', ascending=False).iloc[:50]
+
 # %%

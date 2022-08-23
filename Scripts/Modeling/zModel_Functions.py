@@ -170,7 +170,12 @@ def shap_plot(best_models, X, model_num=0):
     m = best_models[model_num]
     transformer = Pipeline(m.steps[:-1])
     X_shap = transformer.transform(X)
-    cols = X.columns[transformer['k_best'].get_support()]
+
+    if len([i[0] for i in m.get_params()['steps'] if i[0]=='random_sample']) > 0:
+        cols = m['random_sample'].columns
+    elif len([i[0] for i in m.get_params()['steps'] if i[0]=='k_best']) > 0:
+        cols = X.columns[m['k_best'].get_support()]
+    else: cols = X.columns
     X_shap = pd.DataFrame(X_shap, columns=cols)
 
     try: shap_values = shap.TreeExplainer(m.steps[-1][1]).shap_values(X_shap)
