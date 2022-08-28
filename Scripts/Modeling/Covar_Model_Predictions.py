@@ -336,39 +336,54 @@ i = 0
 
 # set the model version
 set_weeks = [
-            10, 16, 17, 11, 12, 13, 14, 15
+         13, 13, 13,
+         11, 11, 11,
+         11, 11, 11,
+         11, 11, 11
         ]
 pred_versions = [
+                'fixed_model_clone',
+                'fixed_model_clone',
+                'fixed_model_clone',
                 'standard_proba_sera_brier',
-                'standard_proba_sera_brier_lowsample',
-                'standard_proba_sera_brier_lowsample',
-                'fixed_model_clone',
-                'fixed_model_clone',
+                'standard_proba_sera_brier',
+                'standard_proba_sera_brier',
+                'fixed_model_clone_proba_sera_perc',
+                'fixed_model_clone_proba_sera_perc',
+                'fixed_model_clone_proba_sera_perc',
                 'fixed_model_clone',
                 'fixed_model_clone',
                 'fixed_model_clone'
 ]
 ensemble_versions = [
-                    'no_weight_yes_kbest_sera',
-                    'no_weight_yes_kbest',
-                    'no_weight_no_kbest_randsample_sera',
-                    'no_weight_no_kbest_randsample_sera',
-                    'no_weight_no_kbest_randsample_sera',
-                    'no_weight_no_kbest_randsample_sera',
-                    'no_weight_no_kbest_randsample_sera',
-                    'no_weight_no_kbest_randsample_sera'
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3'
  ]
 
 std_dev_types = [
-                'spline_proj_only',
-                'spline_all',
-                'spline',
-                'spline_enet_coef_isotonic',
-                'spline_enet_coef_isotonic',
-                'spline_enet_coef_isotonic',
-                'spline_enet_coef_isotonic',
-                'spline_enet_coef_isotonic'
-                 ]
+                'pred_isotonic',
+                'pred_spline',
+                'pred_isotonic_spline',
+                'pred_isotonic',
+                'pred_spline',
+                'pred_isotonic_spline',
+                'pred_isotonic',
+                'pred_spline',
+                'pred_isotonic_spline',
+                'pred_isotonic',
+                'pred_spline',
+                'pred_isotonic_spline'
+]
 
 iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types)
 for set_week, pred_vers, ensemble_vers, std_dev_type in iter_cats:

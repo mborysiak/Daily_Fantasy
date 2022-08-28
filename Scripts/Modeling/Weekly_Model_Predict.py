@@ -17,7 +17,7 @@ from sklearn.metrics import r2_score
 import zModel_Functions as mf
 from joblib import Parallel, delayed
 
-pd.set_option('display.max_rows', None)
+pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', 1000)
 pd.set_option('display.colheader_justify', 'center')
@@ -29,8 +29,6 @@ pandas_bokeh.output_notebook()
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning) 
 warnings.filterwarnings("ignore", category=UserWarning) 
-
-pd.set_option('display.max_columns', 999)
 
 from sklearn import set_config
 set_config(display='diagram')
@@ -156,6 +154,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
         # set up the ADP model pipe
         pipe = skm.model_pipe([skm.piece('feature_select'), 
                                skm.piece('std_scale'), 
+                               skm.piece('k_best'),
                                skm.piece('lr')])
 
     elif stack_model:
@@ -208,8 +207,8 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
     # get the params for the current pipe and adjust if needed
     params = skm.default_params(pipe, 'rand')
     if m=='adp': params['feature_select__cols'] = [
-                                                    ['game_date', 'ProjPts', 'dk_salary', 'fantasyPoints', 'year', 'week'],
-                                                    ['ProjPts', 'dk_salary', 'fantasyPoints'],
+                                                    ['game_date', 'ProjPts', 'dk_salary', 'fantasyPoints'],                                                    
+                                                    ['ProjPts', 'dk_salary', 'fantasyPoints']
                                                 ]
     if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
     if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
@@ -298,14 +297,40 @@ def get_stack_predict_data(df_train, df_predict, df, run_params,
     return X_predict
 
 
-def average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, predictions, show_plot=True):
+def best_average_models(skm_stack, scores, final_models, y_stack, stack_val_pred, predictions, min_include = 3):
+
+    n_scores = []
+    models_included = []
+    for i in range(len(scores)-min_include+1):
+        top_n = sorted(range(len(scores)), key=lambda i: scores[i], reverse=False)[:i+min_include]
+        models_included.append(top_n)
+        model_idx = np.array(final_models)[top_n]
+        
+        n_score = skm_stack.custom_score(y_stack, stack_val_pred[model_idx].mean(axis=1))
+        n_scores.append(n_score)
+        
+    print('All Average Scores:', np.round(n_scores, 3))
+    best_n = np.argmin(n_scores)
+    best_score = n_scores[best_n]
+    top_models = models_included[best_n]
+
+    model_idx = np.array(final_models)[top_models]
+    best_val = stack_val_pred[model_idx]
+    best_predictions = predictions[model_idx]
+
+    return best_val, best_predictions, best_score
+
+
+
+def average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, predictions, show_plot=True, min_include=3):
     
     skm_stack, _, _ = get_skm(df_train, 'reg', to_drop=[])
-    best_val, best_predictions = mf.best_average_models(skm_stack, scores, final_models, y_stack, stack_val_pred, predictions)
+    best_val, best_predictions, best_score = best_average_models(skm_stack, scores, final_models, y_stack, stack_val_pred, predictions, min_include)
     
     if show_plot:
         mf.show_scatter_plot(best_val.mean(axis=1), y_stack, r2=True)
-    return best_val, best_predictions
+    
+    return best_val, best_predictions, best_score
 
 
 def create_output(output_start, predictions):
@@ -322,9 +347,9 @@ def create_output(output_start, predictions):
 def validation_compare_df(model_output_path, best_val):
 
     _, _, _, _, oof_data = mf.load_all_pickles(model_output_path, 'reg')
-    oof_data = oof_data['reg_adp'][['player', 'team', 'year', 'y_act']].reset_index(drop=True)
-    best_val = pd.Series(best_val.mean(axis=1), name='prediction')
-    val_compare = pd.concat([oof_data, best_val], axis=1).rename(columns={'year': 'season'})
+    oof_data = oof_data['reg_adp'][['player', 'team', 'year', 'week', 'y_act']].reset_index(drop=True)
+    best_val = pd.Series(best_val.mean(axis=1), name='pred_fp_per_game')
+    val_compare = pd.concat([oof_data, best_val], axis=1)
     
     return val_compare
 
@@ -339,6 +364,8 @@ def std_dev_features(cur_df, model_name, run_params, show_plot=True):
                                            col_split='game_date', time_split=run_params['cv_time_input'],
                                            bayes_rand='custom_rand', random_seed=1234)
 
+    if model_name=='adp': X = X[list(best_models[0][0].cols)]
+    
     for bm in best_models: bm.fit(X, y)
     if show_plot:
         mf.shap_plot(best_models, X, model_num=0)
@@ -347,19 +374,19 @@ def std_dev_features(cur_df, model_name, run_params, show_plot=True):
     return best_models, X
 
 
-def add_std_dev_max(df_train, df_predict, output, run_params, num_cols=10, iso_spline='iso'):
+def add_std_dev_max(df_train, df_predict, output, model_name, run_params, num_cols=10, iso_spline='iso'):
 
-    std_dev_models, X = std_dev_features(df_train, 'enet', run_params, show_plot=True)
+    std_dev_models, X = std_dev_features(df_train, model_name, run_params, show_plot=True)
     sd_cols, df_train, df_predict = mf.get_sd_cols(df_train, df_predict, X, std_dev_models, num_cols=num_cols)
     
     if iso_spline=='iso':
         sd_m, max_m, min_m = get_std_splines(df_train, sd_cols, show_plot=True, k=2, 
-                                            min_grps_den=int(df_train.shape[0]*0.1), 
-                                            max_grps_den=int(df_train.shape[0]*0.05),
+                                            min_grps_den=int(df_train.shape[0]*0.08), 
+                                            max_grps_den=int(df_train.shape[0]*0.04),
                                             iso_spline=iso_spline)
     elif iso_spline=='spline':
         sd_m, max_m, min_m = get_std_splines(df_train, sd_cols, show_plot=True, k=2, 
-                                            min_grps_den=int(df_train.shape[0]*0.2), 
+                                            min_grps_den=int(df_train.shape[0]*0.15), 
                                             max_grps_den=int(df_train.shape[0]*0.05),
                                             iso_spline=iso_spline)
 
@@ -396,6 +423,31 @@ def assign_sd_max(output, df_predict, sd_df, sd_cols, sd_m, max_m, min_m, iso_sp
     
     return output
 
+def val_std_dev(model_output_path, output, best_val, iso_spline, show_plot=True):
+
+    val_data = validation_compare_df(model_output_path, best_val)
+    sd_max_met = StandardScaler().fit(val_data[['pred_fp_per_game']]).transform(output[['pred_fp_per_game']])
+
+    if iso_spline=='iso':
+        sd_m, max_m, min_m = get_std_splines(val_data, {'pred_fp_per_game': 1}, show_plot=show_plot, k=2, 
+                                            min_grps_den=int(val_data.shape[0]*0.1), 
+                                            max_grps_den=int(val_data.shape[0]*0.05),
+                                            iso_spline=iso_spline)
+        output['std_dev'] = sd_m.predict(sd_max_met)
+        output['max_score'] = max_m.predict(sd_max_met)
+        output['min_score'] = min_m.predict(sd_max_met)
+
+    elif iso_spline=='spline':
+        sd_m, max_m, min_m = get_std_splines(val_data, {'pred_fp_per_game': 1}, show_plot=show_plot, k=2, 
+                                            min_grps_den=int(val_data.shape[0]*0.2), 
+                                            max_grps_den=int(val_data.shape[0]*0.05),
+                                            iso_spline=iso_spline)
+        output['std_dev'] = sd_m(sd_max_met)
+        output['max_score'] = max_m(sd_max_met)
+        output['min_score'] = min_m(sd_max_met)
+ 
+    return output
+
 
 def add_actual(df):
     if set_pos=='Defense': pl = 'defTeam'
@@ -406,6 +458,52 @@ def add_actual(df):
                                 and season={run_params['set_year']}''', 'FastR')
     df = pd.merge(df, actual_pts, on='player')
     return df
+
+def save_val_to_db(model_output_path, best_val, run_params):
+
+    df = validation_compare_df(model_output_path, best_val)
+
+    df['pos'] = set_pos
+    df['pred_version'] = vers
+    df['ensemble_vers'] = ensemble_vers
+    df['model_type'] = model_type
+    df['set_week'] = run_params['set_week']
+    df['set_year'] = run_params['set_year']
+
+    df = df[['player', 'team', 'year', 'week',  'y_act', 'pred_fp_per_game', 'pos',
+             'pred_version', 'ensemble_vers', 'model_type', 'set_week', 'set_year']]
+
+    del_str = f'''pos='{set_pos}' 
+                  AND pred_version='{vers}'
+                  AND ensemble_vers='{ensemble_vers}' 
+                  AND set_week={run_params['set_week']} 
+                  AND set_year={run_params['set_year']}
+                  AND model_type='{model_type}'
+                '''
+    dm.delete_from_db('Simulation', f'Model_Validations', del_str)
+    dm.write_to_db(df, 'Simulation', 'Model_Validations', 'append')
+
+def save_test_to_db(df, run_params):
+
+    df['pos'] = set_pos
+    df['pred_version'] = vers
+    df['ensemble_vers'] = ensemble_vers
+    df['model_type'] = model_type
+    df['set_week'] = run_params['set_week']
+    df['set_year'] = run_params['set_year']
+
+    df = df[['player', 'set_week', 'set_year', 'pos', 'pred_fp_per_game', 'actual_pts',
+             'pred_version', 'ensemble_vers', 'model_type']]
+
+    del_str = f'''pos='{set_pos}' 
+                  AND pred_version='{vers}'
+                  AND ensemble_vers='{ensemble_vers}' 
+                  AND set_week={run_params['set_week']} 
+                  AND set_year={run_params['set_year']}
+                  AND model_type='{model_type}'
+                '''
+    dm.delete_from_db('Simulation', f'Model_Test_Validations', del_str)
+    dm.write_to_db(df, 'Simulation', 'Model_Test_Validations', 'append')
 
 
 def save_output_to_db(output, run_params):
@@ -419,8 +517,8 @@ def save_output_to_db(output, run_params):
     output['year'] = run_params['set_year']
 
     output = output[['player', 'dk_salary', 'pred_fp_per_game', 'std_dev',
-                        'dk_rank', 'pos', 'version', 'model_type', 'max_score', 'min_score',
-                        'week', 'year', 'ensemble_vers', 'std_dev_type']]
+                     'dk_rank', 'pos', 'version', 'model_type', 'max_score', 'min_score',
+                      'week', 'year', 'ensemble_vers', 'std_dev_type']]
 
     del_str = f'''pos='{set_pos}' 
                 AND version='{vers}'
@@ -451,7 +549,7 @@ run_params = {
     
     # set year and week to analyze
     'set_year': 2021,
-    'set_week': 12,
+    'set_week': 13,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -470,14 +568,28 @@ run_params = {
     'rush_pass': ''
 }
 
-# set position and model type
-std_dev_type = 'enet_coef_isotonic'
-ensemble_vers = 'no_weight_no_kbest_randsample_sera'
+min_include = 3
+show_plot= False
 
-# set version and iterations
-vers = 'standard_proba_sera_brier'
+# set the model version
+set_weeks = [
+         11,
+         11,
+         11,
+        ]
+pred_versions = [
+                'standard_proba_sera_brier',
+                'fixed_model_clone_proba_sera_perc',
+                'fixed_model_clone'
+]
+ensemble_versions = [
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+ ]
 
-for w in [9, 10, 11, 12, 13, 14]:
+for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
+
     run_params['set_week'] = w
     runs = [
         ['QB', 'full_model'],
@@ -492,8 +604,6 @@ for w in [9, 10, 11, 12, 13, 14]:
     ]
     for set_pos, model_type in runs:
 
-        if set_pos == 'Defense': run_params['cuts'] = [33, 75, 90]
-        else: run_params['cuts'] = [33, 80, 95]
 
         # load data and filter down
         pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
@@ -507,53 +617,66 @@ for w in [9, 10, 11, 12, 13, 14]:
 
         # get the training data for stacking and prediction data after stacking
         X_stack, y_stack, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path)
+        run_params['cuts'] = sorted(list(set([int(c[-2:]) for c in X_stack.columns if 'class' in c])))
         X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, 
-                                        models_reg, models_class, models_quant)
-
+                                           models_reg, models_class, models_quant)
+        
         # create the stacking models
         final_models = ['ridge', 'lasso', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm']
         stack_val_pred = pd.DataFrame(); scores = []; best_models = []
         for i, fm in enumerate(final_models):
-            best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, scores, stack_val_pred, show_plots=True)
+            best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, 
+                                                                   scores, stack_val_pred, show_plots=show_plot)
 
         # get the best stack predictions and average
         predictions = mf.stack_predictions(X_predict, best_models, final_models)
-        best_val, best_predictions = average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, predictions, show_plot=True)
-
+        best_val, best_predictions, best_score = average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, 
+                                                                      predictions, show_plot=show_plot, min_include=min_include)
+        save_val_to_db(model_output_path, best_val, run_params)
+        
         # create the output and add standard devations / max scores
-        std_dev_type = 'enet_coef_isotonic'
+        std_dev_type = 'pred_isotonic'
         output = create_output(output_start, best_predictions)
-        output = add_std_dev_max(df_train, df_predict, output, run_params, iso_spline='iso')
+        output = val_std_dev(model_output_path, output, best_val, iso_spline='iso', show_plot=show_plot)
 
         try:  
             output = add_actual(output)
-            display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
-            mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
+            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
+            save_test_to_db(output, run_params)
+            
+            if show_plot: mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
             output = output.drop('actual_pts', axis=1)
         except:
-            display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score']])
+            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score']])
 
+        iso_std, iso_max, iso_min = output.std_dev, output.max_score, output.min_score
         save_output_to_db(output, run_params)
 
 
         # create the output and add standard devations / max scores
-        std_dev_type = 'spline_enet_coef'
+        std_dev_type = 'pred_spline'
         output = create_output(output_start, best_predictions)
-        output = add_std_dev_max(df_train, df_predict, output, run_params, iso_spline='spline')
+        output = val_std_dev(model_output_path, output, best_val, iso_spline='spline', show_plot=show_plot)
 
         try:  
             output = add_actual(output)
-            display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
+            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
             # mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
             output = output.drop('actual_pts', axis=1)
         except:
-            display(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score']])
+            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score']])
 
+        spline_std, spline_max, spline_min = output.std_dev, output.max_score, output.min_score
         save_output_to_db(output, run_params)
 
-#%%
+        # combine isotonic and spline metrics
+        std_dev_type = 'pred_isotonic_spline'
+        output['std_dev'] = (spline_std + iso_std) / 2
+        output['max_score'] = (spline_max + iso_max) / 2
+        output['min_score'] = (spline_min + iso_min) / 2
+        save_output_to_db(output, run_params)
 
-
+print('All Runs Finished')
 
 #%%
 # both_compare = validation_compare_df(model_output_path, best_val)
@@ -582,3 +705,5 @@ for w in [9, 10, 11, 12, 13, 14]:
 # print('\nRP Sera:', skm.sera_loss(rp.y_act, rp.rp_pred))
 # print('Both Sera:', skm.sera_loss(rp.y_act, rp.prediction), '\n')
 # print(rp[abs(rp.y_act - rp.rp_y_act) > 0.001])
+
+#%%

@@ -158,7 +158,6 @@ shap_values = shap.TreeExplainer(m.steps[-1][1]).shap_values(X_shap)
 shap.summary_plot(shap_values, X_shap, feature_names=X_shap.columns, plot_size=(8,15), max_display=30, show=False)
 
 #%%
-
 #======================================================================================================================
 
 #==================================================================
@@ -178,10 +177,11 @@ df = dm.read('''SELECT *
 
 X = df[['adjust_pos_counts', 'drop_player_multiple',  'drop_team_frac', 'top_n_choices', 
         'week', 'covar_type', 'full_model_rel_weight', 'min_player_same_team', 'num_iters',
-        'pred_proba', 'pred_sera', 'pred_brier', 'pred_lowsample', 'proper_ensemble',
+        'pred_proba', 'pred_sera', 'pred_brier', 'pred_lowsample', 'proper_ensemble', 'pred_perc',
         'ens_sample_weights', 'ens_kbest', 'ens_randsample', 'ens_sera', 
         'std_dev_type', 'sim_type',
-        'std_spline', 'std_quantile', 'std_experts', 'std_actuals', 'std_splquantile', 'std_predictions', 'std_coef']]
+        'std_spline', 'std_quantile', 'std_experts', 'std_actuals', 'std_splquantile', 
+        'std_predictions', 'std_coef', 'std_isotonic']]
 
 X.loc[X.min_player_same_team == 'Auto', 'min_player_same_team'] = 2.5
 X.min_player_same_team = X.min_player_same_team.astype('float')
@@ -194,12 +194,12 @@ def one_hot(X):
 
 
 X = one_hot(X).fillna(0)
-y = df.max_winnings
+y = df.total_winnings
 
-# m = ElasticNet(alpha=1, l1_ratio=0.2)
+# m = ElasticNet(alpha=5, l1_ratio=0.1)
 # m = Ridge(alpha=100)
-# m = RandomForestRegressor(n_estimators=250, max_depth=10, min_samples_leaf=10, n_jobs=-1)
-m = LGBMRegressor(n_estimators=100, max_depth=10, min_samples_leaf=5, n_jobs=-1)
+# m = RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1)
+m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
 
 if type(m) == sklearn.linear_model._ridge.Ridge or type(m) == sklearn.linear_model._coordinate_descent.ElasticNet:
     sc = StandardScaler()
@@ -212,7 +212,8 @@ print(scores)
 m.fit(X,y)
 
 try:
-    pd.Series(m.coef_, index=X.columns).sort_values().plot.barh(figsize=(10,10))
+    coef_vals = pd.Series(m.coef_, index=X.columns)
+    coef_vals[abs(coef_vals) > 0.01].sort_values().plot.barh(figsize=(10,10))
 
 except:
     import shap
@@ -222,46 +223,19 @@ except:
 
 # %%
 
-# X_pred = pd.DataFrame({
-#  'adjust_pos_counts': [1], 
-#  'drop_player_multiple': [0], 
-#  'drop_team_frac': [0],
-#  'top_n_choices': [0], 
-#  'week': [19], 
-#  'full_model_rel_weight': [0], 
-# #  'week_3': [0], 
-#  'week_4': [0],
-#  'week_5': [0], 
-#  'week_6': [0], 
-#  'week_7': [0], 
-#  'week_8': [0], 
-#  'week_9': [0], 
-#  'week_10': [0], 
-#  'week_11': [0],
-#  'week_12': [0], 
-#  'week_13': [1], 
-#  'week_14': [0], 
-#  'week_15': [0], 
-#  'week_16': [0], 
-#  'week_17': [0],
-#  'week_18': [0], 
-#  'pred_vers_standard_proba': [0],
-#  'pred_vers_standard_proba_quant': [0],
-#  'pred_vers_standard_proba_sweight': [1],
-#  'ensemble_vers_linear_weight': [0],
-#  'ensemble_vers_no_weight': [0],
-#  'covar_type_team_points': [0], 
-#  'std_dev_type_spline': [1],
-#  }, index=[0])
+skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
+df = dm.read("SELECT * FROM Model_Validations", 'Simulation')
+gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', 'model_type']
+df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['y_act'], x['pred_fp_per_game'])[0]).reset_index()
+df
 
-# if type(m) == sklearn.linear_model._ridge.Ridge:
-#     X_pred = pd.DataFrame(sc.transform(X_pred), columns=X_pred.columns)
+#%%
 
-# print('Optimal Avg Winnings:', m.predict(X_pred)[0])
-
-# my_avg_winnings = dm.read('''SELECT DISTINCT week, year, my_total_winnings 
-#                              FROM Winnings_Optimize''', 'Simulation').my_total_winnings.mean()
-# print('My Avg Winnings:', my_avg_winnings)
+skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
+df = dm.read("SELECT * FROM Model_Test_Validations WHERE model_type='full_model'", 'Simulation')
+gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', 'model_type']
+df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['actual_pts'], x['pred_fp_per_game'])[0]).reset_index()
+df
 
 #%%
 
@@ -338,16 +312,16 @@ except:
 # Compare chosen players between runs
 #=================
 
-run1 = {'week': 13,
+run1 = {'week': 11,
         'pred_vers': 'fixed_model_clone',
-        'ensemble_vers': 'no_weight_yes_kbest',
-        'std_dev_type': 'spline_enet_coef',
-        'sim_type': 'v1'}
+        'ensemble_vers': 'no_weight_no_kbest_randsample_sera_logparams_include3',
+        'std_dev_type': 'pred_spline',
+        'sim_type': 'v2'}
 
-run2 = {'week': 13,
-        'pred_vers': 'fixed_model_clone',
-        'ensemble_vers': 'no_weight_yes_kbest',
-        'std_dev_type': 'spline_enet_coef',
+run2 = {'week': 11,
+        'pred_vers': 'fixed_model_clone_proba_sera_perc',
+        'ensemble_vers': 'no_weight_no_kbest_randsample_sera_logparams_include3',
+        'std_dev_type': 'pred_spline',
         'sim_type': 'v2'
         }
 
@@ -358,15 +332,15 @@ def get_lineups(r, label):
                              AND pred_vers='{r['pred_vers']}'
                              AND ensemble_vers='{r['ensemble_vers']}'
                              AND std_dev_type='{r['std_dev_type']}' 
-                             AND sim_type='{r['sim_type']}'
+                           --  AND sim_type='{r['sim_type']}'
                             ''', 'Results')
 
     df = pd.DataFrame(pd.melt(df.iloc[:, :8]).value.value_counts() / df.shape[0]).reset_index()
     df.columns = ['player', label]
     pred = dm.read(f''' 
                      SELECT player, 
-                            AVG(pred_fp_per_game) pred_fp_per_game_{label}
-                          --  AVG(std_dev) std_dev_{label}, 
+                            AVG(pred_fp_per_game) pred_fp_per_game_{label},
+                            AVG(std_dev) std_dev_{label}
                           --  AVG(max_score) max_score_{label}, 
                           --  1000 *AVG(pred_fp_per_game) / AVG(dk_salary) pts_salary_{label}
                      FROM Model_Predictions
@@ -374,7 +348,7 @@ def get_lineups(r, label):
                              AND version='{r['pred_vers']}'
                              AND ensemble_vers='{r['ensemble_vers']}'
                              AND std_dev_type='{r['std_dev_type']}'
-                             AND sim_type='{r['sim_type']}'
+                         --    AND sim_type='{r['sim_type']}'
                      GROUP BY player
     ''', 'Simulation')
 
@@ -404,10 +378,18 @@ df3 = pd.merge(df3, pts, on='player')
 
 df3['pct_diff'] = df3.best_run - df3.recent_run
 df3 = df3[['player', 'best_run', 'recent_run','pct_diff',
-           'pred_fp_per_game_best_run', 'pred_fp_per_game_recent_run', 'actual_pts']]
+           'pred_fp_per_game_best_run', 'pred_fp_per_game_recent_run',
+           'std_dev_best_run', 'std_dev_recent_run', 'actual_pts']]
+df3.sort_values(by='best_run', ascending=False).iloc[:50]
+
+# %%
+
 df3.sort_values(by='pct_diff', ascending=False).iloc[:50]
 
 # %%
 df3.sort_values(by='pct_diff', ascending=True).iloc[:50]
+
+
+
 
 # %%

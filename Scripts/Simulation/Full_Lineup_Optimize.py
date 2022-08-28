@@ -15,42 +15,57 @@ dm = DataManage(db_path)
 
 sim_type = 'v2'
 
-
 # set the model version
 set_weeks = [
-            10#, 16, 17, 11, 12, 13, 14, 15
+         13, 13, 13,
+         11, 11, 11,
+         11, 11, 11,
+         11, 11, 11
         ]
 pred_versions = [
+                'fixed_model_clone',
+                'fixed_model_clone',
+                'fixed_model_clone',
                 'standard_proba_sera_brier',
-                'standard_proba_sera_brier_lowsample',
-                'standard_proba_sera_brier_lowsample',
-                'fixed_model_clone',
-                'fixed_model_clone',
+                'standard_proba_sera_brier',
+                'standard_proba_sera_brier',
+                'fixed_model_clone_proba_sera_perc',
+                'fixed_model_clone_proba_sera_perc',
+                'fixed_model_clone_proba_sera_perc',
                 'fixed_model_clone',
                 'fixed_model_clone',
                 'fixed_model_clone'
 ]
 ensemble_versions = [
-                    'no_weight_yes_kbest_sera',
-                    'no_weight_yes_kbest',
-                    'no_weight_no_kbest_randsample_sera',
-                    'no_weight_no_kbest_randsample_sera',
-                    'no_weight_no_kbest_randsample_sera',
-                    'no_weight_no_kbest_randsample_sera',
-                    'no_weight_no_kbest_randsample_sera',
-                    'no_weight_no_kbest_randsample_sera'
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3',
+                    'no_weight_no_kbest_randsample_sera_logparams_include3'
  ]
 
 std_dev_types = [
-                'spline_proj_only',
-                'spline_all',
-                'spline',
-                'spline_enet_coef_isotonic',
-                'spline_enet_coef_isotonic',
-                'spline_enet_coef_isotonic',
-                'spline_enet_coef_isotonic',
-                'spline_enet_coef_isotonic'
-                 ]
+                'pred_isotonic',
+                'pred_spline',
+                'pred_isotonic_spline',
+                'pred_isotonic',
+                'pred_spline',
+                'pred_isotonic_spline',
+                'pred_isotonic',
+                'pred_spline',
+                'pred_isotonic_spline',
+                'pred_isotonic',
+                'pred_spline',
+                'pred_isotonic_spline'
+]
+
 
 
 iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types)
@@ -314,9 +329,14 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
     output.loc[output.std_dev_type=='spline_proj_only_no_perc', 'std_predictions'] = 0.25
 
     output.loc[output.pred_vers.str.contains('fixed_model_clone'), 'proper_ensemble'] = 1
-    output.loc[output.std_dev_type.str.contains('enet'), 'std_coef'] = 1
+    output.loc[output.std_dev_type.str.contains('coef'), 'std_coef'] = 1
+    output.loc[output.std_dev_type.str.contains('adp'), 'std_experts'] = 1
 
     output.loc[output.std_dev_type.str.contains('isotonic'), 'std_isotonic'] = 1
+    output['pred_perc'] = 0
+    output.loc[~output.pred_vers.str.contains('lowsample'), 'pred_perc'] = 1
+
+    output.loc[output.std_dev_type.isin(['pred_isotonic', 'pred_spline', 'pred_isotonic_spline']), 'std_predictions'] = 1
 
     lineups['sim_type'] = sim_type
 
@@ -327,8 +347,14 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 #%%
 
 # df = dm.read('''SELECT * FROM Winnings_Optimize''', 'Results')
-# df['std_isotonic'] = 0
-# df.loc[df.std_dev_type=='spline_enet_coef_isotonic', ['std_dev_type', 'std_spline']] = ['enet_coef_isotonic', 0]
+
+# df['std_coef'] = 0
+# df.loc[df.std_dev_type.str.contains('coef'), 'std_coef'] = 1
+
+# df['std_enet'] = 0
+# df.loc[df.std_dev_type.str.contains('enet'), 'std_enet'] = 1
+# df.loc[df.std_dev_type.str.contains('adp'), 'std_experts'] = 1
+
 # dm.write_to_db(df, 'Results', 'Winnings_Optimize', 'replace')
 
 #%%

@@ -41,7 +41,7 @@ run_params = {
     
     # set year and week to analyze
     'set_year': 2021,
-    'set_week': 15,
+    'set_week': 11,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -65,7 +65,7 @@ set_pos = 'RB'
 model_type = 'full_model'
 
 # set version and iterations
-vers = 'fixed_model_clone'
+vers = 'fixed_model_clone_proba_sera_lowsample_perc_logparams'
 
 #----------------
 # Data Loading
@@ -166,7 +166,7 @@ def get_class_data(df, cut, run_params):
     df_train_class = df_train_class.drop('cut_perc', axis=1)
 
     return df_train_class, df_predict_class
-
+    
 
 #----------------
 # Modeling Functions
@@ -216,10 +216,11 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
     elif skm.model_obj == 'reg':
         pipe = skm.model_pipe([skm.piece('random_sample'),
                                 skm.piece('std_scale'), 
+                                skm.piece('select_perc'),
                                 skm.feature_union([
                                                 skm.piece('agglomeration'), 
                                                 skm.piece('k_best'),
-                                              #  skm.piece('pca')
+                                                skm.piece('pca')
                                                 ]),
                                 skm.piece('k_best'),
                                 skm.piece(m)])
@@ -227,6 +228,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
     elif skm.model_obj == 'class':
         pipe = skm.model_pipe([skm.piece('random_sample'),
                                skm.piece('std_scale'), 
+                               skm.piece('select_perc_c'),
                                skm.feature_union([
                                                 skm.piece('agglomeration'), 
                                                 skm.piece('k_best_c'),
@@ -278,7 +280,8 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
     
     out_dict = update_output_dict(model_obj, model_name, str(alpha), out_dict, oof_data, best_models)
     # db_output = add_result_db_output('reg', m, oof_data['scores'], db_output, run_params)
-    # save_param_scores(param_scores, model_obj, m, run_params)
+    try: save_param_scores(param_scores, model_obj, m, run_params)
+    except: print(f'Param save for {m} failed')
 
     return out_dict, best_models, oof_data, 
 
@@ -429,35 +432,6 @@ def create_output(output_start, predictions):
     return output
 
 
-# def std_dev_features(cur_df, model_name, set_pos, show_plot=True):
-#     skm, X, y = get_skm(cur_df, 'reg')
-#     pipe, params = get_full_pipe(skm, model_name, stack_model=True)
-
-#     # fit and append the ADP model
-#     best_models, _, _ = skm.time_series_cv(pipe, X, y, params, n_iter=pos[set_pos]['iters'], n_splits=pos[set_pos]['n_splits'],
-#                                            col_split='year', time_split=pos[set_pos]['val_start'],
-#                                            bayes_rand='custom_rand', random_seed=1234)
-
-#     for bm in best_models: bm.fit(X, y)
-#     if show_plot:
-#         mf.shap_plot(best_models, X, model_num=0)
-#         plt.show()
-
-#     return best_models, X
-
-
-# def add_std_dev_max(df_train, df_predict, output, set_pos, num_cols=5):
-
-#     std_dev_models, X = std_dev_features(df_train, 'enet', set_pos, show_plot=True)
-#     sd_cols, df_train, df_predict = mf.get_sd_cols(df_train, df_predict, X, std_dev_models, num_cols=num_cols)
-#     sd_spline, max_spline = get_std_splines(df_train, sd_cols, show_plot=True, k=1, 
-#                                             min_grps_den=int(df_train.shape[0]*0.3), 
-#                                             max_grps_den=int(df_train.shape[0]*0.1))
-
-#     output = mf.assign_sd_max(output, df_predict, df_train, sd_cols, sd_spline, max_spline)
-
-#     return output
-
 
 #%%
 run_list = [
@@ -515,29 +489,6 @@ for set_pos, rush_pass, model_type in run_list:
         out_quant, _, _ = get_model_output('gbm_q', df_train, 'quantile', out_quant, run_params, i=1234, alpha=alph)
     save_output_dict(out_quant, model_output_path, 'quant')
 
-#%%
-    # #------------
-    # # Run the Stacking Models and Generate Output
-    # #------------
-
-    # # get the training data for stacking and prediction data after stacking
-    # X_stack, y_stack, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path)
-    # X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, 
-    #                                 models_reg, models_class, models_quant)
-
-    # # create the stacking models
-    # final_models = ['ridge', 'lasso', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm']
-    # stack_val_pred = pd.DataFrame(); scores = []; best_models = []
-    # for i, fm in enumerate(final_models):
-    #     best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, scores, stack_val_pred, show_plots=True)
-
-    # # get the best stack predictions and average
-    # predictions = mf.stack_predictions(X_predict, best_models, final_models)
-    # best_val, best_predictions = average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, predictions, show_plot=True)
-
-    # # create the output and add standard devations / max scores
-    # output = create_output(output_start, best_predictions)
-    # output
 
 #%%
 
@@ -553,4 +504,3 @@ for set_pos, rush_pass, model_type in run_list:
 # dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
 # dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
 
-# %%
