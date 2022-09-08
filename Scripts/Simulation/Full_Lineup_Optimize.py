@@ -13,63 +13,53 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
-sim_type = 'v2'
 
-# set the model version
 set_weeks = [
-         13, 13, 13,
-         11, 11, 11,
-         11, 11, 11,
-         11, 11, 11
+         13, 13,
+         14, 14,
+         15, 15,
+         16, 16
         ]
 pred_versions = [
-                'fixed_model_clone',
-                'fixed_model_clone',
-                'fixed_model_clone',
-                'standard_proba_sera_brier',
-                'standard_proba_sera_brier',
-                'standard_proba_sera_brier',
-                'fixed_model_clone_proba_sera_perc',
-                'fixed_model_clone_proba_sera_perc',
-                'fixed_model_clone_proba_sera_perc',
-                'fixed_model_clone',
-                'fixed_model_clone',
-                'fixed_model_clone'
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+               
 ]
 ensemble_versions = [
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3'
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                   
  ]
 
 std_dev_types = [
-                'pred_isotonic',
-                'pred_spline',
-                'pred_isotonic_spline',
-                'pred_isotonic',
-                'pred_spline',
-                'pred_isotonic_spline',
-                'pred_isotonic',
-                'pred_spline',
-                'pred_isotonic_spline',
-                'pred_isotonic',
-                'pred_spline',
-                'pred_isotonic_spline'
+                'pred_spline_class',
+                'pred_isotonic_class',
+                'pred_spline_class',
+                'pred_isotonic_class',
+                'pred_spline_class',
+                'pred_isotonic_class',
+                'pred_spline_class',
+                'pred_isotonic_class',
+               
 ]
 
+sim_types = ['v2', 'v2', 'v2', 'v2', 'v2', 'v2', 'v2', 'v2']
 
 
-iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types)
-for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
+iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types, sim_types)
+for week, pred_vers, ensemble_vers, std_dev_type, sim_type in iter_cats:
 
     year = 2021
     salary_cap = 50000
@@ -82,6 +72,11 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
     min_players_same_team = 'Auto'
     set_max_team = None
+
+    if 'ownership' in sim_type:
+        use_ownership=True
+    else:
+        use_ownership=False
     
 
     def get_stats(pos):
@@ -196,14 +191,14 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
 
     def sim_winnings(adjust_select, player_drop_multiplier, team_drop_frac, top_n_choices, full_model_rel_weight, covar_type):
-
+        
         if covar_type=='team_points': use_covar=True
         elif covar_type=='no_covar': use_covar=False
 
         sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
                                  pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
                                  covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
-                                 use_covar=use_covar)
+                                 use_covar=use_covar, use_ownership=use_ownership)
 
         winnings = []
         points_record = []
@@ -234,7 +229,8 @@ for week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
         return list(sim_results.values), lineups
 
-    # print(sim_winnings(True, 0, 0, 4, 1, 'no_covar'))
+# for adj, pdm, tdf, tn, fmw, ct, i in params:
+#     sim_winnings(adj, pdm, tdf, tn, fmw, ct)
 
 #%%
     from joblib import Parallel, delayed

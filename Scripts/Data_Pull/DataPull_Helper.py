@@ -255,7 +255,8 @@ full_team_map = {'Arizona Cardinals': 'ARI',
  'Tampa Bay Buccaneers': 'TB',
  'Tennessee Titans': 'TEN',
  'Washington Redskins': 'WAS',
- 'Washington Football Team': 'WAS'}
+ 'Washington Football Team': 'WAS',
+ 'Washington Commanders': 'WAS'}
 
 name_map = {'Cardinals': 'ARI',
  'Falcons': 'ATL',
@@ -289,7 +290,8 @@ name_map = {'Cardinals': 'ARI',
  'Buccaneers': 'TB',
  'Titans': 'TEN',
  'Redskins': 'WAS',
- 'Football Team': 'WAS'}
+ 'Football Team': 'WAS',
+ 'Commanders': 'WAS'}
 
 city_map = {'Arizona': 'ARI',
  'Atlanta': 'ATL',
@@ -441,7 +443,8 @@ def_vs_map = {'Arizona Cardinals': 'ARI',
              'Tampa Bay Buccaneers': 'TB',
              'Tennessee Titans': 'TEN',
              'Washington Redskins': 'WAS',
-             'Washington Football Team': 'WAS'}
+             'Washington Football Team': 'WAS',
+             'Washington Commanders': 'WAS'}
 
 fo_fp_map = {'ARI': 'ARI',
              'ATL': 'ATL',

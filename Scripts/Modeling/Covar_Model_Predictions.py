@@ -335,54 +335,46 @@ covar_type = 'team_points'
 i = 0
 
 # set the model version
+# set the model version
 set_weeks = [
-         13, 13, 13,
-         11, 11, 11,
-         11, 11, 11,
-         11, 11, 11
+         13, 13,
+         14, 14,
+         15, 15,
+         16, 16
         ]
 pred_versions = [
-                'fixed_model_clone',
-                'fixed_model_clone',
-                'fixed_model_clone',
-                'standard_proba_sera_brier',
-                'standard_proba_sera_brier',
-                'standard_proba_sera_brier',
-                'fixed_model_clone_proba_sera_perc',
-                'fixed_model_clone_proba_sera_perc',
-                'fixed_model_clone_proba_sera_perc',
-                'fixed_model_clone',
-                'fixed_model_clone',
-                'fixed_model_clone'
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+               
 ]
 ensemble_versions = [
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3',
-                    'no_weight_no_kbest_randsample_sera_logparams_include3'
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_no_kbest_randsample_sera_include2',
+                   
  ]
 
 std_dev_types = [
-                'pred_isotonic',
-                'pred_spline',
-                'pred_isotonic_spline',
-                'pred_isotonic',
-                'pred_spline',
-                'pred_isotonic_spline',
-                'pred_isotonic',
-                'pred_spline',
-                'pred_isotonic_spline',
-                'pred_isotonic',
-                'pred_spline',
-                'pred_isotonic_spline'
+                'pred_spline_class',
+                'pred_isotonic_class',
+                'pred_spline_class',
+                'pred_isotonic_class',
+                'pred_spline_class',
+                'pred_isotonic_class',
+                'pred_spline_class',
+                'pred_isotonic_class',
+               
 ]
 
 iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types)

@@ -8,6 +8,11 @@ import os
 import pickle
 import datetime as dt
 import gzip
+from sklearn.linear_model import Ridge, ElasticNet
+import sklearn
+from sklearn.model_selection import cross_val_score
+from sklearn.preprocessing import StandardScaler
+from lightgbm import LGBMRegressor
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -171,56 +176,64 @@ import sklearn
 from sklearn.linear_model import Ridge, ElasticNet
 from sklearn.ensemble import RandomForestRegressor
 
-df = dm.read('''SELECT * 
-                FROM Winnings_Optimize
-                ORDER BY year, week''', 'Results')
+for i, w in enumerate([8, 9, 10, 11, 12, 13, 14, 15, 16]):
 
-X = df[['adjust_pos_counts', 'drop_player_multiple',  'drop_team_frac', 'top_n_choices', 
-        'week', 'covar_type', 'full_model_rel_weight', 'min_player_same_team', 'num_iters',
-        'pred_proba', 'pred_sera', 'pred_brier', 'pred_lowsample', 'proper_ensemble', 'pred_perc',
-        'ens_sample_weights', 'ens_kbest', 'ens_randsample', 'ens_sera', 
-        'std_dev_type', 'sim_type',
-        'std_spline', 'std_quantile', 'std_experts', 'std_actuals', 'std_splquantile', 
-        'std_predictions', 'std_coef', 'std_isotonic']]
+    df = dm.read(f'''SELECT * 
+                    FROM Winnings_Optimize
+                    WHERE week={w}
+                    ORDER BY year, week''', 'Results')
 
-X.loc[X.min_player_same_team == 'Auto', 'min_player_same_team'] = 2.5
-X.min_player_same_team = X.min_player_same_team.astype('float')
-def one_hot(X):
-    for c in ['week', 'covar_type', 'std_dev_type', 'sim_type']:
-        X = pd.concat([X, pd.get_dummies(X[c], prefix=c, drop_first=True)], axis=1)
-        if c!='week':
-            X = X.drop(c, axis=1)
-    return X
+    X = df[['adjust_pos_counts', 'drop_player_multiple',  'drop_team_frac', 'top_n_choices', 
+            'week', 'covar_type', 'full_model_rel_weight', 'min_player_same_team', 'num_iters',
+            'pred_proba', 'pred_sera', 'pred_brier', 'pred_lowsample', 'proper_ensemble', 'pred_perc',
+            'ens_sample_weights', 'ens_kbest', 'ens_randsample', 'ens_sera', 
+            'std_dev_type', 'sim_type',
+            'std_spline', 'std_quantile', 'std_experts', 'std_actuals', 'std_splquantile', 
+            'std_predictions', 'std_coef', 'std_isotonic']]
 
-
-X = one_hot(X).fillna(0)
-y = df.total_winnings
-
-# m = ElasticNet(alpha=5, l1_ratio=0.1)
-# m = Ridge(alpha=100)
-# m = RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1)
-m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
-
-if type(m) == sklearn.linear_model._ridge.Ridge or type(m) == sklearn.linear_model._coordinate_descent.ElasticNet:
-    sc = StandardScaler()
-    sc.fit(X)
-    X = pd.DataFrame(sc.transform(X), columns=X.columns)
-
-scores = cross_val_score(m, X, y, cv=5, scoring='neg_mean_squared_error')
-scores = np.sqrt(-np.mean(scores))
-print(scores)
-m.fit(X,y)
-
-try:
-    coef_vals = pd.Series(m.coef_, index=X.columns)
-    coef_vals[abs(coef_vals) > 0.01].sort_values().plot.barh(figsize=(10,10))
-
-except:
-    import shap
-    shap_values = shap.TreeExplainer(m).shap_values(X)
-    shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(8,10), max_display=30, show=False)
+    X.loc[X.min_player_same_team == 'Auto', 'min_player_same_team'] = 2.5
+    X.min_player_same_team = X.min_player_same_team.astype('float')
+    def one_hot(X):
+        for c in ['week', 'covar_type', 'std_dev_type', 'sim_type']:
+            X = pd.concat([X, pd.get_dummies(X[c], prefix=c, drop_first=False)], axis=1)
+            if c!='week':
+                X = X.drop(c, axis=1)
+        return X
 
 
+    X = one_hot(X).fillna(0)
+    y = df.max_winnings
+
+    # m = ElasticNet(alpha=5, l1_ratio=0.1)
+    # m = Ridge(alpha=100)
+    # m = RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1)
+    m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
+
+    if type(m) == sklearn.linear_model._ridge.Ridge or type(m) == sklearn.linear_model._coordinate_descent.ElasticNet:
+        sc = StandardScaler()
+        sc.fit(X)
+        X = pd.DataFrame(sc.transform(X), columns=X.columns)
+
+    scores = cross_val_score(m, X, y, cv=5, scoring='neg_mean_squared_error')
+    scores = np.sqrt(-np.mean(scores))
+    print(scores)
+    m.fit(X,y)
+
+    try:
+        coef_vals = pd.DataFrame(m.coef_, index=X.columns, columns=[f'week_{w}']).reset_index()
+        coef_vals = coef_vals.rename(columns={'index': 'metric'})
+        # coef_vals[abs(coef_vals) > 0.01].sort_values().plot.barh(figsize=(10,10))
+
+    except:
+        import shap
+        shap_values = shap.TreeExplainer(m).shap_values(X)
+        shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(8,10), max_display=30, show=False)
+
+    if i==0: all_coef = coef_vals.copy()
+    else: all_coef = pd.merge(all_coef, coef_vals, on='metric', how='outer').fillna(0)
+
+coef_vals = pd.Series(all_coef.mean(axis=1).values, index=all_coef.metric)
+coef_vals[abs(coef_vals) > 0.01].sort_values().plot.barh(figsize=(10,10))
 # %%
 
 skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
@@ -235,7 +248,8 @@ skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
 df = dm.read("SELECT * FROM Model_Test_Validations WHERE model_type='full_model'", 'Simulation')
 gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', 'model_type']
 df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['actual_pts'], x['pred_fp_per_game'])[0]).reset_index()
-df
+df.sort_values(by=['set_year', 'set_week', 'pos', 0],
+               ascending=[True, True, False, False])
 
 #%%
 
@@ -245,13 +259,15 @@ df
 # Look at Hyperparameter Optimization
 #==================================================================
 
+
+
 reg_or_class = 'reg'
 model_type = 'enet'
 
 df = dm.read(f'''SELECT * 
                  FROM {reg_or_class}_{model_type}
-                 WHERE scores < 200
-                       AND pos='TE' ''', 'Results')
+                 WHERE scores < 1
+                        ''', 'Results')
 df = df.drop(['model'], axis=1).dropna()
 
 if reg_or_class == 'reg':
@@ -280,13 +296,13 @@ def one_hot(X):
 
 X = one_hot(df)
 X = X.drop('scores', axis=1)
-y = df.scores
+y = -df.scores
 
-m = Ridge(alpha=100)
+# m = ElasticNet(alpha=0.01, l1_ratio=0.05)
 # m = RandomForestRegressor(n_estimators=100, max_depth=3, min_samples_leaf=2)
-# m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=1)
+m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=1)
 
-if type(m) == sklearn.linear_model._ridge.Ridge:
+if type(m) == sklearn.linear_model._ridge.Ridge or type(m)==sklearn.linear_model._coordinate_descent.ElasticNet:
     sc = StandardScaler()
     sc.fit(X)
     X = pd.DataFrame(sc.transform(X), columns=X.columns)

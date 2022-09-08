@@ -9,8 +9,8 @@ from DataPull_Helper import *
 pd.set_option('display.max_columns', 999)
 
 # +
-set_year = 2021
-set_week = 19
+set_year = 2022
+set_week = 1
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -492,7 +492,7 @@ dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
 
 
 # %%
-dk = pd.read_csv('c:/Users/mborysia/Downloads/dk-ownership (1).csv')
+dk = pd.read_csv('c:/Users/mborysia/Downloads/dk-ownership.csv')
 dk.player = dk.player.apply(dc.name_clean)
 dk.loc[dk.position=='D', 'player'] = dk.loc[dk.position=='D', 'team']
 dk.loc[dk.position=='D', 'position'] = 'DST'

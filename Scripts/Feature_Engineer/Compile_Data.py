@@ -1321,9 +1321,9 @@ def qb_pull(rush_or_pass):
     df = remove_non_uniques(df)
     df = df[(df.ProjPts > 10) & (df.projected_points > 10)].reset_index(drop=True)
 
-    dm.write_to_db(df.iloc[:,:2000], 'Model_Features', f'QB_Data{rush_or_pass}', if_exist='replace')
+    dm.write_to_db(df.iloc[:,:2000], 'Model_Features', f"QB_Data{rush_or_pass.replace('_', '')}", if_exist='replace')
     if df.shape[1] > 2000:
-        dm.write_to_db(df.iloc[:,2000:], 'Model_Features', f'QB_Data{rush_or_pass}2', if_exist='replace')
+        dm.write_to_db(df.iloc[:,2000:], 'Model_Features', f"QB_Data{rush_or_pass.replace('_', '')}2", if_exist='replace')
 
     return df
 

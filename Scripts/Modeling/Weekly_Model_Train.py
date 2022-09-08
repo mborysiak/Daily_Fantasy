@@ -65,7 +65,7 @@ set_pos = 'RB'
 model_type = 'full_model'
 
 # set version and iterations
-vers = 'fixed_model_clone_proba_sera_lowsample_perc_logparams'
+vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc'
 
 #----------------
 # Data Loading
@@ -283,7 +283,7 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
     try: save_param_scores(param_scores, model_obj, m, run_params)
     except: print(f'Param save for {m} failed')
 
-    return out_dict, best_models, oof_data, 
+    return out_dict, best_models, oof_data
 
 
 #-----------------
@@ -315,9 +315,14 @@ def add_result_db_output(model_type, model, results, db_output, run_params):
     return db_output
 
 def save_param_scores(df, obj_type, model, run_params):
+    for c in df.columns:
+        if 'class_weight' in c:
+            df[c] = df[c].apply(lambda x: x[0])
+
     df = df.assign(model=model, year=run_params['set_year'], week=run_params['set_week'], pos=set_pos, model_type=model_type)
     exist = dm.read(f"SELECT * FROM {obj_type}_{model}", 'Results')
     df = pd.concat([exist, df], axis=0, sort=False)
+
     dm.write_to_db(df, 'Results', f'{obj_type}_{model}', 'replace')
 
 def save_output_dict(out_dict, model_output_path, label):
@@ -435,59 +440,63 @@ def create_output(output_start, predictions):
 
 #%%
 run_list = [
-            ['QB', '', 'full_model'],
-            ['RB', '', 'full_model'],
+            # ['QB', '', 'full_model'],
+            # ['RB', '', 'full_model'],
             ['WR', '', 'full_model'],
-            ['TE', '', 'full_model'],
-            ['Defense', '', 'full_model'],
-            ['QB', '', 'backfill'],
-            ['RB', '', 'backfill'],
-            ['WR', '', 'backfill'],
-            ['TE', '', 'backfill'],
+            # ['TE', '', 'full_model'],
+            # ['Defense', '', 'full_model'],
+            # ['QB', '', 'backfill'],
+            # ['RB', '', 'backfill'],
+            # ['WR', '', 'backfill'],
+            # ['TE', '', 'backfill'],
 ]
 
-for set_pos, rush_pass, model_type in run_list:
+for w in [ 15]:
+    run_params['set_week'] = w
 
-    run_params['rush_pass'] = rush_pass
+    for set_pos, rush_pass, model_type in run_list:
 
-    print(f"\n==================\n{set_pos} {model_type} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
+        run_params['rush_pass'] = rush_pass
 
-    #==========
-    # Pull and clean compiled data
-    #==========
+        print(f"\n==================\n{set_pos} {model_type} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
 
-    # load data and filter down
-    pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
-    df, run_params = load_data(model_type, set_pos, run_params)
-    df, run_params = create_game_date(df, run_params)
-    df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
+        #==========
+        # Pull and clean compiled data
+        #==========
 
-    #=========
-    # Run Models
-    #=========
+        # load data and filter down
+        pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
+        df, run_params = load_data(model_type, set_pos, run_params)
+        df, run_params = create_game_date(df, run_params)
+        df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
-    # set up blank dictionaries for all metrics
-    out_reg, out_class, out_quant = output_dict(), output_dict(), output_dict()
+        #=========
+        # Run Models
+        #=========
 
-    # run all other models
-    model_list = ['adp', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']
-    for i, m in enumerate(model_list):
-        out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
-    save_output_dict(out_reg, model_output_path, 'reg')
 
-    # run all other models
-    model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
-    for cut in run_params['cuts']:
-        print(f"\n--------------\nPercentile {cut}\n--------------\n")
-        df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
-        for i, m in enumerate(model_list):
-            out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
-    save_output_dict(out_class, model_output_path, 'class')
+        # set up blank dictionaries for all metrics
+        out_reg, out_class, out_quant = output_dict(), output_dict(), output_dict()
 
-    # run all other models
-    for alph in [0.8, 0.95]:
-        out_quant, _, _ = get_model_output('gbm_q', df_train, 'quantile', out_quant, run_params, i=1234, alpha=alph)
-    save_output_dict(out_quant, model_output_path, 'quant')
+        # # run all other models
+        # model_list = ['adp', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']
+        # for i, m in enumerate(model_list):
+        #     out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
+        # save_output_dict(out_reg, model_output_path, 'reg')
+
+        # # run all other models
+        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
+        # for cut in run_params['cuts']:
+        #     print(f"\n--------------\nPercentile {cut}\n--------------\n")
+        #     df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
+        #     for i, m in enumerate(model_list):
+        #         out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
+        # save_output_dict(out_class, model_output_path, 'class')
+
+        # run all other models
+        for alph in [0.8, 0.95]:
+            out_quant, _, _ = get_model_output('gbm_q', df_train, 'quantile', out_quant, run_params, i=1234, alpha=alph)
+        save_output_dict(out_quant, model_output_path, 'quant')
 
 
 #%%
@@ -503,4 +512,3 @@ for set_pos, rush_pass, model_type in run_list:
 # db_output_pd = db_output_pd.assign(n_iters=n_iters).assign(to_keep=to_keep).assign(val_week=val_week_min).assign(val_year=val_year_min)
 # dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
 # dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
-

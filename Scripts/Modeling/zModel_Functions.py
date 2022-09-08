@@ -114,10 +114,11 @@ def get_reg_predict_features(df_predict, models, X, y):
 
     return X_predict
 
-def stack_predictions(X_predict, best_models, final_models):
+def stack_predictions(X_predict, best_models, final_models, model_obj='reg'):
     predictions = pd.DataFrame()
     for bm, fm in zip(best_models, final_models):
-        cur_prediction = np.round(bm.predict(X_predict), 2)
+        if model_obj=='reg': cur_prediction = np.round(bm.predict(X_predict), 2)
+        elif model_obj=='class': cur_prediction = np.round(bm.predict_proba(X_predict)[:,1], 3)
         cur_prediction = pd.Series(cur_prediction, name=fm)
         predictions = pd.concat([predictions, cur_prediction], axis=1)
 
