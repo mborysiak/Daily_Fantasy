@@ -13,49 +13,32 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
-
 set_weeks = [
-         13, 13,
-         14, 14,
-         15, 15,
-         16, 16
+        16, 17
         ]
 pred_versions = [
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+          
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample'
                
 ]
 ensemble_versions = [
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                   
+                 
+                     'no_weight_yes_kbest',
+                     'no_weight_no_kbest_randsample_sera'
  ]
 
 std_dev_types = [
-                'pred_spline_class',
-                'pred_isotonic_class',
-                'pred_spline_class',
-                'pred_isotonic_class',
-                'pred_spline_class',
-                'pred_isotonic_class',
-                'pred_spline_class',
-                'pred_isotonic_class',
-               
+          
+                'spline_all',
+                'spline'
 ]
 
-sim_types = ['v2', 'v2', 'v2', 'v2', 'v2', 'v2', 'v2', 'v2']
+
+sim_types = [
+             'ownership_ln_pos',
+             'ownership_ln_pos'
+             ]
 
 
 iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types, sim_types)

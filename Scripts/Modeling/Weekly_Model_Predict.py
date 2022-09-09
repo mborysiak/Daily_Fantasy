@@ -162,6 +162,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
         pipe = skm.model_pipe([
                             skm.piece('random_sample'),
                             skm.piece('std_scale'), 
+                            skm.piece('k_best'),
                             skm.piece(m)
                         ])
 
@@ -213,7 +214,9 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
                                                 ]
     if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
     if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
-    if stack_model: params['random_sample__frac'] = np.arange(0.02, 1, 0.05)
+    if stack_model: 
+        params['random_sample__frac'] = np.arange(0.3, 1, 0.05)
+        params['k_best__k'] = range(1, 30)
 
     return pipe, params
 
@@ -602,7 +605,7 @@ pred_versions = [
                 
 ]
 ensemble_versions = [
-                    'no_weight_no_kbest_randsample_sera_include2',
+                    'no_weight_yes_kbest_randsample_sera_include2',
                 
  ]
 
@@ -637,7 +640,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         # get the stack cuts
         _, _, _, _, full_hold_class = mf.load_all_pickles(model_output_path, 'class')
         run_params['cuts'] = sorted(list(set([int(c[-2:]) for c in full_hold_class.keys()])))
-        class_cut = run_params['cuts'][-1]
+        class_cut = run_params['cuts'][-2]
 
         # get the training data for stacking and prediction data after stacking
         X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path, class_cut)
@@ -695,7 +698,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
 
         # create the output and add standard devations / max scores
-        std_dev_type = 'pred_spline_class'
+        std_dev_type = 'pred_spline_class80'
         output = create_output(output_start, best_predictions, best_predictions_class)
         output = val_std_dev(model_output_path, output, best_val, best_val_class, metrics=metrics, iso_spline='spline', show_plot=True)
 

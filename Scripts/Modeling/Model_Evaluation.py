@@ -176,8 +176,10 @@ import sklearn
 from sklearn.linear_model import Ridge, ElasticNet
 from sklearn.ensemble import RandomForestRegressor
 
+i=0
 for i, w in enumerate([8, 9, 10, 11, 12, 13, 14, 15, 16]):
 
+    print(w)
     df = dm.read(f'''SELECT * 
                     FROM Winnings_Optimize
                     WHERE week={w}
@@ -189,8 +191,15 @@ for i, w in enumerate([8, 9, 10, 11, 12, 13, 14, 15, 16]):
             'ens_sample_weights', 'ens_kbest', 'ens_randsample', 'ens_sera', 
             'std_dev_type', 'sim_type',
             'std_spline', 'std_quantile', 'std_experts', 'std_actuals', 'std_splquantile', 
-            'std_predictions', 'std_coef', 'std_isotonic']]
+            'std_predictions', 'std_coef', 'std_isotonic']].copy()
 
+    X['std_class'] = 0
+    X.loc[X.std_dev_type.str.contains('class'), 'std_class'] = 1
+
+    X['num_include'] = 1
+    X.loc[X.std_dev_type.str.contains('include2'), 'num_include'] = 2
+    X.loc[X.std_dev_type.str.contains('include3'), 'num_include'] = 3
+    
     X.loc[X.min_player_same_team == 'Auto', 'min_player_same_team'] = 2.5
     X.min_player_same_team = X.min_player_same_team.astype('float')
     def one_hot(X):
@@ -222,25 +231,37 @@ for i, w in enumerate([8, 9, 10, 11, 12, 13, 14, 15, 16]):
     try:
         coef_vals = pd.DataFrame(m.coef_, index=X.columns, columns=[f'week_{w}']).reset_index()
         coef_vals = coef_vals.rename(columns={'index': 'metric'})
+        if i==0: all_coef = coef_vals.copy()
+        else: all_coef = pd.merge(all_coef, coef_vals, on='metric', how='outer').fillna(0)
         # coef_vals[abs(coef_vals) > 0.01].sort_values().plot.barh(figsize=(10,10))
 
     except:
         import shap
         shap_values = shap.TreeExplainer(m).shap_values(X)
-        shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(8,10), max_display=30, show=False)
+        coef_vals = pd.DataFrame(shap_values, columns=X.columns)
+        
+        if i==0: 
+            all_coef = coef_vals.copy()
+            X_all = X.copy()
+        else: 
+            all_coef = pd.concat([all_coef, coef_vals], axis=0, sort=False).fillna(0)
+            X_all = pd.concat([X, X_all], sort=False, axis=0)
+            
 
-    if i==0: all_coef = coef_vals.copy()
-    else: all_coef = pd.merge(all_coef, coef_vals, on='metric', how='outer').fillna(0)
-
-coef_vals = pd.Series(all_coef.mean(axis=1).values, index=all_coef.metric)
-coef_vals[abs(coef_vals) > 0.01].sort_values().plot.barh(figsize=(10,10))
+    
+try:
+    coef_vals = pd.Series(all_coef.mean(axis=1).values, index=all_coef.metric)
+    coef_vals[abs(coef_vals) > 0.01].sort_values().plot.barh(figsize=(10,10))
+except:
+    shap.summary_plot(all_coef.values, X_all, feature_names=X_all.columns, plot_size=(8,10), max_display=30, show=False)
 # %%
 
 skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
 df = dm.read("SELECT * FROM Model_Validations", 'Simulation')
 gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', 'model_type']
 df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['y_act'], x['pred_fp_per_game'])[0]).reset_index()
-df
+df.sort_values(by=['set_year', 'set_week', 'pos', 0],
+               ascending=[True, True, False, False]).iloc[:50]
 
 #%%
 
@@ -249,7 +270,7 @@ df = dm.read("SELECT * FROM Model_Test_Validations WHERE model_type='full_model'
 gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', 'model_type']
 df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['actual_pts'], x['pred_fp_per_game'])[0]).reset_index()
 df.sort_values(by=['set_year', 'set_week', 'pos', 0],
-               ascending=[True, True, False, False])
+               ascending=[True, True, False, False]).iloc[:50]
 
 #%%
 

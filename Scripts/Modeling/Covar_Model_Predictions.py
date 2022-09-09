@@ -331,56 +331,47 @@ def get_mean_points(preds):
 # set year to analyze
 set_year = 2021
 covar_type = 'team_points'
+use_covar = 'False'
+use_ownership = 'True'
+adjust_select = True
 
-i = 0
-
-# set the model version
-# set the model version
 set_weeks = [
-         13, 13,
-         14, 14,
-         15, 15,
-         16, 16
+         11, 13, 14, 15, 16, 17
         ]
 pred_versions = [
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'standard_proba_sera_brier',
+                'fixed_model_clone',
+                'standard_proba_sera_brier',
+                'fixed_model_clone',
+                'standard_proba_sera_brier_lowsample',
+                'standard_proba_sera_brier_lowsample'
                
 ]
 ensemble_versions = [
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                    'no_weight_no_kbest_randsample_sera_include2',
-                   
+                    'no_weight_no_kbest_randsample_sera',
+                    'no_weight_yes_kbest', 
+                     'no_weight_no_kbest_randsample_sera',
+                    'no_weight_yes_kbest', 
+                     'no_weight_yes_kbest',
+                     'no_weight_no_kbest_randsample_sera'
  ]
 
 std_dev_types = [
-                'pred_spline_class',
-                'pred_isotonic_class',
-                'pred_spline_class',
-                'pred_isotonic_class',
-                'pred_spline_class',
-                'pred_isotonic_class',
-                'pred_spline_class',
-                'pred_isotonic_class',
-               
+                'spline',
+                'spline_enet_coef',
+                'spline_all',
+                'spline_enet_coef',
+                'spline_all',
+                'spline'
 ]
 
+full_model_weights = [0.2, 1, 5]
+
+i = 0
 iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types)
 for set_week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
-    for full_model_rel_weight in [0.2, 1, 5]:
+    for full_model_rel_weight in full_model_weights:
 
         # get the player and opposing player data to create correlation matrices
         player_data, _ = get_max_metrics(set_week, set_year)
@@ -413,6 +404,23 @@ for set_week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         else:
             dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
             dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
+
+
+run_params = pd.DataFrame({
+    'week': [set_week],
+    'year': [set_year],
+    'pred_vers': [pred_vers],
+    'ensemble_vers': [ensemble_vers],
+    'std_dev_type': [std_dev_type],
+    'full_model_rel_weight': [full_model_rel_weight],
+    'covar_type': [covar_type],
+    'use_covar': [use_covar],
+    'use_ownership': [use_ownership],
+    'adjust_select': [adjust_select]
+})
+
+dm.delete_from_db('Simulation', 'Run_Params', f"week={set_week} AND year={set_year}")
+dm.write_to_db(run_params, 'Simulation', 'Run_Params', 'append')
 
 #%%
 # Kmeans for covariance grouping

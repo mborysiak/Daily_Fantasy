@@ -4,15 +4,20 @@
 # import sim functions
 from pandas.core.frame import DataFrame
 from zSim_Helper_Covar import *
-import seaborn as sns
-
+import os
+import ast
 # set the root path and database management object
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
 
 # root_path = '/Users/sammyers/Desktop/Daily/'
-root_path = ffgeneral.get_main_path('Daily_Fantasy')
-db_path = f'{root_path}/Data/Databases/'
+try:
+    root_path = ffgeneral.get_main_path('Daily_Fantasy')
+    db_path = f'{root_path}/Data/Databases/'
+except:
+    root_path = os.getcwd()
+    db_path = root_path
+
 dm = DataManage(db_path)
 
 #===============
@@ -20,8 +25,29 @@ dm = DataManage(db_path)
 #===============
 
 year = 2021
-week = 18
+week = 17
 num_iters = 500
+
+#-----------------
+# Model and Sim Settings
+#-----------------
+
+# pull in the run parameters for the current week and year
+op_params = dm.read(f'''SELECT * 
+                        FROM Run_Params
+                        WHERE week={week}
+                              AND year={year}''', 'Simulation')
+op_params = {k: v[0] for k,v in op_params.to_dict().items()}
+
+# extract all the operating parameters
+pred_vers = op_params['pred_vers']
+ensemble_vers = op_params['ensemble_vers']
+std_dev_type = op_params['std_dev_type']
+full_model_rel_weight = op_params['full_model_rel_weight']
+covar_type = op_params['covar_type']
+use_covar = ast.literal_eval(op_params['use_covar'])
+use_ownership = ast.literal_eval(op_params['use_ownership'])
+adjust_select = op_params['adjust_select']
 
 #--------
 # League Settings
@@ -43,17 +69,20 @@ total_pos = np.sum(list(pos_require_flex.values()))
 #==================
 
 # instantiate simulation class and add salary information to data
-sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters)
+sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters,
+                         pred_vers, ensemble_vers, std_dev_type, covar_type,
+                         full_model_rel_weight, use_covar, use_ownership)
 
 # return the data and set up dataframe for proportion of salary across position
 d = sim.player_data
 d = d.rename(columns={'pos': 'Position', 'salary': 'Salary'})
 
 # pull in projected ownership
-ownership = dm.read(f'''SELECT player Player, ownership Ownership
-                        FROM Projected_Ownership
+ownership = dm.read(f'''SELECT player Player, pred_ownership Ownership
+                        FROM Predicted_Ownership
                         WHERE week={week} 
                               AND year={year}''', 'Simulation')
+ownership.Ownership = ownership.Ownership.apply(lambda x: np.round(100*np.exp(x),1))
 
 #------------------
 # For Beta Keepers
@@ -140,7 +169,7 @@ def init_player_table_dash(pick_df):
 def init_possible_teams(df):
     possible_teams = ['Auto']
     possible_teams.extend(list(df.team.unique()))
-    return possible_teams
+    return [t for t in possible_teams if t is not None]
 
 
 def init_stack_table_dash(possible_teams):
@@ -346,6 +375,7 @@ def app_layout():
                     
                 ])
 
+
 # update the app based on the above layout
 app.layout = app_layout
 
@@ -544,13 +574,12 @@ def update_output(nc, nc2, player_dash_table_data, player_dash_table_columns, st
     if my_team_player_cnt <= total_pos:
         set_max_team, min_players_same_team = update_stack_data(stack_data)
         
-        results, max_team_cnt = sim.run_sim(to_add_players, to_drop_players, min_players_same_team, set_max_team)
+        results, max_team_cnt = sim.run_sim(to_add_players, to_drop_players, min_players_same_team, set_max_team, adjust_select=adjust_select)
         results = format_results(results, my_team_player_cnt)
         
         player_select_graph = update_player_selection_chart(results)
         top_team_graph = update_top_team_chart(max_team_cnt)
 
-    print(my_team_player_cnt, total_pos)
     team_info_update, my_team_dash = update_team_info_table(my_team, my_team_dash, remain_sal)
 
     # convert my team and the team info tables to dictionary records for Output

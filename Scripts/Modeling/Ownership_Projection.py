@@ -7,16 +7,52 @@ import datetime as dt
 from ff.db_operations import DataManage   
 import ff.general as ffgeneral 
 from skmodel import SciKitModel
-
+import zModel_Functions as mf
 # set the root path and database management object
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2021
-set_week = 18
+set_week = 16
 
 #%%
+
+team_map = {'Cardinals': 'ARI',
+            'Falcons': 'ATL',
+            'Ravens': 'BAL',
+            'Bills': 'BUF',
+            'Panthers': 'CAR',
+            'Bears': 'CHI',
+            'Bengals': 'CIN',
+            'Browns': 'CLE',
+            'Cowboys': 'DAL',
+            'Broncos': 'DEN',
+            'Lions': 'DET',
+            'Packers': 'GB',
+            'Texans': 'HOU',
+            'Colts': 'IND',
+            'Jaguars': 'JAC',
+            'Chiefs': 'KC',
+            'Chargers': 'LAC',
+            'Rams': 'LAR',
+            'Dolphins': 'MIA',
+            'Vikings': 'MIN',
+            'Patriots': 'NE',
+            'Saints': 'NO',
+            'Giants': 'NYG',
+            'Jets': 'NYJ',
+            'Raiders': 'LVR',
+            'Eagles': 'PHI',
+            'Steelers': 'PIT',
+            '49ers': 'SF',
+            '49Ers': 'SF',
+            'Seahawks': 'SEA',
+            'Buccaneers': 'TB',
+            'Titans': 'TEN',
+            'Redskins': 'WAS',
+            'Football Team': 'WAS',
+            'Commanders': 'WAS'}
 
 def get_best_lineups(full_entries, min_place, max_place):
 
@@ -70,17 +106,33 @@ def format_lineups(full_entries, min_place, max_place):
 def add_proj(df):
 
     # pull in the salary and actual results data
+    def_proj1 = dm.read('''SELECT team player, team, week, year, projected_points
+                        FROM FantasyPros
+                        WHERE pos='DST'
+                                ''', 'Pre_PlayerData')
+
+    def_proj2 = dm.read('''SELECT offteam player, position pos, offTeam team, week, year, 
+                                  dk_salary, fantasyPoints, `Proj Pts` ProjPts 
+                           FROM PFF_Expert_Ranks
+                           JOIN (SELECT offteam, week, year, salary dk_salary, fantasyPoints
+                                 FROM PFF_Proj_Ranks)
+                                 USING (offTeam, week, year)''', 'Pre_TeamData')
+    def_proj = pd.merge(def_proj1, def_proj2, on=['player', 'team', 'week', 'year']).dropna()
+
+    # pull in the salary and actual results data
     proj = dm.read('''SELECT player, position pos, offTeam team, week, year, dk_salary, projected_points, fantasyPoints, ProjPts
-                    FROM PFF_Proj_Ranks
-                    JOIN (SELECT player, team offTeam, week, year, projected_points 
+                      FROM PFF_Proj_Ranks
+                      JOIN (SELECT player, team offTeam, week, year, projected_points 
                             FROM FantasyPros)
                             USING (player, offTeam, week, year)
-                    JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts 
+                      JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts 
                             FROM PFF_Expert_Ranks)
                             USING (player, offTeam, week, year)
-                    JOIN (SELECT player, team offTeam, week, year, dk_salary 
+                      JOIN (SELECT player, team offTeam, week, year, dk_salary 
                             FROM Daily_Salaries) USING (player, offTeam, week, year)
                 ''', 'Pre_PlayerData')
+
+    proj = pd.concat([proj, def_proj], axis=0)
 
     proj['avg_proj_pts'] = proj[['projected_points', 'fantasyPoints', 'ProjPts']].mean(axis=1)
 
@@ -88,10 +140,6 @@ def add_proj(df):
     df = pd.merge(df, proj, on=['player', 'week', 'year'])
 
     return df
-
-    
-#%%
-
 
 
 def drop_player_weeks(df, drop_list):
@@ -184,6 +232,7 @@ def run_model_mean(m, test_predict, X_test, time_split):
 
     # get the model pipe for stacking setup and train it on meta features
     pipe = skm.model_pipe([
+                           skm.piece('std_scale'),
                            skm.piece('k_best'),
                            skm.piece(m)
                         ])
@@ -198,13 +247,13 @@ def run_model_mean(m, test_predict, X_test, time_split):
                                                  time_split=time_split)
 
     val_predict = oof_data['full_hold'].copy()
-    val_predict = val_predict.rename(columns={'pred': f'pred_ownership_{m}'})
+    val_predict = val_predict.rename(columns={'pred': f'pred_ownership'})
 
     predictions = []
     for bm in best_models:
         predictions.append(bm.fit(X, y).predict(X_test))
 
-    test_predict[f'pred_ownership_{m}'] = pd.DataFrame(predictions).T.mean(axis=1)
+    test_predict[f'pred_ownership'] = pd.DataFrame(predictions).T.mean(axis=1)
 
     return val_predict, test_predict
 
@@ -230,15 +279,30 @@ def drop_teams(data):
 
     return data
 
+
+def add_gambling_lines(df):
+
+    gambling_lines = dm.read('''SELECT away_team team, week, year, away_line line, away_moneyline, over_under
+                                FROM Gambling_Lines
+                                UNION
+                                SELECT home_team team, week, year, home_line line, home_moneyline, over_under
+                                FROM Gambling_Lines
+                            ''', 'Pre_TeamData').dropna()
+   
+    df = pd.merge(df, gambling_lines, on=['team', 'week', 'year'])
+ 
+    return df
+
 #%%
 #================
 # Predict Ownership Pct
 #================
 
-for set_week in [11, 12, 13, 14, 15, 16, 17, 18]:
+for set_week in [16]:
 
-    player_ownership = dm.read("SELECT * FROM Million_Ownership", 'DK_Results')
-
+    player_ownership = dm.read("SELECT * FROM Million_Ownership", 'DK_Results').drop('player_points', axis=1)
+    player_ownership.loc[player_ownership.player.isin(team_map.keys()), 'player'] = \
+        player_ownership.loc[player_ownership.player.isin(team_map.keys()), 'player'].map(team_map)
     val_week_min = 8
     val_year_min = 2021
 
@@ -248,6 +312,7 @@ for set_week in [11, 12, 13, 14, 15, 16, 17, 18]:
                 'Kyler Murray 132021']
     df = drop_player_weeks(df, drop_list)
     df = add_injuries(df)
+    df = add_gambling_lines(df)
     df = feature_engineering(df)
     df = df.rename(columns={'pct_drafted': 'y_act'})
 
@@ -270,20 +335,12 @@ for set_week in [11, 12, 13, 14, 15, 16, 17, 18]:
     X_test, y_test = skm_test.Xy_split('y_act', to_drop=['player', 'team'])
 
     test_predict = df_test[['player', 'team', 'week', 'year']].copy()
-    val_predict_gbm, test_predict = run_model_mean('gbm', test_predict, X_test, cv_time_input)
-    val_predict_rf, test_predict = run_model_mean('rf', test_predict, X_test, cv_time_input)
-
-    val_predict = pd.merge(val_predict_gbm, val_predict_rf.drop('y_act', axis=1), on=['player', 'team', 'week', 'year'])
-    val_predict['pred_ownership'] = val_predict[[c for c in val_predict.columns if 'pred' in c]].mean(axis=1)
-    test_predict['pred_ownership'] = test_predict[[c for c in test_predict.columns if 'pred' in c]].mean(axis=1)
-
-    # test_predict3 = df_test[['player', 'team', 'week', 'year']].copy()
-    # val_predict3, test_predict3 = run_model_mean('ada', test_predict3, X_test, cv_time_input)
-    # for alpha in [0.01, 0.16, 0.84, 0.99]:
-
-    #     print(f'\n===============Running alpha {int(alpha*100)}\n================')
-    #     val_predict, test_predict = run_model_alpha(val_predict, test_predict, X_test, alpha, cv_time_input)
-
+    val_predict, test_predict = run_model_mean('rf', test_predict, X_test, cv_time_input)
+    
+    mf.show_scatter_plot(val_predict.y_act, val_predict.pred_ownership)
+    # val_predict = pd.merge(val_predict_gbm, val_predict_rf.drop('y_act', axis=1), on=['player', 'team', 'week', 'year'])
+    # val_predict['pred_ownership'] = val_predict[[c for c in val_predict.columns if 'pred' in c]].mean(axis=1)
+    # test_predict['pred_ownership'] = test_predict[[c for c in test_predict.columns if 'pred' in c]].mean(axis=1)
 
     from Fix_Standard_Dev import *
     sd_m, max_m, min_m = get_std_splines(val_predict, {'pred_ownership': 1}, 
@@ -329,17 +386,15 @@ for set_week in [11, 12, 13, 14, 15, 16, 17, 18]:
         test_predict = test_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
         display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
 
-    test_predict.loc[test_predict.min_score < 0, 'min_score'] = 0 
+    # test_predict.loc[test_predict.min_score < 0, 'min_score'] = 0 
     test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'max_score'] = \
         test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'pred_ownership'] * 1.5
-    test_predict.loc[test_predict.std_dev < 0, 'std_dev'] = 1
-
+    # test_predict.loc[test_predict.std_dev < 0, 'std_dev'] = 1
 
     dm.delete_from_db('Simulation', 'Predicted_Ownership', f'week={set_week} AND year={set_year}')
     dm.write_to_db(test_predict, 'Simulation', 'Predicted_Ownership', 'append')
 
     val_predict = val_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
-    # dm.delete_from_db('Simulation', 'Predicted_Ownership_Validation', f'week={set_week} AND year={set_year}')
     dm.write_to_db(val_predict, 'Simulation', 'Predicted_Ownership_Validation', 'replace')
 
 
@@ -352,7 +407,7 @@ pred_player_ownership = dm.read(f'''SELECT player,
                                            year, 
                                            AVG(pred_ownership) pred_ownership, 
                                            AVG(std_dev) std_dev 
-                                    FROM Predicted_Ownership_Validation 
+                                    FROM Predicted_Ownership 
                                     WHERE year={set_year}
                                     GROUP BY player, week, year
                                     ''', 'Simulation')
@@ -406,55 +461,18 @@ for base_place, places in zip([1, 25000, 50000, 100000, 150000], [25, 1000, 1000
     drafted_pct['pct_drafted'] = drafted_pct.pct_drafted_sum / (drafted_pct.lineup_position / 9)
     drafted_pct['pred_drafted'] = drafted_pct.pred_drafted_sum / (drafted_pct.lineup_position / 9)
 
+    pred_drafted_mean = np.mean(drafted_pct.pred_drafted)
+    pred_drafted_std = np.std(drafted_pct.pred_drafted)
+
     print('\nAvg Pct Drafted:', np.mean(drafted_pct.pct_drafted), 
-            '\nAvg Projected Drafted:', np.mean(drafted_pct.pred_drafted), 
-            # '\nStd Perc Drafted:', np.std(drafted_pct.pct_drafted),
-            '\nStd Perc Drafted:', np.std(drafted_pct.pred_drafted),
-            # '\nAvg Min Pct Drafted:', np.mean(drafted_pct.pct_drafted_min), 
-            # '\nAvg Min Pred Drafted:', np.mean(drafted_pct.pred_drafted_min), 
-            # '\nAvg Max Pct Drafted:', np.mean(drafted_pct.pct_drafted_max), 
-            # '\nAvg Max Pred Drafted:', np.mean(drafted_pct.pred_drafted_max), 
+            '\nAvg Projected Drafted:', pred_drafted_mean, 
+            '\nStd Perc Drafted:', pred_drafted_std,
             )
 
-#%%
-player_ownership = dm.read("SELECT * FROM Million_Ownership", 'DK_Results')
+    if base_place==1:
+        mean_output = pd.DataFrame([pred_drafted_mean, pred_drafted_std, set_week, set_year], 
+                                    index=['ownership_mean', 'ownership_std', 'week', 'year']).T
+        dm.delete_from_db('Simulation', 'Mean_Ownership', f"year={set_year} AND week={set_week}")
+        dm.write_to_db(mean_output, 'Simulation', 'Mean_Ownership', 'append')
 
-val_week_min = 8
-val_year_min = 2021
-
-player_ownership.player.unique()[:50]
-#%%
-df = add_proj(player_ownership)
-drop_list = ['Dalvin Cook32021', 'Calvin Ridley82021', 'Odell Beckham152021', 'Cooper Kupp152021', 'Van Jefferson152021',
-            "D'Andre Swift112021", 'Josh Johnson162021', 'Kyler Murray92021', 'Darren Waller72021',
-            'Kyler Murray 132021']
-df = drop_player_weeks(df, drop_list)
-df = add_injuries(df)
-df = feature_engineering(df)
-df = df.rename(columns={'pct_drafted': 'y_act'})
-
-for c in ['pos', 'practice_status', 'game_status', 'practice_game']:
-    df = pd.concat([df, pd.get_dummies(df[c], drop_first=True)], axis=1).drop(c, axis=1)
-
-df, cv_time_input, train_time_split = create_game_date(df, val_year_min, val_week_min, year_week_to_date)
-
-df_train = df[df.game_date < train_time_split].reset_index(drop=True)
-df_test = df[df.game_date == train_time_split].reset_index(drop=True)
-df_test.y_act = np.log(df_test.y_act/100)
-
-df_train = df_train[df_train.y_act!=0].reset_index(drop=True)
-df_train.y_act = np.log(df_train.y_act/100)
-
-skm = SciKitModel(df_train)
-X, y = skm.Xy_split('y_act', to_drop=['player', 'team'])
-
-skm_test = SciKitModel(df_test)
-X_test, y_test = skm_test.Xy_split('y_act', to_drop=['player', 'team'])
-
-test_predict = df_test[['player', 'team', 'week', 'year']].copy()
-val_predict_gbm, test_predict = run_model_mean('gbm', test_predict, X_test, cv_time_input)
-val_predict_rf, test_predict = run_model_mean('rf', test_predict, X_test, cv_time_input)
-
-val_predict = pd.merge(val_predict_gbm, val_predict_rf.drop('y_act', axis=1), on=['player', 'team', 'week', 'year'])
-val_predict['pred_ownership'] = val_predict[[c for c in val_predict.columns if 'pred' in c]].mean(axis=1)
-test_predict['pred_ownership'] = test_predict[[c for c in test_predict.columns if 'pred' in c]].mean(axis=1)
+# %%

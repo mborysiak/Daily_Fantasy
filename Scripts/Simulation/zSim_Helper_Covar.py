@@ -148,7 +148,7 @@ class FootballSimulation:
     def join_ownership_pred(self, df):
 
         # add salaries to the dataframe and set index to player
-        ownership = self.dm.read(f'''SELECT player, pred_ownership, std_dev, max_score
+        ownership = self.dm.read(f'''SELECT player, pred_ownership, std_dev, min_score, max_score
                                       FROM Predicted_Ownership
                                       WHERE year={self.set_year}
                                             AND week={self.week} ''', 'Simulation')
@@ -157,10 +157,13 @@ class FootballSimulation:
         else: df = df.drop(['pred_fp_per_game', 'std_dev', 'min_score','max_score'], axis=1)
 
         df = pd.merge(df, ownership, how='left', on='player')
-        df['min_score'] = df.pred_ownership.min()-0.01
+
+        # df['min_score'] = df.pred_ownership.min()-0.01
+
         df.pred_ownership = df.pred_ownership.fillna(df.pred_ownership.mean())
-        # df.min_score = df.min_score.fillna(0)
         df.std_dev = df.std_dev.fillna(df.std_dev.mean())
+        df.min_score = df.min_score.fillna(df.min_score.min())
+        
         df.loc[df.max_score.isnull(), 'max_score'] = df.loc[df.max_score.isnull(), 'pred_ownership'] + \
                                                         df.loc[df.max_score.isnull(), 'std_dev']*3
 
@@ -178,15 +181,14 @@ class FootballSimulation:
 
 
     @staticmethod
-    def trunc_normal(col, row, num_samples=1000):
+    def trunc_normal(mean_val, sdev, min_sc, max_sc, num_samples=500):
 
         import scipy.stats as stats
 
         # create truncated distribution
-        lower, upper = row.min_score,  row.max_score
-        lower_bound = (lower - row[col]) / row.std_dev, 
-        upper_bound = (upper - row[col]) / row.std_dev
-        trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc=row[col], scale=row.std_dev)
+        lower_bound = (min_sc - mean_val) / sdev, 
+        upper_bound = (max_sc - mean_val) / sdev
+        trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc=mean_val, scale=sdev)
         
         estimates = trunc_dist.rvs(num_samples)
 
@@ -197,11 +199,12 @@ class FootballSimulation:
         predictions = pd.DataFrame()
         if col=='pred_ownership': df = self.ownership_data
         elif col=='pred_fp_per_game': df = self.player_data
-        for _, row in df.iterrows():
-            dists = pd.DataFrame(self.trunc_normal(col, row, num_options)).T
-            predictions = pd.concat([predictions, dists], axis=0)
+
+        pred_list = []
+        for mean_val, sdev, min_sc, max_sc in df[[col, 'std_dev', 'min_score', 'max_score']].values:
+            pred_list.append(self.trunc_normal(mean_val, sdev, min_sc, max_sc, num_options))
         
-        return predictions.reset_index(drop=True)
+        return pd.DataFrame(pred_list)
 
 
     def covar_dist(self, num_options=500):
@@ -347,13 +350,13 @@ class FootballSimulation:
 
     @staticmethod
     def samples_G_ownership(data, max_entries):
-        current_ownership = data.iloc[:, np.random.choice(range(4, max_entries+4))].values
+        current_ownership = -data.iloc[:, np.random.choice(range(4, max_entries+4))].values
         current_ownership = current_ownership.reshape(1, len(current_ownership))
         return current_ownership
 
     @staticmethod
     def create_h_ownership():
-        return np.random.normal(-25.5962726085, 2.8129, size=1).reshape(1, 1)
+        return np.random.normal(28.583, 2.96566, size=1).reshape(1, 1)
 
     @staticmethod
     def create_G_team(team_map, player_map):
@@ -443,18 +446,18 @@ class FootballSimulation:
     @staticmethod
     def tally_player_selections(predictions, player_selections, x):
             
-            # find all LP results chosen and equal to 1
-            x = np.array(x)[:, 0]==1
-            names = predictions.player.values[x]
+        # find all LP results chosen and equal to 1
+        x = np.array(x)[:, 0]==1
+        names = predictions.player.values[x]
 
-            # add up the player selections
-            if len(names) != len(np.unique(names)):
-                pass
-            else:
-                for n in names:
-                    player_selections[n] += 1
+        # add up the player selections
+        if len(names) != len(np.unique(names)):
+            pass
+        else:
+            for n in names:
+                player_selections[n] += 1
 
-            return player_selections
+        return player_selections
 
     
     def final_results(self, player_selections):
@@ -593,12 +596,12 @@ class FootballSimulation:
 # db_path = f'{root_path}/Data/Databases/'
 # dm = DataManage(db_path)
 
-# pred_vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc'
-# ens_vers = 'no_weight_no_kbest_randsample_sera_include2'
-# std_dev_type = 'pred_spline_class'
-# use_covar=True
-# use_ownership=False
-# week = 13
+# pred_vers = 'standard_proba_sera_brier_lowsample'
+# ens_vers = 'no_weight_yes_kbest'
+# std_dev_type = 'spline_all'
+# use_covar=False
+# use_ownership=True
+# week = 16
 # year = 2021
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -608,13 +611,12 @@ class FootballSimulation:
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
 #                          full_model_rel_weight=5, covar_type='team_points', use_covar=use_covar, 
 #                          use_ownership=use_ownership)
-# min_players_same_team = -1
+# min_players_same_team = 'Auto'
 # set_max_team = None
 # to_add = []
 # to_drop = []
+
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select=True)
+
 # print(max_team_cnt)
 # results
-
-
-# %%
