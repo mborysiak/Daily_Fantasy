@@ -9,8 +9,8 @@ from DataPull_Helper import *
 pd.set_option('display.max_columns', 999)
 
 # +
-set_year = 2021
-set_week = 17
+set_year = 2022
+set_week = 1
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -387,3 +387,52 @@ dm.delete_from_db('Post_PlayerData', 'Offensive_Line_Players', f"week={set_week}
 dm.write_to_db(df, 'Post_PlayerData', 'Offensive_Line_Players', 'append')
 # %%
 
+import requests
+import pandas as pd
+
+def get_next_gen(data_type, year, week):
+    headers = {
+        'accept': 'application/json, text/plain, */*',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
+        'referer': 'https://nextgenstats.nfl.com/',
+        'accept-language': 'en-US,en;q=0.9,hi;q=0.8',
+    }
+
+    response = requests.get(f'https://appapi.ngs.nfl.com/statboard/{data_type}?season={year}&seasonType=REG&week={week}', headers=headers)
+
+    df = pd.read_json(response.content)
+
+    return df
+
+
+
+for stat_type in ['receiving', 'rushing', 'passing']:
+
+    next_gen_data = get_next_gen(stat_type, set_year, set_week)
+
+    all_stats = []
+    if stat_type == 'receiving': ignore = ('player', 'recTouchdowns', 'receptions', 'targets', 'yards', 'teamId')
+    elif stat_type == 'rushing': ignore = ('player', 'rushTouchdowns', 'rushYards', 'rushAttempts', 'teamId')
+    elif stat_type == 'passing': ignore = ('player', 'attempts', 'gamesPlayed', 'interceptions', 'nflId', 'season', 'seasonType', 'week', 'teamId', 'completions')
+
+    for i, x in enumerate(next_gen_data.stats.values):
+        parse_dict = {k:v for k,v in x.items() if k not in ignore}
+        if i==0: 
+            cols = list(parse_dict.keys())
+            if stat_type == 'rushing': cols.append('playerName')
+        
+        parse_list = list(parse_dict.values())
+        if stat_type == 'rushing': 
+            parse_list.append(x['player']['displayName'])
+
+        all_stats.append(parse_list)
+
+    next_gen = pd.DataFrame(all_stats, columns=cols).rename(columns={'playerName': 'player', 'position': 'pos'})
+    next_gen = next_gen.dropna()
+    next_gen.player = next_gen.player.apply(dc.name_clean)
+    next_gen = next_gen.assign(week=set_week, year=set_year)
+    
+    dm.delete_from_db('Post_PlayerData', f'NextGen_{stat_type.title()}', f"year={set_year} AND week={set_week}")
+    dm.write_to_db(next_gen, 'Post_PlayerData', f'NextGen_{stat_type.title()}', 'append')
+   
+# %%

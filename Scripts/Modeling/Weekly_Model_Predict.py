@@ -480,7 +480,9 @@ def add_actual(df):
                             FROM {set_pos}_Stats 
                             WHERE week={run_params['set_week']} 
                                 and season={run_params['set_year']}''', 'FastR')
-    df = pd.merge(df, actual_pts, on='player')
+    
+    if len(actual_pts) > 0:
+        df = pd.merge(df, actual_pts, on='player')
     return df
 
 def save_val_to_db(model_output_path, best_val, run_params):
@@ -574,11 +576,11 @@ dm = DataManage(db_path)
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2021,
+    'set_year': 2022,
 
     # set beginning of validation period
     'val_year_min': 2020,
-    'val_week_min': 10,
+    'val_week_min': 14,
 
     # opt params
     'n_iters': 25,
@@ -588,7 +590,6 @@ run_params = {
     'use_sample_weight': False,
     'opt_type': 'custom_rand',
     'met': 'y_act',
-
 }
 
 min_include = 2
@@ -597,11 +598,10 @@ class_std = True
 
 # set the model version
 set_weeks = [
-        16
+        2
         ]
 pred_versions = [
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-         
+                'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate'         
                 
 ]
 ensemble_versions = [
@@ -613,11 +613,11 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
     run_params['set_week'] = w
     runs = [
-        ['QB', 'full_model', ''],
-        ['RB', 'full_model', ''],
-        ['WR', 'full_model', ''],
-        ['TE', 'full_model', ''],
-        ['Defense', 'full_model', ''],
+        # ['QB', 'full_model', ''],
+        # ['RB', 'full_model', ''],
+        # ['WR', 'full_model', ''],
+        # ['TE', 'full_model', ''],
+        # ['Defense', 'full_model', ''],
         ['QB', 'backfill', ''],
         ['RB', 'backfill', ''],
         ['WR', 'backfill', ''],
@@ -677,12 +677,13 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         save_val_to_db(model_output_path, best_val, run_params)
         
         # create the output and add standard devations / max scores
-        std_dev_type = 'pred_isotonic_class'
+        std_dev_type = 'pred_spline_class80'
         output = create_output(output_start, best_predictions, best_predictions_class)
         
         if class_std and set_pos!='Defense': metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1}
         else: metrics = {'pred_fp_per_game': 1}
-        output = val_std_dev(model_output_path, output, best_val, best_val_class, metrics=metrics, iso_spline='iso', show_plot=True)
+        output = val_std_dev(model_output_path, output, best_val, best_val_class, metrics=metrics, 
+                             iso_spline='spline', show_plot=True)
         
         try:  
             output = add_actual(output)
@@ -690,22 +691,6 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
             save_test_to_db(output, run_params)
             
             if show_plot: mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
-            output = output.drop('actual_pts', axis=1)
-        except:
-            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score']])
-
-        save_output_to_db(output, run_params)
-
-
-        # create the output and add standard devations / max scores
-        std_dev_type = 'pred_spline_class80'
-        output = create_output(output_start, best_predictions, best_predictions_class)
-        output = val_std_dev(model_output_path, output, best_val, best_val_class, metrics=metrics, iso_spline='spline', show_plot=True)
-
-        try:  
-            output = add_actual(output)
-            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
-            # mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
             output = output.drop('actual_pts', axis=1)
         except:
             print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score']])

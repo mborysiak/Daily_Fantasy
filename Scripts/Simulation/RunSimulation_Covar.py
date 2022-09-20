@@ -11,10 +11,10 @@ from ff.db_operations import DataManage
 from ff import general as ffgeneral
 
 # root_path = '/Users/sammyers/Desktop/Daily/'
-try:
+if 'mborysia' in os.getcwd():
     root_path = ffgeneral.get_main_path('Daily_Fantasy')
     db_path = f'{root_path}/Data/Databases/'
-except:
+else:
     root_path = os.getcwd()
     db_path = root_path
 
@@ -24,8 +24,8 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
-year = 2021
-week = 17
+year = 2022
+week = 2
 num_iters = 500
 
 #-----------------
@@ -47,8 +47,12 @@ full_model_rel_weight = op_params['full_model_rel_weight']
 covar_type = op_params['covar_type']
 use_covar = ast.literal_eval(op_params['use_covar'])
 use_ownership = ast.literal_eval(op_params['use_ownership'])
-adjust_select = op_params['adjust_select']
+adjust_select = ast.literal_eval(op_params['adjust_select'])
 
+print(full_model_rel_weight, use_ownership, adjust_select)
+
+
+#%%
 #--------
 # League Settings
 #--------
@@ -598,6 +602,6 @@ def update_output(nc, nc2, player_dash_table_data, player_dash_table_columns, st
 
 #%%
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=True, host='127.0.0.1')
 
 # %%

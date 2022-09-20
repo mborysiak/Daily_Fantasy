@@ -13,6 +13,7 @@ import sklearn
 from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import StandardScaler
 from lightgbm import LGBMRegressor
+from sklearn.metrics import r2_score
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -89,34 +90,31 @@ def train_predict_split(df, train_time_split, cv_time_input):
 #==================================================================
 
 # set year to analyze
-set_year = 2021
-set_week = 17
+set_year = 2022
+set_week = 1
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 10
+val_week_min = 14
 
 # set the model version
-vers = 'standard_proba_sera_brier'
-ensemble_vers = 'no_weight_yes_kbest_sera'
+vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc'
+ensemble_vers = 'no_weight_yes_kbest_randsample_sera_include2'
 model_type ='full_model'
-set_pos = 'RB'
-
-     
-pkey = f'{set_pos}_year{set_year}_week{set_week}_{model_type}{vers}'
-
-model_output_path = f'{root_path}/Model_Outputs/{set_year}/{pkey}/'
-if not os.path.exists(model_output_path): os.makedirs(model_output_path)
+set_pos = 'QB'
 
 #==========
 # Pull and clean compiled data
 #==========
 
 df, drop_cols = load_data(model_type, set_pos)
+
+df = df[~((df.player=='Davis Mills') & (df.week==5) & (df.year==2021))].reset_index(drop=True)
+
 df, cv_time_input, train_time_split = create_game_date(df)
 df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
 
-df_train['y_act'] = ( df_train.dk_salary / (df_train.y_act+2.020403))
+df_train['y_act'] = df_train.y_act
 
 skm = SciKitModel(df_train, model_obj='reg')
 X_all, y = skm.Xy_split('y_act', drop_cols)
@@ -130,38 +128,121 @@ if 'game_date' not in X.columns:
 #------------
 
 from sklearn.pipeline import Pipeline
-
+from sklearn.ensemble import HistGradientBoostingRegressor
 # set up the model pipe and get the default search parameters
-pipe = skm.model_pipe([skm.piece('std_scale'), 
-                       skm.piece('k_best'),
-                       skm.piece('xgb')])
+# pipe = skm.model_pipe([skm.piece('std_scale'), 
+#                        skm.piece('k_best'),
+#                        skm.piece('lgbm')])
+
+pipe = skm.model_pipe([skm.piece('random_sample'),
+                        skm.piece('std_scale'), 
+                        skm.piece('select_perc'),
+                        skm.feature_union([
+                                        skm.piece('agglomeration'), 
+                                        skm.piece('k_best'),
+                                        skm.piece('pca')
+                                        ]),
+                        skm.piece('k_best'),
+                        ('gbm', HistGradientBoostingRegressor())])
 
 # set params
-params = skm.default_params(pipe, 'rand')
-params['k_best__k'] = range(20, 200, 5)
+# params = skm.default_params(pipe, 'rand')
+params = {'random_sample__frac': [0.2 , 0.22, 0.24, 0.26, 0.28, 0.3 , 0.32, 0.34, 0.36, 0.38, 0.4 ,
+                0.42, 0.44, 0.46, 0.48, 0.5 , 0.52, 0.54, 0.56, 0.58, 0.6 , 0.62,
+                0.64],
+ 'random_sample__seed': range(0, 10000, 1000),
+ 'select_perc__percentile': range(25, 75, 5),
+ 'feature_union__agglomeration__n_clusters': range(2, 20, 2),
+ 'feature_union__k_best__k': range(20, 125, 5),
+ 'feature_union__pca__n_components': range(2, 15, 2),
+ 'k_best__k': range(20, 125, 5),
 
+  'gbm__learning_rate': 10**np.arange(-2, -0.5, 0.1),
+#   'gbm__max_iter': range(50, 150, 10),
+#   'gbm__max_leaf_nodes': range(20, 80, 5),
+  'gbm__max_depth': range(8, 25),
+  'gbm__min_samples_leaf': range(5, 25),
+#   'gbm__l2_regularization': range(0, 10, 1)
+ }
+
+
+lgbm = { 
+    'lgbm__max_depth': range(2, 12),
+    'lgbm__num_leaves': range(25, 100, 1),
+ }
+
+# don't improve over current
+# xgb = {
+#     'xgb__n_estimators': range(100, 250, 5),
+#     'xgb__learning_rate': 10**np.arange(-2, -0.5, 0.1),
+#     'xgb__max_depth': range(2, 10, 2),
+#     'xgb__booster': ['gbtree', 'gblinear', 'dart'],
+#     'xgb__verbosity': [0]
+#  }
 
 # run the model with parameter search
 best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=25,
-                                                        col_split='game_date', 
+                                                        col_split='game_date',n_splits=4,
                                                         time_split=cv_time_input,
                                                         bayes_rand='custom_rand',
                                                         sample_weight=False,
                                                         random_seed=1234)
 
+
 oof_data['full_hold'].plot.scatter(x='pred', y='y_act')
 
 #%%
-m = best_models[1]
+
+df = param_scores.copy()
+
+df['input_features'] = df.feature_union__k_best__k + df.feature_union__agglomeration__n_clusters
+df.loc[df.k_best__k < df.input_features, 'k_best__k'] = df.loc[df.k_best__k < df.input_features, 'input_features']
+df.select_perc__percentile = df.select_perc__percentile.fillna(100)
+
+X = df.drop('scores', axis=1)
+
+for c in X.dtypes[X.dtypes=='object'].index:
+    X = pd.concat([X, pd.get_dummies(X)], axis=1).drop(c, axis=1)
+y = -df.scores
+
+# m = ElasticNet(alpha=0.01, l1_ratio=0.05)
+# m = RandomForestRegressor(n_estimators=100, max_depth=3, min_samples_leaf=2)
+m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=1)
+
+if type(m) == sklearn.linear_model._ridge.Ridge or type(m)==sklearn.linear_model._coordinate_descent.ElasticNet:
+    sc = StandardScaler()
+    sc.fit(X)
+    X = pd.DataFrame(sc.transform(X), columns=X.columns)
+
+scores = cross_val_score(m, X, y, cv=5, scoring='neg_mean_squared_error')
+scores = np.sqrt(-np.mean(scores))
+print(scores)
+m.fit(X,y)
+
+try:
+    pd.Series(m.coef_, index=X.columns).sort_values().plot.barh(figsize=(10,10))
+
+except:
+    import shap
+    shap_values = shap.TreeExplainer(m).shap_values(X)
+    shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(8,10), max_display=20, show=False)
+
+
+#%%
+m = best_models[2]
+m.fit(X,y)
 transformer = Pipeline(m.steps[:-1])
 X_shap = transformer.transform(X)
 cols = X.columns[transformer['k_best'].get_support()]
 X_shap = pd.DataFrame(X_shap, columns=cols)
 
 import shap
-shap_values = shap.TreeExplainer(m.steps[-1][1]).shap_values(X_shap)
-shap.summary_plot(shap_values, X_shap, feature_names=X_shap.columns, plot_size=(8,15), max_display=30, show=False)
-
+try:
+    shap_values = shap.TreeExplainer(m.steps[-1][1]).shap_values(X_shap)
+    shap.summary_plot(shap_values, X_shap, feature_names=X_shap.columns, plot_size=(8,15), max_display=30, show=False)
+except:
+    xx = pd.Series(m.steps[-1][1].coef_, index=X_shap.columns)
+    xx[np.abs(xx)>0.001].sort_values().plot.barh(figsize=(5,10))
 #%%
 #======================================================================================================================
 
@@ -176,14 +257,24 @@ import sklearn
 from sklearn.linear_model import Ridge, ElasticNet
 from sklearn.ensemble import RandomForestRegressor
 
+weeks = [10, 11, 12, 13, 14, 15, 1, 2]
+years = [2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022]
+
+# weeks = [2]
+# years = [2022]
 i=0
-for i, w in enumerate([8, 9, 10, 11, 12, 13, 14, 15, 16]):
+for w, yr in zip(weeks, years):
 
     print(w)
     df = dm.read(f'''SELECT * 
                     FROM Winnings_Optimize
-                    WHERE week={w}
+                    WHERE NumPlayers=9
+                         and week={w}
+                         and year={yr}
                     ORDER BY year, week''', 'Results')
+
+    df.loc[df.Contest=='ThreePointStance', ['total_winnings', 'max_winnings']] = df.loc[df.Contest=='ThreePointStance', ['total_winnings', 'max_winnings']] * 20 / 33
+    df.loc[df.Contest=='ScreenPass', ['total_winnings', 'max_winnings']] = df.loc[df.Contest=='ScreenPass', ['total_winnings', 'max_winnings']] * 20 / 15
 
     X = df[['adjust_pos_counts', 'drop_player_multiple',  'drop_team_frac', 'top_n_choices', 
             'week', 'covar_type', 'full_model_rel_weight', 'min_player_same_team', 'num_iters',
@@ -191,7 +282,8 @@ for i, w in enumerate([8, 9, 10, 11, 12, 13, 14, 15, 16]):
             'ens_sample_weights', 'ens_kbest', 'ens_randsample', 'ens_sera', 
             'std_dev_type', 'sim_type',
             'std_spline', 'std_quantile', 'std_experts', 'std_actuals', 'std_splquantile', 
-            'std_predictions', 'std_coef', 'std_isotonic']].copy()
+            'std_predictions', 'std_coef', 'std_isotonic',
+            'Contest']].copy()
 
     X['std_class'] = 0
     X.loc[X.std_dev_type.str.contains('class'), 'std_class'] = 1
@@ -199,11 +291,11 @@ for i, w in enumerate([8, 9, 10, 11, 12, 13, 14, 15, 16]):
     X['num_include'] = 1
     X.loc[X.std_dev_type.str.contains('include2'), 'num_include'] = 2
     X.loc[X.std_dev_type.str.contains('include3'), 'num_include'] = 3
-    
+
     X.loc[X.min_player_same_team == 'Auto', 'min_player_same_team'] = 2.5
     X.min_player_same_team = X.min_player_same_team.astype('float')
     def one_hot(X):
-        for c in ['week', 'covar_type', 'std_dev_type', 'sim_type']:
+        for c in ['week', 'covar_type', 'std_dev_type', 'sim_type', 'Contest']:
             X = pd.concat([X, pd.get_dummies(X[c], prefix=c, drop_first=False)], axis=1)
             if c!='week':
                 X = X.drop(c, axis=1)
@@ -213,10 +305,10 @@ for i, w in enumerate([8, 9, 10, 11, 12, 13, 14, 15, 16]):
     X = one_hot(X).fillna(0)
     y = df.max_winnings
 
-    # m = ElasticNet(alpha=5, l1_ratio=0.1)
+    m = ElasticNet(alpha=5, l1_ratio=0.1)
     # m = Ridge(alpha=100)
     # m = RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1)
-    m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
+    # m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
 
     if type(m) == sklearn.linear_model._ridge.Ridge or type(m) == sklearn.linear_model._coordinate_descent.ElasticNet:
         sc = StandardScaler()
@@ -247,8 +339,8 @@ for i, w in enumerate([8, 9, 10, 11, 12, 13, 14, 15, 16]):
             all_coef = pd.concat([all_coef, coef_vals], axis=0, sort=False).fillna(0)
             X_all = pd.concat([X, X_all], sort=False, axis=0)
             
+    i+=1
 
-    
 try:
     coef_vals = pd.Series(all_coef.mean(axis=1).values, index=all_coef.metric)
     coef_vals[abs(coef_vals) > 0.01].sort_values().plot.barh(figsize=(10,10))
@@ -257,7 +349,7 @@ except:
 # %%
 
 skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
-df = dm.read("SELECT * FROM Model_Validations", 'Simulation')
+df = dm.read("SELECT * FROM Model_Validations WHERE model_type='backfill' AND set_year=2022", 'Simulation')
 gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', 'model_type']
 df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['y_act'], x['pred_fp_per_game'])[0]).reset_index()
 df.sort_values(by=['set_year', 'set_week', 'pos', 0],
@@ -266,7 +358,7 @@ df.sort_values(by=['set_year', 'set_week', 'pos', 0],
 #%%
 
 skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
-df = dm.read("SELECT * FROM Model_Test_Validations WHERE model_type='full_model'", 'Simulation')
+df = dm.read("SELECT * FROM Model_Test_Validations WHERE model_type='full_model' AND set_year=2022", 'Simulation')
 gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', 'model_type']
 df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['actual_pts'], x['pred_fp_per_game'])[0]).reset_index()
 df.sort_values(by=['set_year', 'set_week', 'pos', 0],
@@ -283,11 +375,13 @@ df.sort_values(by=['set_year', 'set_week', 'pos', 0],
 
 
 reg_or_class = 'reg'
-model_type = 'enet'
+model_type = 'lgbm'
 
 df = dm.read(f'''SELECT * 
                  FROM {reg_or_class}_{model_type}
-                 WHERE scores < 1
+                 WHERE scores > 0
+                       AND pos='WR'
+                       and week=1
                         ''', 'Results')
 df = df.drop(['model'], axis=1).dropna()
 
@@ -319,9 +413,9 @@ X = one_hot(df)
 X = X.drop('scores', axis=1)
 y = -df.scores
 
-# m = ElasticNet(alpha=0.01, l1_ratio=0.05)
+m = ElasticNet(alpha=0.01, l1_ratio=0.05)
 # m = RandomForestRegressor(n_estimators=100, max_depth=3, min_samples_leaf=2)
-m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=1)
+# m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=1)
 
 if type(m) == sklearn.linear_model._ridge.Ridge or type(m)==sklearn.linear_model._coordinate_descent.ElasticNet:
     sc = StandardScaler()

@@ -37,19 +37,20 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
+run_weeks = [2]
+
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2021,
-    'set_week': 11,
+    'set_year': 2022,
 
     # set beginning of validation period
     'val_year_min': 2020,
-    'val_week_min': 10,
+    'val_week_min': 14,
 
     # opt params
     'n_iters': 25,
-    'n_splits': 5,
+    'n_splits': 4,
 
     # other parameters
     'use_sample_weight': False,
@@ -65,7 +66,7 @@ set_pos = 'RB'
 model_type = 'full_model'
 
 # set version and iterations
-vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc'
+vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate'
 
 #----------------
 # Data Loading
@@ -442,16 +443,16 @@ def create_output(output_start, predictions):
 run_list = [
             # ['QB', '', 'full_model'],
             # ['RB', '', 'full_model'],
-            ['WR', '', 'full_model'],
+            # ['WR', '', 'full_model'],
             # ['TE', '', 'full_model'],
             # ['Defense', '', 'full_model'],
-            # ['QB', '', 'backfill'],
-            # ['RB', '', 'backfill'],
-            # ['WR', '', 'backfill'],
-            # ['TE', '', 'backfill'],
+            ['QB', '', 'backfill'],
+            ['RB', '', 'backfill'],
+            ['WR', '', 'backfill'],
+            ['TE', '', 'backfill'],
 ]
 
-for w in [ 15]:
+for w in run_weeks:
     run_params['set_week'] = w
 
     for set_pos, rush_pass, model_type in run_list:
@@ -478,20 +479,20 @@ for w in [ 15]:
         # set up blank dictionaries for all metrics
         out_reg, out_class, out_quant = output_dict(), output_dict(), output_dict()
 
-        # # run all other models
-        # model_list = ['adp', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']
-        # for i, m in enumerate(model_list):
-        #     out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
-        # save_output_dict(out_reg, model_output_path, 'reg')
+        # run all other models
+        model_list = ['adp', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']
+        for i, m in enumerate(model_list):
+            out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
+        save_output_dict(out_reg, model_output_path, 'reg')
 
-        # # run all other models
-        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
-        # for cut in run_params['cuts']:
-        #     print(f"\n--------------\nPercentile {cut}\n--------------\n")
-        #     df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
-        #     for i, m in enumerate(model_list):
-        #         out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
-        # save_output_dict(out_class, model_output_path, 'class')
+        # run all other models
+        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
+        for cut in run_params['cuts']:
+            print(f"\n--------------\nPercentile {cut}\n--------------\n")
+            df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
+            for i, m in enumerate(model_list):
+                out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
+        save_output_dict(out_class, model_output_path, 'class')
 
         # run all other models
         for alph in [0.8, 0.95]:
@@ -512,3 +513,27 @@ for w in [ 15]:
 # db_output_pd = db_output_pd.assign(n_iters=n_iters).assign(to_keep=to_keep).assign(val_week=val_week_min).assign(val_year=val_year_min)
 # dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
 # dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
+
+#%%
+
+cur_df = df_train.copy()
+model_obj = 'reg'
+model_name = 'lgbm'
+alpha = None
+i=0
+
+skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'])
+pipe, params = get_full_pipe(skm, model_name, alpha, min_samples=min_samples)
+
+if model_obj == 'class': 
+    proba = True
+    alpha = f'_{cut}' 
+else: proba = False
+
+# fit and append the ADP model
+best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=run_params['n_iters'], n_splits=run_params['n_splits'],
+                                                            col_split='game_date', time_split=run_params['cv_time_input'],
+                                                            bayes_rand=run_params['opt_type'], proba=proba, random_seed=(i+7)*19+(i*12)+6)
+# %%
+param_scores
+# %%

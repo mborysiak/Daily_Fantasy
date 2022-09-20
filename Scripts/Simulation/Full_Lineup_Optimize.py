@@ -13,45 +13,53 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
+year=2022
+
+
+# set the model version
 set_weeks = [
-        16, 17
+    2, 
         ]
 pred_versions = [
           
-                'standard_proba_sera_brier_lowsample',
-                'standard_proba_sera_brier_lowsample'
-               
+                'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate',                
+                
 ]
 ensemble_versions = [
-                 
-                     'no_weight_yes_kbest',
-                     'no_weight_no_kbest_randsample_sera'
+
+                    'no_weight_yes_kbest_randsample_sera_include2',
+                  
+                
  ]
 
 std_dev_types = [
-          
-                'spline_all',
-                'spline'
+
+                'pred_spline_class80',
+               
 ]
 
 
 sim_types = [
-             'ownership_ln_pos',
-             'ownership_ln_pos'
+             
+              'ownership_inverse', 
              ]
 
+contests = [
 
-iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types, sim_types)
-for week, pred_vers, ensemble_vers, std_dev_type, sim_type in iter_cats:
+            'Million'
+]
 
-    year = 2021
+
+iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types, sim_types, contests)
+for week, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in iter_cats:
+
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
     num_iters = 100
     TOTAL_LINEUPS = 10
     
 
-    print(f'\nWeek {week} PredVer: {pred_vers} EnsVer: {ensemble_vers} SDType:{std_dev_type}\n===============\n')
+    print(f'\nWeek {week} PredVer: {pred_vers} EnsVer: {ensemble_vers} SDType:{std_dev_type} SimType:{sim_type} Contest:{contest}\n===============\n')
 
     min_players_same_team = 'Auto'
     set_max_team = None
@@ -89,8 +97,8 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type in iter_cats:
                 to_drop.append(k)
         return to_drop
 
-    def get_my_results(week):
-        path = f'//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/MBorysiak/DK/Results/{year}/week{week}.csv'
+    def get_my_results(week, contest):
+        path = f'//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/MBorysiak/DK/Results/{year}/{contest}/week{week}.csv'
         my_results = pd.read_csv(path, low_memory=False)
         my_results = my_results.loc[my_results.EntryName.str.contains('mborysi'), 'Points'].values
 
@@ -100,12 +108,15 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type in iter_cats:
             prize_money = prizes.loc[idx_match, 'prize']
             actual_winnings.append(prize_money)
 
+        if len(actual_winnings) == 0: actual_winnings=[0]
+        if len(my_results) == 0: my_results=[100]
+
         return actual_winnings, my_results
 
 
     def summary_results(winnings, points):
         if len(winnings) != 10:
-            frac = 10 / len(winnings)
+            frac = 10 / (len(winnings)+1)
         else:
             frac = 1
         total_winnings = np.sum(winnings) * frac
@@ -137,16 +148,17 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type in iter_cats:
         points = pd.concat([points, get_stats(pos)])
 
     prizes = dm.read(f'''SELECT Rank, Points, prize
-                        FROM Million_Results
-                        WHERE week={week}
-                            AND year={year}''', 'DK_Results')
+                         FROM Contest_Results
+                         WHERE week={week}
+                            AND year={year}
+                            AND Contest='{contest}' ''', 'DK_Results')
 
     min_prize_pts = round(prizes.loc[prizes.prize > 0, 'Points'].min(),1)
     mean_prize_pts = round(prizes.loc[prizes.prize > 0, 'Points'].mean(),1)
     max_prize_pts = round(prizes.loc[prizes.prize > 0, 'Points'].max(),1)
     print(f'Min Prize Points: {min_prize_pts}\nMean Prize Points: {mean_prize_pts}\nMax Prize Points: {max_prize_pts}')
 
-    actual_winnings, actual_points = get_my_results(week)
+    actual_winnings, actual_points = get_my_results(week, contest)
     actual_results = summary_results(actual_winnings, actual_points)
     actual_results.columns = ['My'+ar for ar in actual_results]
     print(actual_results)
@@ -194,7 +206,7 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type in iter_cats:
             to_drop = rand_drop_teams(unique_teams, team_drop_frac)
             to_drop.extend(to_drop_selected)
 
-            for i in range(8):
+            for i in range(9):
                 results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select)
                 prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
                 selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
@@ -212,7 +224,7 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type in iter_cats:
 
         return list(sim_results.values), lineups
 
-# for adj, pdm, tdf, tn, fmw, ct, i in params:
+# for adj, pdm, tdf, tn, fmw, ct, i in params[:1]:
 #     sim_winnings(adj, pdm, tdf, tn, fmw, ct)
 
 #%%
@@ -239,8 +251,10 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type in iter_cats:
     output.columns = cols
     output = output.assign(min_prize_points=min_prize_pts, mean_prize_points=mean_prize_pts, max_prize_points=max_prize_pts,
                            week=week, year=year, pred_vers=pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
-                           min_player_same_team=min_players_same_team, num_iters=num_iters)
-
+                          num_iters=num_iters)
+    if min_players_same_team not in cols:
+        output = output.assign(min_player_same_team=min_players_same_team)
+    
     output['sim_type'] = sim_type
 
     output['pred_proba'] = 0
@@ -318,9 +332,11 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type in iter_cats:
     output.loc[output.std_dev_type.isin(['pred_isotonic', 'pred_spline', 'pred_isotonic_spline']), 'std_predictions'] = 1
 
     lineups['sim_type'] = sim_type
-
+    output['Contest'] = contest
+    output['NumPlayers'] = 9
+    
     dm.write_to_db(output, 'Results', 'Winnings_Optimize', 'append')
-    dm.write_to_db(lineups, 'Results', 'Lineups_Optimize', 'append')
+    # dm.write_to_db(lineups, 'Results', 'Lineups_Optimize', 'append')
 
 
 #%%

@@ -7,10 +7,11 @@ import datetime as dt
 import sqlite3
 from DataPull_Helper import *
 pd.set_option('display.max_columns', 999)
+import shutil as su
 
 # +
 set_year = 2022
-set_week = 1
+set_week = 2
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -189,6 +190,9 @@ print('Missing Teams:', set([t for t in team_map.values() if t not in teams]))
 
 dm.delete_from_db('Pre_TeamData', 'Gambling_Lines', f"week={set_week} and year={set_year}")
 dm.write_to_db(data, 'Pre_TeamData', 'Gambling_Lines', if_exist='append')
+#%%
+glines = dm.read("SELECT * FROM Gambling_Lines", 'Pre_TeamData')
+dm.write_to_db(glines, 'Simulation', 'Gambling_Lines', 'replace')
 
 #%%
 # # Weather
@@ -450,8 +454,8 @@ dm.write_to_db(df, 'Pre_PlayerData', 'PlayerInjuries', 'append')
 #--------------
 
 try:
-    os.replace(f"/Users/mborysia/Downloads/DKSalaries.csv", 
-            f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv')   
+    su.copyfile(f'//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/MBorysiak/DK/Lineups/{set_year}/week{set_week}/DKSalaries.csv', 
+                f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv')   
 except:
     print('No file to move')
 
@@ -492,7 +496,15 @@ dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
 
 
 # %%
-dk = pd.read_csv('c:/Users/mborysia/Downloads/dk-ownership.csv')
+
+try:
+    os.replace(f"/Users/mborysia/Downloads/dk-ownership.csv", 
+                f'{root_path}/Data/OtherData/projected_ownership/{set_year}/week{set_week}.csv')
+except:
+    pass
+
+dk = pd.read_csv(f'{root_path}/Data/OtherData/projected_ownership/{set_year}/week{set_week}.csv')
+
 dk.player = dk.player.apply(dc.name_clean)
 dk.loc[dk.position=='D', 'player'] = dk.loc[dk.position=='D', 'team']
 dk.loc[dk.position=='D', 'position'] = 'DST'
@@ -506,10 +518,9 @@ dm.write_to_db(dk, 'Simulation', 'Projected_Ownership', 'replace')
 
 #%%
 
-
 try:
-    os.replace(f"/Users/mborysia/Downloads/DKSalariesShowdown.csv", 
-            f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv')   
+    su.copyfile(f'//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/mborysia/DK/Lineups/{set_year}/week{set_week}/DKSalariesShowdown.csv',
+                f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv')   
 except:
     print('No file to move')
 
@@ -525,8 +536,15 @@ salary_id.loc[~salary_id.GoodId.isnull(), 'ID'] = salary_id.loc[~salary_id.GoodI
 salary_id = salary_id.rename(columns={'Name': 'player', 'Salary': 'salary', 'ID': 'player_id', 'Roster Position': 'pos'})
 salary_id.player = salary_id.player.apply(dc.name_clean)
 
-defense = salary_id.loc[salary_id['pos']=='DST', ['TeamAbbrev', 'salary', 'player_id']]
-salary_id = salary_id.loc[salary_id['pos'] != 'DST']
+defense = salary_id.loc[salary_id['Position']=='DST', ['TeamAbbrev', 'salary', 'player_id']]
+defense = defense.rename(columns={'TeamAbbrev': 'player'})
+max_d = defense.groupby('player').agg({'salary': 'max'}).reset_index()
+max_d['IsCPT'] = 1
+defense = pd.merge(defense, max_d, how='left', on=['player', 'salary'])
+defense['pos'] = np.where(defense.IsCPT==1, 'CPT', 'FLEX')
+defense = defense[['player', 'pos', 'salary', 'player_id']]
+
+salary_id = salary_id.loc[salary_id['Position'] != 'DST']
 salary_id = salary_id[['player', 'pos', 'salary', 'player_id']]
 salary_id = pd.concat([salary_id, defense.rename(columns={'TeamAbbrev': 'player'})], axis=0)
 

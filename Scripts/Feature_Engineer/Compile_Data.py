@@ -1,7 +1,7 @@
 #%%
 
-YEAR = 2021
-WEEK = 12
+YEAR = 2022
+WEEK = 2
 
 #%%
 import pandas as pd 
@@ -315,7 +315,7 @@ def te_matchups(df):
 def add_team_matchups():
 
     team_matchups = dm.read('''SELECT *
-                            FROM PFF_Oline_Dline_Matchups''', 'Pre_PlayerData')
+                               FROM PFF_Oline_Dline_Matchups''', 'Pre_PlayerData')
     team_matchups = team_matchups.drop(['gameTime', 'offTeam'], axis=1)
 
     dst = dm.read(f'''SELECT offTeam defTeam, a.defTeam AS offTeam, week, a.year,
@@ -431,8 +431,8 @@ def get_player_data(df, pos, YEAR, prev_years=1):
 
     player_data = dm.read(f'''SELECT * 
                               FROM {pos}_Stats 
-                              WHERE (season >= 2020 AND week != 17)
-                                    OR (season >=2021 AND week != 18)
+                              WHERE (season = 2020 AND week != 17)
+                                     OR (season >=2021 AND week != 18)
                                 ''', 'FastR')
 
     if pos=='QB':
@@ -531,7 +531,10 @@ def add_player_comparison(df, cols):
 
 def get_team_stats(YEAR, prev_years=1):
     
-    team_stats = dm.read(f'''SELECT * FROM Team_Stats WHERE season>={YEAR-prev_years}''', 'FastR')
+    team_stats = dm.read(f'''SELECT * 
+                             FROM Team_Stats 
+                             WHERE (season = 2020 AND week != 17)
+                                    OR (season >=2021 AND week != 18)''', 'FastR')
 
     rcols_team = [c for c in team_stats.columns if 'rush_' in c or 'rec_' in c]
 
@@ -745,12 +748,37 @@ def advanced_rec_stats(df):
     return df
 
 
+def add_next_gen(df, pos, stat_type):
+
+    next_gen = dm.read(f"SELECT * FROM NextGen_{stat_type}", 'Post_PlayerData')
+    try: next_gen = next_gen.drop('pos', axis=1)
+    except: pass
+    teams = dm.read(f'''SELECT player, week, year, team 
+                        FROM FantasyPros
+                        WHERE pos='{pos}' ''', 'Pre_PlayerData')
+    next_gen = pd.merge(next_gen, teams, on=['player', 'week', 'year'])
+
+    next_gen = drop_extra_bye_week(next_gen)
+    next_gen.week = next_gen.week + 1
+    next_gen = fix_bye_week(next_gen)
+    next_gen = switch_seasons(next_gen)
+
+    df = pd.merge(df, next_gen.drop('team', axis=1), on=['player', 'week', 'year'], how='left')
+
+    fill_cols = [c for c in next_gen.columns if c not in (['player', 'pos', 'week', 'year', 'team'])]
+    
+    df = forward_fill(df)
+    df[fill_cols] = df[fill_cols].fillna(df[fill_cols].mean())
+    df = add_rolling_stats(df, gcols=['player'], rcols=fill_cols)
+
+    return df
+
+
 def get_defense_stats(prev_years=1):
     d_stats = dm.read(f'''SELECT * 
                         FROM Defense_Stats 
-                        WHERE season>={YEAR-prev_years}
-                              AND (season >= 2020 AND week != 17)
-                                    OR (season >=2021 AND week != 18)
+                        WHERE (season = 2020 AND week != 17)
+                               OR (season >=2021 AND week != 18)
                               ''', 'FastR')
     d_stats = d_stats.rename(columns={'season': 'year', 'defteam': 'team' })
 
@@ -1286,17 +1314,18 @@ def qb_pull(rush_or_pass):
     df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
 
     team_stats = get_team_stats(YEAR)
-    df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
+    df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print( df.shape[0])
 
     df = add_rz_stats_qb(df); print(df.shape[0])
     df = add_qbr(df); print(df.shape[0])
     df = add_qb_adv(df); print(df.shape[0])
+    df = add_next_gen(df, pos, 'Passing'); print(df.shape[0])
 
     # get the positional values for the team
     pos_values = positional_values()
     df = pd.merge(df, pos_values, on=['team', 'week', 'year']); print(df.shape[0])
 
-    df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
+    df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print('dstats', df.shape[0])
     df = def_pts_allowed(df); print(df.shape[0])
 
     pff_def = pff_defense_rollup().rename(columns={'team': 'defTeam'})
@@ -1327,9 +1356,9 @@ def qb_pull(rush_or_pass):
 
     return df
 
-# qb_both = qb_pull('')
-qb_rush = qb_pull('_rush')
-qb_pass = qb_pull('_pass')
+qb_both = qb_pull('')
+# qb_rush = qb_pull('_rush')
+# qb_pass = qb_pull('_pass')
 
 #%%
 for pos in [
@@ -1366,12 +1395,16 @@ for pos in [
     df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
     
     team_stats = get_team_stats(YEAR, prev_years=1)
-    df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
+    df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print('team_stats', df.shape[0])
     
     df = calc_market_share(df); print(df.shape[0])
     df = add_rz_stats(df); print(df.shape[0])
     df = advanced_rec_stats(df)
-    if pos == 'RB': df = advanced_rb_stats(df)
+    if pos in ('WR', 'TE'):
+        df = add_next_gen(df, pos, 'Receiving'); print('next_gen', df.shape[0])
+    if pos == 'RB': 
+        df = advanced_rb_stats(df)
+        df = add_next_gen(df, pos, 'Rushing'); print(df.shape[0])
 
     team_qb = get_max_qb()
     df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
@@ -1534,62 +1567,22 @@ dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 # - Market share in terms of projected FP, dk salary, etc
 
 #%%
-from scipy.stats import kstest, norm, poisson, shapiro
-from seaborn import distplot
-import matplotlib.pyplot as plt
+output['avg_pts'] = output[['ProjPts', 'fantasyPoints', 'projected_points']].mean(axis=1)
+output = output.sort_values(by=['year', 'week', 'team', 'avg_pts'],
+                            ascending=[True, True, True, False]).reset_index(drop=True)
 
+team_pts = output.groupby(['year', 'week', 'team']).agg({'avg_pts': 'sum', 'y_act': 'sum'}).reset_index()
 
-players = dm.read('''SELECT player , week
-                    FROM FantasyPros 
-                    WHERE week=3 and year=2021
-                            and pos='RB'
-                            and projected_points > 6 ''', 'Pre_PlayerData').player.values
+team_off = dm.read("SELECT * FROM Defense_Data", 'Model_Features').drop('y_act', axis=1)
+team_off = team_off.rename(columns={'player': 'defTeam', 'offTeam': 'team'})
+team_off = pd.merge(team_pts, team_off, on=['team', 'week', 'year'])
+team_off = team_off.rename(columns={'team': 'player'})
+team_off['team'] = team_off.player
 
-normal_count = 0
-log_count = 0
-normal_count_games = []
-log_count_games = []
+print('Unique team-week-years:', team_off[['player', 'week', 'year']].drop_duplicates().shape[0])
+print('Team Counts by Week:', team_off[['year', 'week', 'player']].drop_duplicates().groupby(['year', 'week'])['player'].count())
 
-for player in players:
-    print(player)
-
-    df = dm.read(f'''SELECT fantasy_pts FROM RB_Stats 
-                    WHERE player="{player}"
-                        AND fantasy_pts > 2 ''', 'FastR')
-    # df.fantasy_pts = df.fantasy_pts + abs(df.fantasy_pts.min()) + 1
-
-    distplot(df)
-    plt.show()
-    stats, p_normal = shapiro(df)
-    compare = norm.rvs(loc=df.mean(), scale=df.std(), size=1000)
-    ktest = kstest(df.values.reshape(1, -1)[0], compare)[1]
-
-    compare_p = poisson.rvs(df.mean(), size=1000)
-    ktest_p = kstest(df.values.reshape(1, -1)[0], compare_p)[1]
-
-    print('prob normal:', p_normal, 'k test:',  ktest,  'poisson k test:', ktest_p)
-
-    df = np.log(df)
-    distplot(df)
-    plt.show()
-    compare = norm.rvs(loc=df.mean(), scale=df.std(), size=1000)
-    ktest = kstest(df.values.reshape(1, -1)[0], compare)[1]
-    stats, p_log = shapiro(df)
-    print(p_log, ktest)
-
-    if p_normal > p_log:
-        normal_count += 1
-        normal_count_games.append(len(df))
-    else: 
-        log_count += 1
-        log_count_games.append(len(df))
-
-print('normal counts:', normal_count, 'avg games', np.mean(normal_count_games))
-print('log counts:', log_count, 'avg games', np.mean(log_count_games))
-#%%
-
-
-
+dm.write_to_db(team_off, 'Model_Features', f'Team_Offense_Data', if_exist='replace')
 
 #%%
 cur_pos = 'RB'

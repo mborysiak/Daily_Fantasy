@@ -13,11 +13,11 @@ dm = DataManage(db_path)
 
 # set the filepath and name for NFL Fast R data saved from R script
 DATA_PATH = f'{root_path}/Data/OtherData/NFL_FastR/'
-FNAME = 'raw_data_2021.parquet'
+FNAME = 'raw_data_2022.parquet'
 
 pd.set_option('display.max_columns', 999)
 
-cur_season = 2021
+cur_season = 2022
 
 #---------------
 # Functions

@@ -33,8 +33,9 @@ dm = DataManage(db_path)
 np.random.seed(1234)
 
 # set year to analyze
-set_year = 2021
-set_week = 16
+set_year = 2022
+set_week = 1
+showdown_teams = ['SEA', 'DEN']
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -43,7 +44,7 @@ val_week_min = 10
 met = 'y_act'
 
 # full_model or backfill
-vers = 'standard'
+vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc'
 
 # %%
 
@@ -54,6 +55,8 @@ preds = dm.read(f'''SELECT *
                           AND year = '{set_year}' 
                           AND player != 'Ryan Griffin'
             ''', 'Simulation')
+
+kickers = preds.loc[preds.pos=='K', 'player'].unique()
 
 preds['weighting'] = 1
 preds.loc[preds.model_type=='full_model', 'weighting'] = 1
@@ -73,7 +76,6 @@ preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game'
 for c in score_cols: preds[c] = preds[c] / preds.weighting
 preds = preds.drop('weighting', axis=1)
 
-drop_teams = ['DAL', 'WAS']
 
 teams = dm.read(f'''SELECT player, team
                     FROM (
@@ -85,8 +87,8 @@ teams = dm.read(f'''SELECT player, team
                     ) WHERE rn=1''', 'Pre_PlayerData')
 
 preds = pd.merge(preds, teams, on=['player'], how='left')
-preds = preds[(preds.team.isin(drop_teams)) | \
-    (preds.player.isin(['Greg Zuerlein', 'Joey Slye']))].drop('team', axis=1).reset_index(drop=True)
+preds = preds[(preds.team.isin(showdown_teams)) | \
+    (preds.player.isin(kickers))].drop('team', axis=1).reset_index(drop=True)
 
 captain = preds.copy()
 captain.pos = 'CPT'

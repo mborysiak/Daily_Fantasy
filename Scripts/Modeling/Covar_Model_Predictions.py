@@ -329,41 +329,32 @@ def get_mean_points(preds):
 #%%
 
 # set year to analyze
-set_year = 2021
+set_year = 2022
 covar_type = 'team_points'
 use_covar = 'False'
 use_ownership = 'True'
-adjust_select = True
+adjust_select = 'False'
 
+# set the model version
 set_weeks = [
-         11, 13, 14, 15, 16, 17
+         2
         ]
 pred_versions = [
-                'standard_proba_sera_brier',
-                'fixed_model_clone',
-                'standard_proba_sera_brier',
-                'fixed_model_clone',
-                'standard_proba_sera_brier_lowsample',
-                'standard_proba_sera_brier_lowsample'
-               
+                'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate',
+                
 ]
 ensemble_versions = [
-                    'no_weight_no_kbest_randsample_sera',
-                    'no_weight_yes_kbest', 
-                     'no_weight_no_kbest_randsample_sera',
-                    'no_weight_yes_kbest', 
-                     'no_weight_yes_kbest',
-                     'no_weight_no_kbest_randsample_sera'
+                    'no_weight_yes_kbest_randsample_sera_include2',           
  ]
 
 std_dev_types = [
-                'spline',
-                'spline_enet_coef',
-                'spline_all',
-                'spline_enet_coef',
-                'spline_all',
-                'spline'
+                'pred_spline_class80',
 ]
+
+
+sim_types = [
+             'ownership_ln_pos',
+             ]
 
 full_model_weights = [0.2, 1, 5]
 

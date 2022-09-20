@@ -33,7 +33,7 @@ class FootballSimulation:
         self.full_model_rel_weight = full_model_rel_weight
         self.use_covar = use_covar
         self.use_ownership = use_ownership
-
+        
         if self.use_covar: 
             player_data = self.get_covar_means()
             self.covar = self.pull_covar()
@@ -109,6 +109,7 @@ class FootballSimulation:
         df.loc[df.pos=='Defense', 'pos'] = 'DEF'
         teams = self.dm.read("SELECT * FROM Player_Teams", 'Simulation')
         df = pd.merge(df, teams, on=['player'])
+
         drop_teams = self.get_drop_teams()
         df = df[~df.team.isin(drop_teams)].reset_index(drop=True)
 
@@ -118,10 +119,10 @@ class FootballSimulation:
     def get_drop_teams(self):
 
         df = self.dm.read(f'''SELECT away_team, home_team, gametime 
-                        FROM Gambling_Lines 
-                        WHERE week={self.week} 
-                            and year={self.set_year} 
-                    ''', 'Pre_TeamData')
+                              FROM Gambling_Lines 
+                              WHERE week={self.week} 
+                                    and year={self.set_year} 
+                    ''', 'Simulation')
         df.gametime = pd.to_datetime(df.gametime)
         df['day_of_week'] = df.gametime.apply(lambda x: x.weekday())
         df['hour_in_day'] = df.gametime.apply(lambda x: x.hour)
@@ -350,13 +351,13 @@ class FootballSimulation:
 
     @staticmethod
     def samples_G_ownership(data, max_entries):
-        current_ownership = -data.iloc[:, np.random.choice(range(4, max_entries+4))].values
+        current_ownership = data.iloc[:, np.random.choice(range(4, max_entries+4))].values
         current_ownership = current_ownership.reshape(1, len(current_ownership))
         return current_ownership
 
     @staticmethod
     def create_h_ownership():
-        return np.random.normal(28.583, 2.96566, size=1).reshape(1, 1)
+        return np.random.normal(1.74, 0.51, size=1).reshape(1, 1)
 
     @staticmethod
     def create_G_team(team_map, player_map):

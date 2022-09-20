@@ -29,8 +29,8 @@ dm = DataManage(db_path)
 # connection for simulation and specific table
 path = f'/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
-set_year = 2021
-league=16
+set_year = 2022
+league=1
 
 # number of iteration to run
 iterations = 1000
