@@ -126,12 +126,15 @@ def stack_predictions(X_predict, best_models, final_models, model_obj='reg'):
 
 def best_average_models(skm_stack, scores, final_models, y_stack, stack_val_pred, predictions):
 
+    from sklearn.metrics import r2_score
+
     n_scores = []
     for i in range(len(scores)):
         top_n = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:i+1]
         model_idx = np.array(final_models)[top_n]
         
-        n_score = skm_stack.custom_score(y_stack, stack_val_pred[model_idx].mean(axis=1))
+        n_score = -r2_score(y_stack, stack_val_pred[model_idx].mean(axis=1))
+        # n_score = skm_stack.custom_score(y_stack, stack_val_pred[model_idx].mean(axis=1))
         n_scores.append(n_score)
 
     print('All Average Scores:', np.round(n_scores, 3))
@@ -141,6 +144,7 @@ def best_average_models(skm_stack, scores, final_models, y_stack, stack_val_pred
     model_idx = np.array(final_models)[top_n]
     best_val = stack_val_pred[model_idx]
 
+    print('Top Models:', model_idx)
     best_predictions = predictions[model_idx]
 
     return best_val, best_predictions

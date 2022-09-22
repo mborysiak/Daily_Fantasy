@@ -170,6 +170,39 @@ class FootballSimulation:
 
         return df
 
+    def get_matchups(self):
+        df = self.dm.read(f'''SELECT away_team, home_team
+                              FROM Gambling_Lines 
+                              WHERE week={self.week} 
+                                    and year={self.set_year} 
+                    ''', 'Simulation')
+
+        matchups = {}
+        for away, home in df.values:
+            matchups[away] = home
+            matchups[home] = away
+
+        return matchups
+
+    @staticmethod
+    def get_min_players(min_players_same_team_input):
+        if min_players_same_team_input=='Auto': 
+                min_players_same_team= np.random.choice([1, 2, 3], p=[0.24, 0.56, 0.2])
+        else:
+            min_players_same_team = min_players_same_team_input
+        min_players_same_team += 1
+
+        return min_players_same_team
+
+    @staticmethod
+    def get_min_players_opp_team(min_players_opp_team_input):
+        if min_players_opp_team_input=='Auto': 
+            min_players_opp_team = np.random.choice([0, 1], p=[0.5, 0.5])
+        else:
+            min_players_opp_team = min_players_opp_team_input
+
+        return min_players_opp_team
+
     @staticmethod
     def get_top_players_from_team(df, top_players=5):
                 
@@ -351,13 +384,18 @@ class FootballSimulation:
 
     @staticmethod
     def samples_G_ownership(data, max_entries):
-        current_ownership = data.iloc[:, np.random.choice(range(4, max_entries+4))].values
+        current_ownership = -data.iloc[:, np.random.choice(range(4, max_entries+4))].values
         current_ownership = current_ownership.reshape(1, len(current_ownership))
         return current_ownership
 
-    @staticmethod
-    def create_h_ownership():
-        return np.random.normal(1.74, 0.51, size=1).reshape(1, 1)
+    
+    def create_h_ownership(self):
+        mean_own, std_own = self.dm.read(f'''SELECT ownership_mean, ownership_std
+                                             FROM Mean_Ownership
+                                              WHERE week={self.week}
+                                                    AND year={self.set_year}
+                                        ''', 'Simulation').values[0]
+        return -np.random.normal(mean_own, std_own, size=1).reshape(1, 1)
 
     @staticmethod
     def create_G_team(team_map, player_map):
@@ -397,7 +435,7 @@ class FootballSimulation:
         return best_team
 
 
-    def create_h_teams(self, team_map, added_teams, set_max_team, min_players):
+    def create_h_teams(self, team_map, added_teams, set_max_team, min_players, opp_players):
 
         if set_max_team is None: 
             max_team = self.get_max_team(self.labels, self.c_points, added_teams)
@@ -406,6 +444,10 @@ class FootballSimulation:
 
         h_teams = np.full(shape=(len(team_map), 1), fill_value=0)
         h_teams[team_map[max_team]] = -min_players
+
+        # use a bring back player
+        max_team_opponent = self.matchups[max_team]
+        h_teams[team_map[max_team_opponent]] = -opp_players
 
         return h_teams, max_team
 
@@ -494,7 +536,8 @@ class FootballSimulation:
         df = df.drop(['pos', 'num_required'], axis=1)
         return df
 
-    def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team, adjust_select=False):
+
+    def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team, min_players_opp_team_input=0, adjust_select=False):
         
         # can set as argument, but static set for now
         num_options=500
@@ -503,11 +546,9 @@ class FootballSimulation:
 
         for i in range(self.num_iters):
 
-            if min_players_same_team_input=='Auto': 
-                min_players_same_team= np.random.choice([1, 2, 3], p=[0.24, 0.56, 0.2])
-            else:
-                min_players_same_team = min_players_same_team_input
-            min_players_same_team += 1
+            self.matchups = self.get_matchups()
+            min_players_same_team = self.get_min_players(min_players_same_team_input)
+            min_player_opp_team = self.get_min_players_opp_team(min_players_opp_team_input)
 
             if i ==0:
                 # pull out current add players and added teams
@@ -550,7 +591,7 @@ class FootballSimulation:
             
             if remaining_pos_cnt > min_players_same_team and max_added_team_cnt < min_players_same_team:
              
-                h_teams, max_team = self.create_h_teams(team_map, added_teams, set_max_team, min_players_same_team)
+                h_teams, max_team = self.create_h_teams(team_map, added_teams, set_max_team, min_players_same_team, min_player_opp_team)
                 max_team_cnt.append(max_team)
                 G = np.concatenate([G_salaries, G_teams, G_players])
                 h = np.concatenate([h_salaries, h_teams, h_players])
@@ -601,23 +642,25 @@ class FootballSimulation:
 # ens_vers = 'no_weight_yes_kbest'
 # std_dev_type = 'spline_all'
 # use_covar=False
-# use_ownership=True
+# use_ownership=False
 # week = 16
 # year = 2021
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-# num_iters = 200
+# num_iters = 10
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
 #                          full_model_rel_weight=5, covar_type='team_points', use_covar=use_covar, 
 #                          use_ownership=use_ownership)
 # min_players_same_team = 'Auto'
+# min_players_opp_team = 'Auto'
 # set_max_team = None
 # to_add = []
 # to_drop = []
 
-# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select=True)
+# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
+#                                     min_players_opp_team, adjust_select=True)
 
 # print(max_team_cnt)
 # results

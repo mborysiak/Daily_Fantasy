@@ -50,7 +50,7 @@ run_params = {
 
     # opt params
     'n_iters': 25,
-    'n_splits': 4,
+    'n_splits': 5,
 
     # other parameters
     'use_sample_weight': False,
@@ -65,8 +65,14 @@ run_params = {
 set_pos = 'RB'
 model_type = 'full_model'
 
+# set weights for running model
+r2_wt = 1
+sera_wt = 5
+matt_wt = 1
+brier_wt = 2
+
 # set version and iterations
-vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate'
+vers = 'sera5_rsq1_brier2_matt1_lowsample_perc'
 
 #----------------
 # Data Loading
@@ -192,7 +198,13 @@ def update_output_dict(label, m, suffix, out_dict, oof_data, best_models):
 
 def get_skm(skm_df, model_obj, to_drop):
     
-    skm = SciKitModel(skm_df, model_obj=model_obj)
+    skm_options = {
+        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt),
+        'class': SciKitModel(skm_df, model_obj='class', brier_wt=brier_wt, matt_wt=matt_wt),
+        'quantile': SciKitModel(skm_df, model_obj='quantile')
+    }
+    
+    skm = skm_options[model_obj]
     X, y = skm.Xy_split(y_metric='y_act', to_drop=to_drop)
 
     return skm, X, y
@@ -441,11 +453,11 @@ def create_output(output_start, predictions):
 
 #%%
 run_list = [
-            # ['QB', '', 'full_model'],
-            # ['RB', '', 'full_model'],
-            # ['WR', '', 'full_model'],
-            # ['TE', '', 'full_model'],
-            # ['Defense', '', 'full_model'],
+            ['QB', '', 'full_model'],
+            ['RB', '', 'full_model'],
+            ['WR', '', 'full_model'],
+            ['TE', '', 'full_model'],
+            ['Defense', '', 'full_model'],
             ['QB', '', 'backfill'],
             ['RB', '', 'backfill'],
             ['WR', '', 'backfill'],

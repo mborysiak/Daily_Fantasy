@@ -13,45 +13,52 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
-year=2022
-
-
 # set the model version
 set_weeks = [
-    2, 
+       17, 1, 2
         ]
-pred_versions = [
-          
-                'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate',                
+
+set_years = [
+        2021, 2022, 2022
+]
+
+pred_versions = [                
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
                 
 ]
-ensemble_versions = [
 
+ensemble_versions = [
                     'no_weight_yes_kbest_randsample_sera_include2',
-                  
-                
- ]
+                    'no_weight_yes_kbest_randsample_sera5_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera5_rsq1_include2'
+]
 
 std_dev_types = [
-
                 'pred_spline_class80',
-               
+                'pred_spline_class80',
+                'pred_spline_class80',
+                
 ]
 
 
 sim_types = [
-             
-              'ownership_inverse', 
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix'
              ]
 
 contests = [
-
-            'Million'
+                'Million',
+                'Million',
+                'Million',
+                'Million',
+                'Million',
 ]
 
-
-iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types, sim_types, contests)
-for week, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in iter_cats:
+iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types, sim_types, contests)
+for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in iter_cats:
 
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -61,7 +68,6 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in iter_cats
 
     print(f'\nWeek {week} PredVer: {pred_vers} EnsVer: {ensemble_vers} SDType:{std_dev_type} SimType:{sim_type} Contest:{contest}\n===============\n')
 
-    min_players_same_team = 'Auto'
     set_max_team = None
 
     if 'ownership' in sim_type:
@@ -170,13 +176,24 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in iter_cats
         for vcomb in product(*d.values()):
             yield dict(zip(d.keys(), vcomb))
 
+    # G = {
+    #     'adjust_pos_counts': [True, False], 
+    #     'drop_player_multiple': [0, 4], 
+    #     'drop_team_frac': [0, 0.1],
+    #     'top_n_choices': [0, 4],
+    #     'full_model_rel_weight': [0.2, 1, 5],
+    #     'covar_type': [ 'no_covar', 'team_points'],
+    #     'min_players_same_team': ['Auto'],
+    #     'iter': [0, 1, 2],
+    #     }
     G = {
-        'adjust_pos_counts': [True, False], 
-        'drop_player_multiple': [0, 4], 
-        'drop_team_frac': [0, 0.1],
+        'adjust_pos_counts': [False], 
+        'drop_player_multiple': [2, 4, 6], 
+        'drop_team_frac': [0],
         'top_n_choices': [0, 4],
         'full_model_rel_weight': [0.2, 1, 5],
-        'covar_type': [ 'no_covar', 'team_points'],
+        'covar_type': ['no_covar'],
+        'min_player_same_team': [-1, 2, 3],
         'iter': [0, 1, 2],
         }
 
@@ -185,7 +202,8 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in iter_cats
         params.append(list(config.values()))
 
 
-    def sim_winnings(adjust_select, player_drop_multiplier, team_drop_frac, top_n_choices, full_model_rel_weight, covar_type):
+    def sim_winnings(adjust_select, player_drop_multiplier, team_drop_frac, top_n_choices, 
+                     full_model_rel_weight, covar_type, min_players_same_team):
         
         if covar_type=='team_points': use_covar=True
         elif covar_type=='no_covar': use_covar=False
@@ -230,7 +248,7 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in iter_cats
 #%%
     from joblib import Parallel, delayed
 
-    par_out = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(adj, pdm, tdf, tn, fmw, ct) for adj, pdm, tdf, tn, fmw, ct, i in params)
+    par_out = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(adj, pdm, tdf, tn, fmw, ct, mpst) for adj, pdm, tdf, tn, fmw, ct, mpst, i in params)
     
     lineups = []
     for o in par_out:
@@ -252,8 +270,6 @@ for week, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in iter_cats
     output = output.assign(min_prize_points=min_prize_pts, mean_prize_points=mean_prize_pts, max_prize_points=max_prize_pts,
                            week=week, year=year, pred_vers=pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
                           num_iters=num_iters)
-    if min_players_same_team not in cols:
-        output = output.assign(min_player_same_team=min_players_same_team)
     
     output['sim_type'] = sim_type
 

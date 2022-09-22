@@ -329,7 +329,6 @@ def get_mean_points(preds):
 #%%
 
 # set year to analyze
-set_year = 2022
 covar_type = 'team_points'
 use_covar = 'False'
 use_ownership = 'True'
@@ -337,30 +336,45 @@ adjust_select = 'False'
 
 # set the model version
 set_weeks = [
-         2
+       17, 1, 2
         ]
-pred_versions = [
-                'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate',
+
+set_years = [
+        2021, 2022, 2022
+]
+
+pred_versions = [                
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
                 
 ]
+
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera_include2',           
- ]
+                    'no_weight_yes_kbest_randsample_sera_include2',
+                    'no_weight_yes_kbest_randsample_sera5_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera5_rsq1_include2'
+]
 
 std_dev_types = [
                 'pred_spline_class80',
+                'pred_spline_class80',
+                'pred_spline_class80',
+                
 ]
 
 
 sim_types = [
-             'ownership_ln_pos',
+             'ownership_inverse',
+             'ownership_inverse',
+             'ownership_inverse'
              ]
 
 full_model_weights = [0.2, 1, 5]
 
 i = 0
-iter_cats = zip(set_weeks, pred_versions, ensemble_versions, std_dev_types)
-for set_week, pred_vers, ensemble_vers, std_dev_type in iter_cats:
+iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
+for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
     for full_model_rel_weight in full_model_weights:
 

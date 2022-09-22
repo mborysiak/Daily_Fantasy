@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2022
-set_week = 1
+set_week = 2
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -293,10 +293,22 @@ snaps['week'] = set_week
 # snaps.avg_snap_pct = snaps.avg_snap_pct.apply(lambda x: x.replace('%', ''))
 snaps = convert_float(snaps)
 
-#%%
-
 dm.delete_from_db('Post_PlayerData', f'Snap_Counts', f"year={set_year} AND week={set_week}")
 dm.write_to_db(snaps, 'Post_PlayerData', f'Snap_Counts', 'append')
+
+
+#%%
+
+df = pd.read_html('https://www.fantasypros.com/nfl/reports/snap-counts/?year=2022')[0]
+df = pd.melt(df, id_vars=['Player', 'Pos', 'Team'])
+df = df[~df.variable.isin(['AVG', 'TTL'])].dropna().reset_index(drop=True)
+df.columns = ['player', 'pos', 'team', 'week', 'snap_counts']
+df['year'] = set_year
+df.player = df.player.apply(dc.name_clean)
+
+dm.delete_from_db('Post_PlayerData', f'Snap_Counts_V2', f"year={set_year}")
+dm.write_to_db(df, 'Post_PlayerData', 'Snap_Counts_V2', 'append')
+
 
 #%%
 # # QBR

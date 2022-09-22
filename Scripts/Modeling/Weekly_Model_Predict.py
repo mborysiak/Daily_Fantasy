@@ -142,7 +142,13 @@ def get_class_data(df, cut, run_params):
 
 def get_skm(skm_df, model_obj, to_drop):
     
-    skm = SciKitModel(skm_df, model_obj=model_obj)
+    skm_options = {
+        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt),
+        'class': SciKitModel(skm_df, model_obj='class', brier_wt=brier_wt, matt_wt=matt_wt),
+        'quantile': SciKitModel(skm_df, model_obj='quantile')
+    }
+    
+    skm = skm_options[model_obj]
     X, y = skm.Xy_split(y_metric='y_act', to_drop=to_drop)
 
     return skm, X, y
@@ -243,7 +249,8 @@ def load_all_stack_pred(model_output_path, stack_cut=95):
     return X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant
 
 
-def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores, stack_val_pred, model_obj='reg', run_adp=True, show_plots=True):
+def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores, 
+                     stack_val_pred, model_obj='reg', run_adp=True, show_plots=True):
 
     print(f'\n{final_m}')
 
@@ -308,8 +315,11 @@ def get_stack_predict_data(df_train, df_predict, df, run_params,
     return X_predict
 
 
-def best_average_models(skm_stack, scores, final_models, y_stack, stack_val_pred, predictions, min_include = 3):
 
+def best_average_models(scores, final_models, y_stack, stack_val_pred, predictions, model_obj, min_include = 3):
+    
+    skm, _, _ = get_skm(pd.DataFrame({'x':[0]}), model_obj=model_obj, to_drop=[])
+    
     n_scores = []
     models_included = []
     for i in range(len(scores)-min_include+1):
@@ -317,7 +327,7 @@ def best_average_models(skm_stack, scores, final_models, y_stack, stack_val_pred
         models_included.append(top_n)
         model_idx = np.array(final_models)[top_n]
         
-        n_score = skm_stack.custom_score(y_stack, stack_val_pred[model_idx].mean(axis=1))
+        n_score = skm.custom_score(y_stack, stack_val_pred[model_idx].mean(axis=1))
         n_scores.append(n_score)
         
     print('All Average Scores:', np.round(n_scores, 3))
@@ -326,17 +336,18 @@ def best_average_models(skm_stack, scores, final_models, y_stack, stack_val_pred
     top_models = models_included[best_n]
 
     model_idx = np.array(final_models)[top_models]
+
+    print('Top Models:', model_idx)
     best_val = stack_val_pred[model_idx]
     best_predictions = predictions[model_idx]
 
     return best_val, best_predictions, best_score
 
 
-
-def average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, predictions, model_obj='reg', show_plot=True, min_include=3):
+def average_stack_models(scores, final_models, y_stack, stack_val_pred, predictions, model_obj, show_plot=True, min_include=3):
     
-    skm_stack, _, _ = get_skm(df_train, model_obj, to_drop=[])
-    best_val, best_predictions, best_score = best_average_models(skm_stack, scores, final_models, y_stack, stack_val_pred, predictions, min_include)
+    best_val, best_predictions, best_score = best_average_models(scores, final_models, y_stack, stack_val_pred, predictions, 
+                                                                 model_obj=model_obj, min_include=min_include)
     
     if show_plot:
         mf.show_scatter_plot(best_val.mean(axis=1), y_stack, r2=True)
@@ -596,16 +607,21 @@ min_include = 2
 show_plot= True
 class_std = True
 
+r2_wt = 1
+sera_wt = 5
+brier_wt = 2
+matt_wt = 1
+
 # set the model version
 set_weeks = [
-        2
+         2
         ]
 pred_versions = [
-                'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate'         
+                'fixed_model_clone_proba_sera_brier_lowsample_perc'         
                 
 ]
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera_include2',
+                    'no_weight_yes_kbest_randsample_sera5_rsq1_include2',
                 
  ]
 
@@ -613,11 +629,11 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
     run_params['set_week'] = w
     runs = [
-        # ['QB', 'full_model', ''],
-        # ['RB', 'full_model', ''],
-        # ['WR', 'full_model', ''],
-        # ['TE', 'full_model', ''],
-        # ['Defense', 'full_model', ''],
+        ['QB', 'full_model', ''],
+        ['RB', 'full_model', ''],
+        ['WR', 'full_model', ''],
+        ['TE', 'full_model', ''],
+        ['Defense', 'full_model', ''],
         ['QB', 'backfill', ''],
         ['RB', 'backfill', ''],
         ['WR', 'backfill', ''],
@@ -653,13 +669,13 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
             stack_val_pred = pd.DataFrame(); scores = []; best_models = []
             for i, fm in enumerate(final_models):
                 best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack_class, best_models, 
-                                                                    scores, stack_val_pred, model_obj='class',
-                                                                    run_adp=False, show_plots=show_plot)
+                                                                       scores, stack_val_pred, model_obj='class',
+                                                                       run_adp=False, show_plots=show_plot)
 
             # get the best stack predictions and average
             predictions = mf.stack_predictions(X_predict, best_models, final_models, model_obj='class')
-            best_val_class, best_predictions_class, _ = average_stack_models(df_train, scores, final_models, y_stack_class, stack_val_pred, 
-                                                                            predictions, model_obj='class', show_plot=False, min_include=min_include-1)
+            best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_class, stack_val_pred, 
+                                                                             predictions, model_obj='class', show_plot=False, min_include=min_include-1)
         else:
             best_val_class = None; best_predictions_class = None
 
@@ -672,8 +688,9 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
         # get the best stack predictions and average
         predictions = mf.stack_predictions(X_predict, best_models, final_models)
-        best_val, best_predictions, best_score = average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, 
-                                                                      predictions, show_plot=show_plot, min_include=min_include)
+        best_val, best_predictions, best_score = average_stack_models(scores, final_models, y_stack, stack_val_pred, 
+                                                                      predictions, model_obj='reg',
+                                                                      show_plot=show_plot, min_include=min_include)
         save_val_to_db(model_output_path, best_val, run_params)
         
         # create the output and add standard devations / max scores
@@ -701,26 +718,44 @@ print('All Runs Finished')
 
 #%%
 
-std_dev_type='pred_isotonic_class'
-rush_pass_roll = dm.read(f'''SELECT player, 
-                                    sum(pred_fp_per_game) pred_fp_per_game, 
-                                    sum(std_dev) std_dev, 
-                                    sum(max_score) max_score, 
-                                    sum(min_score) min_score
-                             FROM Model_Predictions
-                             WHERE week={run_params['set_week']}
-                                   AND year={run_params['set_year']}
-                                   AND version='{vers}'
-                                   AND ensemble_vers='{ensemble_vers}'
-                                   AND rush_pass IN ('rush', 'pass')
-                                   AND std_dev_type='{std_dev_type}'
-                            GROUP BY player
-                            ''', 'Simulation')
-rush_pass_roll = rush_pass_roll.sort_values(by='pred_fp_per_game', ascending=False)
-run_params['rush_pass'] = ''
-rush_pass_roll = add_actual(rush_pass_roll)
 
-mf.show_scatter_plot(rush_pass_roll.pred_fp_per_game, rush_pass_roll.actual_pts, r2=True)
+
+xx = {}
+for fm, s in zip(final_models, scores):
+    xx[fm]= s
+print(xx)
+
+best_val, best_predictions, best_score = average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, 
+                                                                      predictions, show_plot=show_plot, min_include=min_include)
+#%%
+skm = SciKitModel(pd.DataFrame({'x': [0, 1]}))
+print('Sera', skm.custom_score(y_stack, stack_val_pred[['gbm', 'rf']].mean(axis=1)))
+print('R2', r2_score(y_stack, stack_val_pred[['gbm', 'rf']].mean(axis=1)))
+
+print('Sera', skm.custom_score(y_stack, stack_val_pred[['lasso', 'rf']].mean(axis=1)))
+print('R2', r2_score(y_stack, stack_val_pred[['lasso', 'rf']].mean(axis=1)))
+
+#%%
+# std_dev_type='pred_isotonic_class'
+# rush_pass_roll = dm.read(f'''SELECT player, 
+#                                     sum(pred_fp_per_game) pred_fp_per_game, 
+#                                     sum(std_dev) std_dev, 
+#                                     sum(max_score) max_score, 
+#                                     sum(min_score) min_score
+#                              FROM Model_Predictions
+#                              WHERE week={run_params['set_week']}
+#                                    AND year={run_params['set_year']}
+#                                    AND version='{vers}'
+#                                    AND ensemble_vers='{ensemble_vers}'
+#                                    AND rush_pass IN ('rush', 'pass')
+#                                    AND std_dev_type='{std_dev_type}'
+#                             GROUP BY player
+#                             ''', 'Simulation')
+# rush_pass_roll = rush_pass_roll.sort_values(by='pred_fp_per_game', ascending=False)
+# run_params['rush_pass'] = ''
+# rush_pass_roll = add_actual(rush_pass_roll)
+
+# mf.show_scatter_plot(rush_pass_roll.pred_fp_per_game, rush_pass_roll.actual_pts, r2=True)
 
 #%%
 # both_compare = validation_compare_df(model_output_path, best_val)

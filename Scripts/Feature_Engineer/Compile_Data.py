@@ -1187,8 +1187,30 @@ def projected_pts_vs_predicted(df, pos):
     return df
 
 
+def get_snap_data():
+
+    snaps = dm.read('''SELECT player, team, snap_counts, week, year
+                    FROM Snap_Counts_V2
+                    WHERE snap_counts!='bye' 
+                            AND week != 18
+                    ''', 'Post_PlayerData')
+
+    snaps.snap_counts = snaps.snap_counts.apply(lambda x: int(float(x)))
+    snaps.week = snaps.week.astype('int')
+
+    team_snaps = snaps.groupby(['team', 'week','year']).agg(team_snap_count=('snap_counts', 'max'))
+    snaps = pd.merge(snaps, team_snaps, on=['team', 'week', 'year']).drop('team', axis=1)
+    snaps['snap_pct'] = snaps.snap_counts / snaps.team_snap_count
+
+    snaps = snaps[snaps.snap_counts > 0].sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
+    snaps['avg_snap_pct'] = snaps.snap_pct.rolling(4).mean()
+    snaps = snaps.drop(['snap_counts', 'team_snap_count'], axis=1)
+
+    return snaps
+
 
 def attach_y_act(df, pos, defense=False, rush_or_pass=''):
+
     if defense:
         y_act = dm.read(f'''SELECT defTeam player, week, season year, fantasy_pts y_act
                             FROM {pos}_Stats
@@ -1209,20 +1231,18 @@ def attach_y_act(df, pos, defense=False, rush_or_pass=''):
         y_act = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
                             FROM {pos}_Stats
                             WHERE season >= 2020''', 'FastR')
-        snaps = dm.read('''SELECT player, pct_snaps, avg_snap_pct, week, year
-                        FROM Snap_Counts_V2''', 'Post_PlayerData')
+                            
+        snaps = get_snap_data()
         proj = dm.read('''SELECT player, week, year, fantasyPoints
                         FROM PFF_Proj_Ranks''', 'Pre_PlayerData')
 
-        snaps.player = snaps.player.apply(dc.name_clean)
-        snaps.week = snaps.week.apply(lambda x: int(x))
         y_act = pd.merge(y_act, snaps, on=['player', 'week', 'year'], how='left')
         y_act = pd.merge(y_act, proj, on=['player', 'week', 'year'], how='left')
 
         y_act = y_act[~((y_act.fantasyPoints > 12) & \
-                        (y_act.pct_snaps < y_act.avg_snap_pct*0.4) & \
-                        (y_act.pct_snaps <= 0.3) & \
-                        (y_act.pct_snaps > 0))].drop(['pct_snaps', 'avg_snap_pct', 'fantasyPoints'], axis=1)
+                        (y_act.snap_pct < y_act.avg_snap_pct*0.5) & \
+                        (y_act.snap_pct <= 0.4) & \
+                        (y_act.snap_pct > 0))].drop(['snap_pct', 'avg_snap_pct', 'fantasyPoints'], axis=1)
         
         df = pd.merge(df, y_act, on=['player', 'team', 'week', 'year'], how='left')
 
@@ -1655,3 +1675,63 @@ data
 # df = dm.read('''SELECT * FROM WR_Stats WHERE season>=2020 AND rec_yards_gained_sum > 10 ''', 'FastR')
 # df.fantasy_pts.plot.hist()
 # # %%
+
+#%%
+
+y_act = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
+                            FROM RB_Stats
+                            WHERE season >= 2020''', 'FastR')
+
+
+def get_snap_data():
+
+    snaps = dm.read('''SELECT player, team, snap_counts, week, year
+                    FROM Snap_Counts_V2
+                    WHERE snap_counts!='bye' 
+                            AND week != 18
+                    ''', 'Post_PlayerData')
+
+    snaps.snap_counts = snaps.snap_counts.apply(lambda x: int(float(x)))
+    snaps.week = snaps.week.astype('int')
+
+    team_snaps = snaps.groupby(['team', 'week','year']).agg(team_snap_count=('snap_counts', 'max'))
+    snaps = pd.merge(snaps, team_snaps, on=['team', 'week', 'year']).drop('team', axis=1)
+    snaps['snap_pct'] = snaps.snap_counts / snaps.team_snap_count
+
+    snaps = snaps[snaps.snap_counts > 0].sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
+    snaps['avg_snap_pct'] = snaps.snap_pct.rolling(4).mean()
+
+    return snaps
+
+snaps = get_snap_data()
+proj = dm.read('''SELECT player, week, year, fantasyPoints
+                  FROM PFF_Proj_Ranks''', 'Pre_PlayerData')
+
+y_act = pd.merge(y_act, snaps, on=['player', 'week', 'year'], how='left')
+y_act = pd.merge(y_act, proj, on=['player', 'week', 'year'], how='left')
+
+y_act[((y_act.fantasyPoints > 12) & \
+                (y_act.snap_pct < y_act.avg_snap_pct*0.5) & \
+                (y_act.snap_pct <= 0.5) & \
+                (y_act.snap_pct > 0))].drop(['snap_pct', 'avg_snap_pct', 'fantasyPoints'], axis=1)
+                
+# %%
+
+snaps = dm.read('''SELECT player, team, snap_counts, week, year
+                   FROM Snap_Counts_V2
+                   WHERE snap_counts!='bye' 
+                   ''', 'Post_PlayerData')
+
+snaps.snap_counts = snaps.snap_counts.apply(lambda x: int(float(x)))
+
+team_snaps = snaps.groupby(['team', 'week','year']).agg(team_snap_count=('snap_counts', 'max'))
+snaps = pd.merge(snaps, team_snaps, on=['team', 'week', 'year'])
+snaps['snap_pct'] = snaps.snap_counts / snaps.team_snap_count
+
+snaps = snaps[snaps.snap_counts > 0].sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
+snaps['avg_snap_pct'] = snaps.snap_pct.rolling(4).mean()
+snaps
+# %%
+snaps[snaps.player=='Christian Mccaffrey']
+
+# %%

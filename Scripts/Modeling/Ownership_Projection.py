@@ -249,7 +249,7 @@ def run_model_alpha(val_predict, test_predict, X_test, alpha, time_split):
 def run_model_mean(m, test_predict, X_test, time_split):
     
     print(f"\n===========Running {m}=============\n")
-    skm = SciKitModel(df_train, model_obj='reg')
+    skm = SciKitModel(df_train, model_obj='reg', r2_wt=1, sera_wt=5)
 
     # get the model pipe for stacking setup and train it on meta features
     pipe = skm.model_pipe([
@@ -259,6 +259,7 @@ def run_model_mean(m, test_predict, X_test, time_split):
                         ])
 
     params = skm.default_params(pipe)
+    params['k_best__k'] = range(1, X.shape[1]+1)
     
     # run the model with parameter search
     best_models, oof_data, _ = skm.time_series_cv(pipe, X, y, 
@@ -276,7 +277,7 @@ def run_model_mean(m, test_predict, X_test, time_split):
 
     test_predict[f'pred_ownership'] = pd.DataFrame(predictions).T.mean(axis=1)
 
-    return val_predict, test_predict
+    return val_predict, test_predict, best_models
 
 
 def drop_teams(data):
@@ -300,19 +301,22 @@ def drop_teams(data):
 
     return data
 
+def filter_snap_counts(df):
+    snaps = dm.read('''SELECT player, snap_counts, week, year
+                FROM Snap_Counts_V2
+                WHERE snap_counts!='bye' 
+                        AND week != 18
+                ''', 'Post_PlayerData')
 
-# def add_gambling_lines(df):
+    snaps.snap_counts = snaps.snap_counts.apply(lambda x: int(float(x)))
+    snaps.week = snaps.week.astype('int')
 
-#     gambling_lines = dm.read('''SELECT away_team team, week, year, away_line line, away_moneyline, over_under
-#                                 FROM Gambling_Lines
-#                                 UNION
-#                                 SELECT home_team team, week, year, home_line line, home_moneyline, over_under
-#                                 FROM Gambling_Lines
-#                             ''', 'Pre_TeamData').dropna()
-   
-#     df = pd.merge(df, gambling_lines, on=['team', 'week', 'year'])
- 
-#     return df
+    df = pd.merge(df, snaps, on=['player', 'year', 'week'], how='left')
+    df = df[(df.snap_counts > 0) | \
+            (df.pos=='DST') | \
+            ((df.week==set_week) & (df.year==set_year))].reset_index(drop=True).drop('snap_counts', axis=1)
+
+    return df
 
 def add_gambling_lines(df):
 
@@ -335,141 +339,160 @@ def add_gambling_lines(df):
     return df
 
 def adjust_owernship(df, col, adjust_type):
-    if adjust_type == 'inverse': df[col] = 1 / (df[col] + 1)
+    if adjust_type == 'inverse': df[col] = -(1 / (df[col] + 1))
     elif adjust_type =='ln': df[col] = np.log(df[col]/100)
     return df
+
+def remove_week15_2020(df):
+
+    return df[~(
+                (df.team.isin(['CLE', 'LVR', 'WAS', 'PHI', 'SEA', 'LAR'])) & \
+                (df.week==15) & \
+                (df.year==2021)
+                )].reset_index(drop=True)
+
 
 #%%
 #================
 # Predict Ownership Pct
 #================
 
+for set_week, set_year in zip([10, 11, 12, 13, 14, 15, 16, 17, 1, 2], 
+                              [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022]):
+# for set_week, set_year in zip([2], [2022]):
 
-val_week_min = 8
-val_year_min = 2021
+    print(f'Running week {set_week} year {set_year}')
+    val_week_min = 8
+    val_year_min = 2021
 
+    player_ownership = dm.read(f'''SELECT * 
+                                FROM Contest_Ownership
+                                WHERE week <= 16
+                                        AND Contest='{contest}' ''', 'DK_Results').drop('player_points', axis=1)
+    
+    player_ownership.loc[player_ownership.player.isin(team_map.keys()), 'player'] = \
+        player_ownership.loc[player_ownership.player.isin(team_map.keys()), 'player'].map(team_map)
 
-player_ownership = dm.read(f'''SELECT * 
-                            FROM Contest_Ownership
-                            WHERE week < 16
-                                    AND Contest='{contest}' ''', 'DK_Results').drop('player_points', axis=1)
-player_ownership.loc[player_ownership.player.isin(team_map.keys()), 'player'] = \
-    player_ownership.loc[player_ownership.player.isin(team_map.keys()), 'player'].map(team_map)
+    player_ownership = player_ownership[~((player_ownership.week==set_week) & \
+                                          (player_ownership.year==set_year))].drop('Contest', axis=1).reset_index(drop=True)
 
-player_ownership = player_ownership[~((player_ownership.week==set_week) & \
-                                    (player_ownership.year==set_year))].drop('Contest', axis=1).reset_index(drop=True)
+    model_players = dm.read(f'''SELECT DISTINCT player
+                                FROM Model_Predictions
+                                WHERE week={set_week}
+                                    AND year={set_year}
+                                ''', 'Simulation').player.values
+    ty_players = dm.read(f'''SELECT DISTINCT player, team, 0 as pct_drafted, {set_week} week, {set_year} year
+                            FROM Player_Teams
+                                ''', 'Simulation')
 
-model_players = dm.read(f'''SELECT DISTINCT player
-                            FROM Model_Predictions
-                            WHERE week={set_week}
-                                  AND year={set_year}
-                            ''', 'Simulation').player.values
-ty_players = dm.read(f'''SELECT DISTINCT player, team, 0 as pct_drafted, {set_week} week, {set_year} year
-                         FROM Player_Teams
-                            ''', 'Simulation')
+    drop_teams = get_drop_teams(set_week, set_year)
+    ty_players = ty_players[~ty_players.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)
+    ty_players = ty_players[ty_players.player.isin(model_players)].reset_index(drop=True)
 
-drop_teams = get_drop_teams(set_week, set_year)
-ty_players = ty_players[~ty_players.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)
-ty_players = ty_players[ty_players.player.isin(model_players)].reset_index(drop=True)
-
-player_ownership = pd.concat([player_ownership, ty_players])
-
-
-df = add_proj(player_ownership)
-
-drop_list = ['Dalvin Cook32021', 'Calvin Ridley82021', 'Odell Beckham152021', 'Cooper Kupp152021', 'Van Jefferson152021',
-            "D'Andre Swift112021", 'Josh Johnson162021', 'Kyler Murray92021', 'Darren Waller72021',
-            'Kyler Murray 132021']
-df = drop_player_weeks(df, drop_list)
-df = add_injuries(df)
-df = add_gambling_lines(df)
-df = feature_engineering(df)
-df = df.rename(columns={'pct_drafted': 'y_act'})
-
-df = df[df.pos!='DST'].reset_index(drop=True)
-
-for c in ['pos', 'practice_status', 'game_status', 'practice_game']:
-    df = pd.concat([df, pd.get_dummies(df[c], drop_first=True)], axis=1).drop(c, axis=1)
-
-df, cv_time_input, train_time_split = create_game_date(df, val_year_min, val_week_min, year_week_to_date)
-
-df_train = df[df.game_date < train_time_split].reset_index(drop=True)
-df_test = df[df.game_date == train_time_split].reset_index(drop=True)
-df_train = df_train[df_train.y_act!=0].reset_index(drop=True)
-
-df_train = adjust_owernship(df_train, 'y_act', 'inverse')
-df_test = adjust_owernship(df_test, 'y_act', 'inverse')
-
-skm = SciKitModel(df_train)
-X, y = skm.Xy_split('y_act', to_drop=['player', 'team'])
-
-skm_test = SciKitModel(df_test)
-X_test, y_test = skm_test.Xy_split('y_act', to_drop=['player', 'team'])
+    player_ownership = pd.concat([player_ownership, ty_players])
 
 
-test_predict = df_test[['player', 'team', 'week', 'year']].copy()
-val_predict, test_predict = run_model_mean('lgbm', test_predict, X_test, cv_time_input)
+    df = add_proj(player_ownership)
 
-mf.show_scatter_plot( val_predict.pred_ownership, val_predict.y_act)
-# val_predict = pd.merge(val_predict_gbm, val_predict_rf.drop('y_act', axis=1), on=['player', 'team', 'week', 'year'])
-# val_predict['pred_ownership'] = val_predict[[c for c in val_predict.columns if 'pred' in c]].mean(axis=1)
-# test_predict['pred_ownership'] = test_predict[[c for c in test_predict.columns if 'pred' in c]].mean(axis=1)
+    drop_list = ['Dalvin Cook32021', 'Calvin Ridley82021', 'Odell Beckham152021', 'Cooper Kupp152021', 'Van Jefferson152021',
+                "D'Andre Swift112021", 'Josh Johnson162021', 'Kyler Murray92021', 'Darren Waller72021',
+                'Kyler Murray132021', 'Deandre Hopkins92021', 'Lamar Jackson112021']
+    # df = drop_player_weeks(df, drop_list)
+    df = add_injuries(df)
+    df = add_gambling_lines(df)
+    df = feature_engineering(df)
+    df = df.rename(columns={'pct_drafted': 'y_act'})
+    df = filter_snap_counts(df)
+    df = remove_week15_2020(df)
 
-from Fix_Standard_Dev import *
-sd_m, max_m, min_m = get_std_splines(val_predict, {'pred_ownership': 1}, 
-                                                    show_plot=True, k=2, 
-                                                    min_grps_den=int(val_predict.shape[0]*0.15), 
-                                                    max_grps_den=int(val_predict.shape[0]*0.05),
-                                                    iso_spline='spline')
+    for c in ['pos', 'practice_status', 'game_status', 'practice_game']:
+        df = pd.concat([df, pd.get_dummies(df[c], drop_first=True)], axis=1).drop(c, axis=1)
 
-sc = StandardScaler().fit(val_predict[['pred_ownership']])
-sd_max_val = sc.transform(val_predict[['pred_ownership']])
-val_predict['std_dev'] = sd_m(sd_max_val)
-val_predict['max_score'] = max_m(sd_max_val)
-val_predict['min_score'] = min_m(sd_max_val)
+    df, cv_time_input, train_time_split = create_game_date(df, val_year_min, val_week_min, year_week_to_date)
 
-for i in [3, 2, 1]:
-    val_predict['std_dev_test'] = i*val_predict.std_dev
-    val_predict.loc[val_predict.std_dev < 0, 'std_dev_test'] = 1
-    val_predict['upper_range'] = val_predict.pred_ownership + val_predict.std_dev_test
-    val_predict['lower_range'] = val_predict.pred_ownership - val_predict.std_dev_test
+    df_train = df[df.game_date < train_time_split].reset_index(drop=True)
+    df_test = df[df.game_date == train_time_split].reset_index(drop=True)
+    df_train = df_train[df_train.y_act!=0].reset_index(drop=True)
 
-    print(f'Num samples within {i} std dev:',
-        val_predict[(val_predict.y_act > val_predict.lower_range) & (val_predict.y_act < val_predict.upper_range)].shape[0] / \
-            val_predict.shape[0])
+    df_train = adjust_owernship(df_train, 'y_act', 'ln')
+    df_test = adjust_owernship(df_test, 'y_act', 'ln')
 
-print('Num Samples Greater than Max:',
-    val_predict[(val_predict.y_act > val_predict.max_score)].shape[0] / \
-            val_predict.shape[0])
+    skm = SciKitModel(df_train)
+    X, y = skm.Xy_split('y_act', to_drop=['player', 'team'])
 
-sd_max_test = sc.transform(test_predict[['pred_ownership']])
+    skm_test = SciKitModel(df_test)
+    X_test, y_test = skm_test.Xy_split('y_act', to_drop=['player', 'team'])
 
-test_predict['std_dev'] = sd_m(sd_max_test)
-test_predict['max_score'] = max_m(sd_max_test)
-test_predict['min_score'] = min_m(sd_max_test)
 
-try:
-    test_predict['y_act'] = df_test.y_act
-    test_predict.plot.scatter(x='pred_ownership', y='y_act')
-    test_predict = test_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'y_act', 'std_dev', 'min_score', 'max_score']]
-    display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
-    test_predict = test_predict.drop('y_act', axis=1)
-except:
-    pass
-    test_predict = test_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
-    display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
+    test_predict = df_test[['player', 'team', 'week', 'year']].copy()
+    val_predict, test_predict, best_models = run_model_mean('lgbm', test_predict, X_test, cv_time_input)
 
-# test_predict.loc[test_predict.min_score < 0, 'min_score'] = 0 
-test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'max_score'] = \
-    test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'pred_ownership'] * 1.5
-# test_predict.loc[test_predict.std_dev < 0, 'std_dev'] = 1
+    mf.show_scatter_plot(val_predict.pred_ownership, val_predict.y_act)
+    # val_predict = pd.merge(val_predict_gbm, val_predict_rf.drop('y_act', axis=1), on=['player', 'team', 'week', 'year'])
+    # val_predict['pred_ownership'] = val_predict[[c for c in val_predict.columns if 'pred' in c]].mean(axis=1)
+    # test_predict['pred_ownership'] = test_predict[[c for c in test_predict.columns if 'pred' in c]].mean(axis=1)
 
-dm.delete_from_db('Simulation', 'Predicted_Ownership', f'week={set_week} AND year={set_year}')
-dm.write_to_db(test_predict, 'Simulation', 'Predicted_Ownership', 'append')
+    from Fix_Standard_Dev import *
+    sd_m, max_m, min_m = get_std_splines(val_predict, {'pred_ownership': 1}, 
+                                                        show_plot=True, k=2, 
+                                                        min_grps_den=int(val_predict.shape[0]*0.15), 
+                                                        max_grps_den=int(val_predict.shape[0]*0.05),
+                                                        iso_spline='spline')
 
-val_predict = val_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
-dm.write_to_db(val_predict, 'Simulation', 'Predicted_Ownership_Validation', 'replace')
+    sc = StandardScaler().fit(val_predict[['pred_ownership']])
+    sd_max_val = sc.transform(val_predict[['pred_ownership']])
+    val_predict['std_dev'] = sd_m(sd_max_val)
+    val_predict['max_score'] = max_m(sd_max_val)
+    val_predict['min_score'] = min_m(sd_max_val)
 
+    for i in [3, 2, 1]:
+        val_predict['std_dev_test'] = i*val_predict.std_dev
+        val_predict.loc[val_predict.std_dev < 0, 'std_dev_test'] = 1
+        val_predict['upper_range'] = val_predict.pred_ownership + val_predict.std_dev_test
+        val_predict['lower_range'] = val_predict.pred_ownership - val_predict.std_dev_test
+
+        print(f'Num samples within {i} std dev:',
+            val_predict[(val_predict.y_act > val_predict.lower_range) & (val_predict.y_act < val_predict.upper_range)].shape[0] / \
+                val_predict.shape[0])
+
+    print('Num Samples Greater than Max:',
+        val_predict[(val_predict.y_act > val_predict.max_score)].shape[0] / \
+                val_predict.shape[0])
+
+    sd_max_test = sc.transform(test_predict[['pred_ownership']])
+
+    test_predict['std_dev'] = sd_m(sd_max_test)
+    test_predict['max_score'] = max_m(sd_max_test)
+    test_predict['min_score'] = min_m(sd_max_test)
+
+    try:
+        test_predict['y_act'] = df_test.y_act
+        test_predict.plot.scatter(x='pred_ownership', y='y_act')
+        test_predict = test_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'y_act', 'std_dev', 'min_score', 'max_score']]
+        display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
+        test_predict = test_predict.drop('y_act', axis=1)
+    except:
+        pass
+        test_predict = test_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
+        display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
+
+    # test_predict.loc[test_predict.min_score < 0, 'min_score'] = 0 
+    test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'max_score'] = \
+        test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'pred_ownership'] * 1.5
+    # test_predict.loc[test_predict.std_dev < 0, 'std_dev'] = 1
+
+    dm.delete_from_db('Simulation', 'Predicted_Ownership', f'week={set_week} AND year={set_year}')
+    dm.write_to_db(test_predict, 'Simulation', 'Predicted_Ownership', 'append')
+
+    val_predict = val_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
+    dm.write_to_db(val_predict, 'Simulation', 'Predicted_Ownership_Validation', 'replace')
+
+#%%
+
+val_predict_chk = pd.merge(df_train[['player', 'week', 'year', 'y_act']], val_predict, on=['player', 'week', 'year'])
+val_predict_chk['error'] = val_predict_chk.pred_ownership - val_predict_chk.y_act
+display(val_predict_chk.sort_values(by='error').iloc[-25:])
+display(val_predict_chk.sort_values(by='error').iloc[:25])
 
 #%%
 
@@ -481,13 +504,15 @@ pred_player_ownership = dm.read(f'''SELECT player,
                                            AVG(pred_ownership) pred_ownership, 
                                            AVG(std_dev) std_dev 
                                     FROM Predicted_Ownership_Validation 
-                                    WHERE week < 16
+                                    WHERE week <= 16
                                     GROUP BY player, week, year
                                     ''', 'Simulation')
 pred_player_ownership = add_proj(pred_player_ownership)
 
 #%%
 
+set_week=2
+set_year=2022
 for base_place, places in zip([1, 25000, 50000, 100000, 150000], [25, 1000, 1000, 1000, 1000]):
     print(f'\nPlaces {base_place}-{places+base_place}\n==================')
 
@@ -517,8 +542,8 @@ for base_place, places in zip([1, 25000, 50000, 100000, 150000], [25, 1000, 1000
 
     # df_lineups.pred_ownership = df_lineups.pred_ownership / df_lineups.avg_proj_pts
     
-    df_lineups = adjust_owernship(df_lineups, 'pct_drafted', 'inverse')
-    df_lineups = adjust_owernship(df_lineups, 'pct_drafted', 'inverse')
+    df_lineups = adjust_owernship(df_lineups, 'pct_drafted', 'ln')
+    # df_lineups = adjust_owernship(df_lineups, 'pred_ownership', 'inverse')
 
     def product_sum(x):
         return np.sum(x)

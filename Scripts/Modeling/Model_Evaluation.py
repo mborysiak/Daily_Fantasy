@@ -257,21 +257,8 @@ import sklearn
 from sklearn.linear_model import Ridge, ElasticNet
 from sklearn.ensemble import RandomForestRegressor
 
-weeks = [10, 11, 12, 13, 14, 15, 1, 2]
-years = [2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022]
 
-# weeks = [2]
-# years = [2022]
-i=0
-for w, yr in zip(weeks, years):
-
-    print(w)
-    df = dm.read(f'''SELECT * 
-                    FROM Winnings_Optimize
-                    WHERE NumPlayers=9
-                         and week={w}
-                         and year={yr}
-                    ORDER BY year, week''', 'Results')
+def winnings_importance(df, m):
 
     df.loc[df.Contest=='ThreePointStance', ['total_winnings', 'max_winnings']] = df.loc[df.Contest=='ThreePointStance', ['total_winnings', 'max_winnings']] * 20 / 33
     df.loc[df.Contest=='ScreenPass', ['total_winnings', 'max_winnings']] = df.loc[df.Contest=='ScreenPass', ['total_winnings', 'max_winnings']] * 20 / 15
@@ -301,14 +288,8 @@ for w, yr in zip(weeks, years):
                 X = X.drop(c, axis=1)
         return X
 
-
     X = one_hot(X).fillna(0)
     y = df.max_winnings
-
-    m = ElasticNet(alpha=5, l1_ratio=0.1)
-    # m = Ridge(alpha=100)
-    # m = RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1)
-    # m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
 
     if type(m) == sklearn.linear_model._ridge.Ridge or type(m) == sklearn.linear_model._coordinate_descent.ElasticNet:
         sc = StandardScaler()
@@ -323,46 +304,100 @@ for w, yr in zip(weeks, years):
     try:
         coef_vals = pd.DataFrame(m.coef_, index=X.columns, columns=[f'week_{w}']).reset_index()
         coef_vals = coef_vals.rename(columns={'index': 'metric'})
-        if i==0: all_coef = coef_vals.copy()
-        else: all_coef = pd.merge(all_coef, coef_vals, on='metric', how='outer').fillna(0)
-        # coef_vals[abs(coef_vals) > 0.01].sort_values().plot.barh(figsize=(10,10))
-
     except:
         import shap
         shap_values = shap.TreeExplainer(m).shap_values(X)
         coef_vals = pd.DataFrame(shap_values, columns=X.columns)
-        
+    
+    return coef_vals, X
+
+
+def join_coef(i, all_coef, coef_vals, X_all, X, m):
+
+    if m in ('ridge', 'enet'):
+        if i==0: 
+            all_coef = coef_vals.copy()
+            X_all=None
+        else: 
+            all_coef = pd.merge(all_coef, coef_vals, on='metric', how='outer').fillna(0)
+            X_all = None
+
+    if m in ('lgbm', 'rf'):
         if i==0: 
             all_coef = coef_vals.copy()
             X_all = X.copy()
         else: 
             all_coef = pd.concat([all_coef, coef_vals], axis=0, sort=False).fillna(0)
             X_all = pd.concat([X, X_all], sort=False, axis=0)
-            
-    i+=1
+    return all_coef, X_all
 
-try:
-    coef_vals = pd.Series(all_coef.mean(axis=1).values, index=all_coef.metric)
-    coef_vals[abs(coef_vals) > 0.01].sort_values().plot.barh(figsize=(10,10))
-except:
-    shap.summary_plot(all_coef.values, X_all, feature_names=X_all.columns, plot_size=(8,10), max_display=30, show=False)
+def show_coef(all_coef, X_all):
+    try:
+        all_coef = pd.Series(all_coef.mean(axis=1).values, index=all_coef.metric)
+        all_coef[abs(all_coef) > 0.01].sort_values().plot.barh(figsize=(10,10))
+    except:
+        shap.summary_plot(all_coef.values, X_all, feature_names=X_all.columns, plot_size=(8,10), max_display=30, show=False)
+
+#%%
+
+model_type = {
+ 'enet': ElasticNet(alpha=5, l1_ratio=0.1),
+ 'ridge': Ridge(alpha=100),
+ 'rf': RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1),
+ 'lgbm': LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
+
+}
+
+weeks = [10, 11, 12, 13, 14, 15, 16, 17, 1, 2]
+years = [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022]
+
+i=0
+all_coef = None; X_all = None
+for w, yr in zip(weeks, years):
+    df = dm.read(f'''SELECT * 
+                    FROM Winnings_Optimize
+                    WHERE NumPlayers=9
+                        and week = {w}
+                        and year = {yr}
+                        and max_winnings < 50000
+                    ORDER BY year, week''', 'Results')
+
+    model_name = 'enet'
+    m = model_type[model_name]
+    coef_vals, X = winnings_importance(df, m)
+    all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1
+
+show_coef(all_coef, X_all)
+
+#%%
+
+df = dm.read(f'''SELECT * 
+                FROM Winnings_Optimize
+                WHERE NumPlayers=9
+                      and max_winnings < 50000
+                ORDER BY year, week''', 'Results')
+
+m = model_type['enet']
+coef_vals, X = winnings_importance(df, m)
+show_coef(coef_vals, X)
+
 # %%
 
 skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
-df = dm.read("SELECT * FROM Model_Validations WHERE model_type='backfill' AND set_year=2022", 'Simulation')
-gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', 'model_type']
+df = dm.read("SELECT * FROM Model_Validations WHERE model_type='full_model' AND set_year=2022", 'Simulation')
+gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', ]
 df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['y_act'], x['pred_fp_per_game'])[0]).reset_index()
-df.sort_values(by=['set_year', 'set_week', 'pos', 0],
-               ascending=[True, True, False, False]).iloc[:50]
+display(df.sort_values(by=['set_year', 'set_week', 'pos', 0],
+               ascending=[True, True, False, False]).iloc[:50])
 
 #%%
 
 skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
 df = dm.read("SELECT * FROM Model_Test_Validations WHERE model_type='full_model' AND set_year=2022", 'Simulation')
-gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', 'model_type']
+gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', ]
 df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['actual_pts'], x['pred_fp_per_game'])[0]).reset_index()
-df.sort_values(by=['set_year', 'set_week', 'pos', 0],
-               ascending=[True, True, False, False]).iloc[:50]
+display(df.sort_values(by=['set_year', 'set_week', 'pos', 0],
+               ascending=[True, True, False, False]).iloc[:50])
 
 #%%
 
