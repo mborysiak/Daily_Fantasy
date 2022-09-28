@@ -37,7 +37,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [2]
+run_weeks = [1, 2]
 
 run_params = {
     
@@ -66,13 +66,15 @@ set_pos = 'RB'
 model_type = 'full_model'
 
 # set weights for running model
-r2_wt = 1
-sera_wt = 5
+r2_wt = 0
+sera_wt = 1
 matt_wt = 1
 brier_wt = 2
 
+use_calibrate = True
+
 # set version and iterations
-vers = 'sera5_rsq1_brier2_matt1_lowsample_perc'
+vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_calibrate'
 
 #----------------
 # Data Loading
@@ -217,6 +219,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
         # set up the ADP model pipe
         pipe = skm.model_pipe([skm.piece('feature_select'), 
                                skm.piece('std_scale'), 
+                               skm.piece('k_best'),
                                skm.piece('lr')])
 
     elif stack_model:
@@ -263,10 +266,13 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
 
     # get the params for the current pipe and adjust if needed
     params = skm.default_params(pipe, 'rand')
-    if m=='adp': params['feature_select__cols'] = [
-                                                    ['game_date', 'ProjPts', 'dk_salary', 'fantasyPoints', 'year', 'week'],
-                                                    ['ProjPts', 'dk_salary', 'fantasyPoints'],
-                                                ]
+    if m=='adp': 
+        params['feature_select__cols'] = [
+                                            ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints'],
+                                            ['year', 'week',  'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints'],
+                                            [ 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints']
+                                        ]
+        params['k_best__k'] = range(1, 9)
     if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
     if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
     if stack_model: params['k_best__k'] = range(2, 40)
@@ -284,12 +290,16 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
     if model_obj == 'class': 
         proba = True
         alpha = f'_{cut}' 
-    else: proba = False
+        calibrate=use_calibrate
+    else: 
+        proba = False
+        calibrate=False
 
     # fit and append the ADP model
     best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=run_params['n_iters'], n_splits=run_params['n_splits'],
                                                              col_split='game_date', time_split=run_params['cv_time_input'],
-                                                             bayes_rand=run_params['opt_type'], proba=proba, random_seed=(i+7)*19+(i*12)+6)
+                                                             bayes_rand=run_params['opt_type'], proba=proba, calibrate=calibrate,
+                                                             random_seed=(i+7)*19+(i*12)+6)
     
     out_dict = update_output_dict(model_obj, model_name, str(alpha), out_dict, oof_data, best_models)
     # db_output = add_result_db_output('reg', m, oof_data['scores'], db_output, run_params)
@@ -525,27 +535,3 @@ for w in run_weeks:
 # db_output_pd = db_output_pd.assign(n_iters=n_iters).assign(to_keep=to_keep).assign(val_week=val_week_min).assign(val_year=val_year_min)
 # dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
 # dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
-
-#%%
-
-cur_df = df_train.copy()
-model_obj = 'reg'
-model_name = 'lgbm'
-alpha = None
-i=0
-
-skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'])
-pipe, params = get_full_pipe(skm, model_name, alpha, min_samples=min_samples)
-
-if model_obj == 'class': 
-    proba = True
-    alpha = f'_{cut}' 
-else: proba = False
-
-# fit and append the ADP model
-best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=run_params['n_iters'], n_splits=run_params['n_splits'],
-                                                            col_split='game_date', time_split=run_params['cv_time_input'],
-                                                            bayes_rand=run_params['opt_type'], proba=proba, random_seed=(i+7)*19+(i*12)+6)
-# %%
-param_scores
-# %%

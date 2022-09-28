@@ -14,7 +14,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 2
+set_week = 3
 contest = 'Million'
 
 #%%
@@ -357,9 +357,9 @@ def remove_week15_2020(df):
 # Predict Ownership Pct
 #================
 
-for set_week, set_year in zip([10, 11, 12, 13, 14, 15, 16, 17, 1, 2], 
-                              [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022]):
-# for set_week, set_year in zip([2], [2022]):
+# for set_week, set_year in zip([10, 11, 12, 13, 14, 15, 16, 17, 1, 2], 
+#                               [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022]):
+for set_week, set_year in zip([1, 2, 3], [2022, 2022, 2022]):
 
     print(f'Running week {set_week} year {set_year}')
     val_week_min = 8
@@ -397,7 +397,8 @@ for set_week, set_year in zip([10, 11, 12, 13, 14, 15, 16, 17, 1, 2],
     drop_list = ['Dalvin Cook32021', 'Calvin Ridley82021', 'Odell Beckham152021', 'Cooper Kupp152021', 'Van Jefferson152021',
                 "D'Andre Swift112021", 'Josh Johnson162021', 'Kyler Murray92021', 'Darren Waller72021',
                 'Kyler Murray132021', 'Deandre Hopkins92021', 'Lamar Jackson112021']
-    # df = drop_player_weeks(df, drop_list)
+    
+    df = drop_player_weeks(df, drop_list)
     df = add_injuries(df)
     df = add_gambling_lines(df)
     df = feature_engineering(df)
@@ -504,15 +505,12 @@ pred_player_ownership = dm.read(f'''SELECT player,
                                            AVG(pred_ownership) pred_ownership, 
                                            AVG(std_dev) std_dev 
                                     FROM Predicted_Ownership_Validation 
-                                    WHERE week <= 16
                                     GROUP BY player, week, year
                                     ''', 'Simulation')
 pred_player_ownership = add_proj(pred_player_ownership)
 
 #%%
 
-set_week=2
-set_year=2022
 for base_place, places in zip([1, 25000, 50000, 100000, 150000], [25, 1000, 1000, 1000, 1000]):
     print(f'\nPlaces {base_place}-{places+base_place}\n==================')
 

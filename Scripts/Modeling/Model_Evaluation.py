@@ -91,17 +91,15 @@ def train_predict_split(df, train_time_split, cv_time_input):
 
 # set year to analyze
 set_year = 2022
-set_week = 1
+set_week = 3
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
 val_week_min = 14
 
 # set the model version
-vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc'
-ensemble_vers = 'no_weight_yes_kbest_randsample_sera_include2'
 model_type ='full_model'
-set_pos = 'QB'
+set_pos = 'RB'
 
 #==========
 # Pull and clean compiled data
@@ -129,10 +127,6 @@ if 'game_date' not in X.columns:
 
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import HistGradientBoostingRegressor
-# set up the model pipe and get the default search parameters
-# pipe = skm.model_pipe([skm.piece('std_scale'), 
-#                        skm.piece('k_best'),
-#                        skm.piece('lgbm')])
 
 pipe = skm.model_pipe([skm.piece('random_sample'),
                         skm.piece('std_scale'), 
@@ -143,10 +137,14 @@ pipe = skm.model_pipe([skm.piece('random_sample'),
                                         skm.piece('pca')
                                         ]),
                         skm.piece('k_best'),
-                        ('gbm', HistGradientBoostingRegressor())])
+                        skm.piece('gbm')
+                        # ('gbm', HistGradientBoostingRegressor())
+                     ])
 
 # set params
 # params = skm.default_params(pipe, 'rand')
+
+
 params = {'random_sample__frac': [0.2 , 0.22, 0.24, 0.26, 0.28, 0.3 , 0.32, 0.34, 0.36, 0.38, 0.4 ,
                 0.42, 0.44, 0.46, 0.48, 0.5 , 0.52, 0.54, 0.56, 0.58, 0.6 , 0.62,
                 0.64],
@@ -191,6 +189,8 @@ best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_i
 
 oof_data['full_hold'].plot.scatter(x='pred', y='y_act')
 
+
+
 #%%
 
 df = param_scores.copy()
@@ -227,13 +227,213 @@ except:
     shap_values = shap.TreeExplainer(m).shap_values(X)
     shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(8,10), max_display=20, show=False)
 
+#%%
+
+def select_main_slate_teams(df):
+
+    import datetime as dt
+
+    good_teams = dm.read(f'''
+                    SELECT away_team team, gametime, week, year 
+                    FROM Gambling_Lines 
+                    WHERE year >= 2021
+                    UNION
+                    SELECT home_team team, gametime, week, year 
+                    FROM Gambling_Lines
+                    WHERE year >= 2021
+                ''', 'Pre_TeamData')
+
+    good_teams.gametime = pd.to_datetime(good_teams.gametime)
+    good_teams['day_of_week'] = good_teams.gametime.apply(lambda x: x.weekday())
+    good_teams['hour_in_day'] = good_teams.gametime.apply(lambda x: x.hour)
+
+    good_teams = good_teams[(good_teams.day_of_week==6) & (good_teams.hour_in_day <= 16)]
+    good_teams = good_teams[['team', 'week', 'year']]
+
+    if set_pos == 'Defense': 
+        good_teams = good_teams.rename(columns={'team': 'player'})
+        df = pd.merge(df, good_teams, on=['player', 'week', 'year'])
+
+    else:
+        df = pd.merge(df, good_teams, on=['team', 'week', 'year'])
+
+    return df
+
+def show_calibration_curve(y_true, y_pred, n_bins=10):
+
+    from sklearn.calibration import calibration_curve
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import brier_score_loss
+
+    x, y = calibration_curve(y_true, y_pred, n_bins=n_bins)
+
+    # Plot perfectly calibrated
+    plt.plot([0, 1], [0, 1], linestyle = '--', label = 'Ideally Calibrated')
+    
+    # Plot model's calibration curve
+    plt.plot(y, x, marker = '.', label = 'Model')
+    
+    leg = plt.legend(loc = 'upper left')
+    plt.xlabel('Average Predicted Probability in each bin')
+    plt.ylabel('Ratio of positives')
+    plt.show()
+
+    print('Brier Score:', brier_score_loss(y_true, y_pred))
+
+# dates = [
+#     [13, 2021],
+#     [14, 2021],
+#     [15, 2021],
+#     [16, 2021], 
+#     [17, 2021],
+#     [1, 2022],
+#     [2, 2022],
+#     [3, 2023]
+# ]
+
+# for set_week, set_year in dates:
+#     for set_pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+
+#         if set_pos != 'Defense': 
+#             model_types = ['full_model', 'backfill']
+#         else: 
+#             model_types = ['full_model']
+
+#         for model_type in model_types:
+
+set_week = 3
+set_year = 2022
+set_pos = 'WR'
+model_type= 'full_model'
+
+# set the earliest date to begin the validation set
+val_year_min = 2021
+val_week_min = 8
+
+n_splits = 4
+
+#==========
+# Pull and clean compiled data
+#==========
+
+df, drop_cols = load_data(model_type, set_pos)
+if set_pos == 'Defense': 
+    df['team'] = df.player
+    drop_cols.append('team')
+
+df, cv_time_input, train_time_split = create_game_date(df)
+
+df = select_main_slate_teams(df)
+
+df = df[df.game_date >= 20210102].reset_index(drop=True)
+df = df.drop('y_act', axis=1)
+top_players = dm.read("SELECT * FROM Top_Players", "DK_Results").drop('counts', axis=1)
+
+df = pd.merge(df, top_players, on=['player', 'week', 'year'], how='left')
+df = df.fillna({'y_act': 0})
+
+df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
+
+
+
+skm = SciKitModel(df_train, model_obj='class', matt_wt=1, brier_wt=1)
+X, y = skm.Xy_split('y_act', drop_cols)
+
+#------------
+# Get Regression Data
+#------------
+
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import HistGradientBoostingRegressor
+
+pipe = skm.model_pipe([ skm.piece('random_sample'),
+                        skm.piece('std_scale'),
+                        skm.piece('select_perc_c'),
+                        skm.feature_union([
+                                        skm.piece('agglomeration'), 
+                                        skm.piece('k_best_c'),
+                                        skm.piece('pca')
+                                        ]),
+                        skm.piece('k_best_c'),
+                        skm.piece('rf_c')
+                    ])
+
+# set params
+params = skm.default_params(pipe, 'rand')
+params['random_sample__frac'] = np.arange(0.5, 1, 0.05)
+
+# run the model with parameter search
+best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=50,
+                                                        col_split='game_date',n_splits=n_splits,
+                                                        time_split=cv_time_input,
+                                                        bayes_rand='custom_rand',
+                                                        proba=True, calibrate=True,
+                                                        sample_weight=False,
+                                                        random_seed=1234)
+
+
+show_calibration_curve(oof_data['full_hold'].y_act, oof_data['full_hold'].pred)
+
+all_preds = []
+for i in range(n_splits):
+    cur_pred = best_models[i].fit(X,y).predict_proba(df_predict[X.columns])[:,1]
+    all_preds.append(cur_pred)
+
+preds = pd.DataFrame(all_preds).T.mean(axis=1)
+preds.name = 'pred'
+
+results = pd.concat([df_predict[['player', 'team', 'dk_salary']], preds], axis=1).sort_values(by='dk_salary', ascending=False).reset_index(drop=True)
+results['dk_rank'] = range(len(results))
+results = results.sort_values(by='pred', ascending=False)
+results['value'] = results.dk_rank - range(len(results))
+
+display(results.sort_values(by='pred', ascending=False).reset_index(drop=True).iloc[:50])
+display(results.sort_values(by='value', ascending=False).reset_index(drop=True).iloc[:50])
+
+results.pred = np.round(results.pred, 3)
+results = results.assign(week=set_week, year=set_year, pos=set_pos, model_type=model_type).rename(columns={'pred': 'pred_ownership'})
+results['std_dev'] = np.round(results.pred_ownership / 3, 3)
+results['min_score'] = 0.0
+results['max_score'] = 1.0
+
+# results = results[['player', 'team', 'week', 'year', 'pos', 'model_type', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
+# dm.delete_from_db('Simulation', 'Predicted_Top_Players', f"week={set_week} AND year={set_year} AND model_type='{model_type}' AND pos='{set_pos}'")
+# dm.write_to_db(results, 'Simulation', 'Predicted_Top_Players', 'append')
 
 #%%
-m = best_models[2]
+
+from sklearn.calibration import CalibratedClassifierCV
+
+model = best_models[0]
+model.fit(X, y)
+model = CalibratedClassifierCV(model, cv='prefit')
+model.fit(X,y)
+pred = model.predict_proba(df_predict[X.columns])[:,1]
+
+show_calibration_curve(df_predict.y_act, pred)
+#%%
+
+model = best_models[0]
+model.fit(X, y)
+pred = model.predict_proba(df_predict[X.columns])[:,1]
+show_calibration_curve(df_predict.y_act, pred)
+
+#%%
+
+df = dm.read("SELECT * FROM Predicted_Top_Players", 'Simulation')
+df = df.groupby(['player', 'team', 'week', 'year']).agg({'pred_ownership': 'mean', 
+                                                        'std_dev': 'mean', 
+                                                        'min_score': 'mean', 
+                                                        'max_score': 'mean'}).reset_index()
+
+dm.write_to_db(df, 'Simulation', 'Predicted_Ownership', 'replace')
+
+#%%
+m = best_models[3]
 m.fit(X,y)
 transformer = Pipeline(m.steps[:-1])
 X_shap = transformer.transform(X)
-cols = X.columns[transformer['k_best'].get_support()]
+cols = X.columns[transformer['k_best_c'].get_support()]
 X_shap = pd.DataFrame(X_shap, columns=cols)
 
 import shap
@@ -241,8 +441,9 @@ try:
     shap_values = shap.TreeExplainer(m.steps[-1][1]).shap_values(X_shap)
     shap.summary_plot(shap_values, X_shap, feature_names=X_shap.columns, plot_size=(8,15), max_display=30, show=False)
 except:
-    xx = pd.Series(m.steps[-1][1].coef_, index=X_shap.columns)
+    xx = pd.Series(m.steps[-1][1].coef_[0], index=X_shap.columns)
     xx[np.abs(xx)>0.001].sort_values().plot.barh(figsize=(5,10))
+
 #%%
 #======================================================================================================================
 
@@ -256,7 +457,7 @@ from sklearn.model_selection import cross_val_score
 import sklearn
 from sklearn.linear_model import Ridge, ElasticNet
 from sklearn.ensemble import RandomForestRegressor
-
+import shap
 
 def winnings_importance(df, m):
 
@@ -266,10 +467,12 @@ def winnings_importance(df, m):
     X = df[['adjust_pos_counts', 'drop_player_multiple',  'drop_team_frac', 'top_n_choices', 
             'week', 'covar_type', 'full_model_rel_weight', 'min_player_same_team', 'num_iters',
             'pred_proba', 'pred_sera', 'pred_brier', 'pred_lowsample', 'proper_ensemble', 'pred_perc',
-            'ens_sample_weights', 'ens_kbest', 'ens_randsample', 'ens_sera', 
+            'pred_sera_wt', 'pred_rsq_wt', 'pred_matt_wt', 'pred_brier_wt', 'pred_calibrate',
+            'ens_sample_weights', 'ens_kbest', 'ens_randsample', 'ens_sera', 'ens_sera_wt', 'ens_rsq_wt',
             'std_dev_type', 'sim_type',
             'std_spline', 'std_quantile', 'std_experts', 'std_actuals', 'std_splquantile', 
-            'std_predictions', 'std_coef', 'std_isotonic',
+            'std_predictions', 'std_coef', 'std_isotonic', 'std_calibrate', 'std_class',
+            'std_matt_wt', 'std_brier_wt',
             'Contest']].copy()
 
     X['std_class'] = 0
@@ -279,10 +482,11 @@ def winnings_importance(df, m):
     X.loc[X.std_dev_type.str.contains('include2'), 'num_include'] = 2
     X.loc[X.std_dev_type.str.contains('include3'), 'num_include'] = 3
 
-    X.loc[X.min_player_same_team == 'Auto', 'min_player_same_team'] = 2.5
-    X.min_player_same_team = X.min_player_same_team.astype('float')
+    # X.loc[X.min_player_same_team == 'Auto', 'min_player_same_team'] = 2.5
+    # X.min_player_same_team = X.min_player_same_team.astype('float')
+    X.drop_player_multiple = X.drop_player_multiple.astype('object')
     def one_hot(X):
-        for c in ['week', 'covar_type', 'std_dev_type', 'sim_type', 'Contest']:
+        for c in ['week', 'covar_type', 'std_dev_type', 'sim_type', 'Contest', 'min_player_same_team', 'drop_player_multiple']:
             X = pd.concat([X, pd.get_dummies(X[c], prefix=c, drop_first=False)], axis=1)
             if c!='week':
                 X = X.drop(c, axis=1)
@@ -305,7 +509,7 @@ def winnings_importance(df, m):
         coef_vals = pd.DataFrame(m.coef_, index=X.columns, columns=[f'week_{w}']).reset_index()
         coef_vals = coef_vals.rename(columns={'index': 'metric'})
     except:
-        import shap
+        
         shap_values = shap.TreeExplainer(m).shap_values(X)
         coef_vals = pd.DataFrame(shap_values, columns=X.columns)
     
@@ -348,8 +552,10 @@ model_type = {
 
 }
 
-weeks = [10, 11, 12, 13, 14, 15, 16, 17, 1, 2]
-years = [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022]
+weeks = [10, 11, 12, 13, 14, 15, 16, 17, 1, 2, 3]
+years = [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022, 2022]
+# weeks = [3]
+# years = [2022]
 
 i=0
 all_coef = None; X_all = None
@@ -377,7 +583,7 @@ df = dm.read(f'''SELECT *
                       and max_winnings < 50000
                 ORDER BY year, week''', 'Results')
 
-m = model_type['enet']
+m = model_type[model_name]
 coef_vals, X = winnings_importance(df, m)
 show_coef(coef_vals, X)
 
@@ -398,6 +604,24 @@ gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', ]
 df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['actual_pts'], x['pred_fp_per_game'])[0]).reset_index()
 display(df.sort_values(by=['set_year', 'set_week', 'pos', 0],
                ascending=[True, True, False, False]).iloc[:50])
+
+#%%
+
+df = dm.read('''SELECT * 
+                FROM Model_Validations 
+                JOIN (SELECT player, salary, year, league week FROM Salaries) USING (player, week, year)
+                WHERE set_year=2022''', 'Simulation')
+
+df = df[(df.pred_version=='fixed_model_clone_proba_sera_brier_lowsample_perc') & \
+    (df.ensemble_vers=='no_weight_yes_kbest_randsample_sera_include2') & \
+        (df.model_type=='backfill') & \
+            (df.set_week==1) & \
+                (df.set_year==2022) & \
+                    (df.pos=='TE')]
+
+df['y_act'] = df.y_act
+df['pred_fp_per_game'] = df.pred_fp_per_game
+df.corr()['y_act']
 
 #%%
 

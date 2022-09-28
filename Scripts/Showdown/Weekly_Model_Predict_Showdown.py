@@ -34,17 +34,17 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2022
-set_week = 1
-showdown_teams = ['SEA', 'DEN']
+set_week = 3
+showdown_teams = ['DAL', 'NYG']
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
-val_week_min = 10
+val_week_min = 14
 
 met = 'y_act'
 
 # full_model or backfill
-vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc'
+vers = 'sera1_rsq0_brier2_matt1_lowsample_perc'
 
 # %%
 

@@ -14,10 +14,10 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=2
+week=3
 
-pred_vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate'
-ensemble_vers = 'no_weight_yes_kbest_randsample_sera_include2'
+pred_vers = 'sera1_rsq0_brier2_matt1_lowsample_perc'
+ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2'
 std_dev_type = 'pred_spline_class80'
 
 sim_type = 'ownership_ln_pos'
@@ -71,7 +71,7 @@ def dict_configs(d):
 G = {
     'drop_player_multiple': [4], 
     'drop_team_frac': [0],
-    'full_model_rel_weight': [0.5, 1],
+    'full_model_rel_weight': [0.2, 1, 5],
     'use_ownership': [True, False]
     }
 

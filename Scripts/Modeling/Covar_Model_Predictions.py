@@ -328,47 +328,47 @@ def get_mean_points(preds):
 
 #%%
 
-# set year to analyze
 covar_type = 'team_points'
-use_covar = 'False'
-use_ownership = 'True'
-adjust_select = 'False'
 
 # set the model version
 set_weeks = [
-       17, 1, 2
+       1, 2, 3
         ]
 
 set_years = [
-        2021, 2022, 2022
+        2022, 2022, 2022
 ]
 
-pred_versions = [                
+pred_versions = [   
                 'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate',
+                'sera1_rsq0_brier1_matt1_lowsample_perc_calibrate',
+                
+             
                 
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera_include2',
-                    'no_weight_yes_kbest_randsample_sera5_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera5_rsq1_include2'
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2'    
+                        
+                   
 ]
 
 std_dev_types = [
                 'pred_spline_class80',
                 'pred_spline_class80',
-                'pred_spline_class80',
-                
+                'pred_spline_class80'
+                              
 ]
 
 
 sim_types = [
-             'ownership_inverse',
-             'ownership_inverse',
-             'ownership_inverse'
-             ]
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix'
+]
 
 full_model_weights = [0.2, 1, 5]
 
@@ -417,11 +417,13 @@ run_params = pd.DataFrame({
     'pred_vers': [pred_vers],
     'ensemble_vers': [ensemble_vers],
     'std_dev_type': [std_dev_type],
-    'full_model_rel_weight': [full_model_rel_weight],
-    'covar_type': [covar_type],
-    'use_covar': [use_covar],
-    'use_ownership': [use_ownership],
-    'adjust_select': [adjust_select]
+    'full_model_rel_weight': ['np.random.choice([0.2, 1, 5], p=[0.3, 0.25, 0.45])'],
+    'drop_player_multiple': ['np.random.choice([0, 2, 4], p=[0.1, 0.3, 0.6])'],
+    'covar_type': ["np.random.choice(['team_points'], p=[1])"],
+    'use_covar': ["np.random.choice([False], p=[1])"],
+    'use_ownership': ['np.random.choice([True, False], p=[0.8, 0.2])'],
+    'adjust_select': ["np.random.choice([False], p=[1])"],
+    'min_players_opp_team': ["np.random.choice(['Auto'], p=[1])"]
 })
 
 dm.delete_from_db('Simulation', 'Run_Params', f"week={set_week} AND year={set_year}")

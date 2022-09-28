@@ -1,6 +1,7 @@
 #%%
 import pandas as pd
 import os
+import numpy as np
 from ff import data_clean as dc
 
 from ff.db_operations import DataManage   
@@ -12,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 2
+set_week = 3
 
 download_path = '//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/Mborysiak/DK/'
 extract_path = download_path + f'Results/{set_year}/'
@@ -145,6 +146,96 @@ def get_prizes(contest):
     prizes['PctRank'] = prizes.Rank / num_entries[contest]
     return prizes, num_entries[contest]
 
+
+#-----------------------
+# For extracting best players
+#-----------------------
+
+
+team_map = {'Cardinals': 'ARI',
+            'Falcons': 'ATL',
+            'Ravens': 'BAL',
+            'Bills': 'BUF',
+            'Panthers': 'CAR',
+            'Bears': 'CHI',
+            'Bengals': 'CIN',
+            'Browns': 'CLE',
+            'Cowboys': 'DAL',
+            'Broncos': 'DEN',
+            'Lions': 'DET',
+            'Packers': 'GB',
+            'Texans': 'HOU',
+            'Colts': 'IND',
+            'Jaguars': 'JAC',
+            'Chiefs': 'KC',
+            'Chargers': 'LAC',
+            'Rams': 'LAR',
+            'Dolphins': 'MIA',
+            'Vikings': 'MIN',
+            'Patriots': 'NE',
+            'Saints': 'NO',
+            'Giants': 'NYG',
+            'Jets': 'NYJ',
+            'Raiders': 'LVR',
+            'Eagles': 'PHI',
+            'Steelers': 'PIT',
+            '49ers': 'SF',
+            '49Ers': 'SF',
+            'Seahawks': 'SEA',
+            'Buccaneers': 'TB',
+            'Titans': 'TEN',
+            'Redskins': 'WAS',
+            'Football Team': 'WAS',
+            'Commanders': 'WAS'}
+
+def get_best_lineups(full_entries, min_place, max_place):
+
+    best_lineups = full_entries[(full_entries.Rank >= min_place) & (full_entries.Rank <= max_place)].copy().reset_index(drop=True)
+    best_lineups = best_lineups.sort_values(by=['year', 'week', 'Points'], ascending=[True, True, False]).reset_index(drop=True)
+    # best_lineups['Rank'] = best_lineups.groupby(['year', 'week']).cumcount()
+
+    return best_lineups
+
+
+def extract_players(lineup):
+    positions = ['QB', 'RB', 'WR', 'TE', 'DST', 'FLEX']
+    for p in positions:
+        lineup = lineup.replace(p, ',')
+    lineup = lineup.split(',')[1:]
+    lineup = [p.rstrip().lstrip() for p in lineup]
+
+    return lineup
+
+
+def extract_positions(lineup):
+    positions = ('QB', 'RB', 'WR', 'TE', 'DST', 'FLEX')
+    lineup = lineup.split(' ')
+    lineup = [p for p in lineup if p in positions]
+    return lineup
+
+
+
+def format_lineups(full_entries, min_place, max_place):
+
+    best_lineups = get_best_lineups(full_entries, min_place=min_place, max_place=max_place)
+
+    players = [extract_players(l) for l in best_lineups.Lineup.values]
+    positions = [extract_positions(l) for l in best_lineups.Lineup.values]
+
+    players = pd.DataFrame(players)
+    positions = pd.DataFrame(positions)
+
+    df = pd.concat([players, positions], axis=1)
+    df = pd.concat([df, best_lineups.drop('Lineup', axis=1)], axis=1)
+
+    final_df = pd.DataFrame()
+    for i in range(9):
+        tmp_df = df[[i, 'Rank', 'Points', 'week', 'year']]
+        tmp_df.columns = ['player', 'lineup_position', 'place', 'team_points', 'week', 'year']
+        final_df = pd.concat([final_df, tmp_df], axis=0)
+  
+    return final_df
+
 #%%
 
 for contest in ['Million']:#, 'ThreePointStance', 'ScreenPass']:
@@ -184,11 +275,17 @@ for contest in ['Million']:#, 'ThreePointStance', 'ScreenPass']:
 
 #%%
 
-df = dm.read("SELECT * FROM Million_Results", 'DK_Results')
-df['Contest'] = 'Million'
-dm.write_to_db(df, 'DK_Results', 'Contest_Results', 'replace')
-# %%
-df = dm.read("SELECT * FROM Million_Ownership", 'DK_Results')
-df['Contest'] = 'Million'
-dm.write_to_db(df, 'DK_Results', 'Contest_Ownership', 'replace')
+contest = 'Million'
+base_place = 1
+places = 50
+
+full_entries = dm.read(f"SELECT * FROM Contest_Results WHERE Contest='{contest}'", 'DK_Results')
+df_lineups = format_lineups(full_entries, min_place=base_place, max_place=base_place+places)
+df_lineups.player = df_lineups.player.apply(dc.name_clean)
+df_lineups.loc[df_lineups.lineup_position=='DST', 'player'] = df_lineups.loc[df_lineups.lineup_position=='DST', 'player'].map(team_map)
+
+df_lineups = df_lineups.groupby(['player', 'week', 'year']).agg(counts=('place', 'count')).reset_index()
+df_lineups['y_act'] = np.where(df_lineups.counts >= 5, 1, 0)
+
+dm.write_to_db(df_lineups, 'DK_Results', 'Top_Players', 'replace')
 # %%

@@ -25,10 +25,10 @@ dm = DataManage(db_path)
 #===============
 
 year = 2022
-week = 2
-num_iters = 50
+week = 3
+num_iters = 200
 
-total_lineups = 10
+total_lineups = 8
 
 #-----------------
 # Model and Sim Settings
@@ -104,13 +104,12 @@ def initiate_class(op_params):
     pred_vers = op_params['pred_vers']
     ensemble_vers = op_params['ensemble_vers']
     std_dev_type = op_params['std_dev_type']
-    full_model_rel_weight = op_params['full_model_rel_weight']
-    covar_type = op_params['covar_type']
-    use_covar = eval('np.random.choice([True, False], p=[0.5, 0.5])')
+    full_model_rel_weight = eval(op_params['full_model_rel_weight'])
+    covar_type = eval(op_params['covar_type'])
+    use_covar = eval(op_params['use_covar'])
     use_ownership = eval(op_params['use_ownership'])
-    # adjust_select = eval(op_params['adjust_select'])
-    
-    print(use_covar)
+
+    print('Full Model Weight:', full_model_rel_weight, 'Use Covar:', use_covar, 'Use Ownership:', use_ownership)
 
     # instantiate simulation class and add salary information to data
     sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters,
@@ -123,14 +122,14 @@ def initiate_class(op_params):
 def pull_prev_counts(week, year):
 
     df = dm.read(f'''SELECT * 
-                 FROM Best_Lineups
-                 WHERE week={week} 
-                       AND year={year}''', 'Results')
+                     FROM Best_Lineups
+                     WHERE week={week} 
+                           AND year={year}''', 'Results')
     if len(df)>0:
         df = pd.melt(df.iloc[:, :9]).value.value_counts().reset_index()
         df.columns = ['Player', 'Prev Cnts']
     else:
-        df = pd.DataFrame({'Player': [None]})
+        df = None
     
     return df
 
@@ -159,9 +158,13 @@ def init_player_table_df(d, week, year):
     pick_df = pd.DataFrame(player_list, columns=['Position', 'Player', 'Salary'])
 
     num_selected = pull_prev_counts(week, year)
-    pick_df = pd.merge(pick_df, num_selected, on='Player', how='left').fillna({'Prev Cnts': 0})
-    pick_df['My Team'] = 'No'
 
+    if num_selected is not None:
+        pick_df = pd.merge(pick_df, num_selected, on='Player', how='left').fillna({'Prev Cnts': 0})
+    else:
+        pick_df['Prev Cnts'] = 0
+
+    pick_df['My Team'] = 'No'
     pick_df = rand_drop_selected(pick_df, drop_player_multiple)
 
     return pick_df
@@ -344,14 +347,15 @@ def init_download_dash_button():
 
 def app_layout():
 
-    global sim, adjust_select, drop_player_multiple
+    global sim, adjust_select, drop_player_multiple, min_players_opp_team
 
     sim = initiate_class(op_params)
-    adjust_select = eval('np.random.choice([True, False], p=[0.5, 0.5])')
-    drop_player_multiple = eval('np.random.choice([0, 4], p=[0.5, 0.5])')
+    adjust_select = eval(op_params['adjust_select'])
+    drop_player_multiple = eval(op_params['drop_player_multiple'])
+    min_players_opp_team = eval(op_params['min_players_opp_team'])
 
-    print(adjust_select, drop_player_multiple)
-    
+    print('adjust_select:', adjust_select, 'drop_multiple:', drop_player_multiple, 'opp_players:', min_players_opp_team)
+
     # pull in current player data
     d = sim.player_data
     d = d.rename(columns={'pos': 'Position', 'salary': 'Salary'})
@@ -494,6 +498,7 @@ def update_stack_data(stack_data):
     
     # if auto set the max team, then convert to None for sim argument
     if set_max_team=='Auto': set_max_team=None
+
     return set_max_team, min_players_same_team
 
 
@@ -611,14 +616,14 @@ def update_output(nc, nc2, player_dash_table_data, player_dash_table_columns, st
     to_drop_players, _ = update_add_drop_lists(players_removed)
     to_add_players, added_salaries = update_add_drop_lists(my_team)
     remain_sal = salary_cap - np.sum(added_salaries)
-    
+
     # run the simulation
     if my_team_player_cnt <= total_pos:
         set_max_team, min_players_same_team = update_stack_data(stack_data)
         
-        results, max_team_cnt = sim.run_sim(to_add_players, to_drop_players, min_players_same_team, set_max_team, adjust_select=adjust_select)
+        results, max_team_cnt = sim.run_sim(to_add_players, to_drop_players, min_players_same_team, 
+                                            set_max_team, min_players_opp_team, adjust_select=adjust_select)
         results = format_results(results, my_team_player_cnt)
-        
         player_select_graph = update_player_selection_chart(results)
         top_team_graph = update_top_team_chart(max_team_cnt)
 
@@ -640,6 +645,6 @@ def update_output(nc, nc2, player_dash_table_data, player_dash_table_columns, st
 
 #%%
 if __name__ == '__main__':
-    app.run_server(debug=True, host='127.0.0.1')
+    app.run_server(debug=False, host='127.0.0.1')
 
 # %%

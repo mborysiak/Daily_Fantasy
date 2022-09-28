@@ -12,34 +12,37 @@ dm = DataManage(db_path)
 #===============
 # Settings and User Inputs
 #===============
-
 # set the model version
 set_weeks = [
-       17, 1, 2
+       1, 2, 3
         ]
 
 set_years = [
-        2021, 2022, 2022
+        2022, 2022, 2022
 ]
 
-pred_versions = [                
+pred_versions = [   
                 'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate',
+                'sera1_rsq0_brier1_matt1_lowsample_perc_calibrate',
+                
+             
                 
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera_include2',
-                    'no_weight_yes_kbest_randsample_sera5_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera5_rsq1_include2'
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2'    
+                        
+                   
 ]
 
 std_dev_types = [
                 'pred_spline_class80',
                 'pred_spline_class80',
-                'pred_spline_class80',
-                
+                'pred_spline_class80'
+                              
 ]
 
 
@@ -47,14 +50,12 @@ sim_types = [
              'ownership_ln_pos_fix',
              'ownership_ln_pos_fix',
              'ownership_ln_pos_fix'
-             ]
+]
 
 contests = [
-                'Million',
-                'Million',
-                'Million',
-                'Million',
-                'Million',
+            'Million',
+            'Million',
+            'Million'
 ]
 
 iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types, sim_types, contests)
@@ -62,7 +63,7 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
 
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-    num_iters = 100
+    num_iters = 50
     TOTAL_LINEUPS = 10
     
 
@@ -176,56 +177,57 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
         for vcomb in product(*d.values()):
             yield dict(zip(d.keys(), vcomb))
 
-    # G = {
-    #     'adjust_pos_counts': [True, False], 
-    #     'drop_player_multiple': [0, 4], 
-    #     'drop_team_frac': [0, 0.1],
-    #     'top_n_choices': [0, 4],
-    #     'full_model_rel_weight': [0.2, 1, 5],
-    #     'covar_type': [ 'no_covar', 'team_points'],
-    #     'min_players_same_team': ['Auto'],
-    #     'iter': [0, 1, 2],
-    #     }
     G = {
-        'adjust_pos_counts': [False], 
-        'drop_player_multiple': [2, 4, 6], 
-        'drop_team_frac': [0],
+        'adjust_pos_counts': [True, False], 
+        'drop_player_multiple': [0, 4], 
+        'drop_team_frac': [0, 0.1],
         'top_n_choices': [0, 4],
         'full_model_rel_weight': [0.2, 1, 5],
-        'covar_type': ['no_covar'],
-        'min_player_same_team': [-1, 2, 3],
+        'covar_type': [ 'no_covar', 'team_points'],
+        'min_player_same_team': ['Auto'],
         'iter': [0, 1, 2],
         }
+    # G = {
+    #     'adjust_pos_counts': [False], 
+    #     'drop_player_multiple': [2, 4, 6], 
+    #     'drop_team_frac': [0],
+    #     'top_n_choices': [0, 4],
+    #     'full_model_rel_weight': [0.2, 1, 5],
+    #     'covar_type': ['no_covar'],
+    #     'min_player_same_team': [-1, 2, 3],
+    #     'iter': [0, 1, 2],
+    #     }
 
     params = []
     for config in dict_configs(G):
         params.append(list(config.values()))
 
-
     def sim_winnings(adjust_select, player_drop_multiplier, team_drop_frac, top_n_choices, 
-                     full_model_rel_weight, covar_type, min_players_same_team):
+                        full_model_rel_weight, covar_type, min_players_same_team):
         
         if covar_type=='team_points': use_covar=True
         elif covar_type=='no_covar': use_covar=False
 
         sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-                                 pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
-                                 covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
-                                 use_covar=use_covar, use_ownership=use_ownership)
+                                    pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
+                                    covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
+                                    use_covar=use_covar, use_ownership=use_ownership)
 
         winnings = []
         points_record = []
         total_add = []
         to_drop_selected = []
         lineups = []
-        for _ in range(10):
-            
+        for t in range(10):
+
             to_add = []
             to_drop = rand_drop_teams(unique_teams, team_drop_frac)
             to_drop.extend(to_drop_selected)
 
             for i in range(9):
-                results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select)
+                results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
+                                         min_players_opp_team_input=0, adjust_select=adjust_select)
+
                 prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
                 selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
                 to_add.append(selected_player)
@@ -242,8 +244,8 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
 
         return list(sim_results.values), lineups
 
-# for adj, pdm, tdf, tn, fmw, ct, i in params[:1]:
-#     sim_winnings(adj, pdm, tdf, tn, fmw, ct)
+# for adj, pdm, tdf, tn, fmw, ct, mpst, i in params[:1]:
+#     sim_winnings(adj, pdm, tdf, tn, fmw, ct, mpst)
 
 #%%
     from joblib import Parallel, delayed
@@ -347,9 +349,39 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
 
     output.loc[output.std_dev_type.isin(['pred_isotonic', 'pred_spline', 'pred_isotonic_spline']), 'std_predictions'] = 1
 
+    output['std_class'] = 0
+    output.loc[output.std_dev_type.str.contains('class'), 'std_class'] = 1
+
+    output['std_calibrate'] = 0
+    output.loc[output.std_dev_type.str.contains('calibrate'), 'std_calibrate'] = 1
+
+    output['pred_calibrate'] = 0
+    output.loc[output.pred_vers.str.contains('calibrate'), 'pred_calibrate'] = 1
+
     lineups['sim_type'] = sim_type
     output['Contest'] = contest
     output['NumPlayers'] = 9
+
+    def get_objective_wts(col, val):
+        col = col.split('_')
+        val_word = [c for c in col if val in c]
+
+        try: val_int = int(val_word[0].replace(val, ''))
+        except: val_int = 0
+        
+        return val_int
+
+    output['ens_sera_wt'] = output.ensemble_vers.apply(lambda x: get_objective_wts(x, 'sera'))
+    output['ens_rsq_wt'] = output.ensemble_vers.apply(lambda x: get_objective_wts(x, 'rsq'))
+
+    output['pred_sera_wt'] = output.pred_vers.apply(lambda x: get_objective_wts(x, 'sera'))
+    output['pred_rsq_wt'] = output.pred_vers.apply(lambda x: get_objective_wts(x, 'rsq'))
+
+    output['pred_brier_wt'] = output.pred_vers.apply(lambda x: get_objective_wts(x, 'brier'))
+    output['pred_matt_wt'] = output.pred_vers.apply(lambda x: get_objective_wts(x, 'matt'))
+
+    output['std_matt_wt'] = output.std_dev_type.apply(lambda x: get_objective_wts(x, 'matt'))
+    output['std_brier_wt'] = output.std_dev_type.apply(lambda x: get_objective_wts(x, 'brier'))
     
     dm.write_to_db(output, 'Results', 'Winnings_Optimize', 'append')
     # dm.write_to_db(lineups, 'Results', 'Lineups_Optimize', 'append')
@@ -359,12 +391,52 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
 
 # df = dm.read('''SELECT * FROM Winnings_Optimize''', 'Results')
 
-# df['std_coef'] = 0
-# df.loc[df.std_dev_type.str.contains('coef'), 'std_coef'] = 1
+# df['std_calibrate'] = 0
+# df.loc[df.ensemble_vers.str.contains('calibrate'), 'std_calibrate'] = 1
 
-# df['std_enet'] = 0
-# df.loc[df.std_dev_type.str.contains('enet'), 'std_enet'] = 1
-# df.loc[df.std_dev_type.str.contains('adp'), 'std_experts'] = 1
+# df['pred_calibrate'] = 0
+# df.loc[df.pred_vers.str.contains('calibrate'), 'pred_calibrate'] = 1
+
+# df['std_class'] = 0
+# df.loc[df.std_dev_type.str.contains('class'), 'std_class'] = 1
+
+# df.loc[df.ensemble_vers.str.contains('calibrate'), 'std_dev_type'] = \
+#     df.loc[df.ensemble_vers.str.contains('calibrate'), 'std_dev_type'] + '_calibrate'
+
+# df.loc[df.ensemble_vers.str.contains('calibrate'), 'ensemble_vers'] = \
+#     df.loc[df.ensemble_vers.str.contains('calibrate'), 'ensemble_vers'].apply(lambda x: x.replace('_calibrate', ''))
+
+
+# df.loc[df.ensemble_vers.str.contains('_matt1_brier_1'), 'std_dev_type'] = \
+#     df.loc[df.ensemble_vers.str.contains('_matt1_brier_1'), 'std_dev_type'] + '_matt1_brier1'
+
+# df.loc[df.ensemble_vers.str.contains('_matt1_brier_1'), 'ensemble_vers'] = \
+#     df.loc[df.ensemble_vers.str.contains('_matt1_brier_1'), 'ensemble_vers'].apply(lambda x: x.replace('_matt1_brier_1', ''))
+
+# def get_objective_wts(col, val):
+#     col = col.split('_')
+#     val_word = [c for c in col if val in c]
+
+#     try: val_int = int(val_word[0].replace(val, ''))
+#     except: val_int = 0
+    
+#     return val_int
+
+# df['ens_sera_wt'] = df.ensemble_vers.apply(lambda x: get_objective_wts(x, 'sera'))
+# df['ens_rsq_wt'] = df.ensemble_vers.apply(lambda x: get_objective_wts(x, 'rsq'))
+# df.loc[(df.ensemble_vers.str.contains('sera')) & (df.ens_sera_wt==0), 'ens_sera_wt'] = 1
+
+# df['pred_sera_wt'] = df.pred_vers.apply(lambda x: get_objective_wts(x, 'sera'))
+# df['pred_rsq_wt'] = df.pred_vers.apply(lambda x: get_objective_wts(x, 'rsq'))
+# df.loc[(df.pred_vers.str.contains('sera')) & (df.pred_sera_wt==0), 'pred_sera_wt'] = 1
+
+# df['pred_brier_wt'] = df.pred_vers.apply(lambda x: get_objective_wts(x, 'brier'))
+# df['pred_matt_wt'] = df.pred_vers.apply(lambda x: get_objective_wts(x, 'matt'))
+# df.loc[(df.pred_vers.str.contains('brier')) & (df.pred_brier_wt==0), 'pred_brier_wt'] = 1
+# df.loc[(df.pred_vers.str.contains('brier')) & (df.pred_matt_wt==0), 'pred_matt_wt'] = 1
+
+# df['std_matt_wt'] = df.std_dev_type.apply(lambda x: get_objective_wts(x, 'matt'))
+# df['std_brier_wt'] = df.std_dev_type.apply(lambda x: get_objective_wts(x, 'brier'))
 
 # dm.write_to_db(df, 'Results', 'Winnings_Optimize', 'replace')
 

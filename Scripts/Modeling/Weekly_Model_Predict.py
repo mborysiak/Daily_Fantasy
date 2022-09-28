@@ -13,7 +13,7 @@ from ff import general as ffgeneral
 import ff.data_clean as dc
 from skmodel import SciKitModel
 from Fix_Standard_Dev import *
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, brier_score_loss
 import zModel_Functions as mf
 from joblib import Parallel, delayed
 
@@ -214,10 +214,13 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
 
     # get the params for the current pipe and adjust if needed
     params = skm.default_params(pipe, 'rand')
-    if m=='adp': params['feature_select__cols'] = [
-                                                    ['game_date', 'ProjPts', 'dk_salary', 'fantasyPoints'],                                                    
-                                                    ['ProjPts', 'dk_salary', 'fantasyPoints']
-                                                ]
+    if m=='adp': 
+        params['feature_select__cols'] = [
+                                            ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints'],
+                                            ['year', 'week',  'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints'],
+                                            [ 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints']
+                                        ]
+        params['k_best__k'] = range(1, 9)
     if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
     if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
     if stack_model: 
@@ -250,7 +253,8 @@ def load_all_stack_pred(model_output_path, stack_cut=95):
 
 
 def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores, 
-                     stack_val_pred, model_obj='reg', run_adp=True, show_plots=True):
+                     stack_val_pred, model_obj='reg', run_adp=True, show_plots=True,
+                     calibrate=False):
 
     print(f'\n{final_m}')
 
@@ -264,7 +268,7 @@ def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores,
                                                           X_stack, y_stack, n_iter=100, 
                                                           run_adp=run_adp, print_coef=True,
                                                           sample_weight=False, proba=proba,
-                                                          random_state=(i*12)+(i*17))
+                                                          random_state=(i*12)+(i*17), calibrate=calibrate)
     best_models.append(best_model)
     scores.append(stack_scores['stack_score'])
     stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
@@ -315,10 +319,29 @@ def get_stack_predict_data(df_train, df_predict, df, run_params,
     return X_predict
 
 
+def show_calibration_curve(y_true, y_pred, n_bins=10):
+
+    from sklearn.calibration import calibration_curve
+    
+    x, y = calibration_curve(y_true, y_pred, n_bins=n_bins)
+
+    # Plot perfectly calibrated
+    plt.plot([0, 1], [0, 1], linestyle = '--', label = 'Ideally Calibrated')
+    
+    # Plot model's calibration curve
+    plt.plot(y, x, marker = '.', label = 'Model')
+    
+    leg = plt.legend(loc = 'upper left')
+    plt.xlabel('Average Predicted Probability in each bin')
+    plt.ylabel('Ratio of positives')
+    plt.show()
+
+    print('Brier Score:', brier_score_loss(y_true, y_pred))
+
 
 def best_average_models(scores, final_models, y_stack, stack_val_pred, predictions, model_obj, min_include = 3):
     
-    skm, _, _ = get_skm(pd.DataFrame({'x':[0]}), model_obj=model_obj, to_drop=[])
+    skm, _, _ = get_skm(df_train, model_obj=model_obj, to_drop=[])
     
     n_scores = []
     models_included = []
@@ -410,9 +433,10 @@ def add_std_dev_max(df_train, df_predict, output, model_name, run_params, num_co
                                             min_grps_den=int(df_train.shape[0]*0.08), 
                                             max_grps_den=int(df_train.shape[0]*0.04),
                                             iso_spline=iso_spline)
+
     elif iso_spline=='spline':
         sd_m, max_m, min_m = get_std_splines(df_train, sd_cols, show_plot=True, k=2, 
-                                            min_grps_den=int(df_train.shape[0]*0.15), 
+                                            min_grps_den=int(df_train.shape[0]*0.12), 
                                             max_grps_den=int(df_train.shape[0]*0.05),
                                             iso_spline=iso_spline)
 
@@ -608,22 +632,28 @@ show_plot= True
 class_std = True
 
 r2_wt = 1
-sera_wt = 5
-brier_wt = 2
+sera_wt = 10
+brier_wt = 1
 matt_wt = 1
+
+calibrate = True
 
 # set the model version
 set_weeks = [
-         2
+         1, 2
         ]
+
 pred_versions = [
-                'fixed_model_clone_proba_sera_brier_lowsample_perc'         
-                
+                'fixed_model_clone_proba_sera_brier_lowsample_perc',
+                'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate'      
 ]
+
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera5_rsq1_include2',
-                
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2'              
  ]
+
+std_dev_type = 'pred_spline_class80'
 
 for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
@@ -654,7 +684,8 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         #------------
 
         # get the stack cuts
-        _, _, _, _, full_hold_class = mf.load_all_pickles(model_output_path, 'class')
+        _, _, best_models_class, _, full_hold_class = mf.load_all_pickles(model_output_path, 'class')
+
         run_params['cuts'] = sorted(list(set([int(c[-2:]) for c in full_hold_class.keys()])))
         class_cut = run_params['cuts'][-2]
 
@@ -665,17 +696,22 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
         if class_std and set_pos!='Defense':
             # create the stacking models
+        
             final_models = ['lr_c', 'lgbm_c', 'xgb_c', 'rf_c', 'gbm_c']
             stack_val_pred = pd.DataFrame(); scores = []; best_models = []
             for i, fm in enumerate(final_models):
                 best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack_class, best_models, 
-                                                                       scores, stack_val_pred, model_obj='class',
-                                                                       run_adp=False, show_plots=show_plot)
+                                                                        scores, stack_val_pred, model_obj='class',
+                                                                        run_adp=False, show_plots=show_plot, calibrate=calibrate)
+
+                show_calibration_curve(y_stack_class, stack_val_pred[fm], n_bins=8)
 
             # get the best stack predictions and average
             predictions = mf.stack_predictions(X_predict, best_models, final_models, model_obj='class')
             best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_class, stack_val_pred, 
                                                                              predictions, model_obj='class', show_plot=False, min_include=min_include-1)
+
+            show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
         else:
             best_val_class = None; best_predictions_class = None
 
@@ -694,7 +730,6 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         save_val_to_db(model_output_path, best_val, run_params)
         
         # create the output and add standard devations / max scores
-        std_dev_type = 'pred_spline_class80'
         output = create_output(output_start, best_predictions, best_predictions_class)
         
         if class_std and set_pos!='Defense': metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1}
@@ -714,27 +749,64 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
         save_output_to_db(output, run_params)
 
-print('All Runs Finished')
-
+# print('All Runs Finished')
 #%%
 
 
-
-xx = {}
-for fm, s in zip(final_models, scores):
-    xx[fm]= s
-print(xx)
-
-best_val, best_predictions, best_score = average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, 
-                                                                      predictions, show_plot=show_plot, min_include=min_include)
 #%%
-skm = SciKitModel(pd.DataFrame({'x': [0, 1]}))
-print('Sera', skm.custom_score(y_stack, stack_val_pred[['gbm', 'rf']].mean(axis=1)))
-print('R2', r2_score(y_stack, stack_val_pred[['gbm', 'rf']].mean(axis=1)))
 
-print('Sera', skm.custom_score(y_stack, stack_val_pred[['lasso', 'rf']].mean(axis=1)))
-print('R2', r2_score(y_stack, stack_val_pred[['lasso', 'rf']].mean(axis=1)))
+# show_calibration_curve(y_stack_class, best_val_class, n_bins=5)
 
+from sklearn.model_selection import cross_val_predict
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import train_test_split
+
+df_train_class, df_predict_class = get_class_data(df, 80, run_params)    
+skm, X, y = get_skm(df_train_class, 'class', to_drop=run_params['drop_cols'])
+
+# X_train, X_test, y_train, y_test = train_test_split(X, y_stack_class, train_size=0.5)
+
+calibrated_pred = []
+# for i in range(5):
+cc = CalibratedClassifierCV(best_models_class['class_xgb_c_80'][0], method='sigmoid')
+cc.fit(X, y)
+cur_pred = cc.predict_proba(X)[:,1]
+calibrated_pred.append(cur_pred)
+
+calibrated_pred = pd.DataFrame(calibrated_pred).T.mean(axis=1)
+show_calibration_curve(y, calibrated_pred, n_bins=5)
+
+#%%
+# show_calibration_curve(y_stack_class[y_test.index], best_val_class.iloc[y_test.index], n_bins=5)
+fm = 'xgb_c'
+from sklearn.model_selection import KFold
+kf = KFold(n_splits=5)
+
+X = X_stack.copy().reset_index(drop=True)
+y = y_stack_class.copy()
+
+calibrated_pred = []
+calibrated_y = []
+for train_index, test_index in kf.split(X):
+    X_train, X_test = X.iloc[train_index, :], X.iloc[test_index, :]
+    y_train, y_test = y[train_index], y[test_index]
+
+    best_models, scores, stack_val_pred = run_stack_models(fm, i, X_train.reset_index(drop=True), y_train.reset_index(drop=True), best_models, 
+                                                            scores, stack_val_pred, model_obj='class',
+                                                            run_adp=False, show_plots=show_plot)
+
+    cc = CalibratedClassifierCV(best_models[-1], method='isotonic', cv='prefit')
+    cc.fit(X_train, y_train)
+    cur_pred = cc.predict_proba(X_test)[:,1]
+    show_calibration_curve(y_test, cur_pred, n_bins=5)
+
+    calibrated_pred.extend(cur_pred)
+    calibrated_y.extend(y_test)
+
+# calibrated_pred = pd.DataFrame(calibrated_pred).T.mean(axis=1)
+# calibrated_y = pd.DataFrame(calibrated_y).T.mean(axis=1)
+
+show_calibration_curve(calibrated_y, calibrated_pred, n_bins=5)
 #%%
 # std_dev_type='pred_isotonic_class'
 # rush_pass_roll = dm.read(f'''SELECT player, 

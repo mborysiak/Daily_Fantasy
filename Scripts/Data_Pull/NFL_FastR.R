@@ -1,5 +1,6 @@
 library(nflfastR)
 library(arrow)
+library(nflreadr)
 library(data.table)
 library(future)
 
@@ -10,12 +11,12 @@ future::plan("multisession")
 #------------------
 
 # define which seasons shall be loaded
-season_pull <- 2021
+season_pull <- 2022
 seasons <- season_pull
-pbp <- data.table(nflfastR::load_pbp(seasons))
+pbp <- data.table(nflreadr::load_pbp(seasons))
 
 # pull in the roster data
-rosters <- data.table(nflfastR::fast_scraper_roster(seasons))
+rosters <- data.table(nflreadr::load_rosters(seasons))
 
 # remove full player names and filter down to real players
 pbp[, c('receiver_player_name', 'rusher_player_name', 'passer_player_name') := NULL]

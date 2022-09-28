@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2022
-set_week = 2
+set_week = 3
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -65,6 +65,133 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
     dm.delete_from_db('Pre_PlayerData', 'FantasyPros', f"week={set_week} and year={set_year} and pos='{set_pos}'")
     dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros', if_exist='append')
 
+
+#%%
+# # PFF Rankings + Projections
+
+def pff_proj(label_pre, label_post, folder, rep=True):
+    
+    try:
+        os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
+                   f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+
+    except:
+        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+
+    df = df.rename(columns={'teamName': 'offTeam', 'games': 'defTeam'})
+    df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
+    df.offTeam = df.offTeam.map(team_map)
+    df.defTeam = df.defTeam.map(team_map)
+
+    df['week'] = set_week
+    df['year'] = set_year
+    
+    players = df[df.position!='dst']
+    teams = df[df.position=='dst']
+    
+    return players, teams
+
+
+def pff_rank(label_pre, label_post, folder):
+    
+    try:
+        os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
+                   f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+
+    except:
+        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+
+    df = df.rename(columns={'Team': 'offTeam', 'Opponent': 'defTeam'})
+    df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
+    df.offTeam = df.offTeam.map(team_map)
+    df.defTeam = df.defTeam.map(team_map)
+
+    df['week'] = set_week
+    df['year'] = set_year
+
+    players = df[df.Position!='DST']
+    teams = df[df.Position=='DST']
+    
+    return players, teams
+
+
+proj_pl, proj_tm = pff_proj('projections', 'projections', 'pff_proj')
+rank1_pl, rank1_tm = pff_rank('week-rankings-export', 'expert_ranks', 'pff_rank')
+# rank2_pl, rank2_tm = pff_rank('week-rankings-export-2', 'vor_ranks', 'pff_rank', True)
+
+rank1_pl = rank1_pl.drop(f'w{set_week}', axis=1)
+rank1_tm = rank1_tm.drop(f'w{set_week}', axis=1)
+
+# rank2_pl = rank2_pl.drop(f'w{set_week}', axis=1)
+# rank2_tm = rank2_tm.drop(f'w{set_week}', axis=1)
+
+proj_pl.playerName = proj_pl.playerName.apply(dc.name_clean)
+rank1_pl.Name = rank1_pl.Name.apply(dc.name_clean)
+# rank2_pl.Name = rank2_pl.Name.apply(dc.name_clean)
+
+proj_pl = proj_pl.rename(columns={'playerName': 'player'})
+rank1_pl = rank1_pl.rename(columns={'Name': 'player'})
+
+#%%
+
+tables = ['Proj', 'Proj', 'Expert', 'Expert']#, 'VOR']
+dfs = [proj_pl, proj_tm, rank1_pl, rank1_tm]#, rank2_pl]
+dbs = ['Pre_PlayerData', 'Pre_TeamData', 'Pre_PlayerData', 'Pre_TeamData']
+
+for t, d, db in zip(tables, dfs, dbs):
+    dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}")
+    dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
+
+
+#%%
+# ## PFF Matchups
+
+def pff_matchups(label):
+    
+    try:
+        os.replace(f"/Users/mborysia/Downloads/{label}_matchup_chart.csv", 
+            f'{root_path}/Data/OtherData/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
+    except:
+        print('No file to pull')
+    df = pd.read_csv(f'{root_path}/Data/OtherData/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
+    
+    if label != 'te':
+        df.offTeam = df.offTeam.map(team_map)
+        df.defTeam = df.defTeam.map(team_map)
+
+    df['week'] = set_week
+    df['year'] = set_year
+    
+    return df
+
+# wrangle the WR-CB matchups into a table
+wr_cb = pff_matchups('wr_cb')
+wr_cb = wr_cb.rename(columns={'advantage': 'adv'}).drop('expectedSnaps', axis=1)
+wr_cb = wr_cb[wr_cb.defPlayer=='All Defenders'].reset_index(drop=True)
+wr_cb.offPlayer = wr_cb.offPlayer.apply(dc.name_clean)
+
+# wrangle the TE matchups into a table
+te = pff_matchups('te')
+te.offPlayer = te.offPlayer.apply(dc.name_clean)
+te['offTeam'] = None
+te['defTeam'] = None
+te['defPosition'] = None
+te_cols = dm.read("SELECT * FROM PFF_TE_Matchups", "Pre_PlayerData").columns
+te = te[te_cols]
+
+# wrangle the oline-dline matchups into a table
+ol_dl = pff_matchups('oline_dline')
+
+for t, d in zip(['WR_CB', 'TE', 'Oline_Dline'], [wr_cb, te, ol_dl]):
+
+    dm.delete_from_db('Pre_PlayerData', f'PFF_{t}_Matchups', f"week={set_week} and year={set_year}")
+    dm.write_to_db(d, 'Pre_PlayerData', f'PFF_{t}_Matchups', if_exist='append')
+
+
+
+
 #%%
 
 teams = dm.read(f'''SELECT player, team
@@ -79,6 +206,8 @@ teams = dm.read(f'''SELECT player, team
                     ) WHERE rn=1''', 'Pre_PlayerData').drop_duplicates()
 
 dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'replace')
+
+
 
 #%%
 
@@ -190,7 +319,7 @@ print('Missing Teams:', set([t for t in team_map.values() if t not in teams]))
 
 dm.delete_from_db('Pre_TeamData', 'Gambling_Lines', f"week={set_week} and year={set_year}")
 dm.write_to_db(data, 'Pre_TeamData', 'Gambling_Lines', if_exist='append')
-#%%
+
 glines = dm.read("SELECT * FROM Gambling_Lines", 'Pre_TeamData')
 dm.write_to_db(glines, 'Simulation', 'Gambling_Lines', 'replace')
 
@@ -305,128 +434,6 @@ for t, d in zip(['RB', 'WR', 'TE', 'QB'], [rb, wr, te, qb]):
     dm.delete_from_db('Pre_PlayerData', f'{t}_PFR_Matchups', f"week={set_week} and year={set_year}")
     dm.write_to_db(d, 'Pre_PlayerData', f'{t}_PFR_Matchups', if_exist='append')
 
-#%%
-# ## PFF Matchups
-
-def pff_matchups(label):
-    
-    try:
-        os.replace(f"/Users/mborysia/Downloads/{label}_matchup_chart.csv", 
-            f'{root_path}/Data/OtherData/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
-    except:
-        print('No file to pull')
-    df = pd.read_csv(f'{root_path}/Data/OtherData/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
-    
-    if label != 'te':
-        df.offTeam = df.offTeam.map(team_map)
-        df.defTeam = df.defTeam.map(team_map)
-
-    df['week'] = set_week
-    df['year'] = set_year
-    
-    return df
-
-# wrangle the WR-CB matchups into a table
-wr_cb = pff_matchups('wr_cb')
-wr_cb = wr_cb.rename(columns={'advantage': 'adv'}).drop('expectedSnaps', axis=1)
-wr_cb = wr_cb[wr_cb.defPlayer=='All Defenders'].reset_index(drop=True)
-wr_cb.offPlayer = wr_cb.offPlayer.apply(dc.name_clean)
-
-# wrangle the TE matchups into a table
-te = pff_matchups('te')
-te.offPlayer = te.offPlayer.apply(dc.name_clean)
-te['offTeam'] = None
-te['defTeam'] = None
-te['defPosition'] = None
-te_cols = dm.read("SELECT * FROM PFF_TE_Matchups", "Pre_PlayerData").columns
-te = te[te_cols]
-
-# wrangle the oline-dline matchups into a table
-ol_dl = pff_matchups('oline_dline')
-
-for t, d in zip(['WR_CB', 'TE', 'Oline_Dline'], [wr_cb, te, ol_dl]):
-
-    dm.delete_from_db('Pre_PlayerData', f'PFF_{t}_Matchups', f"week={set_week} and year={set_year}")
-    dm.write_to_db(d, 'Pre_PlayerData', f'PFF_{t}_Matchups', if_exist='append')
-
-#%%
-# # PFF Rankings + Projections
-
-def pff_proj(label_pre, label_post, folder, rep=True):
-    
-    try:
-        os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
-                   f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
-        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
-
-    except:
-        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
-
-    df = df.rename(columns={'teamName': 'offTeam', 'games': 'defTeam'})
-    df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
-    df.offTeam = df.offTeam.map(team_map)
-    df.defTeam = df.defTeam.map(team_map)
-
-    df['week'] = set_week
-    df['year'] = set_year
-    
-    players = df[df.position!='dst']
-    teams = df[df.position=='dst']
-    
-    return players, teams
-
-
-def pff_rank(label_pre, label_post, folder):
-    
-    try:
-        os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
-                   f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
-        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
-
-    except:
-        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
-
-    df = df.rename(columns={'Team': 'offTeam', 'Opponent': 'defTeam'})
-    df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
-    df.offTeam = df.offTeam.map(team_map)
-    df.defTeam = df.defTeam.map(team_map)
-
-    df['week'] = set_week
-    df['year'] = set_year
-
-    players = df[df.Position!='DST']
-    teams = df[df.Position=='DST']
-    
-    return players, teams
-
-
-proj_pl, proj_tm = pff_proj('projections', 'projections', 'pff_proj')
-rank1_pl, rank1_tm = pff_rank('week-rankings-export', 'expert_ranks', 'pff_rank')
-# rank2_pl, rank2_tm = pff_rank('week-rankings-export-2', 'vor_ranks', 'pff_rank', True)
-
-rank1_pl = rank1_pl.drop(f'w{set_week}', axis=1)
-rank1_tm = rank1_tm.drop(f'w{set_week}', axis=1)
-
-# rank2_pl = rank2_pl.drop(f'w{set_week}', axis=1)
-# rank2_tm = rank2_tm.drop(f'w{set_week}', axis=1)
-
-proj_pl.playerName = proj_pl.playerName.apply(dc.name_clean)
-rank1_pl.Name = rank1_pl.Name.apply(dc.name_clean)
-# rank2_pl.Name = rank2_pl.Name.apply(dc.name_clean)
-
-proj_pl = proj_pl.rename(columns={'playerName': 'player'})
-rank1_pl = rank1_pl.rename(columns={'Name': 'player'})
-
-#%%
-
-tables = ['Proj', 'Proj', 'Expert', 'Expert']#, 'VOR']
-dfs = [proj_pl, proj_tm, rank1_pl, rank1_tm]#, rank2_pl]
-dbs = ['Pre_PlayerData', 'Pre_TeamData', 'Pre_PlayerData', 'Pre_TeamData']
-
-for t, d, db in zip(tables, dfs, dbs):
-    dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}")
-    dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
-
 
 # %%
 
@@ -471,6 +478,12 @@ salary_id.loc[~salary_id.GoodId.isnull(), 'ID'] = salary_id.loc[~salary_id.GoodI
 salary_id = salary_id.rename(columns={'Name': 'player', 'Salary': 'salary', 'ID': 'player_id'})
 salary_id.player = salary_id.player.apply(dc.name_clean)
 
+salary_id.loc[salary_id.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
+salary_id.loc[salary_id.player=='JAX', 'player'] = 'JAC'
+salary_id.loc[salary_id.player=='LV', 'player'] = 'LVR'
+salary_id.loc[salary_id.player=='Dee Eskridge', 'player'] = "D'Wayne Eskridge"
+salary_id.loc[salary_id.player=='Eli Penny', 'player'] = "Elijhaa Penny"
+
 defense = salary_id.loc[salary_id['Roster Position']=='DST', ['TeamAbbrev', 'salary', 'player_id']]
 salary_id = salary_id.loc[salary_id['Roster Position'] != 'DST']
 salary_id = salary_id[['player', 'salary', 'player_id']]
@@ -482,11 +495,7 @@ salary.loc[salary.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
 
 ids = salary_id[['player', 'player_id']]
 ids = ids.assign(year=set_year).assign(league=set_week)
-ids.loc[ids.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
-ids.loc[ids.player=='JAX', 'player'] = 'JAC'
-ids.loc[ids.player=='LV', 'player'] = 'LVR'
-ids.loc[ids.player=='Dee Eskridge', 'player'] = "D'Wayne Eskridge"
-ids.loc[ids.player=='Eli Penny', 'player'] = "Elijhaa Penny"
+
 
 dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
 dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
@@ -519,7 +528,7 @@ dm.write_to_db(dk, 'Simulation', 'Projected_Ownership', 'replace')
 #%%
 
 try:
-    su.copyfile(f'//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/mborysia/DK/Lineups/{set_year}/week{set_week}/DKSalariesShowdown.csv',
+    su.copyfile(f'//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/MBorysiak/DK/Lineups/{set_year}/week{set_week}/DKSalariesShowdown.csv',
                 f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv')   
 except:
     print('No file to move')

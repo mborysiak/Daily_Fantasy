@@ -149,7 +149,7 @@ class FootballSimulation:
     def join_ownership_pred(self, df):
 
         # add salaries to the dataframe and set index to player
-        ownership = self.dm.read(f'''SELECT player, pred_ownership, std_dev, min_score, max_score
+        ownership = self.dm.read(f'''SELECT player, pred_ownership, std_dev+0.01 as std_dev, min_score, max_score
                                       FROM Predicted_Ownership
                                       WHERE year={self.set_year}
                                             AND week={self.week} ''', 'Simulation')
@@ -187,7 +187,7 @@ class FootballSimulation:
     @staticmethod
     def get_min_players(min_players_same_team_input):
         if min_players_same_team_input=='Auto': 
-                min_players_same_team= np.random.choice([1, 2, 3], p=[0.24, 0.56, 0.2])
+                min_players_same_team= np.random.choice([-1, 2, 3], p=[0.2, 0.4, 0.4])
         else:
             min_players_same_team = min_players_same_team_input
         min_players_same_team += 1
@@ -197,7 +197,7 @@ class FootballSimulation:
     @staticmethod
     def get_min_players_opp_team(min_players_opp_team_input):
         if min_players_opp_team_input=='Auto': 
-            min_players_opp_team = np.random.choice([0, 1], p=[0.5, 0.5])
+            min_players_opp_team = np.random.choice([0, 1, 2], p=[0.3, 0.35, 0.35])
         else:
             min_players_opp_team = min_players_opp_team_input
 
@@ -230,7 +230,6 @@ class FootballSimulation:
 
 
     def trunc_normal_dist(self, col, num_options=500):
-        predictions = pd.DataFrame()
         if col=='pred_ownership': df = self.ownership_data
         elif col=='pred_fp_per_game': df = self.player_data
 
@@ -276,7 +275,7 @@ class FootballSimulation:
 
         chk_flex = [p for p,v in open_pos_require.items() if v == -1]
         if len(chk_flex) == 0:
-            flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[0.37, 0.53, 0.1])
+            flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[0.35, 0.55, 0.1])
         else:
             flex_pos = chk_flex[0]
 
@@ -399,6 +398,14 @@ class FootballSimulation:
 
     @staticmethod
     def create_G_team(team_map, player_map):
+
+        pos_wt = {
+            'QB': -2,
+            'WR': -1,
+            'TE': -1,
+            'RB': -0.5,
+            'DEF': 0
+        }
         
         num_players = len(player_map)
         num_teams = len(team_map)
@@ -408,16 +415,11 @@ class FootballSimulation:
 
             cur_team = player_map[i]['team']
             cur_pos = player_map[i]['pos']
-            if cur_pos not in ('DEF', 'RB'):
-                G_teams[team_map[cur_team], i] = -1
-
-            if cur_pos == 'QB':
-                G_teams[team_map[cur_team], i] = -2
+            G_teams[team_map[cur_team], i] = pos_wt[cur_pos]
 
         return G_teams
 
 
-    
     def get_max_team(self, labels, c_points, added_teams):
 
         team_pts = pd.concat([labels, c_points], axis=1)
@@ -442,13 +444,14 @@ class FootballSimulation:
         else:
             max_team = set_max_team
 
-        h_teams = np.full(shape=(len(team_map), 1), fill_value=0)
+        h_teams = np.full(shape=(len(team_map), 1), fill_value=0.0)
         h_teams[team_map[max_team]] = -min_players
 
         # use a bring back player
-        max_team_opponent = self.matchups[max_team]
-        h_teams[team_map[max_team_opponent]] = -opp_players
-
+        if opp_players > 0:
+            max_team_opponent = self.matchups[max_team]
+            h_teams[team_map[max_team_opponent]] = -opp_players/2
+        
         return h_teams, max_team
 
     @staticmethod
@@ -503,13 +506,13 @@ class FootballSimulation:
         return player_selections
 
     
-    def final_results(self, player_selections):
+    def final_results(self, player_selections, success_trials):
         results = pd.DataFrame(player_selections, index=['SelectionCounts']).T
         results = results.sort_values(by='SelectionCounts', ascending=False).iloc[:29]
         salaries = self.player_data[['player', 'salary']].set_index('player')
         results = pd.merge(results, salaries, left_index=True, right_index=True)
         results = results.reset_index().rename(columns={'index': 'player'})
-        results.SelectionCounts = 100*np.round(results.SelectionCounts / self.num_iters, 3)
+        results.SelectionCounts = 100*np.round(results.SelectionCounts / success_trials, 3)
         return results
 
     @staticmethod
@@ -543,13 +546,13 @@ class FootballSimulation:
         num_options=500
         player_selections = self.init_select_cnts()
         max_team_cnt = []
-
+        success_trials = 0
         for i in range(self.num_iters):
 
             self.matchups = self.get_matchups()
             min_players_same_team = self.get_min_players(min_players_same_team_input)
             min_player_opp_team = self.get_min_players_opp_team(min_players_opp_team_input)
-
+            
             if i ==0:
                 # pull out current add players and added teams
                 h_player_add, open_pos_require = self.add_players(to_add)
@@ -589,7 +592,7 @@ class FootballSimulation:
             # generate the c matrix with the point values to be optimized
             self.labels, self.c_points = self.sample_c_points(predictions, num_options)
             
-            if remaining_pos_cnt > min_players_same_team and max_added_team_cnt < min_players_same_team:
+            if remaining_pos_cnt > (min_players_same_team+min_player_opp_team-1) and max_added_team_cnt < min_players_same_team:
              
                 h_teams, max_team = self.create_h_teams(team_map, added_teams, set_max_team, min_players_same_team, min_player_opp_team)
                 max_team_cnt.append(max_team)
@@ -618,10 +621,12 @@ class FootballSimulation:
                 status, x = self.solve_ilp(c, G, h, A, b)
                 if status=='optimal':
                     player_selections = self.tally_player_selections(predictions, player_selections, x)
-            
-        results = self.final_results(player_selections)
+                    success_trials += 1
+
+        results = self.final_results(player_selections, success_trials)
         if adjust_select:
             results = self.adjust_select_perc(results, open_pos_require)
+
         team_cnts = self.final_team_cnts(max_team_cnt)
 
         return results, team_cnts
@@ -638,16 +643,17 @@ class FootballSimulation:
 # db_path = f'{root_path}/Data/Databases/'
 # dm = DataManage(db_path)
 
-# pred_vers = 'standard_proba_sera_brier_lowsample'
-# ens_vers = 'no_weight_yes_kbest'
-# std_dev_type = 'spline_all'
+# pred_vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc'
+# ens_vers = 'no_weight_yes_kbest_randsample_sera_include2'
+# std_dev_type = 'pred_spline_class80'
 # use_covar=False
 # use_ownership=False
+
 # week = 16
 # year = 2021
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-# num_iters = 10
+# num_iters = 100
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
@@ -656,11 +662,22 @@ class FootballSimulation:
 # min_players_same_team = 'Auto'
 # min_players_opp_team = 'Auto'
 # set_max_team = None
-# to_add = []
+# to_add = ['Cooper Kupp']
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                     min_players_opp_team, adjust_select=True)
+#                                     min_players_opp_team, adjust_select=False)
 
 # print(max_team_cnt)
 # results
+
+# # %%
+
+# sim.matchups
+# # %%
+
+# team_map = {}
+# unique_teams = sim.player_data.team.unique()
+# for i, team in enumerate(unique_teams):
+#     team_map[team] = i
+# %%

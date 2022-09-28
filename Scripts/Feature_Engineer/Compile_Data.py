@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2022
-WEEK = 2
+WEEK = 3
 
 #%%
 import pandas as pd 
@@ -1364,11 +1364,12 @@ def qb_pull(rush_or_pass):
 
     df = one_qb_per_week(df); print(df.shape[0])
 
-    print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
-    print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
-
     df = remove_non_uniques(df)
     df = df[(df.ProjPts > 10) & (df.projected_points > 10)].reset_index(drop=True)
+
+    print('Total Rows:', df.shape[0])
+    print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
+    print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
 
     dm.write_to_db(df.iloc[:,:2000], 'Model_Features', f"QB_Data{rush_or_pass.replace('_', '')}", if_exist='replace')
     if df.shape[1] > 2000:
@@ -1449,12 +1450,12 @@ for pos in [
     # fill in missing data and drop any remaining rows
     df = forward_fill(df)
     df = df.dropna().reset_index(drop=True); print(df.shape[0])
-    
+    df = remove_non_uniques(df)
+
+    print('Total Rows:', df.shape[0])
     print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
     print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
     
-    df = remove_non_uniques(df)
-
     dm.write_to_db(df.iloc[:, :2000], 'Model_Features', f'{pos}_Data', if_exist='replace')
     if df.shape[1] > 2000:
         dm.write_to_db(df.iloc[:, 2000:], 'Model_Features', f'{pos}_Data2', if_exist='replace')
@@ -1569,6 +1570,7 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     df['pos'] = pos
     if pos=='QB': df = one_qb_per_week(df); print(df.shape[0])
 
+    print('Data Size:', df.shape[0])
     print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
     print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
     
@@ -1578,6 +1580,12 @@ output = def_pts_allowed(output); print(output.shape[0])
 output = remove_non_uniques(output)
 
 dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
+
+#%%
+
+backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={WEEK} AND year={YEAR}", 'Model_Features').player.values
+sal = dm.read(f"SELECT player, salary FROM Salaries WHERE league={WEEK} AND year={YEAR}", 'Simulation')
+sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
 
 
 # %%
