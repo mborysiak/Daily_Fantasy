@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2022
-set_week = 2
+set_week = 3
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -447,4 +447,3 @@ for stat_type in ['receiving', 'rushing', 'passing']:
     dm.delete_from_db('Post_PlayerData', f'NextGen_{stat_type.title()}', f"year={set_year} AND week={set_week}")
     dm.write_to_db(next_gen, 'Post_PlayerData', f'NextGen_{stat_type.title()}', 'append')
    
-# %%

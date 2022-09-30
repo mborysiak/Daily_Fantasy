@@ -37,7 +37,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [1, 2]
+run_weeks = [4]
 
 run_params = {
     
@@ -74,7 +74,7 @@ brier_wt = 2
 use_calibrate = True
 
 # set version and iterations
-vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_calibrate'
+vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
 
 #----------------
 # Data Loading
@@ -463,15 +463,15 @@ def create_output(output_start, predictions):
 
 #%%
 run_list = [
-            ['QB', '', 'full_model'],
-            ['RB', '', 'full_model'],
-            ['WR', '', 'full_model'],
-            ['TE', '', 'full_model'],
-            ['Defense', '', 'full_model'],
-            ['QB', '', 'backfill'],
-            ['RB', '', 'backfill'],
+            # ['QB', '', 'full_model'],
+            # ['RB', '', 'full_model'],
+            # ['WR', '', 'full_model'],
+            # ['TE', '', 'full_model'],
+            # ['Defense', '', 'full_model'],
+            # ['QB', '', 'backfill'],
+            # ['RB', '', 'backfill'],
             ['WR', '', 'backfill'],
-            ['TE', '', 'backfill'],
+            # ['TE', '', 'backfill'],
 ]
 
 for w in run_weeks:
@@ -501,20 +501,20 @@ for w in run_weeks:
         # set up blank dictionaries for all metrics
         out_reg, out_class, out_quant = output_dict(), output_dict(), output_dict()
 
-        # run all other models
-        model_list = ['adp', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']
-        for i, m in enumerate(model_list):
-            out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
-        save_output_dict(out_reg, model_output_path, 'reg')
+        # # run all other models
+        # model_list = ['adp', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']
+        # for i, m in enumerate(model_list):
+        #     out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
+        # save_output_dict(out_reg, model_output_path, 'reg')
 
-        # run all other models
-        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
-        for cut in run_params['cuts']:
-            print(f"\n--------------\nPercentile {cut}\n--------------\n")
-            df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
-            for i, m in enumerate(model_list):
-                out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
-        save_output_dict(out_class, model_output_path, 'class')
+        # # run all other models
+        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
+        # for cut in run_params['cuts']:
+        #     print(f"\n--------------\nPercentile {cut}\n--------------\n")
+        #     df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
+        #     for i, m in enumerate(model_list):
+        #         out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
+        # save_output_dict(out_class, model_output_path, 'class')
 
         # run all other models
         for alph in [0.8, 0.95]:

@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2022
-set_week = 3
+set_week = 4
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -435,25 +435,6 @@ for t, d in zip(['RB', 'WR', 'TE', 'QB'], [rb, wr, te, qb]):
     dm.write_to_db(d, 'Pre_PlayerData', f'{t}_PFR_Matchups', if_exist='append')
 
 
-# %%
-
-# https://www.nfl.com/injuries/league/2021/reg11
-
-df = pd.read_csv(f'{root_path}/Data/OtherData/Injury_Status/{set_year}/week{set_week}.csv', 
-                 encoding='latin', skip_blank_lines=True, error_bad_lines=False)
-df.columns = ['player', 'pos', 'injuries', 'practice_status', 'game_status']
-df = df[df.player!='Player'].dropna(axis=0, thresh=3).reset_index(drop=True)
-
-df.loc[(df['practice_status'] == 'Did Not Participate In Practice') & \
-        (df.game_status.isnull()), 'game_status'] = 'Questionable'
-
-df['week'] = set_week
-df['year'] = set_year
-df.player = df.player.apply(dc.name_clean)
-
-dm.delete_from_db('Pre_PlayerData', 'PlayerInjuries', f"week={set_week} AND year={set_year}")
-dm.write_to_db(df, 'Pre_PlayerData', 'PlayerInjuries', 'append')
-
 #%%
 
 #--------------
@@ -502,6 +483,26 @@ dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
 
 dm.delete_from_db('Simulation', 'Player_Ids', f"league={set_week} AND year={set_year}")
 dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
+
+
+# %%
+
+# https://www.nfl.com/injuries/league/2021/reg11
+
+df = pd.read_csv(f'{root_path}/Data/OtherData/Injury_Status/{set_year}/week{set_week}.csv', 
+                 encoding='latin', skip_blank_lines=True, error_bad_lines=False)
+df.columns = ['player', 'pos', 'injuries', 'practice_status', 'game_status']
+df = df[df.player!='Player'].dropna(axis=0, thresh=3).reset_index(drop=True)
+
+df.loc[(df['practice_status'] == 'Did Not Participate In Practice') & \
+        (df.game_status.isnull()), 'game_status'] = 'Questionable'
+
+df['week'] = set_week
+df['year'] = set_year
+df.player = df.player.apply(dc.name_clean)
+
+dm.delete_from_db('Pre_PlayerData', 'PlayerInjuries', f"week={set_week} AND year={set_year}")
+dm.write_to_db(df, 'Pre_PlayerData', 'PlayerInjuries', 'append')
 
 
 # %%

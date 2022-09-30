@@ -14,45 +14,45 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
-       1, 2, 3
+        2,1,2
         ]
 
 set_years = [
-        2022, 2022, 2022
+       2022, 2022, 2022, 2022
 ]
 
 pred_versions = [   
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate',
-                'sera1_rsq0_brier1_matt1_lowsample_perc_calibrate',
+                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                 
              
                 
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2'    
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
                         
                    
 ]
 
 std_dev_types = [
-                'pred_spline_class80',
-                'pred_spline_class80',
-                'pred_spline_class80'
+                'pred_spline_class80_matt1_brier1_calibrate',
+                 'pred_spline_class80_matt1_brier1_calibrate',
+                'pred_spline_class80_matt1_brier1_calibrate',
                               
 ]
 
 
 sim_types = [
              'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix'
+             'v2', 'v2'
 ]
 
 contests = [
+            'Million',
             'Million',
             'Million',
             'Million'
@@ -203,7 +203,7 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
         params.append(list(config.values()))
 
     def sim_winnings(adjust_select, player_drop_multiplier, team_drop_frac, top_n_choices, 
-                        full_model_rel_weight, covar_type, min_players_same_team):
+                        full_model_rel_weight, covar_type, min_players_same_team, iter_num):
         
         if covar_type=='team_points': use_covar=True
         elif covar_type=='no_covar': use_covar=False
@@ -231,6 +231,8 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
                 prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
                 selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
                 to_add.append(selected_player)
+
+            # to_add.append(iter_num)
             lineups.append(to_add)
 
             total_pts, prize_money = calc_winnings(to_add)
@@ -242,15 +244,18 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
         sim_results = summary_results(winnings, points_record)
         print(sim_results)
 
-        return list(sim_results.values), lineups
+        sim_results = list(sim_results.values)
+        # sim_results.append(iter_num)
+        
+        return sim_results, lineups
 
-# for adj, pdm, tdf, tn, fmw, ct, mpst, i in params[:1]:
-#     sim_winnings(adj, pdm, tdf, tn, fmw, ct, mpst)
+    # for adj, pdm, tdf, tn, fmw, ct, mpst, i in params[:1]:
+    #     sim_winnings(adj, pdm, tdf, tn, fmw, ct, mpst, i)
 
 #%%
     from joblib import Parallel, delayed
 
-    par_out = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(adj, pdm, tdf, tn, fmw, ct, mpst) for adj, pdm, tdf, tn, fmw, ct, mpst, i in params)
+    par_out = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(adj, pdm, tdf, tn, fmw, ct, mpst, it_n) for adj, pdm, tdf, tn, fmw, ct, mpst, it_n in params)
     
     lineups = []
     for o in par_out:

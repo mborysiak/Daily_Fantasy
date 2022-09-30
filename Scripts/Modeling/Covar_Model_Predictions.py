@@ -332,34 +332,30 @@ covar_type = 'team_points'
 
 # set the model version
 set_weeks = [
-       1, 2, 3
+       1, 2
         ]
 
 set_years = [
-        2022, 2022, 2022
+       2022, 2022
 ]
 
 pred_versions = [   
-                'fixed_model_clone_proba_sera_brier_lowsample_perc',
-                'fixed_model_clone_proba_sera_brier_lowsample_perc_paramupdate',
-                'sera1_rsq0_brier1_matt1_lowsample_perc_calibrate',
+                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                 
              
                 
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_matt1_brier_1_calibrate_include2'    
-                        
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',                 
                    
 ]
 
 std_dev_types = [
-                'pred_spline_class80',
-                'pred_spline_class80',
-                'pred_spline_class80'
+                'pred_spline_class80_matt1_brier1_calibrate',
+                'pred_spline_class80_matt1_brier1_calibrate'
                               
 ]
 
@@ -367,7 +363,6 @@ std_dev_types = [
 sim_types = [
              'ownership_ln_pos_fix',
              'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix'
 ]
 
 full_model_weights = [0.2, 1, 5]

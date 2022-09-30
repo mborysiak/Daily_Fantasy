@@ -26,7 +26,7 @@ use_ownership=True
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 num_iters = 200
-TOTAL_LINEUPS = 3
+TOTAL_LINEUPS = 4
     
 min_players_same_team = 'Auto'
 set_max_team = None
@@ -34,7 +34,6 @@ set_max_team = None
 adjust_select = False
 use_covar = False
 covar_type = 'no_covar'
-top_n_choices = 0
 
 #%%
 
@@ -69,10 +68,12 @@ def dict_configs(d):
         yield dict(zip(d.keys(), vcomb))
 
 G = {
-    'drop_player_multiple': [4], 
-    'drop_team_frac': [0],
-    'full_model_rel_weight': [0.2, 1, 5],
-    'use_ownership': [True, False]
+    'full_model_rel_weight': [1, 5],
+    'drop_player_multiple': [0], 
+    'top_n_choices': [0, 2, 4],
+    'drop_team_frac': [0, 0.1],
+    'adjust_pos_counts': [False],
+    'use_ownership': [True]
     }
 
 params = []

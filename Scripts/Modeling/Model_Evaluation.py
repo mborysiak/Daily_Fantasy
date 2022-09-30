@@ -565,7 +565,7 @@ for w, yr in zip(weeks, years):
                     WHERE NumPlayers=9
                         and week = {w}
                         and year = {yr}
-                        and max_winnings < 50000
+                        and max_winnings < 100000
                     ORDER BY year, week''', 'Results')
 
     model_name = 'enet'
@@ -580,7 +580,7 @@ show_coef(all_coef, X_all)
 df = dm.read(f'''SELECT * 
                 FROM Winnings_Optimize
                 WHERE NumPlayers=9
-                      and max_winnings < 50000
+                      and max_winnings < 100000
                 ORDER BY year, week''', 'Results')
 
 m = model_type[model_name]
