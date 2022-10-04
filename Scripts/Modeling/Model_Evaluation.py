@@ -552,8 +552,8 @@ model_type = {
 
 }
 
-weeks = [10, 11, 12, 13, 14, 15, 16, 17, 1, 2, 3]
-years = [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022, 2022]
+weeks = [10, 11, 12, 13, 14, 15, 16, 17, 1, 2, 3, 4]
+years = [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022, 2022, 2022]
 # weeks = [3]
 # years = [2022]
 
@@ -565,10 +565,10 @@ for w, yr in zip(weeks, years):
                     WHERE NumPlayers=9
                         and week = {w}
                         and year = {yr}
-                        and max_winnings < 100000
+                        and max_winnings < 50000
                     ORDER BY year, week''', 'Results')
 
-    model_name = 'enet'
+    model_name = 'lgbm'
     m = model_type[model_name]
     coef_vals, X = winnings_importance(df, m)
     all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1
@@ -580,7 +580,7 @@ show_coef(all_coef, X_all)
 df = dm.read(f'''SELECT * 
                 FROM Winnings_Optimize
                 WHERE NumPlayers=9
-                      and max_winnings < 100000
+                      and max_winnings < 50000
                 ORDER BY year, week''', 'Results')
 
 m = model_type[model_name]

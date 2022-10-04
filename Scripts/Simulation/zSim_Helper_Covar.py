@@ -126,7 +126,7 @@ class FootballSimulation:
         df.gametime = pd.to_datetime(df.gametime)
         df['day_of_week'] = df.gametime.apply(lambda x: x.weekday())
         df['hour_in_day'] = df.gametime.apply(lambda x: x.hour)
-        df = df[(df.day_of_week!=6) | (df.hour_in_day > 16)]
+        df = df[(df.day_of_week!=6) | (df.hour_in_day > 16) | (df.hour_in_day < 11)]
         drop_teams = list(df.away_team.values)
         drop_teams.extend(list(df.home_team.values))
 
@@ -213,6 +213,34 @@ class FootballSimulation:
 
         return df
 
+    @staticmethod
+    def bounded_multivariate_dist(means, cov_matrix, dimenions_bounds, size):
+
+        from numpy.random import multivariate_normal
+
+        ndims = means.shape[0]
+        return_samples = np.empty([0,ndims])
+        local_size = size
+
+        # generate new samples while the needed size is not reached
+        while not return_samples.shape[0] == size:
+            samples = multivariate_normal(means, cov_matrix, size=size*10)
+
+            for dim, bounds in enumerate(dimenions_bounds):
+                if not np.isnan(bounds[0]): # bounds[0] is the lower bound
+                    samples = samples[(samples[:,dim] > bounds[0])]  # samples[:,dim] is the column of the dim
+
+                if not np.isnan(bounds[1]): # bounds[1] is the upper bound
+                    samples = samples[(samples[:,dim] < bounds[1])]   # samples[:,dim] is the column of the dim
+
+            return_samples = np.vstack([return_samples, samples])
+
+            local_size = size - return_samples.shape[0]
+            if local_size < 0:
+                return_samples = return_samples[np.random.choice(return_samples.shape[0], size, replace=False), :]
+
+        return return_samples
+
 
     @staticmethod
     def trunc_normal(mean_val, sdev, min_sc, max_sc, num_samples=500):
@@ -239,14 +267,45 @@ class FootballSimulation:
         
         return pd.DataFrame(pred_list)
 
+    # def covar_dist(self, num_options=500):
+    #     import scipy.stats as ss
+    #     dist = ss.multivariate_normal(mean=self.player_data.pred_fp_per_game.values, 
+    #                                   cov=self.covar.drop('player', axis=1).values, 
+    #                                   allow_singular=True)
+    #     predictions = pd.DataFrame(dist.rvs(num_options)).T
+    #     return predictions
+
+    @staticmethod
+    def unique_matchup_pairs(matchups):
+        import itertools
+        sorted_matchups = [sorted(m) for m in matchups.items()]
+        return list(m for m, _ in itertools.groupby(sorted_matchups))
 
     def covar_dist(self, num_options=500):
-        import scipy.stats as ss
-        dist = ss.multivariate_normal(mean=self.player_data.pred_fp_per_game.values, 
-                                      cov=self.covar.drop('player', axis=1).values, 
-                                      allow_singular=True)
-        predictions = pd.DataFrame(dist.rvs(num_options)).T
-        return predictions
+
+        unique_matchups = self.unique_matchup_pairs(self.matchups)
+        min_max = self.get_model_predictions()[['player', 'min_score', 'max_score']]
+        
+        dists = pd.DataFrame()
+        for matchup in unique_matchups:
+
+            means_sample = self.player_data[self.player_data.team.isin(matchup)].reset_index(drop=True)
+            if len(means_sample) > 0:
+                covar_sample = self.covar.loc[self.covar.player.isin(means_sample.player), means_sample.player]
+                min_max_sample = pd.merge(means_sample[['player']], min_max, on='player', how='left')
+
+                mean_vals = means_sample.pred_fp_per_game.values
+                covar_vals = covar_sample.values
+                bound_vals = min_max_sample[['min_score', 'max_score']].values
+
+                results = self.bounded_multivariate_dist(mean_vals, covar_vals, bound_vals, size=num_options)
+                results = pd.DataFrame(results, columns=means_sample.player).T
+                dists = pd.concat([dists, results], axis=0)
+
+        dists = dists.reset_index().rename(columns={'index': 'player'})
+        dists = pd.merge(self.player_data[['player']], dists, on='player').drop('player', axis=1)
+
+        return dists.reset_index(drop=True)
 
 
     def get_predictions(self, col, ownership=False, num_options=500):
@@ -643,26 +702,26 @@ class FootballSimulation:
 # db_path = f'{root_path}/Data/Databases/'
 # dm = DataManage(db_path)
 
-# pred_vers = 'fixed_model_clone_proba_sera_brier_lowsample_perc'
-# ens_vers = 'no_weight_yes_kbest_randsample_sera_include2'
-# std_dev_type = 'pred_spline_class80'
-# use_covar=False
+# pred_vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
+# ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2'
+# std_dev_type = 'pred_spline_class80_matt1_brier1_calibrate'
+# use_covar=True
 # use_ownership=False
 
-# week = 16
-# year = 2021
+# week = 4
+# year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 # num_iters = 100
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
-#                          full_model_rel_weight=5, covar_type='team_points', use_covar=use_covar, 
+#                          full_model_rel_weight=0.2, covar_type='team_points', use_covar=use_covar, 
 #                          use_ownership=use_ownership)
 # min_players_same_team = 'Auto'
 # min_players_opp_team = 'Auto'
 # set_max_team = None
-# to_add = ['Cooper Kupp']
+# to_add = []
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
@@ -670,14 +729,4 @@ class FootballSimulation:
 
 # print(max_team_cnt)
 # results
-
-# # %%
-
-# sim.matchups
-# # %%
-
-# team_map = {}
-# unique_teams = sim.player_data.team.unique()
-# for i, team in enumerate(unique_teams):
-#     team_map[team] = i
 # %%

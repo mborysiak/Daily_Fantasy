@@ -37,12 +37,12 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [4]
+run_weeks = [15,17]
 
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2022,
+    'set_year': 2021,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -303,8 +303,8 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
     
     out_dict = update_output_dict(model_obj, model_name, str(alpha), out_dict, oof_data, best_models)
     # db_output = add_result_db_output('reg', m, oof_data['scores'], db_output, run_params)
-    try: save_param_scores(param_scores, model_obj, m, run_params)
-    except: print(f'Param save for {m} failed')
+    try: save_param_scores(param_scores, model_obj, model_name, run_params)
+    except: print(f'Param save for {model_name} failed')
 
     return out_dict, best_models, oof_data
 
@@ -463,15 +463,15 @@ def create_output(output_start, predictions):
 
 #%%
 run_list = [
-            # ['QB', '', 'full_model'],
-            # ['RB', '', 'full_model'],
-            # ['WR', '', 'full_model'],
-            # ['TE', '', 'full_model'],
-            # ['Defense', '', 'full_model'],
-            # ['QB', '', 'backfill'],
-            # ['RB', '', 'backfill'],
+            ['QB', '', 'full_model'],
+            ['RB', '', 'full_model'],
+            ['WR', '', 'full_model'],
+            ['TE', '', 'full_model'],
+            ['Defense', '', 'full_model'],
+            ['QB', '', 'backfill'],
+            ['RB', '', 'backfill'],
             ['WR', '', 'backfill'],
-            # ['TE', '', 'backfill'],
+            ['TE', '', 'backfill'],
 ]
 
 for w in run_weeks:
@@ -501,20 +501,20 @@ for w in run_weeks:
         # set up blank dictionaries for all metrics
         out_reg, out_class, out_quant = output_dict(), output_dict(), output_dict()
 
-        # # run all other models
-        # model_list = ['adp', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']
-        # for i, m in enumerate(model_list):
-        #     out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
-        # save_output_dict(out_reg, model_output_path, 'reg')
+        # run all other models
+        model_list = ['adp', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']
+        for i, m in enumerate(model_list):
+            out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
+        save_output_dict(out_reg, model_output_path, 'reg')
 
-        # # run all other models
-        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
-        # for cut in run_params['cuts']:
-        #     print(f"\n--------------\nPercentile {cut}\n--------------\n")
-        #     df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
-        #     for i, m in enumerate(model_list):
-        #         out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
-        # save_output_dict(out_class, model_output_path, 'class')
+        # run all other models
+        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
+        for cut in run_params['cuts']:
+            print(f"\n--------------\nPercentile {cut}\n--------------\n")
+            df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
+            for i, m in enumerate(model_list):
+                out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
+        save_output_dict(out_class, model_output_path, 'class')
 
         # run all other models
         for alph in [0.8, 0.95]:

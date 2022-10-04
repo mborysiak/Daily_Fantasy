@@ -12,9 +12,11 @@ dm = DataManage(db_path)
 #===============
 # Settings and User Inputs
 #===============
-# set the model version
+
+sim_past_auto = True
+
 set_weeks = [
-        2,1,2
+       1, 2, 3, 4,
         ]
 
 set_years = [
@@ -23,32 +25,32 @@ set_years = [
 
 pred_versions = [   
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                
-             
-                
+                'sera1_rsq0_brier1_matt1_lowsample_perc_calibrate',
+                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 ]
 
 ensemble_versions = [
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                        
-                   
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+
 ]
 
 std_dev_types = [
-                'pred_spline_class80_matt1_brier1_calibrate',
-                 'pred_spline_class80_matt1_brier1_calibrate',
-                'pred_spline_class80_matt1_brier1_calibrate',
-                              
+                'pred_spline_class80_matt1_brier1_calibrate', 
+                'pred_spline_class80_matt1_brier1_calibrate', 
+                'pred_spline_class80_matt1_brier1_calibrate', 
+                'pred_spline_class80_matt1_brier1_calibrate', 
 ]
 
 
 sim_types = [
-             'ownership_ln_pos_fix',
-             'v2', 'v2'
+             'v2',
+             'v2',
+             'v2',
+             'v2'
 ]
 
 contests = [
@@ -58,14 +60,15 @@ contests = [
             'Million'
 ]
 
+all_winnings = []
 iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types, sim_types, contests)
 for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in iter_cats:
 
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
     num_iters = 50
-    TOTAL_LINEUPS = 10
-    
+    TOTAL_LINEUPS = 2
+    adjust_winnings = True
 
     print(f'\nWeek {week} PredVer: {pred_vers} EnsVer: {ensemble_vers} SDType:{std_dev_type} SimType:{sim_type} Contest:{contest}\n===============\n')
 
@@ -121,11 +124,13 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
         return actual_winnings, my_results
 
 
-    def summary_results(winnings, points):
-        if len(winnings) != 10:
-            frac = 10 / (len(winnings)+1)
-        else:
-            frac = 1
+    def summary_results(winnings, points, adjust_winnings=True):
+
+        frac = 1
+        if adjust_winnings: 
+            if len(winnings) != 10:
+                frac = 10 / (len(winnings)+1)
+
         total_winnings = np.sum(winnings) * frac
         mean_points = np.mean(points)
         max_points = np.max(points)
@@ -183,30 +188,44 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
         'drop_team_frac': [0, 0.1],
         'top_n_choices': [0, 4],
         'full_model_rel_weight': [0.2, 1, 5],
-        'covar_type': [ 'no_covar', 'team_points'],
+        'covar_type': ['team_points_trunc'],
         'min_player_same_team': ['Auto'],
         'iter': [0, 1, 2],
         }
-    # G = {
-    #     'adjust_pos_counts': [False], 
-    #     'drop_player_multiple': [2, 4, 6], 
-    #     'drop_team_frac': [0],
-    #     'top_n_choices': [0, 4],
-    #     'full_model_rel_weight': [0.2, 1, 5],
-    #     'covar_type': ['no_covar'],
-    #     'min_player_same_team': [-1, 2, 3],
-    #     'iter': [0, 1, 2],
-    #     }
 
     params = []
     for config in dict_configs(G):
         params.append(list(config.values()))
 
-    def sim_winnings(adjust_select, player_drop_multiplier, team_drop_frac, top_n_choices, 
-                        full_model_rel_weight, covar_type, min_players_same_team, iter_num):
+    for i in range(len(params)):
+        params[i].append(i)
+        params[i].append(use_ownership)
+
+    if sim_past_auto:
         
-        if covar_type=='team_points': use_covar=True
-        elif covar_type=='no_covar': use_covar=False
+        params = []
+        adjust_winnings = False
+        for i in range(15):
+            adj = np.random.choice([True, False], p=[0, 1]) 
+            pdm = np.random.choice([0, 4], p=[1, 0])
+            tdf = np.random.choice([0, 0.1], p=[0.5, 0.5]) 
+            tn = np.random.choice([0, 4], p=[0.25, 0.75]) 
+            fmw = np.random.choice([0.2, 1, 5], p=[0, 0.2, 0.8])
+            ct = np.random.choice(['no_covar', 'team_points_trunc'], p=[0.25, 0.75]) 
+            mpst = np.random.choice(['Auto'], p=[1]) 
+            it_n = 0 
+            use_own = np.random.choice([True, False], p=[1, 0])
+
+            params.append([adj, pdm ,tdf, tn, fmw, ct, mpst, it_n, i, use_own])
+    
+
+    
+    def sim_winnings(adjust_select, player_drop_multiplier, team_drop_frac, top_n_choices, 
+                     full_model_rel_weight, covar_type, min_players_same_team, iter_num, param_iter,
+                     use_ownership):
+        
+        if covar_type=='no_covar': use_covar=False
+        else: use_covar=True
 
         sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
                                     pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
@@ -218,7 +237,7 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
         total_add = []
         to_drop_selected = []
         lineups = []
-        for t in range(10):
+        for t in range(TOTAL_LINEUPS):
 
             to_add = []
             to_drop = rand_drop_teams(unique_teams, team_drop_frac)
@@ -232,7 +251,7 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
                 selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
                 to_add.append(selected_player)
 
-            # to_add.append(iter_num)
+            to_add.append(param_iter)
             lineups.append(to_add)
 
             total_pts, prize_money = calc_winnings(to_add)
@@ -241,43 +260,58 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
             total_add.extend(to_add)
             to_drop_selected = rand_drop_selected(total_add, player_drop_multiplier)
 
-        sim_results = summary_results(winnings, points_record)
+        sim_results = summary_results(winnings, points_record, adjust_winnings)
         print(sim_results)
-
-        sim_results = list(sim_results.values)
-        # sim_results.append(iter_num)
+        sim_results = list(sim_results.values[0])
         
         return sim_results, lineups
 
-    # for adj, pdm, tdf, tn, fmw, ct, mpst, i in params[:1]:
-    #     sim_winnings(adj, pdm, tdf, tn, fmw, ct, mpst, i)
+    # for adj, pdm, tdf, tn, fmw, ct, mpst, i, param_i, uo in params[:1]:
+        # sim_winnings(adj, pdm, tdf, tn, fmw, ct, mpst, i, param_i, uo)
 
-#%%
     from joblib import Parallel, delayed
 
-    par_out = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(adj, pdm, tdf, tn, fmw, ct, mpst, it_n) for adj, pdm, tdf, tn, fmw, ct, mpst, it_n in params)
+    par_out = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(adj, pdm, tdf, tn, fmw, ct, mpst, it_n, param_i, uo) for \
+                                                                    adj, pdm, tdf, tn, fmw, ct, mpst, it_n, param_i, uo in params)
     
     lineups = []
     for o in par_out:
         lineups.extend(o[1])
-    lineups = pd.DataFrame(lineups)
+    lineups = pd.DataFrame(lineups).rename(columns={9: 'param_iter'})
     lineups = lineups.assign(week=week, year=year, pred_vers=pred_vers, 
                              ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
                              sim_type=sim_type)
 
-    results = [list(o[0][0]) for o in par_out]
+    results = [list(o[0]) for o in par_out]
     output = pd.concat([pd.DataFrame(params), pd.DataFrame(results)], axis=1)
     output = pd.concat([output, actual_results], axis=1).fillna(method='ffill')
 
     cols = list(G.keys())
-    cols.extend(['lineups_placed', 'total_winnings', 'max_winnings', 'avg_points', 'max_points', 
-                'my_number_placed', 'my_total_winnings', 'my_max_winnings', 'my_mean_points', 'my_max_points'])
+    cols.extend(['param_iter', 'use_ownership', 'lineups_placed', 'total_winnings', 'max_winnings', 'avg_points', 'max_points', 
+                 'my_number_placed', 'my_total_winnings', 'my_max_winnings', 'my_mean_points', 'my_max_points'])
     
     output.columns = cols
     output = output.assign(min_prize_points=min_prize_pts, mean_prize_points=mean_prize_pts, max_prize_points=max_prize_pts,
                            week=week, year=year, pred_vers=pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
-                          num_iters=num_iters)
+                           num_iters=num_iters)
+
+    if sim_past_auto:
+        avg_winnings = []
+        for _ in range(25):
+            
+            total_winnings = 0
+            for w in results:
+                total_winnings += w[1] * np.random.choice([1, 0.15], p=[0.34, 0.66])
+            avg_winnings.append(total_winnings)
+            print(total_winnings)
+        print('Average Winnings:', np.mean(avg_winnings))
     
+    all_winnings.append(np.mean(avg_winnings))
+    print('Total Cumulative Winnings:', np.sum(all_winnings))
+
+    xx = [1770, 1276, 2992, 1586, 1300]
+    yy = [1669, 1822, 1292]
+    #%%
     output['sim_type'] = sim_type
 
     output['pred_proba'] = 0
@@ -389,7 +423,7 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
     output['std_brier_wt'] = output.std_dev_type.apply(lambda x: get_objective_wts(x, 'brier'))
     
     dm.write_to_db(output, 'Results', 'Winnings_Optimize', 'append')
-    # dm.write_to_db(lineups, 'Results', 'Lineups_Optimize', 'append')
+    dm.write_to_db(lineups, 'Results', 'Lineups_Optimize', 'append')
 
 
 #%%
@@ -447,111 +481,8 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
 
 #%%
 
-# from zSim_Helper_Covar import *
-# import pandas as pd
-
-# # set the root path and database management object
-# from ff.db_operations import DataManage
-# from ff import general as ffgeneral
-
-# root_path = ffgeneral.get_main_path('Daily_Fantasy')
-# db_path = f'{root_path}/Data/Databases/'
-# dm = DataManage(db_path)
-
-# df = dm.read('''SELECT * FROM Winnings_Optimize''', 'Results')
-# df.std_dev_type.unique()
-
-# df['std_spline'] = 0
-# df['std_experts'] = 0
-# df['std_actuals'] = 0
-# df['std_splquantile'] = 0
-# df['std_predictions'] = 0
-
-# df.loc[df.std_dev_type=='spline', 'std_spline'] = 1
-# df.loc[df.std_dev_type=='spline', 'std_experts'] = 0.75
-# df.loc[df.std_dev_type=='spline', 'std_actuals'] = 0.25
-
-# df.loc[df.std_dev_type=='spline_actuals', 'std_spline'] = 1
-# df.loc[df.std_dev_type=='spline_actuals', 'std_experts'] = 0.5
-# df.loc[df.std_dev_type=='spline_actuals', 'std_actuals'] = 0.5
-
-# df.loc[df.std_dev_type=='spline_splquant_actuals', 'std_spline'] = 1
-# df.loc[df.std_dev_type=='spline_splquant_actuals', 'std_splquantile'] = 0.5
-# df.loc[df.std_dev_type=='spline_splquant_actuals', 'std_actuals'] = 0.5
-
-# df.loc[df.std_dev_type=='spline_pred_actuals', 'std_spline'] = 1
-# df.loc[df.std_dev_type=='spline_pred_actuals', 'std_predictions'] = 0.5
-# df.loc[df.std_dev_type=='spline_pred_actuals', 'std_actuals'] = 0.5
-
-# df.loc[df.std_dev_type=='spline_pred', 'std_spline'] = 1
-# df.loc[df.std_dev_type=='spline_pred', 'std_predictions'] = 1
-
-# df.loc[df.std_dev_type=='spline_quantile', 'std_spline'] = 1
-# df.loc[df.std_dev_type=='spline_quantile', 'std_splquantile'] = 1
-
-# df.loc[df.std_dev_type=='spline_proj_only', 'std_spline'] = 1
-# df.loc[df.std_dev_type=='spline_proj_only', 'std_experts'] = 0.5
-# df.loc[df.std_dev_type=='spline_proj_only', 'std_splquantile'] = 0.33
-# df.loc[df.std_dev_type=='spline_proj_only', 'std_predictions'] = 0.17
-
-# df.loc[df.std_dev_type=='spline_all', 'std_spline'] = 1
-# df.loc[df.std_dev_type=='spline_all', 'std_experts'] = 0.33
-# df.loc[df.std_dev_type=='spline_all', 'std_splquantile'] = 0.22
-# df.loc[df.std_dev_type=='spline_all', 'std_predictions'] = 0.11
-# df.loc[df.std_dev_type=='spline_all', 'std_actuals'] = 0.33
-
-# df.loc[df.std_dev_type=='spline_all_no_perc', 'std_spline'] = 1
-# df.loc[df.std_dev_type=='spline_all_no_perc', 'std_experts'] = 0.43
-# df.loc[df.std_dev_type=='spline_all_no_perc', 'std_predictions'] = 0.14
-# df.loc[df.std_dev_type=='spline_all_no_perc', 'std_actuals'] = 0.43
-
-# df.loc[df.std_dev_type=='spline_proj_only_no_perc', 'std_spline'] = 1
-# df.loc[df.std_dev_type=='spline_proj_only_no_perc', 'std_experts'] = 0.75
-# df.loc[df.std_dev_type=='spline_proj_only_no_perc', 'std_predictions'] = 0.25
-
-# df['pred_proba'] = 0
-# df.loc[df.pred_vers.str.contains('proba'), 'pred_proba'] = 1
-
-# df['pred_sera'] = 0
-# df.loc[df.pred_vers.str.contains('sera'), 'pred_sera'] = 1
-
-# df['pred_brier'] = 0
-# df.loc[df.pred_vers.str.contains('brier'), 'pred_brier'] = 1
-
-# df['pred_lowsample'] = 0
-# df.loc[df.pred_vers.str.contains('lowsample'), 'pred_lowsample'] = 1
-
-# df['ens_sample_weights'] = 0
-# df.loc[df.ensemble_vers.str.contains('yes_weight'), 'ens_sample_weights'] = 1
-
-# df['ens_kbest'] = 0
-# df.loc[df.ensemble_vers.str.contains('yes_kbest'), 'ens_kbest'] = 1
-
-# df['ens_randsample'] = 0
-# df.loc[df.ensemble_vers.str.contains('randsample'), 'ens_randsample'] = 1
-
-# df['ens_sera'] = 0
-# df.loc[df.ensemble_vers.str.contains('sera'), 'ens_sera'] = 1
-
-# df['bridge'] = 0
-# df.loc[df.std_dev_type.str.contains('bridge'), 'bridge'] = 1
-
-# df['std_spline'] = 0
-# df.loc[df.std_dev_type.str.contains('spline'), 'std_spline'] = 1
-
-# df['std_quantile'] = 0
-# df.loc[df.std_dev_type.str.contains('quantile'), 'std_quantile'] = 1
-
-# df['std_actual'] = 0
-# df.loc[df.std_dev_type.str.contains('actual'), 'std_actual'] = 1
-
-# df['std_pred'] = 0
-# df.loc[df.std_dev_type.str.contains('pred'), 'std_pred'] = 1
-
-# df['splquant'] = 0
-# df.loc[df.std_dev_type.str.contains('splquant'), 'splquant'] = 1
-
-# df['min_best_models'] = 1
+df = dm.read('''SELECT * FROM Winnings_Optimize''', 'Results')
+df.loc[df.sim_type.str.contains('ownership'), 'use_ownership'] = 1
 
 
 

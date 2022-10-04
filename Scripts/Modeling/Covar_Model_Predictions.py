@@ -184,7 +184,7 @@ def get_drop_teams(week, year):
     df.gametime = pd.to_datetime(df.gametime)
     df['day_of_week'] = df.gametime.apply(lambda x: x.weekday())
     df['hour_in_day'] = df.gametime.apply(lambda x: x.hour)
-    df = df[(df.day_of_week!=6) | (df.hour_in_day > 16)]
+    df = df[(df.day_of_week!=6) | (df.hour_in_day > 16) | (df.hour_in_day < 11)]
     drop_teams = list(df.away_team.values)
     drop_teams.extend(list(df.home_team.values))
 
@@ -290,7 +290,6 @@ def get_near_psd(A):
 
     return eigvec.dot(np.diag(eigval)).dot(eigvec.T)
 
-
 def cleanup_pred_covar(pred_cov):
 
     pred_cov_final = pd.DataFrame(get_near_psd(pred_cov))
@@ -302,6 +301,7 @@ def cleanup_pred_covar(pred_cov):
         pred_cov_final.loc[abs(pred_cov_final[c]) < 0.00001, c] = 0
 
     pred_cov_final = pd.melt(pred_cov_final, id_vars='player', var_name=['player_two'], value_name='covar')
+
     pred_cov_final = pred_cov_final.assign(week=set_week, year=set_year,
                                            pred_vers=pred_vers, 
                                            ensemble_vers=ensemble_vers,
@@ -328,39 +328,43 @@ def get_mean_points(preds):
 
 #%%
 
-covar_type = 'team_points'
+covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
-       1, 2
+       1, 2, 3, 4
         ]
 
 set_years = [
-       2022, 2022
+       2022, 2022, 2022, 2022
 ]
 
 pred_versions = [   
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                
-             
-                
+                'sera1_rsq0_brier1_matt1_lowsample_perc_calibrate',
+                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 ]
 
 ensemble_versions = [
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',                 
-                   
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+
 ]
 
 std_dev_types = [
-                'pred_spline_class80_matt1_brier1_calibrate',
-                'pred_spline_class80_matt1_brier1_calibrate'
-                              
+                'pred_spline_class80_matt1_brier1_calibrate', 
+                'pred_spline_class80_matt1_brier1_calibrate', 
+                'pred_spline_class80_matt1_brier1_calibrate', 
+                'pred_spline_class80_matt1_brier1_calibrate', 
 ]
 
 
 sim_types = [
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
              'ownership_ln_pos_fix',
              'ownership_ln_pos_fix',
 ]
@@ -391,9 +395,11 @@ for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         pred_cov = create_player_matches(preds, opponent=False)
         opp_pred_cov = create_player_matches(preds, opponent=True)
         pred_cov = pd.concat([pred_cov, opp_pred_cov], axis=0).reset_index(drop=True)
-        pred_cov = get_team_totals(pred_cov, 'pos_rank2')
 
+        # apply the clusters
+        pred_cov = get_team_totals(pred_cov, 'pos_rank2')
         pred_cov = apply_group_covar(pred_cov, matrices, percs)
+        
         pred_cov_final = cleanup_pred_covar(pred_cov)
         mean_points = get_mean_points(preds)
 
@@ -412,8 +418,8 @@ run_params = pd.DataFrame({
     'pred_vers': [pred_vers],
     'ensemble_vers': [ensemble_vers],
     'std_dev_type': [std_dev_type],
-    'full_model_rel_weight': ['np.random.choice([0.2, 1, 5], p=[0.3, 0.25, 0.45])'],
-    'drop_player_multiple': ['np.random.choice([0, 2, 4], p=[0.1, 0.3, 0.6])'],
+    'full_model_rel_weight': ['np.random.choice([1, 5], p=[0.3, 0.7])'],
+    'drop_player_multiple': ['np.random.choice([0, 4], p=[0.5, 0.5])'],
     'covar_type': ["np.random.choice(['team_points'], p=[1])"],
     'use_covar': ["np.random.choice([False], p=[1])"],
     'use_ownership': ['np.random.choice([True, False], p=[0.8, 0.2])'],
@@ -425,13 +431,236 @@ dm.delete_from_db('Simulation', 'Run_Params', f"week={set_week} AND year={set_ye
 dm.write_to_db(run_params, 'Simulation', 'Run_Params', 'append')
 
 #%%
-# Kmeans for covariance grouping
-df = corr_data.copy()
-col = 'pos_rank'
 
-df = df[df[col].isin(['QB0', 'RB0', 'WR0', 'WR1', 'WR2', 'TE0', 'Defense0', 'OppQB0', 'OppWR0', 'OppDefense0'])]
-df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='max_metric').fillna(0)
-df = df[(df.QB0 > 5) & (df.OppQB0 > 5)]
+week = 4
+year = 2022
+pred_vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
+ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2'
+std_dev_type =  'pred_spline_class80_matt1_brier1_calibrate'
+full_model_rel_weight = 1
+covar_type = 'team_points'
+
+def get_covar_means():
+    # pull in the player data (means, team, position) and covariance matrix
+    player_data = dm.read(f'''SELECT * 
+                                    FROM Covar_Means
+                                    WHERE week={week}
+                                            AND year={year}
+                                            AND pred_vers='{pred_vers}'
+                                            AND ensemble_vers='{ensemble_vers}'
+                                            AND std_dev_type='{std_dev_type}'
+                                            AND covar_type='{covar_type}' 
+                                            AND full_model_rel_weight={full_model_rel_weight}''', 
+                                            'Simulation')
+    return player_data
+
+def pull_covar():
+    covar = dm.read(f'''SELECT player, player_two, covar
+                                FROM Covar_Matrix
+                                WHERE week={week}
+                                    AND year={year}
+                                    AND pred_vers='{pred_vers}'
+                                    AND ensemble_vers='{ensemble_vers}'
+                                    AND std_dev_type='{std_dev_type}'
+                                    AND covar_type='{covar_type}'
+                                    AND full_model_rel_weight={full_model_rel_weight} ''', 
+                                    'Simulation')
+    covar = pd.pivot_table(covar, index='player', columns='player_two').reset_index()
+    covar.columns = [c[1] if i!=0 else 'player' for i, c in enumerate(covar.columns)]
+
+    return covar
+
+def get_min_max():
+    df = dm.read(f'''SELECT player, pos, model_type, min_score, max_score
+                    FROM Model_Predictions
+                    WHERE week={week}
+                          AND year={year}
+                          AND version='{pred_vers}'
+                          AND ensemble_vers='{ensemble_vers}'
+                          AND std_dev_type='{std_dev_type}'
+                          AND pos !='K'
+                          AND pos IS NOT NULL
+                          AND player!='Ryan Griffin'
+                        ''', 'Simulation')
+    df['weighting'] = 1
+    df.loc[df.model_type=='full_model', 'weighting'] = full_model_rel_weight
+
+    score_cols = ['min_score', 'max_score']
+    for c in score_cols: df[c] = df[c] * df.weighting
+
+    # Groupby and aggregate with namedAgg [1]:
+    df = df.groupby(['player', 'pos'], as_index=False).agg({'weighting': 'sum',
+                                                            'min_score': 'sum',
+                                                            'max_score': 'sum'})
+
+    for c in score_cols: df[c] = df[c] / df.weighting
+
+    return df
+
+def get_matchups():
+        df = dm.read(f'''SELECT away_team, home_team
+                              FROM Gambling_Lines 
+                              WHERE week={week} 
+                                    and year={year} 
+                    ''', 'Simulation')
+
+        matchups = {}
+        for away, home in df.values:
+            matchups[away] = home
+            matchups[home] = away
+
+        return matchups
+
+def unique_matchup_pairs(matchups):
+    import itertools
+    sorted_matchups = [sorted(m) for m in matchups.items()]
+    return list(m for m, _ in itertools.groupby(sorted_matchups))
+
+
+def bounded_multivariate_dist(means, cov_matrix, dimenions_bounds, size):
+
+    from numpy.random import multivariate_normal
+
+    ndims = means.shape[0]
+    return_samples = np.empty([0,ndims])
+    local_size = size
+
+    # generate new samples while the needed size is not reached
+    while not return_samples.shape[0] == size:
+        samples = multivariate_normal(means, cov_matrix, size=size*10)
+
+        for dim, bounds in enumerate(dimenions_bounds):
+            if not np.isnan(bounds[0]): # bounds[0] is the lower bound
+                samples = samples[(samples[:,dim] > bounds[0])]  # samples[:,dim] is the column of the dim
+
+            if not np.isnan(bounds[1]): # bounds[1] is the upper bound
+                samples = samples[(samples[:,dim] < bounds[1])]   # samples[:,dim] is the column of the dim
+
+        return_samples = np.vstack([return_samples, samples])
+
+        local_size = size - return_samples.shape[0]; print(local_size)
+        if local_size < 0:
+            return_samples = return_samples[np.random.choice(return_samples.shape[0], size, replace=False), :]
+
+    return return_samples
+
+
+
+#%%
+
+means = get_covar_means()
+covar = pull_covar()
+min_max = get_min_max()
+matchups = get_matchups()
+matchups = unique_matchup_pairs(matchups)
+
+dists = pd.DataFrame()
+for matchup in matchups:
+
+    means_sample = means[means.team.isin(matchup)].reset_index(drop=True)
+    if len(means_sample) > 0:
+        covar_sample = covar.loc[covar.player.isin(means_sample.player), means_sample.player]
+        min_max_sample = pd.merge(means_sample[['player']], min_max, on='player', how='left')
+
+        mean_vals = means_sample.pred_fp_per_game.values
+        covar_vals = covar_sample.values
+        bound_vals = min_max_sample[['min_score', 'max_score']].values
+
+        results = bounded_multivariate_dist(mean_vals, covar_vals, bound_vals, size=1000)
+        results = pd.DataFrame(results, columns=means_sample.player).T
+        dists = pd.concat([dists, results], axis=0)
+
+#%%
+
+p1 = 'Lamar Jackson'
+p2 = 'Jared Goff'
+p3 = 'Tj Hockenson'
+p4 = 'Davante Adams'
+p5 = 'DEN'
+
+p1 = dists[dists.index==p1]
+p2 = dists[dists.index==p2]
+p3 = dists[dists.index==p3]
+p4 = dists[dists.index==p4]
+p5 = dists[dists.index==p5]
+
+import matplotlib.pyplot as plt
+plt.hist(p1, bins=20); plt.show()
+plt.scatter(p1, p2); print(np.corrcoef(p1, p2)); plt.show()
+plt.scatter(p1, p3); print(np.corrcoef(p1, p3)); plt.show()
+plt.scatter(p1, p4); print(np.corrcoef(p1, p4)); plt.show()
+plt.scatter(p1, p5); print(np.corrcoef(p1, p5)); plt.show()
+
+#%%
+
+p1 = 'Stefon Diggs'
+p2 = 'Josh Allen'
+p3 = 'Gabriel Davis'
+p4 = 'Devin Singletary'
+p5 = 'BAL'
+
+p1 = dists[dists.index==p1]
+p2 = dists[dists.index==p2]
+p3 = dists[dists.index==p3]
+p4 = dists[dists.index==p4]
+p5 = dists[dists.index==p5]
+
+import matplotlib.pyplot as plt
+plt.hist(p1, bins=20); plt.show()
+plt.scatter(p1, p2); print(np.corrcoef(p1, p2)); plt.show()
+plt.scatter(p1, p3); print(np.corrcoef(p1, p3)); plt.show()
+plt.scatter(p1, p4); print(np.corrcoef(p1, p4)); plt.show()
+plt.scatter(p1, p5); print(np.corrcoef(p1, p5)); plt.show()
+
+#%%
+
+min_sc = min_max.loc[min_max.player=='Stefon Diggs', 'min_score'].values[0]
+mean_val = means.loc[means.player=='Stefon Diggs', 'pred_fp_per_game'].values[0]
+sdev = np.sqrt(covar.loc[covar.player=='Stefon Diggs', 'Stefon Diggs'].values)
+max_sc = min_max.loc[min_max.player=='Stefon Diggs', 'max_score'].values[0]
+
+num_samples = 10000
+
+import scipy.stats as stats
+
+# create truncated distribution
+lower_bound = (min_sc - mean_val) / sdev, 
+upper_bound = (max_sc - mean_val) / sdev
+trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc=mean_val, scale=sdev)
+
+estimates = trunc_dist.rvs(num_samples)
+
+plt.hist(estimates, bins=20); plt.show()
+
+#%%
+
+# get the player and opposing player data to create correlation matrices
+player_data, _ = get_max_metrics(set_week, set_year)
+corr_data = create_pos_rank(player_data)
+opp_corr_data = create_pos_rank(player_data, opponent=True)
+opp_corr_data = opp_corr_data[~opp_corr_data.team.isnull()].reset_index(drop=True)
+corr_data = pd.concat([corr_data, opp_corr_data], axis=0)
+
+# use  team level data to get the covariance for team-level groups
+corr_data = get_team_totals(corr_data, 'pos_rank')
+
+#%%
+df = corr_data.copy()
+proj = dm.read("SELECT * FROM PFF_Proj_Ranks", 'Pre_PlayerData')
+proj = proj[[ 'player', 'week', 'year' , 'passYds', 'passTd', 'passInt', 'rushYds', 'rushTd',
+              'recvReceptions', 'recvYds', 'recvTd']]
+
+stat_proj_cols = ['passYds', 'passTd', 'passInt', 'rushYds', 'rushTd', 'recvReceptions', 'recvYds', 'recvTd']
+proj[stat_proj_cols] = proj[stat_proj_cols] * [0.1, 4, -1, 0.1, 6, 1, 0.1, 6]
+df = pd.merge(df, proj, on=['player', 'week', 'year'])
+
+df = df[df['pos_rank'].isin(['QB0', 'RB0', 'RB1', 'WR0', 'WR1', 'WR2', 'WR3', 'TE0', 'Defense0', 'OppQB0', 'OppWR0', 'OppDefense0'])]
+df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values=stat_proj_cols).fillna(0)
+df.columns = [f'{c[1]}_{c[0]}' for c in df.columns]
+good_cols = df.sum()[abs(df.sum()) > 10].index
+df = df[good_cols]
+
+#%%
 
 from sklearn.metrics import davies_bouldin_score
 from sklearn.model_selection import GridSearchCV
@@ -439,17 +668,22 @@ from sklearn.cluster import KMeans
 
 X = df.values
 
-for n in range(3, 8):
+for n in range(5, 11):
     km = KMeans(n_clusters=n, random_state=1234)
     km.fit(X)
     print(davies_bouldin_score(X, km.labels_))
 
-km = KMeans(n_clusters=4, random_state=1234)
+#%%
+km = KMeans(n_clusters=8, random_state=1234)
 km.fit(X)
 df['label'] = km.labels_
+
+#%%
 df_melt = pd.melt(df.reset_index(), id_vars=['team', 'week', 'year', 'label']).drop('value', axis=1)
-df_melt = pd.merge(df_melt, corr_data, on=['team','week', 'year', 'pos_rank'])
-df_melt
+# df_melt = pd.merge(df_melt, corr_data, on=['team','week', 'year', 'pos_rank'])
+df_melt.variable = df_melt.variable.apply(lambda x: x.split('_')[0])
+df_melt = df
+
 #%%
 from collections import Counter
 import seaborn as sns

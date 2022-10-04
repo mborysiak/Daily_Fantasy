@@ -14,19 +14,19 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=3
+week=4
 
-pred_vers = 'sera1_rsq0_brier2_matt1_lowsample_perc'
+pred_vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
 ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2'
-std_dev_type = 'pred_spline_class80'
+std_dev_type = 'pred_spline_class80_matt1_brier1_calibrate'
 
 sim_type = 'ownership_ln_pos'
 use_ownership=True
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_iters = 200
-TOTAL_LINEUPS = 4
+num_iters = 100
+TOTAL_LINEUPS = 3
     
 min_players_same_team = 'Auto'
 set_max_team = None
@@ -41,7 +41,7 @@ def rand_drop_selected(total_add, drop_multiplier):
     to_drop = []
     total_selections = dict(Counter(total_add))
     for k, v in total_selections.items():
-        prob_drop = (v * drop_multiplier) / TOTAL_LINEUPS
+        prob_drop = (v * drop_multiplier) / (TOTAL_LINEUPS/2)
         drop_val = np.random.uniform() * prob_drop
         if  drop_val >= 0.5:
             to_drop.append(k)
@@ -69,11 +69,11 @@ def dict_configs(d):
 
 G = {
     'full_model_rel_weight': [1, 5],
-    'drop_player_multiple': [0], 
-    'top_n_choices': [0, 2, 4],
+    'drop_player_multiple': [0, 4], 
+    'top_n_choices': [0, 4],
     'drop_team_frac': [0, 0.1],
     'adjust_pos_counts': [False],
-    'use_ownership': [True]
+    'use_ownership': [True, False]
     }
 
 params = []
@@ -81,7 +81,7 @@ for config in dict_configs(G):
     params.append(list(config.values()))
 
 #%%
-def sim_winnings(player_drop_multiplier, team_drop_frac, full_model_rel_weight, use_ownership):
+def sim_winnings(full_model_rel_weight, player_drop_multiplier, top_n_choices, team_drop_frac, adjust_select, use_ownership):
     
     if covar_type=='team_points': use_covar=True
     elif covar_type=='no_covar': use_covar=False
@@ -94,7 +94,7 @@ def sim_winnings(player_drop_multiplier, team_drop_frac, full_model_rel_weight, 
     total_add = []
     to_drop_selected = []
     lineups = []
-    for _ in range(10):
+    for _ in range(TOTAL_LINEUPS):
         
         to_add = []
         to_drop = rand_drop_teams(unique_teams, team_drop_frac)
@@ -113,7 +113,7 @@ def sim_winnings(player_drop_multiplier, team_drop_frac, full_model_rel_weight, 
 
     return lineups, sim.player_data
 
-def clean_lineup_list(lineups_list):
+def clean_lineup_list(lineups_list, player_data):
     lineups = pd.DataFrame(lineups_list).T
     lineups = pd.melt(lineups)
     lineups.columns = ['TeamNum', 'player']
@@ -162,10 +162,19 @@ def create_database_output(my_team):
 
 dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={week}')
 
-for dpm, dtf, fmrw, uo in params:
-    lineups_list, player_data = sim_winnings(dpm, dtf, fmrw, uo)
-    lineups = clean_lineup_list(lineups_list)
+from joblib import Parallel, delayed
 
-    for i in lineups.TeamNum.unique():
-        create_database_output(lineups[lineups.TeamNum==i])
+par_out = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(fmrw, dpm, topn, tdf, adjs, uo) for \
+                                                                fmrw, dpm, topn, tdf, adjs, uo in params)
+
+lineups_list = []
+for p in par_out:
+    lineups_list.extend(p[0])
+
+player_data = par_out[0][1]
+lineups = clean_lineup_list(lineups_list, player_data)
+
+for i in lineups.TeamNum.unique():
+    create_database_output(lineups[lineups.TeamNum==i])
+
 # %%

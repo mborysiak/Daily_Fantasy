@@ -611,7 +611,7 @@ dm = DataManage(db_path)
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2022,
+    'set_year': 2021,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -640,17 +640,19 @@ calibrate = True
 
 # set the model version
 set_weeks = [
-         1, 2
+         15, 16, 17
         ]
 
 pred_versions = [
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'      
+                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 ]
 
 ensemble_versions = [
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2'              
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2'       
  ]
 
 std_dev_type = 'pred_spline_class80_matt1_brier1_calibrate'
@@ -694,7 +696,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, 
                                            models_reg, models_class, models_quant)
 
-        if class_std and set_pos!='Defense':
+        if class_std:# and set_pos!='Defense':
             # create the stacking models
         
             final_models = ['lr_c', 'lgbm_c', 'xgb_c', 'rf_c', 'gbm_c']
@@ -702,14 +704,14 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
             for i, fm in enumerate(final_models):
                 best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack_class, best_models, 
                                                                         scores, stack_val_pred, model_obj='class',
-                                                                        run_adp=False, show_plots=show_plot, calibrate=calibrate)
+                                                                        run_adp=False, show_plots=False, calibrate=calibrate)
 
                 show_calibration_curve(y_stack_class, stack_val_pred[fm], n_bins=8)
 
             # get the best stack predictions and average
             predictions = mf.stack_predictions(X_predict, best_models, final_models, model_obj='class')
             best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_class, stack_val_pred, 
-                                                                             predictions, model_obj='class', show_plot=False, min_include=min_include-1)
+                                                                             predictions, model_obj='class', show_plot=True, min_include=min_include-1)
 
             show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
         else:

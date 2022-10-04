@@ -14,7 +14,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 3
+set_week = 4
 contest = 'Million'
 
 #%%
@@ -161,7 +161,7 @@ def get_drop_teams(week, year):
     df.gametime = pd.to_datetime(df.gametime)
     df['day_of_week'] = df.gametime.apply(lambda x: x.weekday())
     df['hour_in_day'] = df.gametime.apply(lambda x: x.hour)
-    df = df[(df.day_of_week!=6) | (df.hour_in_day > 16)]
+    df = df[(df.day_of_week!=6) | (df.hour_in_day > 16) | (df.hour_in_day < 11)]
     drop_teams = list(df.away_team.values)
     drop_teams.extend(list(df.home_team.values))
 
@@ -183,7 +183,7 @@ def add_injuries(df):
 def feature_engineering(df):
 
     for c in ['projected_points', 'fantasyPoints', 'ProjPts']:
-        df[c+'_over_sal'] = df[c] / df.dk_salary
+        df[c+'_over_sal'] = df[c] / (df.dk_salary + 1000)
 
     team_pts = df.groupby(['team', 'week', 'year']).agg(team_projected_points=('projected_points', 'sum')).reset_index()
     df = pd.merge(df, team_pts, on=['team','week', 'year'])
@@ -289,7 +289,7 @@ def drop_teams(data):
     df.gametime = pd.to_datetime(df.gametime)
     df['day_of_week'] = df.gametime.apply(lambda x: x.weekday())
     df['hour_in_day'] = df.gametime.apply(lambda x: x.hour)
-    df = df[(df.day_of_week!=6) | (df.hour_in_day > 16)]
+    df = df[(df.day_of_week!=6) | (df.hour_in_day > 16) | (df.hour_in_day < 11)]
     drop_teams = df[['week','year', 'away_team']].rename(columns={'away_team': 'home_team'})
     drop_teams = pd.concat([drop_teams, df[['week','year', 'home_team']]], axis=0)
     drop_teams['to_drop'] = 1
@@ -357,9 +357,9 @@ def remove_week15_2020(df):
 # Predict Ownership Pct
 #================
 
-# for set_week, set_year in zip([10, 11, 12, 13, 14, 15, 16, 17, 1, 2], 
-#                               [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022]):
-for set_week, set_year in zip([1, 2, 3], [2022, 2022, 2022]):
+for set_week, set_year in zip([15, 16, 17, 4], 
+                              [2021, 2021, 2021, 2022]):
+# for set_week, set_year in zip([4], [2022]):
 
     print(f'Running week {set_week} year {set_year}')
     val_week_min = 8

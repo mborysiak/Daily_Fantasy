@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 3
+set_week = 4
 
 download_path = '//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/Mborysiak/DK/'
 extract_path = download_path + f'Results/{set_year}/'
