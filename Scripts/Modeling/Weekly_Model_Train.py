@@ -37,12 +37,12 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [15,17]
+run_weeks = [5]
 
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2021,
+    'set_year': 2022,
 
     # set beginning of validation period
     'val_year_min': 2020,

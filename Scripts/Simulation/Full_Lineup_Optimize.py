@@ -67,7 +67,7 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
     num_iters = 50
-    TOTAL_LINEUPS = 2
+    TOTAL_LINEUPS = 3
     adjust_winnings = True
 
     print(f'\nWeek {week} PredVer: {pred_vers} EnsVer: {ensemble_vers} SDType:{std_dev_type} SimType:{sim_type} Contest:{contest}\n===============\n')
@@ -142,10 +142,22 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
         results = round(results, 1)
         return results
 
-    def rand_drop_teams(unique_teams, drop_frac):
-        drop_teams = np.random.choice(unique_teams, size=int(drop_frac*len(unique_teams)))
-        return list(player_teams.loc[player_teams.team.isin(drop_teams), 'player'].values)
+    def get_matchups():
+        df = dm.read(f'''SELECT away_team, home_team
+                         FROM Gambling_Lines 
+                         WHERE week={week} 
+                               and year={year} 
+                    ''', 'Simulation')
 
+        matchups = []
+        for away, home in df.values:
+            matchups.append([home, away])
+
+        return matchups
+
+    def rand_drop_teams(matchups, drop_matchups):
+        drop_teams = matchups[np.random.choice(matchups.shape[0], drop_matchups, replace=False), :][0]
+        return list(player_teams.loc[player_teams.team.isin(drop_teams), 'player'].values)
 
     player_teams = dm.read(f'''SELECT DISTINCT player, team 
                                FROM Covar_Means
@@ -154,6 +166,7 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
                                      AND pred_vers='{pred_vers}'
                                      ''', 'Simulation')
     unique_teams = player_teams.team.unique()
+    matchups = np.array([m for m in get_matchups() if m[0] in unique_teams and m[1] in unique_teams])
 
     points = pd.DataFrame()
     for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
@@ -200,25 +213,6 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
     for i in range(len(params)):
         params[i].append(i)
         params[i].append(use_ownership)
-
-    if sim_past_auto:
-        
-        params = []
-        adjust_winnings = False
-        for i in range(15):
-            adj = np.random.choice([True, False], p=[0, 1]) 
-            pdm = np.random.choice([0, 4], p=[1, 0])
-            tdf = np.random.choice([0, 0.1], p=[0.5, 0.5]) 
-            tn = np.random.choice([0, 4], p=[0.25, 0.75]) 
-            fmw = np.random.choice([0.2, 1, 5], p=[0, 0.2, 0.8])
-            ct = np.random.choice(['no_covar', 'team_points_trunc'], p=[0.25, 0.75]) 
-            mpst = np.random.choice(['Auto'], p=[1]) 
-            it_n = 0 
-            use_own = np.random.choice([True, False], p=[1, 0])
-
-            params.append([adj, pdm ,tdf, tn, fmw, ct, mpst, it_n, i, use_own])
-    
-
     
     def sim_winnings(adjust_select, player_drop_multiplier, team_drop_frac, top_n_choices, 
                      full_model_rel_weight, covar_type, min_players_same_team, iter_num, param_iter,
@@ -240,12 +234,14 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
         for t in range(TOTAL_LINEUPS):
 
             to_add = []
-            to_drop = rand_drop_teams(unique_teams, team_drop_frac)
+
+            if team_drop_frac > 0: to_drop = rand_drop_teams(matchups, team_drop_frac)
+            else: to_drop = []
             to_drop.extend(to_drop_selected)
 
             for i in range(9):
                 results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-                                         min_players_opp_team_input=0, adjust_select=adjust_select)
+                                         min_players_opp_team_input='Auto', adjust_select=adjust_select)
 
                 prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
                 selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
@@ -295,24 +291,10 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
                            week=week, year=year, pred_vers=pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
                            num_iters=num_iters)
 
-    if sim_past_auto:
-        avg_winnings = []
-        for _ in range(25):
-            
-            total_winnings = 0
-            for w in results:
-                total_winnings += w[1] * np.random.choice([1, 0.15], p=[0.34, 0.66])
-            avg_winnings.append(total_winnings)
-            print(total_winnings)
-        print('Average Winnings:', np.mean(avg_winnings))
-    
-    all_winnings.append(np.mean(avg_winnings))
-    print('Total Cumulative Winnings:', np.sum(all_winnings))
 
-    xx = [1770, 1276, 2992, 1586, 1300]
-    yy = [1669, 1822, 1292]
     #%%
     output['sim_type'] = sim_type
+    output['drop_team_frac'] = output.drop_team_frac / len(matchups)
 
     output['pred_proba'] = 0
     output.loc[output.pred_vers.str.contains('proba'), 'pred_proba'] = 1
@@ -478,13 +460,5 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
 # df['std_brier_wt'] = df.std_dev_type.apply(lambda x: get_objective_wts(x, 'brier'))
 
 # dm.write_to_db(df, 'Results', 'Winnings_Optimize', 'replace')
-
-#%%
-
-df = dm.read('''SELECT * FROM Winnings_Optimize''', 'Results')
-df.loc[df.sim_type.str.contains('ownership'), 'use_ownership'] = 1
-
-
-
 
 # %%

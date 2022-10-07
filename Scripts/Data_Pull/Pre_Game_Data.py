@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2022
-set_week = 4
+set_week = 5
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -62,6 +62,8 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
     if set_pos == 'WR':
         df = df[df.player != 'Cordarrelle Patterson']
 
+    df.loc[df.projected_points=='-', 'projected_points'] = 0
+    
     dm.delete_from_db('Pre_PlayerData', 'FantasyPros', f"week={set_week} and year={set_year} and pos='{set_pos}'")
     dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros', if_exist='append')
 

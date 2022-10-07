@@ -301,16 +301,16 @@ def show_calibration_curve(y_true, y_pred, n_bins=10):
 
 #         for model_type in model_types:
 
-set_week = 3
+set_week = 4
 set_year = 2022
-set_pos = 'WR'
+set_pos = 'TE'
 model_type= 'full_model'
 
 # set the earliest date to begin the validation set
 val_year_min = 2021
 val_week_min = 8
 
-n_splits = 4
+n_splits = 5
 
 #==========
 # Pull and clean compiled data
@@ -336,7 +336,7 @@ df_train, df_predict, output_start, min_samples = train_predict_split(df, train_
 
 
 
-skm = SciKitModel(df_train, model_obj='class', matt_wt=1, brier_wt=1)
+skm = SciKitModel(df_train, model_obj='class', matt_wt=1, brier_wt=2)
 X, y = skm.Xy_split('y_act', drop_cols)
 
 #------------
@@ -346,37 +346,47 @@ X, y = skm.Xy_split('y_act', drop_cols)
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import HistGradientBoostingRegressor
 
-pipe = skm.model_pipe([ skm.piece('random_sample'),
-                        skm.piece('std_scale'),
-                        skm.piece('select_perc_c'),
-                        skm.feature_union([
-                                        skm.piece('agglomeration'), 
-                                        skm.piece('k_best_c'),
-                                        skm.piece('pca')
-                                        ]),
-                        skm.piece('k_best_c'),
-                        skm.piece('rf_c')
-                    ])
+all_models = []
+for i, m in enumerate(['lr_c', 'lgbm_c', 'xgb_c', 'rf_c']):
+    pipe = skm.model_pipe([ skm.piece('random_sample'),
+                            skm.piece('std_scale'),
+                            skm.piece('select_perc_c'),
+                            skm.feature_union([
+                                            skm.piece('agglomeration'), 
+                                            skm.piece('k_best_c'),
+                                            skm.piece('pca')
+                                            ]),
+                            skm.piece('k_best_c'),
+                            skm.piece(m)
+                        ])
 
-# set params
-params = skm.default_params(pipe, 'rand')
-params['random_sample__frac'] = np.arange(0.5, 1, 0.05)
+    # set params
+    params = skm.default_params(pipe, 'rand')
+    params['random_sample__frac'] = np.arange(0.5, 1, 0.05)
 
-# run the model with parameter search
-best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=50,
-                                                        col_split='game_date',n_splits=n_splits,
-                                                        time_split=cv_time_input,
-                                                        bayes_rand='custom_rand',
-                                                        proba=True, calibrate=True,
-                                                        sample_weight=False,
-                                                        random_seed=1234)
+    # run the model with parameter search
+    best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=50,
+                                                            col_split='game_date', n_splits=n_splits,
+                                                            time_split=cv_time_input,
+                                                            bayes_rand='custom_rand',
+                                                            proba=True, calibrate=False,
+                                                            sample_weight=False,
+                                                            random_seed=1234)
 
 
-show_calibration_curve(oof_data['full_hold'].y_act, oof_data['full_hold'].pred)
+    show_calibration_curve(oof_data['full_hold'].y_act, oof_data['full_hold'].pred)
+    
+    oof_data['full_hold'] = oof_data['full_hold'].rename(columns={'pred': f'pred_{m}'})
+    if i == 0: all_oof = oof_data['full_hold'].copy()
+    else: all_oof = pd.merge(all_oof, oof_data['full_hold'].drop('y_act', axis=1), on=['player', 'team', 'week', 'year'])
+    all_models.extend(best_models)
+
+all_oof['mean_pred'] = all_oof[[c for c in all_oof.columns if 'pred' in c]].mean(axis=1)
+show_calibration_curve(all_oof['y_act'], all_oof['mean_pred'])
 
 all_preds = []
-for i in range(n_splits):
-    cur_pred = best_models[i].fit(X,y).predict_proba(df_predict[X.columns])[:,1]
+for i in range(n_splits*4):
+    cur_pred = all_models[i].fit(X,y).predict_proba(df_predict[X.columns])[:,1]
     all_preds.append(cur_pred)
 
 preds = pd.DataFrame(all_preds).T.mean(axis=1)
