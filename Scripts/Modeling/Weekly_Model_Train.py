@@ -37,7 +37,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [5]
+run_weeks = [6]
 
 run_params = {
     
@@ -216,6 +216,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
 
     if m == 'adp':
         
+        
         # set up the ADP model pipe
         pipe = skm.model_pipe([skm.piece('feature_select'), 
                                skm.piece('std_scale'), 
@@ -261,7 +262,8 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
                                 skm.piece('k_best'), 
                                 skm.piece(m)
                                 ])
-        pipe.steps[-1][-1].alpha = alpha
+        if m == 'qr_q': pipe.steps[-1][-1].quantile = alpha
+        else: pipe.steps[-1][-1].alpha = alpha
 
 
     # get the params for the current pipe and adjust if needed
@@ -299,7 +301,7 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
     best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=run_params['n_iters'], n_splits=run_params['n_splits'],
                                                              col_split='game_date', time_split=run_params['cv_time_input'],
                                                              bayes_rand=run_params['opt_type'], proba=proba, calibrate=calibrate,
-                                                             random_seed=(i+7)*19+(i*12)+6)
+                                                             random_seed=(i+7)*19+(i*12)+6, alpha=alpha)
     
     out_dict = update_output_dict(model_obj, model_name, str(alpha), out_dict, oof_data, best_models)
     # db_output = add_result_db_output('reg', m, oof_data['scores'], db_output, run_params)
@@ -463,13 +465,13 @@ def create_output(output_start, predictions):
 
 #%%
 run_list = [
-            ['QB', '', 'full_model'],
-            ['RB', '', 'full_model'],
-            ['WR', '', 'full_model'],
-            ['TE', '', 'full_model'],
-            ['Defense', '', 'full_model'],
-            ['QB', '', 'backfill'],
-            ['RB', '', 'backfill'],
+            # ['QB', '', 'full_model'],
+            # ['RB', '', 'full_model'],
+            # ['WR', '', 'full_model'],
+            # ['TE', '', 'full_model'],
+            # ['Defense', '', 'full_model'],
+            # ['QB', '', 'backfill'],
+            # ['RB', '', 'backfill'],
             ['WR', '', 'backfill'],
             ['TE', '', 'backfill'],
 ]
@@ -502,13 +504,13 @@ for w in run_weeks:
         out_reg, out_class, out_quant = output_dict(), output_dict(), output_dict()
 
         # run all other models
-        model_list = ['adp', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'rf']
+        model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
         for i, m in enumerate(model_list):
             out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
         save_output_dict(out_reg, model_output_path, 'reg')
 
         # run all other models
-        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c']
+        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
         for cut in run_params['cuts']:
             print(f"\n--------------\nPercentile {cut}\n--------------\n")
             df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
@@ -516,10 +518,12 @@ for w in run_weeks:
                 out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
         save_output_dict(out_class, model_output_path, 'class')
 
-        # run all other models
-        for alph in [0.8, 0.95]:
-            out_quant, _, _ = get_model_output('gbm_q', df_train, 'quantile', out_quant, run_params, i=1234, alpha=alph)
-        save_output_dict(out_quant, model_output_path, 'quant')
+        # # run all other models
+        # model_list = ['gbm_q', 'lgbm_q', 'qr_q']
+        # for i, m in enumerate(model_list):
+        #     for alph in [0.8, 0.95]:
+        #         out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
+        # save_output_dict(out_quant, model_output_path, 'quant')
 
 
 #%%

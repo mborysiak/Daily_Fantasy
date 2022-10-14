@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 4
+set_week = 5
 
 download_path = '//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/Mborysiak/DK/'
 extract_path = download_path + f'Results/{set_year}/'
@@ -277,7 +277,7 @@ for contest in ['Million']:#, 'ThreePointStance', 'ScreenPass']:
 
 contest = 'Million'
 base_place = 1
-places = 50
+places = 25
 
 full_entries = dm.read(f"SELECT * FROM Contest_Results WHERE Contest='{contest}'", 'DK_Results')
 df_lineups = format_lineups(full_entries, min_place=base_place, max_place=base_place+places)

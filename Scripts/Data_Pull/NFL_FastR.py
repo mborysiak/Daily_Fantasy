@@ -463,7 +463,6 @@ def_scoring = def_scoring.sort_values(by=['defteam', 'season', 'week']).reset_in
 def_scoring.defteam = def_scoring.defteam.map(team_map)
 dm.delete_from_db('FastR', 'Defense_Stats', f"season={cur_season}")
 dm.write_to_db(def_scoring, 'FastR', 'Defense_Stats', if_exist='append')
-# %%
 
 
 

@@ -264,9 +264,11 @@ def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores,
     skm, _, _ = get_skm(pd.concat([X_stack, y_stack], axis=1), model_obj, to_drop=[])
     pipe, params = get_full_pipe(skm, final_m, stack_model=True)
 
+    if 'gbmh' in final_m: print_coef = False
+    else: print_coef=True
     best_model, stack_scores, stack_pred = skm.best_stack(pipe, params,
                                                           X_stack, y_stack, n_iter=100, 
-                                                          run_adp=run_adp, print_coef=True,
+                                                          run_adp=run_adp, print_coef=print_coef,
                                                           sample_weight=False, proba=proba,
                                                           random_state=(i*12)+(i*17), calibrate=calibrate)
     best_models.append(best_model)
@@ -275,7 +277,7 @@ def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores,
 
     if show_plots:
         mf.show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=True)
-        mf.top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=True)
+        # mf.top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=True)
 
     return best_models, scores, stack_val_pred
 
@@ -436,7 +438,7 @@ def add_std_dev_max(df_train, df_predict, output, model_name, run_params, num_co
 
     elif iso_spline=='spline':
         sd_m, max_m, min_m = get_std_splines(df_train, sd_cols, show_plot=True, k=2, 
-                                            min_grps_den=int(df_train.shape[0]*0.12), 
+                                            min_grps_den=int(df_train.shape[0]*0.1), 
                                             max_grps_den=int(df_train.shape[0]*0.05),
                                             iso_spline=iso_spline)
 
@@ -495,7 +497,7 @@ def val_std_dev(model_output_path, output, best_val, best_val_class=None, metric
 
     elif iso_spline=='spline':
         sd_m, max_m, min_m = get_std_splines(val_data, metrics, show_plot=show_plot, k=2, 
-                                            min_grps_den=int(val_data.shape[0]*0.2), 
+                                            min_grps_den=int(val_data.shape[0]*0.1), 
                                             max_grps_den=int(val_data.shape[0]*0.05),
                                             iso_spline=iso_spline)
         output['std_dev'] = sd_m(sd_max_met)
@@ -611,7 +613,7 @@ dm = DataManage(db_path)
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2021,
+    'set_year': 2022,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -628,11 +630,11 @@ run_params = {
 }
 
 min_include = 2
-show_plot= True
+show_plot= False
 class_std = True
 
-r2_wt = 1
-sera_wt = 10
+r2_wt = 0
+sera_wt = 1
 brier_wt = 1
 matt_wt = 1
 
@@ -640,19 +642,23 @@ calibrate = True
 
 # set the model version
 set_weeks = [
-         15, 16, 17
+          1, 2, 3, 4, 5
         ]
 
 pred_versions = [
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2'       
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2', 
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',      
  ]
 
 std_dev_type = 'pred_spline_class80_matt1_brier1_calibrate'
@@ -699,26 +705,26 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         if class_std:# and set_pos!='Defense':
             # create the stacking models
         
-            final_models = ['lr_c', 'lgbm_c', 'xgb_c', 'rf_c', 'gbm_c']
+            final_models = ['lr_c', 'lgbm_c', 'xgb_c', 'rf_c', 'gbm_c', 'gbmh_c']
             stack_val_pred = pd.DataFrame(); scores = []; best_models = []
             for i, fm in enumerate(final_models):
                 best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack_class, best_models, 
                                                                         scores, stack_val_pred, model_obj='class',
                                                                         run_adp=False, show_plots=False, calibrate=calibrate)
 
-                show_calibration_curve(y_stack_class, stack_val_pred[fm], n_bins=8)
+                if show_plot: show_calibration_curve(y_stack_class, stack_val_pred[fm], n_bins=8)
 
             # get the best stack predictions and average
             predictions = mf.stack_predictions(X_predict, best_models, final_models, model_obj='class')
             best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_class, stack_val_pred, 
-                                                                             predictions, model_obj='class', show_plot=True, min_include=min_include-1)
+                                                                             predictions, model_obj='class', show_plot=show_plot, min_include=min_include-1)
 
-            show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
+            if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
         else:
             best_val_class = None; best_predictions_class = None
 
         # create the stacking models
-        final_models = ['ridge', 'lasso', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm']
+        final_models = ['ridge', 'lasso', 'huber', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm', 'gbmh']
         stack_val_pred = pd.DataFrame(); scores = []; best_models = []
         for i, fm in enumerate(final_models):
             best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, 
@@ -737,7 +743,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         if class_std and set_pos!='Defense': metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1}
         else: metrics = {'pred_fp_per_game': 1}
         output = val_std_dev(model_output_path, output, best_val, best_val_class, metrics=metrics, 
-                             iso_spline='spline', show_plot=True)
+                             iso_spline='spline', show_plot=show_plot)
         
         try:  
             output = add_actual(output)
@@ -754,61 +760,70 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 # print('All Runs Finished')
 #%%
 
+# preds = dm.read(f'''SELECT * 
+#                         FROM Model_Predictions 
+#                         WHERE version='{pred_vers}'
+#                               AND ensemble_vers='{ensemble_vers}'
+#                               AND std_dev_type='{std_dev_type}'
+#                               AND week = '{set_week}'
+#                               AND year = '{set_year}' 
+#                               AND player != 'Ryan Griffin'
+#                 ''', 'Simulation')
 
-#%%
+# #%%
 
-# show_calibration_curve(y_stack_class, best_val_class, n_bins=5)
+# # show_calibration_curve(y_stack_class, best_val_class, n_bins=5)
 
-from sklearn.model_selection import cross_val_predict
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.model_selection import train_test_split
+# from sklearn.model_selection import cross_val_predict
+# from sklearn.calibration import CalibratedClassifierCV
+# from sklearn.model_selection import train_test_split
 
-df_train_class, df_predict_class = get_class_data(df, 80, run_params)    
-skm, X, y = get_skm(df_train_class, 'class', to_drop=run_params['drop_cols'])
+# df_train_class, df_predict_class = get_class_data(df, 80, run_params)    
+# skm, X, y = get_skm(df_train_class, 'class', to_drop=run_params['drop_cols'])
 
-# X_train, X_test, y_train, y_test = train_test_split(X, y_stack_class, train_size=0.5)
+# # X_train, X_test, y_train, y_test = train_test_split(X, y_stack_class, train_size=0.5)
 
-calibrated_pred = []
-# for i in range(5):
-cc = CalibratedClassifierCV(best_models_class['class_xgb_c_80'][0], method='sigmoid')
-cc.fit(X, y)
-cur_pred = cc.predict_proba(X)[:,1]
-calibrated_pred.append(cur_pred)
-
-calibrated_pred = pd.DataFrame(calibrated_pred).T.mean(axis=1)
-show_calibration_curve(y, calibrated_pred, n_bins=5)
-
-#%%
-# show_calibration_curve(y_stack_class[y_test.index], best_val_class.iloc[y_test.index], n_bins=5)
-fm = 'xgb_c'
-from sklearn.model_selection import KFold
-kf = KFold(n_splits=5)
-
-X = X_stack.copy().reset_index(drop=True)
-y = y_stack_class.copy()
-
-calibrated_pred = []
-calibrated_y = []
-for train_index, test_index in kf.split(X):
-    X_train, X_test = X.iloc[train_index, :], X.iloc[test_index, :]
-    y_train, y_test = y[train_index], y[test_index]
-
-    best_models, scores, stack_val_pred = run_stack_models(fm, i, X_train.reset_index(drop=True), y_train.reset_index(drop=True), best_models, 
-                                                            scores, stack_val_pred, model_obj='class',
-                                                            run_adp=False, show_plots=show_plot)
-
-    cc = CalibratedClassifierCV(best_models[-1], method='isotonic', cv='prefit')
-    cc.fit(X_train, y_train)
-    cur_pred = cc.predict_proba(X_test)[:,1]
-    show_calibration_curve(y_test, cur_pred, n_bins=5)
-
-    calibrated_pred.extend(cur_pred)
-    calibrated_y.extend(y_test)
+# calibrated_pred = []
+# # for i in range(5):
+# cc = CalibratedClassifierCV(best_models_class['class_xgb_c_80'][0], method='sigmoid')
+# cc.fit(X, y)
+# cur_pred = cc.predict_proba(X)[:,1]
+# calibrated_pred.append(cur_pred)
 
 # calibrated_pred = pd.DataFrame(calibrated_pred).T.mean(axis=1)
-# calibrated_y = pd.DataFrame(calibrated_y).T.mean(axis=1)
+# show_calibration_curve(y, calibrated_pred, n_bins=5)
 
-show_calibration_curve(calibrated_y, calibrated_pred, n_bins=5)
+# #%%
+# # show_calibration_curve(y_stack_class[y_test.index], best_val_class.iloc[y_test.index], n_bins=5)
+# fm = 'xgb_c'
+# from sklearn.model_selection import KFold
+# kf = KFold(n_splits=5)
+
+# X = X_stack.copy().reset_index(drop=True)
+# y = y_stack_class.copy()
+
+# calibrated_pred = []
+# calibrated_y = []
+# for train_index, test_index in kf.split(X):
+#     X_train, X_test = X.iloc[train_index, :], X.iloc[test_index, :]
+#     y_train, y_test = y[train_index], y[test_index]
+
+#     best_models, scores, stack_val_pred = run_stack_models(fm, i, X_train.reset_index(drop=True), y_train.reset_index(drop=True), best_models, 
+#                                                             scores, stack_val_pred, model_obj='class',
+#                                                             run_adp=False, show_plots=show_plot)
+
+#     cc = CalibratedClassifierCV(best_models[-1], method='isotonic', cv='prefit')
+#     cc.fit(X_train, y_train)
+#     cur_pred = cc.predict_proba(X_test)[:,1]
+#     show_calibration_curve(y_test, cur_pred, n_bins=5)
+
+#     calibrated_pred.extend(cur_pred)
+#     calibrated_y.extend(y_test)
+
+# # calibrated_pred = pd.DataFrame(calibrated_pred).T.mean(axis=1)
+# # calibrated_y = pd.DataFrame(calibrated_y).T.mean(axis=1)
+
+# show_calibration_curve(calibrated_y, calibrated_pred, n_bins=5)
 #%%
 # std_dev_type='pred_isotonic_class'
 # rush_pass_roll = dm.read(f'''SELECT player, 

@@ -13,44 +13,34 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
-sim_past_auto = True
-
+# set the model version
 set_weeks = [
-       1, 2, 3, 4,
+   5, 5, 5
         ]
 
 set_years = [
-       2022, 2022, 2022, 2022
+      2022, 2022, 2022
 ]
 
 pred_versions = [   
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier1_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
 ]
 
 std_dev_types = [
                 'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
 ]
 
 
+
 sim_types = [
-             'v2',
-             'v2',
-             'v2',
-             'v2'
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
+         #    'ownership_ln_pos_fix',
+
 ]
 
 contests = [
@@ -67,7 +57,7 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
     num_iters = 50
-    TOTAL_LINEUPS = 3
+    TOTAL_LINEUPS = 10
     adjust_winnings = True
 
     print(f'\nWeek {week} PredVer: {pred_vers} EnsVer: {ensemble_vers} SDType:{std_dev_type} SimType:{sim_type} Contest:{contest}\n===============\n')
@@ -198,10 +188,10 @@ for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, contest in ite
     G = {
         'adjust_pos_counts': [True, False], 
         'drop_player_multiple': [0, 4], 
-        'drop_team_frac': [0, 0.1],
+        'drop_team_frac': [0, 1],
         'top_n_choices': [0, 4],
         'full_model_rel_weight': [0.2, 1, 5],
-        'covar_type': ['team_points_trunc'],
+        'covar_type': ['no_covar', 'team_points_trunc'],
         'min_player_same_team': ['Auto'],
         'iter': [0, 1, 2],
         }

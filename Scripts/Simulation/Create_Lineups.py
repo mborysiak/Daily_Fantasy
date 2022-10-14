@@ -14,26 +14,17 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=4
+week=5
 
 pred_vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
 ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2'
 std_dev_type = 'pred_spline_class80_matt1_brier1_calibrate'
 
-sim_type = 'ownership_ln_pos'
-use_ownership=True
-
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_iters = 100
-TOTAL_LINEUPS = 3
-    
-min_players_same_team = 'Auto'
-set_max_team = None
+num_iters = 30
 
-adjust_select = False
-use_covar = False
-covar_type = 'no_covar'
+set_max_team = None
 
 #%%
 
@@ -41,15 +32,29 @@ def rand_drop_selected(total_add, drop_multiplier):
     to_drop = []
     total_selections = dict(Counter(total_add))
     for k, v in total_selections.items():
-        prob_drop = (v * drop_multiplier) / (TOTAL_LINEUPS/2)
+        prob_drop = (v * drop_multiplier) / lineups_per_param
         drop_val = np.random.uniform() * prob_drop
         if  drop_val >= 0.5:
             to_drop.append(k)
     return to_drop
 
 
-def rand_drop_teams(unique_teams, drop_frac):
-    drop_teams = np.random.choice(unique_teams, size=int(drop_frac*len(unique_teams)))
+def get_matchups():
+    df = dm.read(f'''SELECT away_team, home_team
+                    FROM Gambling_Lines 
+                    WHERE week={week} 
+                        and year={year} 
+                ''', 'Simulation')
+
+    matchups = []
+    for away, home in df.values:
+        matchups.append([home, away])
+
+    return matchups
+
+
+def rand_drop_teams(matchups, drop_matchups):
+    drop_teams = matchups[np.random.choice(matchups.shape[0], drop_matchups, replace=False), :][0]
     return list(player_teams.loc[player_teams.team.isin(drop_teams), 'player'].values)
 
 
@@ -60,48 +65,98 @@ player_teams = dm.read(f'''SELECT DISTINCT player, team
                                     AND pred_vers='{pred_vers}'
                                     ''', 'Simulation')
 unique_teams = player_teams.team.unique()
+matchups = np.array([m for m in get_matchups() if m[0] in unique_teams and m[1] in unique_teams])
 
-from itertools import product
+        
+d = {
+        'adjust_pos_counts': {
+            True: 0.5, 
+            False: 0.5
+        },
 
-def dict_configs(d):
-    for vcomb in product(*d.values()):
-        yield dict(zip(d.keys(), vcomb))
+        'player_drop_multiple': {
+            0: 0, 
+            4: 1
+        },
+                    
+        'matchup_drop': {
+            0: 0.5,
+            1: 0.5,
+        },
 
-G = {
-    'full_model_rel_weight': [1, 5],
-    'drop_player_multiple': [0, 4], 
-    'top_n_choices': [0, 4],
-    'drop_team_frac': [0, 0.1],
-    'adjust_pos_counts': [False],
-    'use_ownership': [True, False]
+        'top_n_choices': {
+            0: 1,
+            4: 0,
+        },
+
+        'full_model_weight': {
+            1: 0.2,
+            5: 0.8
+        },
+
+        'covar_type': {
+            'no_covar': 0.5,
+            'team_points_trunc': 0.5,
+        },
+
+        'min_player_same_team': {
+            'Auto': 1
+        },
+
+        'min_players_opp_team': {
+           # 'Auto': 0,
+            0: 1
+        },
+
+        'use_ownership': {
+            True: 1,
+            False: 0
+        },
+
+        'max_salary_remain': {
+            None: 1,
+            500: 0
+        }
     }
 
+lineups_per_param = 3
+
 params = []
-for config in dict_configs(G):
-    params.append(list(config.values()))
+for i in range(int(num_iters/lineups_per_param)):
+    cur_params = []
+    for param, param_options in d.items():
+        param_vars = list(param_options.keys())
+        param_prob = list(param_options.values())
+        cur_params.append(np.random.choice(param_vars, p=param_prob))
+
+    params.append(cur_params)
 
 #%%
-def sim_winnings(full_model_rel_weight, player_drop_multiplier, top_n_choices, team_drop_frac, adjust_select, use_ownership):
+def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
+                        full_model_rel_weight, covar_type, min_players_same_team, 
+                        min_players_opp_team, use_ownership, salary_remain_max):
     
-    if covar_type=='team_points': use_covar=True
-    elif covar_type=='no_covar': use_covar=False
+    if covar_type=='no_covar': use_covar=False
+    else: use_covar=True
 
     sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
                              pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
                              covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
-                             use_covar=use_covar, use_ownership=use_ownership)
+                             use_covar=use_covar, use_ownership=use_ownership, salary_remain_max=salary_remain_max)
 
     total_add = []
     to_drop_selected = []
     lineups = []
-    for _ in range(TOTAL_LINEUPS):
+    for _ in range(lineups_per_param):
         
         to_add = []
-        to_drop = rand_drop_teams(unique_teams, team_drop_frac)
+        if matchup_drop > 0: to_drop = rand_drop_teams(matchups, matchup_drop)
+        else: to_drop = []
         to_drop.extend(to_drop_selected)
 
         for i in range(9):
-            results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, adjust_select)
+            results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, None, min_players_opp_team, adjust_select)
+            
             prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
             selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
             to_add.append(selected_player)
@@ -109,7 +164,6 @@ def sim_winnings(full_model_rel_weight, player_drop_multiplier, top_n_choices, t
 
         total_add.extend(to_add)
         to_drop_selected = rand_drop_selected(total_add, player_drop_multiplier)
-
 
     return lineups, sim.player_data
 
@@ -164,8 +218,8 @@ dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={wee
 
 from joblib import Parallel, delayed
 
-par_out = Parallel(n_jobs=-1, verbose=10)(delayed(sim_winnings)(fmrw, dpm, topn, tdf, adjs, uo) for \
-                                                                fmrw, dpm, topn, tdf, adjs, uo in params)
+par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, msr) for \
+                                                               adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, msr in params)
 
 lineups_list = []
 for p in par_out:

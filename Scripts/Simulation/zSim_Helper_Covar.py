@@ -18,7 +18,7 @@ class FootballSimulation:
     def __init__(self, dm, week, set_year, salary_cap, pos_require_start, num_iters, 
                  pred_vers='standard', ensemble_vers='no_weight', std_dev_type='spline',
                  covar_type='team_points', full_model_rel_weight=1,
-                 use_covar=True, use_ownership=False):
+                 use_covar=True, use_ownership=False, salary_remain_max=None):
 
         self.week = week
         self.set_year = set_year
@@ -33,7 +33,9 @@ class FootballSimulation:
         self.full_model_rel_weight = full_model_rel_weight
         self.use_covar = use_covar
         self.use_ownership = use_ownership
+        self.salary_remain_max = salary_remain_max
         
+
         if self.use_covar: 
             player_data = self.get_covar_means()
             self.covar = self.pull_covar()
@@ -642,7 +644,7 @@ class FootballSimulation:
 
                 G_salaries = self.create_G_salaries(predictions)
                 h_salaries = self.create_h_salaries()
-
+                
                 G_players = self.create_G_players(player_idx_map)
                 h_players = self.create_h_players(player_idx_map, h_player_add)
 
@@ -669,6 +671,13 @@ class FootballSimulation:
 
                 h_ownership = self.create_h_ownership()
                 h = np.concatenate([h, h_ownership])
+
+            if self.salary_remain_max is not None:
+                G_salaries_min = -self.create_G_salaries(predictions)
+                h_salaries_min = -(self.create_h_salaries()-self.salary_remain_max)
+                
+                G = np.concatenate([G, G_salaries_min])
+                h = np.concatenate([h, h_salaries_min])
 
             G = matrix(G, tc='d')
             h = matrix(h, tc='d')
@@ -716,8 +725,8 @@ class FootballSimulation:
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
-#                          full_model_rel_weight=0.2, covar_type='team_points', use_covar=use_covar, 
-#                          use_ownership=use_ownership)
+#                          full_model_rel_weight=0.2, covar_type='team_points_trunc', use_covar=use_covar, 
+#                          use_ownership=use_ownership, salary_remain_max=500)
 # min_players_same_team = 'Auto'
 # min_players_opp_team = 'Auto'
 # set_max_team = None
@@ -729,4 +738,4 @@ class FootballSimulation:
 
 # print(max_team_cnt)
 # results
-# %%
+# # %%

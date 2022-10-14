@@ -193,6 +193,9 @@ def pfr_matchup_cleanup(df, cols):
 
     status = df.iloc[:, 2]
     status.name = 'inj_status'
+    df.columns = [c[1] for c in df.columns]
+    if df.FantPt.isnull().sum()[0] > 0:
+        df['FantPt']  = df['DKPt']
     df = df.dropna(axis=1, thresh=int(df.shape[0]*0.75))
     df.columns = cols
     df = pd.concat([df, status], axis=1)

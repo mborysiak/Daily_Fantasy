@@ -34,8 +34,8 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2022
-set_week = 4
-showdown_teams = ['LAR', 'SF']
+set_week = 5
+showdown_teams = ['CIN', 'BAL']
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
