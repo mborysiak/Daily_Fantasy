@@ -34,8 +34,8 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2022
-set_week = 5
-showdown_teams = ['CIN', 'BAL']
+set_week = 6
+showdown_teams = ['DAL', 'PHI']
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -165,38 +165,9 @@ def plot_distribution(estimates):
 
 sim_dist = create_sim_output(preds).reset_index(drop=True)
 
-#%%
-
-idx = sim_dist[sim_dist.player=="Jakobi Meyers"].index[0]
-plot_distribution(sim_dist.iloc[idx])
 
 # %%
 
 dm.write_to_db(sim_dist, 'Simulation', f'showdown_week{set_week}_year{set_year}', 'replace')
 
-
-# %%
-
-for i in range(12):
-
-    players = dm.read('''SELECT * FROM Best_Lineups WHERE week=7''', 'Results').iloc[i, :9].values
-
-    cur_team = preds[preds.player.isin(players)].copy()
-
-    cur_team['variance'] = cur_team.std_dev ** 2
-    sum_variance = np.sum(cur_team.variance)
-    sum_mean_var = np.var(cur_team.pred_fp_per_game)
-
-    team_var = np.sqrt(sum_variance + sum_mean_var)
-    team_mean = cur_team.pred_fp_per_game.sum()
-
-    import seaborn as sns
-    estimates = np.random.normal(team_mean, team_var, 10000)
-    
-    print(i, team_mean, team_var, np.percentile(estimates, 80), np.percentile(estimates, 99))
-    sns.distplot(estimates, hist = True, kde = True, bins = 19,
-                 hist_kws = {'edgecolor': 'k', 'color': 'darkblue'},
-                 kde_kws = {'linewidth' : 4},
-                 label = 'Estimated Dist.')
-    
 # %%

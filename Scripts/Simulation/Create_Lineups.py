@@ -14,7 +14,7 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=5
+week=6
 
 pred_vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
 ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2'
@@ -22,7 +22,7 @@ std_dev_type = 'pred_spline_class80_matt1_brier1_calibrate'
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_iters = 30
+num_iters = 36
 
 set_max_team = None
 
@@ -70,18 +70,18 @@ matchups = np.array([m for m in get_matchups() if m[0] in unique_teams and m[1] 
         
 d = {
         'adjust_pos_counts': {
-            True: 0.5, 
-            False: 0.5
+            True: 0.7, 
+            False: 0.3
         },
 
         'player_drop_multiple': {
-            0: 0, 
-            4: 1
+            0: 0.5, 
+            4: 0.5
         },
                     
         'matchup_drop': {
-            0: 0.5,
-            1: 0.5,
+            0: 1,
+            1: 0
         },
 
         'top_n_choices': {
@@ -95,8 +95,8 @@ d = {
         },
 
         'covar_type': {
-            'no_covar': 0.5,
-            'team_points_trunc': 0.5,
+            'no_covar': 0.8,
+            'team_points_trunc': 0.2,
         },
 
         'min_player_same_team': {
@@ -104,22 +104,22 @@ d = {
         },
 
         'min_players_opp_team': {
-           # 'Auto': 0,
-            0: 1
+           'Auto': 0.5,
+            0: 0.5
         },
 
         'use_ownership': {
-            True: 1,
-            False: 0
+            True: 0.75,
+            False: 0.25
         },
 
         'max_salary_remain': {
-            None: 1,
-            500: 0
+            None: 0.5,
+            500: 0.5
         }
     }
 
-lineups_per_param = 3
+lineups_per_param = 6
 
 params = []
 for i in range(int(num_iters/lineups_per_param)):
@@ -135,6 +135,12 @@ for i in range(int(num_iters/lineups_per_param)):
 def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
                         full_model_rel_weight, covar_type, min_players_same_team, 
                         min_players_opp_team, use_ownership, salary_remain_max):
+
+    try: min_players_opp_team = int(min_players_opp_team)
+    except: pass
+
+    try: min_players_same_team = int(min_players_same_team)
+    except: pass
     
     if covar_type=='no_covar': use_covar=False
     else: use_covar=True

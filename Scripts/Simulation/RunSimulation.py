@@ -25,7 +25,7 @@ dm = DataManage(db_path)
 #===============
 
 year = 2022
-week = 5
+week = 6
 num_iters = 100
 
 total_lineups = 8

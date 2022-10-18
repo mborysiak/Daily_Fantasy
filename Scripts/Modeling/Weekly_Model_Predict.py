@@ -16,6 +16,8 @@ from Fix_Standard_Dev import *
 from sklearn.metrics import r2_score, brier_score_loss
 import zModel_Functions as mf
 from joblib import Parallel, delayed
+from sklearn.utils.validation import check_is_fitted
+from sklearn.calibration import CalibratedClassifierCV
 
 pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', None)
@@ -106,7 +108,7 @@ def train_predict_split(df, run_params):
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 
     df_predict = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
-    output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy().drop_duplicates()
+    output_start = df_predict[['player', 'week', 'year', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < run_params['cv_time_input']].shape[0])  
@@ -267,10 +269,15 @@ def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores,
     if 'gbmh' in final_m: print_coef = False
     else: print_coef=True
     best_model, stack_scores, stack_pred = skm.best_stack(pipe, params,
-                                                          X_stack, y_stack, n_iter=100, 
+                                                          X_stack, y_stack, n_iter=50, 
                                                           run_adp=run_adp, print_coef=print_coef,
                                                           sample_weight=False, proba=proba,
                                                           random_state=(i*12)+(i*17), calibrate=calibrate)
+
+    if calibrate and model_obj == 'class':
+        best_model = CalibratedClassifierCV(best_model, cv='prefit')
+        best_model.fit(X_stack, y_stack)
+
     best_models.append(best_model)
     scores.append(stack_scores['stack_score'])
     stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
@@ -283,7 +290,19 @@ def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores,
 
 
 def fit_and_predict(m, df_predict, X, y, proba):
-    m.fit(X, y)
+    import sklearn
+
+    try: 
+        check_is_fitted(m)
+        print('Model Fitted')
+    except: 
+        m.fit(X, y)
+        print('Fitting Model')
+
+    if proba and 'calibrate' in vers and type(m)!=sklearn.calibration.CalibratedClassifierCV:
+        m = CalibratedClassifierCV(m, cv='prefit')
+        m.fit(X, y)
+
     if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
     else: cur_predict = m.predict(df_predict[X.columns])
 
@@ -306,6 +325,7 @@ def get_stack_predict_data(df_train, df_predict, df, run_params,
     _, X, y = get_skm(df_train, 'reg', to_drop=run_params['drop_cols'])
     print('Predicting Regression Models')
     X_predict = create_stack_predict(df_predict, models_reg, X, y)
+
     print('Predicting Quant Models')
     X_predict_quant = create_stack_predict(df_predict, models_quant, X, y)
     X_predict = pd.concat([X_predict, X_predict_quant], axis=1)
@@ -321,11 +341,25 @@ def get_stack_predict_data(df_train, df_predict, df, run_params,
     return X_predict
 
 
-def show_calibration_curve(y_true, y_pred, n_bins=10):
+def stack_predictions(X_predict, best_models, final_models, model_obj='reg'):
+    
+    predictions = pd.DataFrame()
+    for bm, fm in zip(best_models, final_models):
+        
+        if model_obj=='reg': cur_prediction = np.round(bm.predict(X_predict), 2)
+        elif model_obj=='class': cur_prediction = np.round(bm.predict_proba(X_predict)[:,1], 3)
+        
+        cur_prediction = pd.Series(cur_prediction, name=fm)
+        predictions = pd.concat([predictions, cur_prediction], axis=1)
+
+    return predictions
+
+
+def show_calibration_curve(y_true, y_pred, n_bins=10, strategy='uniform'):
 
     from sklearn.calibration import calibration_curve
     
-    x, y = calibration_curve(y_true, y_pred, n_bins=n_bins)
+    x, y = calibration_curve(y_true, y_pred, n_bins=n_bins, strategy=strategy)
 
     # Plot perfectly calibrated
     plt.plot([0, 1], [0, 1], linestyle = '--', label = 'Ideally Calibrated')
@@ -513,13 +547,13 @@ def add_actual(df):
 
     if run_params['rush_pass'] != '': rush_pass = f"_{run_params['rush_pass']}"
     else: rush_pass = ''
-    actual_pts = dm.read(f'''SELECT {pl} player, fantasy_pts{rush_pass} actual_pts
+    actual_pts = dm.read(f'''SELECT {pl} player, week, season year, fantasy_pts{rush_pass} actual_pts
                             FROM {set_pos}_Stats 
-                            WHERE week={run_params['set_week']} 
+                            WHERE week>={run_params['set_week']} 
                                 and season={run_params['set_year']}''', 'FastR')
     
     if len(actual_pts) > 0:
-        df = pd.merge(df, actual_pts, on='player')
+        df = pd.merge(df, actual_pts, on=['player', 'week', 'year'])
     return df
 
 def save_val_to_db(model_output_path, best_val, run_params):
@@ -633,16 +667,16 @@ min_include = 2
 show_plot= False
 class_std = True
 
-r2_wt = 0
-sera_wt = 1
+r2_wt = 1
+sera_wt = 10
 brier_wt = 1
 matt_wt = 1
 
-calibrate = True
+calibrate = False
 
 # set the model version
 set_weeks = [
-          1, 2, 3, 4, 5
+          2, 3, 4, 5, 6
         ]
 
 pred_versions = [
@@ -651,17 +685,20 @@ pred_versions = [
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+                # 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2', 
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',      
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    
  ]
 
-std_dev_type = 'pred_spline_class80_matt1_brier1_calibrate'
+std_dev_type = 'pred_spline_class80_matt1_brier1'
 
 for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
@@ -715,7 +752,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
                 if show_plot: show_calibration_curve(y_stack_class, stack_val_pred[fm], n_bins=8)
 
             # get the best stack predictions and average
-            predictions = mf.stack_predictions(X_predict, best_models, final_models, model_obj='class')
+            predictions = stack_predictions(X_predict, best_models, final_models, model_obj='class')
             best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_class, stack_val_pred, 
                                                                              predictions, model_obj='class', show_plot=show_plot, min_include=min_include-1)
 
@@ -731,7 +768,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
                                                                    scores, stack_val_pred, show_plots=show_plot)
 
         # get the best stack predictions and average
-        predictions = mf.stack_predictions(X_predict, best_models, final_models)
+        predictions = stack_predictions(X_predict, best_models, final_models)
         best_val, best_predictions, best_score = average_stack_models(scores, final_models, y_stack, stack_val_pred, 
                                                                       predictions, model_obj='reg',
                                                                       show_plot=show_plot, min_include=min_include)
@@ -747,131 +784,52 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         
         try:  
             output = add_actual(output)
-            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
+            print(output.loc[:50, ['player', 'week', 'year', 'dk_salary', 'dk_rank', 
+                                   'pred_fp_per_game', 'pred_fp_per_game_class', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
             save_test_to_db(output, run_params)
             
             if show_plot: mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
             output = output.drop('actual_pts', axis=1)
         except:
-            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score']])
+            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class', 'std_dev', 'min_score', 'max_score']])
 
         save_output_to_db(output, run_params)
 
 # print('All Runs Finished')
 #%%
 
-# preds = dm.read(f'''SELECT * 
-#                         FROM Model_Predictions 
-#                         WHERE version='{pred_vers}'
-#                               AND ensemble_vers='{ensemble_vers}'
-#                               AND std_dev_type='{std_dev_type}'
-#                               AND week = '{set_week}'
-#                               AND year = '{set_year}' 
-#                               AND player != 'Ryan Griffin'
-#                 ''', 'Simulation')
+# create the output and add standard devations / max scores
+output = create_output(output_start, best_predictions, best_predictions_class)
 
-# #%%
+if class_std and set_pos!='Defense': metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1}
+else: metrics = {'pred_fp_per_game': 1}
+output = val_std_dev(model_output_path, output, best_val, best_val_class, metrics=metrics, 
+                    iso_spline='spline', show_plot=show_plot)
 
-# # show_calibration_curve(y_stack_class, best_val_class, n_bins=5)
+output = add_actual(output)
+output = output.rename(columns={'actual_pts': 'y_act'})
+output, _ = create_game_date(output, run_params)
 
-# from sklearn.model_selection import cross_val_predict
-# from sklearn.calibration import CalibratedClassifierCV
-# from sklearn.model_selection import train_test_split
+# set up the target variable to be categorical based on Xth percentile
+cut_perc = output.groupby('game_date')['y_act'].apply(lambda x: np.percentile(x, 80))
+output = pd.merge(output, cut_perc.reset_index().rename(columns={'y_act': 'cut_perc'}), on=['game_date'])
+output['y_act_class'] = np.where(output.y_act >= output.cut_perc, 1, 0)
 
-# df_train_class, df_predict_class = get_class_data(df, 80, run_params)    
-# skm, X, y = get_skm(df_train_class, 'class', to_drop=run_params['drop_cols'])
+output = output.sort_values(by='pred_fp_per_game_class', ascending=False).reset_index(drop=True)
+show_calibration_curve(output.y_act_class, output.pred_fp_per_game_class, n_bins=8)
 
-# # X_train, X_test, y_train, y_test = train_test_split(X, y_stack_class, train_size=0.5)
+display(output[['player', 'week', 'year', 'y_act', 'y_act_class', 'cut_perc', 
+        'pred_fp_per_game', 'pred_fp_per_game_class', 'std_dev', 'min_score', 'max_score']].iloc[:50])
+display(output.loc[output.week==6, ['player', 'week', 'year', 'y_act', 'y_act_class', 'cut_perc', 
+        'pred_fp_per_game', 'pred_fp_per_game_class', 'std_dev', 'min_score', 'max_score']])
 
-# calibrated_pred = []
-# # for i in range(5):
-# cc = CalibratedClassifierCV(best_models_class['class_xgb_c_80'][0], method='sigmoid')
-# cc.fit(X, y)
-# cur_pred = cc.predict_proba(X)[:,1]
-# calibrated_pred.append(cur_pred)
+print(output[output.y_act < output.min_score].shape[0] / output.shape[0])
+print(output[output.y_act > output.max_score].shape[0] / output.shape[0])
 
-# calibrated_pred = pd.DataFrame(calibrated_pred).T.mean(axis=1)
-# show_calibration_curve(y, calibrated_pred, n_bins=5)
+print(output[(output.y_act < (output.pred_fp_per_game + 1*output.std_dev)) & \
+       (output.y_act > (output.pred_fp_per_game - 1*output.std_dev))].shape[0] / output.shape[0])
+print(output[(output.y_act < (output.pred_fp_per_game + 2*output.std_dev)) & \
+       (output.y_act > (output.pred_fp_per_game - 2*output.std_dev))].shape[0] / output.shape[0])
+print(output[(output.y_act < (output.pred_fp_per_game + 3*output.std_dev)) & \
+       (output.y_act > (output.pred_fp_per_game - 3*output.std_dev))].shape[0] / output.shape[0])
 
-# #%%
-# # show_calibration_curve(y_stack_class[y_test.index], best_val_class.iloc[y_test.index], n_bins=5)
-# fm = 'xgb_c'
-# from sklearn.model_selection import KFold
-# kf = KFold(n_splits=5)
-
-# X = X_stack.copy().reset_index(drop=True)
-# y = y_stack_class.copy()
-
-# calibrated_pred = []
-# calibrated_y = []
-# for train_index, test_index in kf.split(X):
-#     X_train, X_test = X.iloc[train_index, :], X.iloc[test_index, :]
-#     y_train, y_test = y[train_index], y[test_index]
-
-#     best_models, scores, stack_val_pred = run_stack_models(fm, i, X_train.reset_index(drop=True), y_train.reset_index(drop=True), best_models, 
-#                                                             scores, stack_val_pred, model_obj='class',
-#                                                             run_adp=False, show_plots=show_plot)
-
-#     cc = CalibratedClassifierCV(best_models[-1], method='isotonic', cv='prefit')
-#     cc.fit(X_train, y_train)
-#     cur_pred = cc.predict_proba(X_test)[:,1]
-#     show_calibration_curve(y_test, cur_pred, n_bins=5)
-
-#     calibrated_pred.extend(cur_pred)
-#     calibrated_y.extend(y_test)
-
-# # calibrated_pred = pd.DataFrame(calibrated_pred).T.mean(axis=1)
-# # calibrated_y = pd.DataFrame(calibrated_y).T.mean(axis=1)
-
-# show_calibration_curve(calibrated_y, calibrated_pred, n_bins=5)
-#%%
-# std_dev_type='pred_isotonic_class'
-# rush_pass_roll = dm.read(f'''SELECT player, 
-#                                     sum(pred_fp_per_game) pred_fp_per_game, 
-#                                     sum(std_dev) std_dev, 
-#                                     sum(max_score) max_score, 
-#                                     sum(min_score) min_score
-#                              FROM Model_Predictions
-#                              WHERE week={run_params['set_week']}
-#                                    AND year={run_params['set_year']}
-#                                    AND version='{vers}'
-#                                    AND ensemble_vers='{ensemble_vers}'
-#                                    AND rush_pass IN ('rush', 'pass')
-#                                    AND std_dev_type='{std_dev_type}'
-#                             GROUP BY player
-#                             ''', 'Simulation')
-# rush_pass_roll = rush_pass_roll.sort_values(by='pred_fp_per_game', ascending=False)
-# run_params['rush_pass'] = ''
-# rush_pass_roll = add_actual(rush_pass_roll)
-
-# mf.show_scatter_plot(rush_pass_roll.pred_fp_per_game, rush_pass_roll.actual_pts, r2=True)
-
-#%%
-# both_compare = validation_compare_df(model_output_path, best_val)
-# rush_val_compare = validation_compare_df(model_output_path, best_val)
-# pass_val_compare = validation_compare_df(model_output_path, best_val)
-# pass_val_compare = pass_val_compare.rename(columns={'prediction': 'pass_prediction', 'y_act': 'pass_y_act'})
-# rush_val_compare = rush_val_compare.rename(columns={'prediction': 'rush_prediction', 'y_act': 'rush_y_act'})
-
-# skm, _, _ = get_skm(df_train, 'reg', [])
-# from sklearn.metrics import mean_squared_error
-
-# rp = pd.concat([both_compare, 
-#                 pass_val_compare[['pass_prediction', 'pass_y_act']],
-#                 rush_val_compare[['rush_prediction', 'rush_y_act']]], axis=1)
-# rp['rp_pred'] = rp.pass_prediction + rp.rush_prediction
-# rp['rp_y_act'] = rp.pass_y_act + rp.rush_y_act
-
-# rp = rp[(rp.rp_pred < 29) & (rp.prediction > 14)].reset_index(drop=True)
-
-# mf.show_scatter_plot(rp.rp_pred, rp.y_act, r2=True)
-# mf.show_scatter_plot(rp.prediction, rp.y_act, r2=True)
-
-
-# print('\nRP MSE:', np.sqrt(mean_squared_error(rp.rp_pred, rp.y_act)))
-# print('Both MSE:', np.sqrt(mean_squared_error(rp.prediction, rp.y_act)))
-# print('\nRP Sera:', skm.sera_loss(rp.y_act, rp.rp_pred))
-# print('Both Sera:', skm.sera_loss(rp.y_act, rp.prediction), '\n')
-# print(rp[abs(rp.y_act - rp.rp_y_act) > 0.001])
-
-#%%

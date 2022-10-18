@@ -19,9 +19,9 @@ SELECT trial_num, AVG(winnings) AvgWinnings, MIN(winnings) MinWinnings, MAX(winn
 FROM (
 		SELECT trial_num, 
 			   repeat_num, 
-			   sum(CASE WHEN avg_winnings > 5000 THEN 5000 ELSE avg_winnings END) winnings 
-		FROM Entry_Optimize_Results
-		WHERE week=5
+			   sum(CASE WHEN avg_winnings > 10000 THEN 10000 ELSE avg_winnings END) winnings 
+			   FROM Entry_Optimize_Results
+-- 		WHERE week=5
 		GROUP BY trial_num, repeat_num
 )
 GROUP BY trial_num
@@ -58,4 +58,4 @@ ORDER BY SUM(WeekTrialRank) ASC;
 
 SELECT DISTINCT version, ensemble_vers, std_dev_type 
 FROM Model_Predictions 
-WHERE week=5 and year=2022;
+WHERE week=3 and year=2022;

@@ -136,6 +136,13 @@ rank1_pl.Name = rank1_pl.Name.apply(dc.name_clean)
 proj_pl = proj_pl.rename(columns={'playerName': 'player'})
 rank1_pl = rank1_pl.rename(columns={'Name': 'player'})
 
+
+if set_week==6 and set_year==2022:
+    old = dm.read("SELECT * FROM PFF_Proj_Ranks", 'Pre_PlayerData')
+    old = old[(old.player=='Tevin Coleman') & (old.week==16) & (old.year==2020)]
+    old = old.assign(offTeam='SF', defTeam='ATL', week=6, year=2022, salary=4500, byeWeek=9)
+    proj_pl = pd.concat([proj_pl, old], axis=0)
+
 #%%
 
 tables = ['Proj', 'Proj', 'Expert', 'Expert']#, 'VOR']
@@ -459,22 +466,18 @@ salary_id = pd.merge(salary_id, ids, on='Name', how='left')
 salary_id.loc[~salary_id.GoodId.isnull(), 'ID'] = salary_id.loc[~salary_id.GoodId.isnull(), 'GoodId']
 
 salary_id = salary_id.rename(columns={'Name': 'player', 'Salary': 'salary', 'ID': 'player_id'})
-salary_id.player = salary_id.player.apply(dc.name_clean)
-
-salary_id.loc[salary_id.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
-salary_id.loc[salary_id.player=='JAX', 'player'] = 'JAC'
-salary_id.loc[salary_id.player=='LV', 'player'] = 'LVR'
-salary_id.loc[salary_id.player=='Dee Eskridge', 'player'] = "D'Wayne Eskridge"
-salary_id.loc[salary_id.player=='Eli Penny', 'player'] = "Elijhaa Penny"
 
 defense = salary_id.loc[salary_id['Roster Position']=='DST', ['TeamAbbrev', 'salary', 'player_id']]
+defense.TeamAbbrev = defense.TeamAbbrev.apply(dc.name_clean).apply(lambda x: x.upper())
+
 salary_id = salary_id.loc[salary_id['Roster Position'] != 'DST']
 salary_id = salary_id[['player', 'salary', 'player_id']]
+salary_id.player = salary_id.player.apply(dc.name_clean)
+
 salary_id = pd.concat([salary_id, defense.rename(columns={'TeamAbbrev': 'player'})], axis=0)
 
 salary = salary_id[['player', 'salary']]
 salary = salary.assign(year=set_year).assign(league=set_week)
-salary.loc[salary.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
 
 ids = salary_id[['player', 'player_id']]
 ids = ids.assign(year=set_year).assign(league=set_week)

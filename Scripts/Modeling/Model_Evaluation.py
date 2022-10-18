@@ -14,6 +14,7 @@ from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import StandardScaler
 from lightgbm import LGBMRegressor
 from sklearn.metrics import r2_score
+import zModel_Functions as mf
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -80,6 +81,26 @@ def train_predict_split(df, train_time_split, cv_time_input):
 
     return df_train, df_predict, output_start, min_samples
 
+
+def get_class_data(df, cut, run_params):
+
+    # set up the training and prediction datasets for the classification 
+    df_train_class = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
+    df_predict_class = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
+
+    # set up the target variable to be categorical based on Xth percentile
+    cut_perc = df_train_class.groupby('game_date')['y_act'].apply(lambda x: np.percentile(x, cut))
+    df_train_class = pd.merge(df_train_class, cut_perc.reset_index().rename(columns={'y_act': 'cut_perc'}), on=['game_date'])
+    
+    if cut > 33:
+        df_train_class['y_act'] = np.where(df_train_class.y_act >= df_train_class.cut_perc, 1, 0)
+    else: 
+        df_train_class['y_act'] = np.where(df_train_class.y_act <= df_train_class.cut_perc, 1, 0)
+
+    df_train_class = df_train_class.drop('cut_perc', axis=1)
+
+    return df_train_class, df_predict_class
+
 #%%
 
 #======================================================================================================================
@@ -112,7 +133,9 @@ df = df[~((df.player=='Davis Mills') & (df.week==5) & (df.year==2021))].reset_in
 df, cv_time_input, train_time_split = create_game_date(df)
 df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
 
-df_train['y_act'] = df_train.y_act
+cut = 95
+run_params = {'train_time_split': train_time_split}
+df_train_class, df_predict_class = get_class_data(df, cut, run_params)
 
 skm = SciKitModel(df_train, model_obj='quantile')
 X_all, y = skm.Xy_split('y_act', drop_cols)
@@ -138,32 +161,32 @@ pipe = skm.model_pipe([skm.piece('random_sample'),
                                         skm.piece('pca')
                                         ]),
                         skm.piece('k_best'),
-                        # skm.piece('lgbm_q')
-                        ('qr', QuantileRegressor())
+                        skm.piece('gbm_q')
+                        
                      ])
 
 pipe.steps[-1][-1].quantile = 0.95
 
 # set params
-params = skm.default_params(pipe, 'rand')
+# params = skm.default_params(pipe, 'rand')
 
 
-# params = {'random_sample__frac': [0.2 , 0.22, 0.24, 0.26, 0.28, 0.3 , 0.32, 0.34, 0.36, 0.38, 0.4 ,
-#                 0.42, 0.44, 0.46, 0.48, 0.5 , 0.52, 0.54, 0.56, 0.58, 0.6 , 0.62,
-#                 0.64],
-#  'random_sample__seed': range(0, 10000, 1000),
-#  'select_perc__percentile': range(25, 61, 5),
-#  'feature_union__agglomeration__n_clusters': range(2, 20, 2),
-#  'feature_union__k_best__k': range(20, 125, 5),
-#  'feature_union__pca__n_components': range(2, 15, 2),
-#  'k_best__k': range(20, 125, 5),
+params = {'random_sample__frac': [0.2 , 0.22, 0.24, 0.26, 0.28, 0.3 , 0.32, 0.34, 0.36, 0.38, 0.4 ,
+                0.42, 0.44, 0.46, 0.48, 0.5 , 0.52, 0.54, 0.56, 0.58, 0.6 , 0.62,
+                0.64],
+ 'random_sample__seed': range(0, 10000, 1000),
+ 'select_perc__percentile': range(25, 61, 5),
+ 'feature_union__agglomeration__n_clusters': range(2, 20, 2),
+ 'feature_union__k_best__k': range(20, 125, 5),
+ 'feature_union__pca__n_components': range(2, 15, 2),
+ 'k_best__k': range(20, 125, 5),
 
-#  'qr__alpha': 10**np.arange(-3, 0, 0.1),
-#  'qr__solver': ['highs-ds', 'highs-ipm', 'highs']
-# # 'lgbm_q__num_leaves': range(20, 50, 3),
-# # 'lgbm_q__max_depth': range(2, 15, 2)
+ 'gbm_q__n_estimators': range(10, 40, 3),
+ 'gbm_q__max_depth': range(2, 12, 1),
+ 'gbm_q__min_samples_leaf': range(5, 25, 2),
+ 'gbm_q__max_features': np.arange(0.7, 1, 0.04)
 
-#  }
+ }
 
 
 # lgbm = { 
@@ -189,7 +212,7 @@ best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_i
                                                         random_seed=12345, alpha=0.95)
 
 
-oof_data['full_hold'].plot.scatter(x='pred', y='y_act')
+mf.show_scatter_plot(oof_data['full_hold']['pred'], oof_data['full_hold']['y_act'])
 
 
 

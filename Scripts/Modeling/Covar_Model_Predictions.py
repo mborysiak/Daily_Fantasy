@@ -331,74 +331,72 @@ def get_mean_points(preds):
 
 covar_type = 'team_points_trunc'
 
-# set the model version
-set_weeks = [
-   1, 2, 3, 4, 5
-        ]
-
-set_years = [
-      2022, 2022, 2022, 2022, 2022
-]
-
-pred_versions = [   
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-]
-
-ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-
-]
-
-std_dev_types = [
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-]
-
-
-sim_types = [
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-]
-
 # # set the model version
 # set_weeks = [
-#    5
+#    1, 2, 3, 4, 5
 #         ]
 
 # set_years = [
-#       2022
+#       2022, 2022, 2022, 2022, 2022
 # ]
 
 # pred_versions = [   
-#                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+#                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+#                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+#                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+#                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+#                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 # ]
 
 # ensemble_versions = [
 #                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+#                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+#                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+#                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+#                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+
 # ]
 
 # std_dev_types = [
+#                 'pred_spline_class80_matt1_brier1_calibrate', 
+#                 'pred_spline_class80_matt1_brier1_calibrate', 
+#                 'pred_spline_class80_matt1_brier1_calibrate', 
+#                 'pred_spline_class80_matt1_brier1_calibrate', 
 #                 'pred_spline_class80_matt1_brier1_calibrate', 
 # ]
 
 
 # sim_types = [
 #              'ownership_ln_pos_fix',
+#              'ownership_ln_pos_fix',
+#              'ownership_ln_pos_fix',
+#              'ownership_ln_pos_fix',
+#              'ownership_ln_pos_fix',
 # ]
+
+# set the model version
+set_weeks = [6]
+
+set_years = [
+      2022
+]
+
+pred_versions = [   
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+]
+
+ensemble_versions = [
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+]
+
+std_dev_types = [
+                'pred_spline_class80_matt1_brier1_calibrate', 
+]
+
+
+sim_types = [
+             'ownership_ln_pos_fix',
+]
 
 full_model_weights = [0.2, 1, 5]
 
@@ -450,9 +448,9 @@ run_params = pd.DataFrame({
     'ensemble_vers': [ensemble_vers],
     'std_dev_type': [std_dev_type],
     'full_model_rel_weight': ['np.random.choice([1, 5], p=[0.2, 0.8])'],
-    'drop_player_multiple': ['np.random.choice([0, 4], p=[0.2, 0.8])'],
-    'covar_type': ["np.random.choice(['team_points'], p=[1])"],
-    'use_covar': ["np.random.choice([False], p=[1])"],
+    'drop_player_multiple': ['np.random.choice([0, 4], p=[0.4, 0.6])'],
+    'covar_type': ["np.random.choice(['team_points_trunc'], p=[1])"],
+    'use_covar': ["np.random.choice([False, True], p=[0.2, 0.8])"],
     'use_ownership': ['np.random.choice([True, False], p=[0.8, 0.2])'],
     'adjust_select': ["np.random.choice([True, False], p=[0.5, 0.5])"],
     'min_players_opp_team': ["np.random.choice([0], p=[1])"]

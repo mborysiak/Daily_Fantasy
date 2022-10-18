@@ -14,7 +14,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 5
+set_week = 6
 contest = 'Million'
 
 #%%
@@ -359,7 +359,7 @@ def remove_week15_2020(df):
 
 # for set_week, set_year in zip([15, 16, 17, 4], 
 #                               [2021, 2021, 2021, 2022]):
-for set_week, set_year in zip([5], [2022]):
+for set_week, set_year in zip([6], [2022]):
 
     print(f'Running week {set_week} year {set_year}')
     val_week_min = 8

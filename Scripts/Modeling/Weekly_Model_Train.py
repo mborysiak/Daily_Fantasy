@@ -12,6 +12,8 @@ from ff.db_operations import DataManage
 from ff import general as ffgeneral
 from skmodel import SciKitModel
 import zModel_Functions as mf
+from joblib import Parallel, delayed
+from sklearn.calibration import CalibratedClassifierCV
 
 import pandas_bokeh
 pandas_bokeh.output_notebook()
@@ -37,7 +39,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [6]
+run_weeks = [2]
 
 run_params = {
     
@@ -74,7 +76,7 @@ brier_wt = 2
 use_calibrate = True
 
 # set version and iterations
-vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
+vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate_fix'
 
 #----------------
 # Data Loading
@@ -282,6 +284,16 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
     return pipe, params
 
 
+def post_model_fit(bm, X, y, calibrate):
+
+    bm.fit(X, y)
+
+    if calibrate: 
+        bm = CalibratedClassifierCV(bm, cv='prefit')
+        bm.fit(X, y)
+
+    return bm
+
 def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min_samples=10, alpha=''):
 
     print(f'\n{model_name}\n============\n')
@@ -302,9 +314,13 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
                                                              col_split='game_date', time_split=run_params['cv_time_input'],
                                                              bayes_rand=run_params['opt_type'], proba=proba, calibrate=calibrate,
                                                              random_seed=(i+7)*19+(i*12)+6, alpha=alpha)
+
+
+    best_models = Parallel(n_jobs=-1, verbose=0)(delayed(post_model_fit)(bm, X, y, calibrate) for bm in best_models)
     
     out_dict = update_output_dict(model_obj, model_name, str(alpha), out_dict, oof_data, best_models)
     # db_output = add_result_db_output('reg', m, oof_data['scores'], db_output, run_params)
+
     try: save_param_scores(param_scores, model_obj, model_name, run_params)
     except: print(f'Param save for {model_name} failed')
 
@@ -358,122 +374,19 @@ def save_output_dict(out_dict, model_output_path, label):
     save_pickle(out_dict['scores'], model_output_path, f'{label}_scores')
     save_pickle(out_dict['full_hold'], model_output_path, f'{label}_full_hold')
 
-#====================
-# Stacking Functions
-#====================
-
-def load_all_stack_pred(model_output_path):
-
-    # load the regregression predictions
-    pred, actual, models_reg, _, full_hold_reg = mf.load_all_pickles(model_output_path, 'reg')
-    X_stack, y_stack = mf.X_y_stack('reg', full_hold_reg, pred, actual)
-
-    # load the class predictions
-    pred_class, actual_class, models_class, _, full_hold_class = mf.load_all_pickles(model_output_path, 'class')
-    X_stack_class, _ = mf.X_y_stack('class', full_hold_class, pred_class, actual_class)
-
-    # load the quantile predictions
-    pred_quant, actual_quant, models_quant, _, full_hold_quant = mf.load_all_pickles(model_output_path, 'quant')
-    X_stack_quant, _ = mf.X_y_stack('quant', full_hold_quant, pred_quant, actual_quant)
-
-    # concat all the predictions together
-    X_stack = pd.concat([X_stack, X_stack_quant, X_stack_class], axis=1)
-
-    return X_stack, y_stack, models_reg, models_class, models_quant
-
-
-def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores, stack_val_pred, show_plots=True):
-
-    print(f'\n{final_m}')
-
-    skm, _, _ = get_skm(pd.concat([X_stack, y_stack], axis=1), 'reg', to_drop=[])
-    pipe, params = get_full_pipe(skm, final_m, stack_model=True)
-
-    best_model, stack_scores, stack_pred = skm.best_stack(pipe, params,
-                                                          X_stack, y_stack, n_iter=100, 
-                                                          run_adp=True, print_coef=True,
-                                                          sample_weight=False, random_state=(i*12)+(i*17))
-    best_models.append(best_model)
-    scores.append(stack_scores['stack_score'])
-    stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
-
-    if show_plots:
-        mf.show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=True)
-        mf.top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=True)
-
-    return best_models, scores, stack_val_pred
-    
-def create_stack_predict(df_predict, models, X, y, proba=False):
-
-    # create the full stack pipe with meta estimators followed by stacked model
-    X_predict = pd.DataFrame()
-    for k, ind_models in models.items():
-        
-        predictions = pd.DataFrame()
-        for m in ind_models:
-
-            m.fit(X, y)
-            if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
-            else: cur_predict = m.predict(df_predict[X.columns])
-            predictions = pd.concat([predictions, pd.Series(cur_predict)], axis=1)
-            
-        predictions = predictions.mean(axis=1)
-        predictions = pd.Series(predictions, name=k)
-        X_predict = pd.concat([X_predict, predictions], axis=1)
-
-    return X_predict
-
-def get_stack_predict_data(df_train, df_predict, df, run_params, 
-                           models_reg, models_class, models_quant):
-
-    _, X, y = get_skm(df_train, 'reg', to_drop=run_params['drop_cols'])
-    X_predict = create_stack_predict(df_predict, models_reg, X, y)
-    X_predict_quant = create_stack_predict(df_predict, models_quant, X, y)
-    X_predict = pd.concat([X_predict, X_predict_quant], axis=1)
-
-    for cut in run_params['cuts']:
-        df_train_class, df_predict_class = get_class_data(df, cut, run_params)
-        _, X, y = get_skm(df_train_class, 'class', to_drop=run_params['drop_cols'])
-        X_predict_class = create_stack_predict(df_predict_class, models_class, X, y, proba=True)
-        X_predict_class = X_predict_class[[c for c in X_predict_class.columns if str(cut) in c]]
-        X_predict = pd.concat([X_predict, X_predict_class], axis=1)
-
-    return X_predict
-
-
-def average_stack_models(df_train, scores, final_models, y_stack, stack_val_pred, predictions, show_plot=True):
-    
-    skm_stack, _, _ = get_skm(df_train, 'reg', to_drop=[])
-    best_val, best_predictions = mf.best_average_models(skm_stack, scores, final_models, y_stack, stack_val_pred, predictions)
-    
-    if show_plot:
-        mf.show_scatter_plot(best_val.mean(axis=1), y_stack, r2=True)
-    return best_val, best_predictions
-
-
-def create_output(output_start, predictions):
-
-    output = output_start.copy()
-    output['pred_fp_per_game'] = predictions.mean(axis=1)
-    output = output.sort_values(by='dk_salary', ascending=False)
-    output['dk_salary_rank'] = range(len(output))
-    output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
-
-    return output
-
 
 
 #%%
 run_list = [
-            # ['QB', '', 'full_model'],
+            ['QB', '', 'full_model'],
             # ['RB', '', 'full_model'],
             # ['WR', '', 'full_model'],
             # ['TE', '', 'full_model'],
             # ['Defense', '', 'full_model'],
             # ['QB', '', 'backfill'],
             # ['RB', '', 'backfill'],
-            ['WR', '', 'backfill'],
-            ['TE', '', 'backfill'],
+            # ['WR', '', 'backfill'],
+            # ['TE', '', 'backfill'],
 ]
 
 for w in run_weeks:
@@ -518,12 +431,12 @@ for w in run_weeks:
                 out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
         save_output_dict(out_class, model_output_path, 'class')
 
-        # # run all other models
-        # model_list = ['gbm_q', 'lgbm_q', 'qr_q']
-        # for i, m in enumerate(model_list):
-        #     for alph in [0.8, 0.95]:
-        #         out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
-        # save_output_dict(out_quant, model_output_path, 'quant')
+        # run all other models
+        model_list = ['gbm_q', 'lgbm_q', 'qr_q']
+        for i, m in enumerate(model_list):
+            for alph in [0.8, 0.95]:
+                out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
+        save_output_dict(out_quant, model_output_path, 'quant')
 
 
 #%%

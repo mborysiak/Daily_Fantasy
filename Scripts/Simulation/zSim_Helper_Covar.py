@@ -717,7 +717,7 @@ class FootballSimulation:
 # use_covar=True
 # use_ownership=False
 
-# week = 4
+# week = 6
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -738,4 +738,4 @@ class FootballSimulation:
 
 # print(max_team_cnt)
 # results
-# # %%
+# %%

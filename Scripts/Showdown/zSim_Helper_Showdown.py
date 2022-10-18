@@ -583,11 +583,11 @@ class FootballSimulation():
 # import sqlite3
 # path = f'c:/Users/{os.getlogin()}/Documents/Github/Daily_Fantasy/'
 # conn_sim = sqlite3.connect(f'{path}/Data/Databases/Simulation.sqlite3')
-# set_year = 2021
-# league=11
+# set_year = 2022
+# league=6
 
 # # number of iteration to run
-# iterations = 10
+# iterations = 500
 
 # # define point values for all statistical categories
 # pass_yd_per_pt = 0.04 
@@ -617,13 +617,13 @@ class FootballSimulation():
 # league_info['salary_cap'] = 50000
 
 # to_drop = {}
-# to_drop['players'] = []
-# to_drop['salaries'] = []
+# to_drop['players'] = ['Aj Brown', 'DAL']
+# to_drop['salaries'] = [10800, 3700]
 
 # # input information for players and their associated salaries selected by your team
 # to_add = {}
-# to_add['players'] = []
-# to_add['salaries'] = []
+# to_add['players'] = ['Jalen Hurts', 'Brett Maher', 'Ceedee Lamb', 'Dallas Goedert', 'Devonta Smith', 'PHI']
+# to_add['salaries'] = [17700, 3800, 9800, 6800, 7400, 4200]
 
 # _, _ = sim.run_simulation(league_info, to_drop, to_add, iterations=iterations)
 # sim.show_most_selected(to_add, iterations, num_show=30).sort_values(by='Percent Drafted', ascending=False)
