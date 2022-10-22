@@ -171,20 +171,20 @@ pipe.steps[-1][-1].quantile = 0.95
 # params = skm.default_params(pipe, 'rand')
 
 
-params = {'random_sample__frac': [0.2 , 0.22, 0.24, 0.26, 0.28, 0.3 , 0.32, 0.34, 0.36, 0.38, 0.4 ,
+params = {'random_sample__frac': [ 0.24, 0.26, 0.28, 0.3 , 0.32, 0.34, 0.36, 0.38, 0.4 ,
                 0.42, 0.44, 0.46, 0.48, 0.5 , 0.52, 0.54, 0.56, 0.58, 0.6 , 0.62,
-                0.64],
+                0.64, 0.66, 0.68],
  'random_sample__seed': range(0, 10000, 1000),
  'select_perc__percentile': range(25, 61, 5),
- 'feature_union__agglomeration__n_clusters': range(2, 20, 2),
+ 'feature_union__agglomeration__n_clusters': range(2, 25, 2),
  'feature_union__k_best__k': range(20, 125, 5),
- 'feature_union__pca__n_components': range(2, 15, 2),
+ 'feature_union__pca__n_components': range(2, 20, 2),
  'k_best__k': range(20, 125, 5),
 
- 'gbm_q__n_estimators': range(10, 40, 3),
- 'gbm_q__max_depth': range(2, 12, 1),
- 'gbm_q__min_samples_leaf': range(5, 25, 2),
- 'gbm_q__max_features': np.arange(0.7, 1, 0.04)
+ 'gbm_q__n_estimators': range(10, 50, 3),
+ 'gbm_q__max_depth': range(2, 20, 1),
+ 'gbm_q__min_samples_leaf': range(5, 30, 5),
+ 'gbm_q__max_features': np.arange(0.7, 1, 0.1)
 
  }
 

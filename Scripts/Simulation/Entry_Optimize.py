@@ -14,36 +14,51 @@ dm = DataManage(db_path)
 # Settings and User Inputs
 #===============
 
+# set the model version
 set_weeks = [
-       1, 2, 3, 4, 5
+    1, 2, 3, 4, 5, 6
 ]
 
 set_years = [
-       2022, 2022, 2022, 2022, 2022
+      2022,
+      2022, 2022, 2022, 2022, 2022
 ]
 
 pred_versions = [   
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
 ]
 
 std_dev_types = [
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
+]
+
+
+sim_types = [
+             'ownership_ln_prob',
+             'ownership_ln_prob',
+             'ownership_ln_prob',
+             'ownership_ln_prob',
+             'ownership_ln_prob',
+             'ownership_ln_prob',
 ]
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
@@ -228,9 +243,9 @@ for repeat_num in range(10):
             },
 
             'full_model_weight': {
-                0.2: 0,
+                0.2: 0.2,
                 1: 0.2,
-                5: 0.8
+                5: 0.6
             },
 
             'covar_type': {
@@ -252,8 +267,8 @@ for repeat_num in range(10):
             },
 
             'use_ownership': {
-                True: 0.75,
-                False: 0.25
+                True: 1,
+                False: 0
             },
 
             'max_salary_remain': {
@@ -264,7 +279,7 @@ for repeat_num in range(10):
             }
         }
 
-        lineups_per_param = 5
+        lineups_per_param = 3
 
         params = []
         for i in range(int(30/lineups_per_param)):

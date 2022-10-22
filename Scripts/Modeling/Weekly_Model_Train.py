@@ -13,7 +13,6 @@ from ff import general as ffgeneral
 from skmodel import SciKitModel
 import zModel_Functions as mf
 from joblib import Parallel, delayed
-from sklearn.calibration import CalibratedClassifierCV
 
 import pandas_bokeh
 pandas_bokeh.output_notebook()
@@ -39,7 +38,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [2]
+run_weeks = [7]
 
 run_params = {
     
@@ -70,13 +69,11 @@ model_type = 'full_model'
 # set weights for running model
 r2_wt = 0
 sera_wt = 1
-matt_wt = 1
-brier_wt = 2
-
-use_calibrate = True
+matt_wt = 0
+brier_wt = 1
 
 # set version and iterations
-vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate_fix'
+vers = 'sera1_rsq0_brier1_matt0_lowsample_perc'
 
 #----------------
 # Data Loading
@@ -284,14 +281,8 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
     return pipe, params
 
 
-def post_model_fit(bm, X, y, calibrate):
-
+def post_model_fit(bm, X, y):
     bm.fit(X, y)
-
-    if calibrate: 
-        bm = CalibratedClassifierCV(bm, cv='prefit')
-        bm.fit(X, y)
-
     return bm
 
 def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min_samples=10, alpha=''):
@@ -304,19 +295,17 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
     if model_obj == 'class': 
         proba = True
         alpha = f'_{cut}' 
-        calibrate=use_calibrate
     else: 
         proba = False
-        calibrate=False
 
     # fit and append the ADP model
     best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=run_params['n_iters'], n_splits=run_params['n_splits'],
                                                              col_split='game_date', time_split=run_params['cv_time_input'],
-                                                             bayes_rand=run_params['opt_type'], proba=proba, calibrate=calibrate,
+                                                             bayes_rand=run_params['opt_type'], proba=proba,
                                                              random_seed=(i+7)*19+(i*12)+6, alpha=alpha)
 
 
-    best_models = Parallel(n_jobs=-1, verbose=0)(delayed(post_model_fit)(bm, X, y, calibrate) for bm in best_models)
+    best_models = Parallel(n_jobs=-1, verbose=0)(delayed(post_model_fit)(bm, X, y) for bm in best_models)
     
     out_dict = update_output_dict(model_obj, model_name, str(alpha), out_dict, oof_data, best_models)
     # db_output = add_result_db_output('reg', m, oof_data['scores'], db_output, run_params)
@@ -379,14 +368,14 @@ def save_output_dict(out_dict, model_output_path, label):
 #%%
 run_list = [
             ['QB', '', 'full_model'],
-            # ['RB', '', 'full_model'],
-            # ['WR', '', 'full_model'],
-            # ['TE', '', 'full_model'],
-            # ['Defense', '', 'full_model'],
-            # ['QB', '', 'backfill'],
-            # ['RB', '', 'backfill'],
-            # ['WR', '', 'backfill'],
-            # ['TE', '', 'backfill'],
+            ['RB', '', 'full_model'],
+            ['WR', '', 'full_model'],
+            ['TE', '', 'full_model'],
+            ['Defense', '', 'full_model'],
+            ['QB', '', 'backfill'],
+            ['RB', '', 'backfill'],
+            ['WR', '', 'backfill'],
+            ['TE', '', 'backfill'],
 ]
 
 for w in run_weeks:

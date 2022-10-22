@@ -713,20 +713,21 @@ class FootballSimulation:
 
 # pred_vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
 # ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2'
-# std_dev_type = 'pred_spline_class80_matt1_brier1_calibrate'
+# std_dev_type = 'pred_spline_class80_matt0_brier1'
 # use_covar=True
-# use_ownership=False
+# use_ownership=True
 
 # week = 6
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-# num_iters = 100
+# num_iters = 200
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
-#                          full_model_rel_weight=0.2, covar_type='team_points_trunc', use_covar=use_covar, 
+#                          full_model_rel_weight=1, covar_type='team_points_trunc', use_covar=use_covar, 
 #                          use_ownership=use_ownership, salary_remain_max=500)
+
 # min_players_same_team = 'Auto'
 # min_players_opp_team = 'Auto'
 # set_max_team = None
@@ -734,8 +735,9 @@ class FootballSimulation:
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                     min_players_opp_team, adjust_select=False)
+#                                     min_players_opp_team, adjust_select=True)
 
 # print(max_team_cnt)
 # results
+
 # %%

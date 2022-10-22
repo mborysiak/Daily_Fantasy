@@ -333,11 +333,11 @@ covar_type = 'team_points_trunc'
 
 # # set the model version
 # set_weeks = [
-#    1, 2, 3, 4, 5
+#    5,6,6
 #         ]
 
 # set_years = [
-#       2022, 2022, 2022, 2022, 2022
+#       2022, 2022, 2022, 2022, 2022, 2022
 # ]
 
 # pred_versions = [   
@@ -346,23 +346,26 @@ covar_type = 'team_points_trunc'
 #                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 #                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 #                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+#                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 # ]
 
 # ensemble_versions = [
-#                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-#                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-#                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-#                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
-#                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+#                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
 
 # ]
 
 # std_dev_types = [
+#                 'pred_spline_class80_matt1_brier1', 
+#                 'pred_spline_class80_matt1_brier1', 
 #                 'pred_spline_class80_matt1_brier1_calibrate', 
-#                 'pred_spline_class80_matt1_brier1_calibrate', 
-#                 'pred_spline_class80_matt1_brier1_calibrate', 
-#                 'pred_spline_class80_matt1_brier1_calibrate', 
-#                 'pred_spline_class80_matt1_brier1_calibrate', 
+#                 'pred_spline_class80_matt1_brier1', 
+#                 'pred_spline_class80_matt1_brier1', 
+#                 'pred_spline_class80_matt1_brier1', 
 # ]
 
 
@@ -372,30 +375,54 @@ covar_type = 'team_points_trunc'
 #              'ownership_ln_pos_fix',
 #              'ownership_ln_pos_fix',
 #              'ownership_ln_pos_fix',
+#              'ownership_ln_pos_fix',
 # ]
 
 # set the model version
-set_weeks = [6]
+set_weeks = [
+    1, 2, 3, 4, 5, 6
+]
 
 set_years = [
-      2022
+      2022,
+      2022, 2022, 2022, 2022, 2022
 ]
 
 pred_versions = [   
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+               'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 ]
 
 ensemble_versions = [
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
 ]
 
 std_dev_types = [
-                'pred_spline_class80_matt1_brier1_calibrate', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
+                'pred_spline_class80_matt0_brier1_calibrate_pipe', 
 ]
 
 
 sim_types = [
-             'ownership_ln_pos_fix',
+             'ownership_ln_prob',
+             'ownership_ln_prob',
+             'ownership_ln_prob',
+             'ownership_ln_prob',
+             'ownership_ln_prob',
+             'ownership_ln_prob',
 ]
 
 full_model_weights = [0.2, 1, 5]
@@ -403,6 +430,8 @@ full_model_weights = [0.2, 1, 5]
 i = 0
 iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
 for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
+
+    print('Week:', set_week)
 
     for full_model_rel_weight in full_model_weights:
 

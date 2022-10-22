@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=UserWarning) 
 
 from sklearn import set_config
-set_config(display='diagram')
+set_config(display='text')
 
 #====================
 # Data Loading Functions
@@ -108,7 +108,7 @@ def train_predict_split(df, run_params):
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 
     df_predict = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
-    output_start = df_predict[['player', 'week', 'year', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy().drop_duplicates()
+    output_start = df_predict[['player', 'team', 'week', 'year', 'dk_salary']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < run_params['cv_time_input']].shape[0])  
@@ -254,9 +254,25 @@ def load_all_stack_pred(model_output_path, stack_cut=95):
     return X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant
 
 
+def add_calibrator_to_pipe(pipe, params):
+
+    est_name = pipe.steps[-1][0]
+    est = CalibratedClassifierCV(pipe.steps[-1][1], cv=3)
+    pipe.steps[-1] = (est_name, est)
+
+    new_params = {}
+    for p, v in params.items():
+        if est_name in p:
+            p = p.split('__')[0] + '__base_estimator__' + p.split('__')[1]
+        
+        new_params[p] = v
+    
+    return pipe, new_params
+
+
 def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores, 
                      stack_val_pred, model_obj='reg', run_adp=True, show_plots=True,
-                     calibrate=False):
+                     calibrate=False, num_k_folds=3):
 
     print(f'\n{final_m}')
 
@@ -265,18 +281,18 @@ def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores,
 
     skm, _, _ = get_skm(pd.concat([X_stack, y_stack], axis=1), model_obj, to_drop=[])
     pipe, params = get_full_pipe(skm, final_m, stack_model=True)
+    
+    if calibrate: pipe, params = add_calibrator_to_pipe(pipe, params)
 
-    if 'gbmh' in final_m: print_coef = False
+    if 'gbmh' in final_m or (calibrate and model_obj=='class'): print_coef = False
     else: print_coef=True
+
     best_model, stack_scores, stack_pred = skm.best_stack(pipe, params,
                                                           X_stack, y_stack, n_iter=50, 
                                                           run_adp=run_adp, print_coef=print_coef,
                                                           sample_weight=False, proba=proba,
-                                                          random_state=(i*12)+(i*17), calibrate=calibrate)
-
-    if calibrate and model_obj == 'class':
-        best_model = CalibratedClassifierCV(best_model, cv='prefit')
-        best_model.fit(X_stack, y_stack)
+                                                          num_k_folds=num_k_folds,
+                                                          random_state=(i*12)+(i*17))
 
     best_models.append(best_model)
     scores.append(stack_scores['stack_score'])
@@ -284,7 +300,6 @@ def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores,
 
     if show_plots:
         mf.show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=True)
-        # mf.top_predictions(stack_pred['stack_pred'], stack_pred['y'], r2=True)
 
     return best_models, scores, stack_val_pred
 
@@ -294,12 +309,10 @@ def fit_and_predict(m, df_predict, X, y, proba):
 
     try: 
         check_is_fitted(m)
-        print('Model Fitted')
     except: 
         m.fit(X, y)
-        print('Fitting Model')
 
-    if proba and 'calibrate' in vers and type(m)!=sklearn.calibration.CalibratedClassifierCV:
+    if proba and 'calibrate' in vers and type(m.steps[-1][1])!=sklearn.calibration.CalibratedClassifierCV:
         m = CalibratedClassifierCV(m, cv='prefit')
         m.fit(X, y)
 
@@ -355,7 +368,7 @@ def stack_predictions(X_predict, best_models, final_models, model_obj='reg'):
     return predictions
 
 
-def show_calibration_curve(y_true, y_pred, n_bins=10, strategy='uniform'):
+def show_calibration_curve(y_true, y_pred, n_bins=10, strategy='quantile'):
 
     from sklearn.calibration import calibration_curve
     
@@ -427,16 +440,6 @@ def create_output(output_start, predictions, predictions_class=None):
 
     return output
 
-
-def validation_compare_df(model_output_path, best_val):
-    
-    _, _, _, _, oof_data = mf.load_all_pickles(model_output_path, 'reg')
-    
-    oof_data = oof_data['reg_adp'][['player', 'team', 'year', 'week', 'y_act']].reset_index(drop=True)
-    best_val = pd.Series(best_val.mean(axis=1), name='pred_fp_per_game')
-    val_compare = pd.concat([oof_data, best_val], axis=1)
-    
-    return val_compare
 
 
 def std_dev_features(cur_df, model_name, run_params, show_plot=True):
@@ -556,29 +559,52 @@ def add_actual(df):
         df = pd.merge(df, actual_pts, on=['player', 'week', 'year'])
     return df
 
-def save_val_to_db(model_output_path, best_val, run_params):
 
-    df = validation_compare_df(model_output_path, best_val)
+
+def validation_compare_df(model_output_path, best_val, model_obj='reg'):
+    
+    _, _, _, _, oof_data = mf.load_all_pickles(model_output_path, model_obj)
+    
+    if model_obj == 'reg': label='reg_adp'
+    elif model_obj == 'class': label = 'class_lr_c_80'
+    oof_data = oof_data[label][['player', 'team', 'year', 'week', 'y_act']].reset_index(drop=True)
+    best_val = pd.Series(best_val.mean(axis=1), name='pred_fp_per_game')
+    val_compare = pd.concat([oof_data, best_val], axis=1)
+    
+    return val_compare
+
+
+def save_val_to_db(model_output_path, best_val, run_params, model_obj='reg'):
+
+    df = validation_compare_df(model_output_path, best_val, model_obj)
 
     df['pos'] = set_pos
     df['pred_version'] = vers
     df['ensemble_vers'] = ensemble_vers
+    df['std_dev_type'] = std_dev_type
     df['model_type'] = model_type
     df['set_week'] = run_params['set_week']
     df['set_year'] = run_params['set_year']
 
     df = df[['player', 'team', 'year', 'week',  'y_act', 'pred_fp_per_game', 'pos',
-             'pred_version', 'ensemble_vers', 'model_type', 'set_week', 'set_year']]
+             'pred_version', 'ensemble_vers', 'std_dev_type', 'model_type', 'set_week', 'set_year']]
 
     del_str = f'''pos='{set_pos}' 
                   AND pred_version='{vers}'
                   AND ensemble_vers='{ensemble_vers}' 
+                  AND std_dev_type='{std_dev_type}'
                   AND set_week={run_params['set_week']} 
                   AND set_year={run_params['set_year']}
                   AND model_type='{model_type}'
                 '''
-    dm.delete_from_db('Simulation', f'Model_Validations', del_str)
-    dm.write_to_db(df, 'Simulation', 'Model_Validations', 'append')
+    
+    if model_obj == 'reg':
+        dm.delete_from_db('Simulation', f'Model_Validations', del_str)
+        dm.write_to_db(df, 'Simulation', 'Model_Validations', 'append')
+
+    elif model_obj == 'class': 
+        dm.delete_from_db('Simulation', f'Model_Validations_Class', del_str)
+        dm.write_to_db(df, 'Simulation', 'Model_Validations_Class', 'append')
 
 def save_test_to_db(df, run_params):
 
@@ -601,6 +627,39 @@ def save_test_to_db(df, run_params):
                 '''
     dm.delete_from_db('Simulation', f'Model_Test_Validations', del_str)
     dm.write_to_db(df, 'Simulation', 'Model_Test_Validations', 'append')
+
+
+def save_prob_to_db(output, run_params):
+
+    
+    df = output[['player', 'team', 'week', 'year', 'pred_fp_per_game_class']].copy()
+    df = df.rename(columns={'week': 'set_week', 'year': 'set_year', 'pred_fp_per_game_class': 'pred_fp_per_game'})
+    df['std_dev'] = df.pred_fp_per_game * 0.25
+    df['min_score'] = 0
+    df['max_score'] = df.pred_fp_per_game * 1.5
+    df['max_score'] = df.max_score.apply(lambda x: np.min([x, 1]))
+
+    df['pos'] = set_pos
+    df['pred_version'] = vers
+    df['ensemble_vers'] = ensemble_vers
+    df['std_dev_type'] = std_dev_type
+    df['model_type'] = model_type
+    df['week'] = df.set_week
+    df['year'] = df.set_year
+
+    df = df[['player', 'set_week', 'set_year', 'pos', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score',
+             'pred_version', 'ensemble_vers', 'model_type', 'std_dev_type', 'week', 'year']]
+
+    del_str = f'''pos='{set_pos}' 
+                  AND pred_version='{vers}'
+                  AND ensemble_vers='{ensemble_vers}' 
+                  AND std_dev_type='{std_dev_type}' 
+                  AND set_week={run_params['set_week']} 
+                  AND set_year={run_params['set_year']}
+                  AND model_type='{model_type}'
+                '''
+    dm.delete_from_db('Simulation', f'Predicted_Probability', del_str)
+    dm.write_to_db(df, 'Simulation', 'Predicted_Probability', 'append')
 
 
 def save_output_to_db(output, run_params):
@@ -664,19 +723,19 @@ run_params = {
 }
 
 min_include = 2
-show_plot= False
+show_plot= True
 class_std = True
 
 r2_wt = 1
 sera_wt = 10
 brier_wt = 1
-matt_wt = 1
+matt_wt = 0
 
-calibrate = False
+calibrate = True
 
 # set the model version
 set_weeks = [
-          2, 3, 4, 5, 6
+          1,2,3,4,5,6
         ]
 
 pred_versions = [
@@ -685,7 +744,7 @@ pred_versions = [
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                # 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
 ]
 
 ensemble_versions = [
@@ -694,11 +753,10 @@ ensemble_versions = [
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',                  
  ]
 
-std_dev_type = 'pred_spline_class80_matt1_brier1'
+std_dev_type = 'pred_spline_class80_matt0_brier1_calibrate_check'
 
 for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
@@ -742,7 +800,8 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         if class_std:# and set_pos!='Defense':
             # create the stacking models
         
-            final_models = ['lr_c', 'lgbm_c', 'xgb_c', 'rf_c', 'gbm_c', 'gbmh_c']
+            final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c']
+            if not calibrate: final_models.append('xgb_c')
             stack_val_pred = pd.DataFrame(); scores = []; best_models = []
             for i, fm in enumerate(final_models):
                 best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack_class, best_models, 
@@ -757,6 +816,8 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
                                                                              predictions, model_obj='class', show_plot=show_plot, min_include=min_include-1)
 
             if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
+            save_val_to_db(model_output_path, best_val_class, run_params, model_obj='class')
+
         else:
             best_val_class = None; best_predictions_class = None
 
@@ -776,8 +837,9 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         
         # create the output and add standard devations / max scores
         output = create_output(output_start, best_predictions, best_predictions_class)
-        
-        if class_std and set_pos!='Defense': metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1}
+        save_prob_to_db(output, run_params)
+
+        if class_std: metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1}
         else: metrics = {'pred_fp_per_game': 1}
         output = val_std_dev(model_output_path, output, best_val, best_val_class, metrics=metrics, 
                              iso_spline='spline', show_plot=show_plot)
@@ -797,6 +859,13 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
 # print('All Runs Finished')
 #%%
+
+
+
+
+#%%
+
+print('Calibrate:', calibrate)
 
 # create the output and add standard devations / max scores
 output = create_output(output_start, best_predictions, best_predictions_class)
@@ -833,3 +902,39 @@ print(output[(output.y_act < (output.pred_fp_per_game + 2*output.std_dev)) & \
 print(output[(output.y_act < (output.pred_fp_per_game + 3*output.std_dev)) & \
        (output.y_act > (output.pred_fp_per_game - 3*output.std_dev))].shape[0] / output.shape[0])
 
+#%%
+
+final_models = ['lr_c', 'lgbm_c', 'xgb_c', 'rf_c', 'gbm_c', 'gbmh_c']
+stack_val_pred = pd.DataFrame(); scores = []; best_models = []
+best_models, scores, stack_val_pred = run_stack_models('lr_c', 10, X_stack, y_stack_class, best_models, 
+                                                                        scores, stack_val_pred, model_obj='class',
+                                                                        run_adp=False, show_plots=False, calibrate=calibrate)
+
+#%%
+
+
+
+def param_select(params):
+    param_select = {}
+    for k, v in params.items():
+        param_select[k] = np.random.choice(v)
+    return param_select
+
+
+skm, _, _ = get_skm(pd.concat([X_stack, y_stack], axis=1), 'class', to_drop=[])
+pipe, params = get_full_pipe(skm, 'lr_c')
+pipe, params = add_calibrator_to_pipe(pipe, params)
+
+cur_par = param_select(params)
+pipe.set_params(**cur_par) 
+pipe.fit(X_stack, y_stack_class)
+
+pipe.predict_proba(X_stack)
+
+
+# pipe = CalibratedClassifierCV(pipe, cv='prefit')
+# pipe.fit(X_stack, y_stack_class)
+
+# pipe.predict_proba(X_predict)
+
+# %%

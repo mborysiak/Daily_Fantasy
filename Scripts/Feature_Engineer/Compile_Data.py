@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2022
-WEEK = 6
+WEEK = 7
 
 #%%
 import pandas as pd 

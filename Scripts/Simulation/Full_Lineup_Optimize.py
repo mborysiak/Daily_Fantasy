@@ -14,12 +14,10 @@ dm = DataManage(db_path)
 #===============
 
 # set the model version
-set_weeks = [
-   5, 5, 5
-        ]
+set_weeks = [5]
 
 set_years = [
-      2022, 2022, 2022
+      2022
 ]
 
 pred_versions = [   
@@ -27,20 +25,16 @@ pred_versions = [
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
 ]
 
 std_dev_types = [
-                'pred_spline_class80_matt1_brier1_calibrate', 
+                'pred_spline_class80_matt0_brier1', 
 ]
 
 
-
 sim_types = [
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-         #    'ownership_ln_pos_fix',
-
+             'ownership_ln_prob',
 ]
 
 contests = [
