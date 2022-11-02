@@ -14,15 +14,15 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=6
+week=8
 
-pred_vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
-ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2'
-std_dev_type = 'pred_spline_class80_matt1_brier1_calibrate'
+pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
+std_dev_type = 'pred_spline_class80_matt1_brier1_kfold3'
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_iters = 36
+num_iters = 35
 
 set_max_team = None
 
@@ -75,8 +75,8 @@ d = {
         },
 
         'player_drop_multiple': {
-            0: 0.5, 
-            4: 0.5
+            0: 0.7, 
+            4: 0.3
         },
                     
         'matchup_drop': {
@@ -85,18 +85,19 @@ d = {
         },
 
         'top_n_choices': {
-            0: 1,
-            4: 0,
+            0: 0,
+            1: 1
         },
 
         'full_model_weight': {
+            0.2: 0,
             1: 0.2,
             5: 0.8
         },
 
         'covar_type': {
-            'no_covar': 0.8,
-            'team_points_trunc': 0.2,
+            'no_covar': 0.5,
+            'team_points_trunc': 0.5,
         },
 
         'min_player_same_team': {
@@ -104,22 +105,22 @@ d = {
         },
 
         'min_players_opp_team': {
-           'Auto': 0.5,
-            0: 0.5
+           'Auto': 1,
+            0: 0
         },
 
         'use_ownership': {
-            True: 0.75,
-            False: 0.25
+            True: 1,
+            False: 0
         },
 
         'max_salary_remain': {
-            None: 0.5,
-            500: 0.5
+            300: 1,
+            500: 0
         }
     }
 
-lineups_per_param = 6
+lineups_per_param = 5
 
 params = []
 for i in range(int(num_iters/lineups_per_param)):
@@ -182,7 +183,7 @@ def clean_lineup_list(lineups_list, player_data):
     lineups = lineups.sort_values(by='TeamNum').reset_index(drop=True)
     return lineups
 
-def create_database_output(my_team):
+def create_database_output(my_team, j):
 
     ids = dm.read(f"SELECT * FROM Player_Ids WHERE year={year} AND league={week}", "Simulation")
     my_team_ids = my_team.rename(columns={'Player': 'player'}).copy()
@@ -216,6 +217,12 @@ def create_database_output(my_team):
     dk_output['year'] = year
     dk_output['week'] = week
 
+    if j < 10:
+        dk_output['contest'] = 'Million'
+    else:
+        dk_output['contest'] = 'Screen Pass'
+
+
     dm.write_to_db(dk_output, 'Simulation', 'Automated_Lineups', 'append')
 
 #%%
@@ -234,7 +241,10 @@ for p in par_out:
 player_data = par_out[0][1]
 lineups = clean_lineup_list(lineups_list, player_data)
 
-for i in lineups.TeamNum.unique():
-    create_database_output(lineups[lineups.TeamNum==i])
+lineups = lineups.sample(frac=1)
+
+for j, i in enumerate(lineups.TeamNum.unique()):
+    create_database_output(lineups[lineups.TeamNum==i], j)
+
 
 # %%

@@ -112,7 +112,7 @@ def get_class_data(df, cut, run_params):
 
 # set year to analyze
 set_year = 2022
-set_week = 5
+set_week = 8
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -127,8 +127,7 @@ set_pos = 'QB'
 #==========
 
 df, drop_cols = load_data(model_type, set_pos)
-
-df = df[~((df.player=='Davis Mills') & (df.week==5) & (df.year==2021))].reset_index(drop=True)
+drop_cols = ['team', 'pos', 'defTeam']
 
 df, cv_time_input, train_time_split = create_game_date(df)
 df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
@@ -137,7 +136,7 @@ cut = 95
 run_params = {'train_time_split': train_time_split}
 df_train_class, df_predict_class = get_class_data(df, cut, run_params)
 
-skm = SciKitModel(df_train, model_obj='quantile')
+skm = SciKitModel(df_train, model_obj='reg')
 X_all, y = skm.Xy_split('y_act', drop_cols)
 
 X = X_all.sample(frac=1, axis=1)
@@ -151,57 +150,43 @@ if 'game_date' not in X.columns:
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import LassoLars,HuberRegressor, QuantileRegressor
+from sklearn_quantile import RandomForestQuantileRegressor, KNeighborsQuantileRegressor, SampleRandomForestQuantileRegressor
+from category_encoders.cat_boost import CatBoostEncoder
 
-pipe = skm.model_pipe([skm.piece('random_sample'),
+pipe = skm.model_pipe([ ('cbe', CatBoostEncoder()),
+                        # skm.piece('random_sample'),
                         skm.piece('std_scale'), 
-                        skm.piece('select_perc'),
-                        skm.feature_union([
-                                        skm.piece('agglomeration'), 
-                                        skm.piece('k_best'),
-                                        skm.piece('pca')
-                                        ]),
+                        # skm.piece('select_perc'),
+                        # skm.feature_union([
+                        #                 skm.piece('agglomeration'), 
+                        #                 skm.piece('k_best'),
+                        #                 skm.piece('pca')
+                        #                 ]),
                         skm.piece('k_best'),
-                        skm.piece('gbm_q')
+                        skm.piece('enet')
                         
                      ])
 
-pipe.steps[-1][-1].quantile = 0.95
-
+# pipe.steps[-1][-1].quantile = 0.95
+# pipe.steps[-1][-1].q = 0.8
 # set params
-# params = skm.default_params(pipe, 'rand')
+params = skm.default_params(pipe, 'rand')
 
 
-params = {'random_sample__frac': [ 0.24, 0.26, 0.28, 0.3 , 0.32, 0.34, 0.36, 0.38, 0.4 ,
-                0.42, 0.44, 0.46, 0.48, 0.5 , 0.52, 0.54, 0.56, 0.58, 0.6 , 0.62,
-                0.64, 0.66, 0.68],
- 'random_sample__seed': range(0, 10000, 1000),
- 'select_perc__percentile': range(25, 61, 5),
- 'feature_union__agglomeration__n_clusters': range(2, 25, 2),
- 'feature_union__k_best__k': range(20, 125, 5),
- 'feature_union__pca__n_components': range(2, 20, 2),
- 'k_best__k': range(20, 125, 5),
 
- 'gbm_q__n_estimators': range(10, 50, 3),
- 'gbm_q__max_depth': range(2, 20, 1),
- 'gbm_q__min_samples_leaf': range(5, 30, 5),
- 'gbm_q__max_features': np.arange(0.7, 1, 0.1)
+# params = {'random_sample__frac': np.array([0.25, 0.27, 0.29, 0.31, 0.33, 0.35, 0.37, 0.39, 0.41, 0.43, 0.45,
+#         0.47, 0.49, 0.51, 0.53, 0.55, 0.57, 0.59, 0.61, 0.63, 0.65, 0.67,
+#         0.69]),
+#  'random_sample__seed': range(0, 10000, 1000),
+#  'select_perc__percentile': range(20, 61, 5),
+#  'feature_union__agglomeration__n_clusters': range(2, 25, 2),
+#  'feature_union__k_best__k': range(20, 125, 5),
+#  'feature_union__pca__n_components': range(2, 20, 2),
+#  'k_best__k': range(20, 125, 5),
+#  'knn__n_neighbors': range(20, 80),
+#  'knn__weights': [ 'uniform'],
+#  'knn__algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute']}
 
- }
-
-
-# lgbm = { 
-#     'lgbm__max_depth': range(2, 12),
-#     'lgbm__num_leaves': range(25, 100, 1),
-#  }
-
-# don't improve over current
-# xgb = {
-#     'xgb__n_estimators': range(100, 250, 5),
-#     'xgb__learning_rate': 10**np.arange(-2, -0.5, 0.1),
-#     'xgb__max_depth': range(2, 10, 2),
-#     'xgb__booster': ['gbtree', 'gblinear', 'dart'],
-#     'xgb__verbosity': [0]
-#  }
 
 # run the model with parameter search
 best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=25,
@@ -209,12 +194,12 @@ best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_i
                                                         time_split=cv_time_input,
                                                         bayes_rand='custom_rand',
                                                         sample_weight=False,
-                                                        random_seed=12345, alpha=0.95)
+                                                        random_seed=12345)
 
 
 mf.show_scatter_plot(oof_data['full_hold']['pred'], oof_data['full_hold']['y_act'])
 
-
+skm.print_coef(best_models[0])
 
 #%%
 
@@ -326,7 +311,7 @@ def show_calibration_curve(y_true, y_pred, n_bins=10):
 
 #         for model_type in model_types:
 
-set_week = 5
+set_week = 7
 set_year = 2022
 set_pos = 'WR'
 model_type= 'full_model'
@@ -361,7 +346,7 @@ df_train, df_predict, output_start, min_samples = train_predict_split(df, train_
 
 
 
-skm = SciKitModel(df_train, model_obj='class', matt_wt=1, brier_wt=1)
+skm = SciKitModel(df_train, model_obj='class', matt_wt=0, brier_wt=1)
 X, y = skm.Xy_split('y_act', drop_cols)
 
 #------------
@@ -395,7 +380,7 @@ for i, m in enumerate(['lr_c', 'rf_c']):
                                                             col_split='game_date', n_splits=n_splits,
                                                             time_split=cv_time_input,
                                                             bayes_rand='custom_rand',
-                                                            proba=True, calibrate=True,
+                                                            proba=True,
                                                             sample_weight=False,
                                                             random_seed=1234)
 
@@ -438,13 +423,13 @@ results['max_score'] = 1.0
 
 #%%
 
-df = dm.read("SELECT * FROM Predicted_Top_Players", 'Simulation')
-df = df.groupby(['player', 'team', 'week', 'year']).agg({'pred_ownership': 'mean', 
-                                                        'std_dev': 'mean', 
-                                                        'min_score': 'mean', 
-                                                        'max_score': 'mean'}).reset_index()
+# df = dm.read("SELECT * FROM Predicted_Top_Players", 'Simulation')
+# df = df.groupby(['player', 'team', 'week', 'year']).agg({'pred_ownership': 'mean', 
+#                                                         'std_dev': 'mean', 
+#                                                         'min_score': 'mean', 
+#                                                         'max_score': 'mean'}).reset_index()
 
-dm.write_to_db(df, 'Simulation', 'Predicted_Ownership', 'replace')
+# dm.write_to_db(df, 'Simulation', 'Predicted_Ownership', 'replace')
 
 #%%
 m = best_models[2]
@@ -476,8 +461,6 @@ import sklearn
 from sklearn.linear_model import Ridge, ElasticNet
 from sklearn.ensemble import RandomForestRegressor
 import shap
-
-
 
 
 def winnings_importance(df):
@@ -578,8 +561,8 @@ model_type = {
 
 }
 
-weeks = [10, 11, 12, 13, 14, 15, 16, 17, 1, 2, 3, 4]
-years = [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022, 2022, 2022]
+weeks = [10, 11, 12, 13, 14, 15, 16, 17, 1, 2, 3, 4, 5, 6]
+years = [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022, 2022, 2022, 2022, 2022]
 # weeks = [3]
 # years = [2022]
 
@@ -626,10 +609,14 @@ def entry_optimize_params(df, max_adjust):
     df.winnings = df.winnings / df.max_lineup_num
 
     df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
-    df[['week', 'year']] = df[['week','year']].astype('str')
+    str_cols = ['week', 'year', 'top_n_choices', 'matchup_drop', 'adjust_pos_counts', 
+                'pred_vers', 'ensemble_vers', 'std_dev_type', 'player_drop_multiple',
+                'full_model_weight', 'max_lineup_num']
+    df[str_cols] = df[str_cols].astype('str')
 
-    df = df.drop('trial_num', axis=1)
+    df = df.drop(['trial_num', 'lineup_num'], axis=1)
 
+    
     df.max_salary_remain = df.max_salary_remain.fillna(5000).astype('float').astype('int').astype('str')
     for c in df.columns:
         if df.dtypes[c] == 'object': 
@@ -640,31 +627,43 @@ def entry_optimize_params(df, max_adjust):
 
     return X, y
 
-df = dm.read("SELECT *  FROM Entry_Optimize_Params_Detail WHERE trial_num >20", 'Results')
+df = dm.read('''SELECT *  
+                FROM Entry_Optimize_Params_Detail 
+                JOIN (
+                      SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
+                      FROM Entry_Optimize_Results
+                      ) USING (week, year, trial_num, repeat_num)
+                WHERE trial_num > 40
+                      AND week NOT IN (3)
+                ''', 'Results')
 
 m = model_type['enet']
-X, y = entry_optimize_params(df, max_adjust=1000)
+X, y = entry_optimize_params(df, max_adjust=5000)
 coef_vals, X = get_model_coef(X, y, m)
 show_coef(coef_vals, X)
 
-
 #%%
 
-weeks = [1, 2, 3, 4, 5]
-years = [2022, 2022, 2022, 2022, 2022]
+weeks = [1, 2, 3, 4, 5, 6, 7, 8]
+years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
 
 i=0
 all_coef = None; X_all = None
 for w, yr in zip(weeks, years):
-    df = dm.read(f'''SELECT * 
-                    FROM Entry_Optimize_Params_Detail
-                    WHERE week = {w}
-                          and year = {yr}
-                    ORDER BY year, week''', 'Results')
+    df = dm.read(f'''SELECT *  
+                     FROM Entry_Optimize_Params_Detail 
+                     JOIN (
+                            SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
+                            FROM Entry_Optimize_Results
+                            WHERE week = {w}
+                                AND year = {yr}
+                          ) USING (week, year, trial_num, repeat_num)
+                    -- WHERE trial_num > 40
+                     ''', 'Results')
 
     model_name = 'enet'
     m = model_type[model_name]
-    X, y = entry_optimize_params(df, max_adjust=10000)
+    X, y = entry_optimize_params(df, max_adjust=1000)
     coef_vals, X = get_model_coef(X, y, m)
     all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1
 

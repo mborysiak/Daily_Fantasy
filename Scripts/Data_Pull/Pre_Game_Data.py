@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2022
-set_week = 7
+set_week = 8
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -27,7 +27,7 @@ dm = DataManage(db_path)
 #=============
 # Fantasy Pros
 #=============
-
+# for set_pos in ['RB']:
 for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
 
     try:
@@ -137,11 +137,21 @@ proj_pl = proj_pl.rename(columns={'playerName': 'player'})
 rank1_pl = rank1_pl.rename(columns={'Name': 'player'})
 
 
-if set_week==6 and set_year==2022:
-    old = dm.read("SELECT * FROM PFF_Proj_Ranks", 'Pre_PlayerData')
-    old = old[(old.player=='Tevin Coleman') & (old.week==16) & (old.year==2020)]
-    old = old.assign(offTeam='SF', defTeam='ATL', week=6, year=2022, salary=4500, byeWeek=9)
-    proj_pl = pd.concat([proj_pl, old], axis=0)
+# if set_week==7 and set_year==2022:
+#     old = dm.read("SELECT * FROM PFF_Proj_Ranks", 'Pre_PlayerData')
+#     old = old[(old.player=='Sterling Shepard') & (old.week==3) & (old.year==2022)]
+#     old = old.assign(player="Wan'Dale Robinson", defTeam='JAC', week=7, year=2022, salary=4500, byeWeek=9)
+#     proj_pl = pd.concat([proj_pl, old], axis=0)
+
+    # rank1_pl.loc[rank1_pl.player=='Clyde Edwards Helaire', 'player'] = 'placehold'
+    # rank1_pl.loc[rank1_pl.player=='Jerick Mckinnon', 'player'] = 'Clyde Edwards Helaire'
+    # rank1_pl.loc[rank1_pl.player=='Isiah Pacheco', 'player'] = 'Jerick Mckinnon'
+    # rank1_pl.loc[rank1_pl.player=='placehold', 'player'] = 'Isiah Pacheco'
+
+    # proj_pl.loc[proj_pl.player=='Clyde Edwards Helaire', 'player'] = 'placehold'
+    # proj_pl.loc[proj_pl.player=='Jerick Mckinnon', 'player'] = 'Clyde Edwards Helaire'
+    # proj_pl.loc[proj_pl.player=='Isiah Pacheco', 'player'] = 'Jerick Mckinnon'
+    # proj_pl.loc[proj_pl.player=='placehold', 'player'] = 'Isiah Pacheco'
 
 #%%
 

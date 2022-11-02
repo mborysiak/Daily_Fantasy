@@ -38,7 +38,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [7]
+run_weeks = [5]
 
 run_params = {
     
@@ -69,11 +69,11 @@ model_type = 'full_model'
 # set weights for running model
 r2_wt = 0
 sera_wt = 1
-matt_wt = 0
+matt_wt = 1
 brier_wt = 1
 
 # set version and iterations
-vers = 'sera1_rsq0_brier1_matt0_lowsample_perc'
+vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 
 #----------------
 # Data Loading
@@ -299,12 +299,13 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
         proba = False
 
     # fit and append the ADP model
+    import time
+    start = time.time()
     best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=run_params['n_iters'], n_splits=run_params['n_splits'],
                                                              col_split='game_date', time_split=run_params['cv_time_input'],
                                                              bayes_rand=run_params['opt_type'], proba=proba,
                                                              random_seed=(i+7)*19+(i*12)+6, alpha=alpha)
-
-
+    print('Time Elapsed:', np.round((time.time()-start)/60,1), 'Minutes')
     best_models = Parallel(n_jobs=-1, verbose=0)(delayed(post_model_fit)(bm, X, y) for bm in best_models)
     
     out_dict = update_output_dict(model_obj, model_name, str(alpha), out_dict, oof_data, best_models)
@@ -397,13 +398,13 @@ for w in run_weeks:
         df, run_params = create_game_date(df, run_params)
         df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
-        #=========
-        # Run Models
-        #=========
-
 
         # set up blank dictionaries for all metrics
         out_reg, out_class, out_quant = output_dict(), output_dict(), output_dict()
+
+        #=========
+        # Run Models
+        #=========
 
         # run all other models
         model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']

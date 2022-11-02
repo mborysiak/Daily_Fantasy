@@ -14,7 +14,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 6
+set_week = 8
 contest = 'Million'
 
 #%%
@@ -525,9 +525,9 @@ player_ownership = dm.read(f"SELECT * FROM Contest_Ownership WHERE Contest='{con
 
 #%%
 
-pred_version = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
-ens_version = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2'
-std_dev_type = 'pred_spline_class80_matt0_brier1'
+pred_version = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+ens_version = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
+std_dev_type = 'pred_spline_class80_matt1_brier1_kfold3'
 
 def create_constraint_metrics(prob_table, ownership_table, pred_version, ensemble_vers, std_dev_type, week, year):
 

@@ -29,8 +29,8 @@ import pandas_bokeh
 pandas_bokeh.output_notebook()
 
 import warnings
-warnings.filterwarnings("ignore", category=RuntimeWarning) 
-warnings.filterwarnings("ignore", category=UserWarning) 
+# warnings.filterwarnings("ignore", category=RuntimeWarning) 
+# warnings.filterwarnings("ignore", category=UserWarning) 
 
 from sklearn import set_config
 set_config(display='text')
@@ -167,10 +167,13 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
                                skm.piece('lr')])
 
     elif stack_model:
+        if skm.model_obj=='class': kb = 'k_best_c'
+        else: kb = 'k_best'
+
         pipe = skm.model_pipe([
                             skm.piece('random_sample'),
                             skm.piece('std_scale'), 
-                            skm.piece('k_best'),
+                            skm.piece(kb),
                             skm.piece(m)
                         ])
 
@@ -211,8 +214,6 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
                                 skm.piece('k_best'), 
                                 skm.piece(m)
                                 ])
-        pipe.steps[-1][-1].alpha = alpha
-
 
     # get the params for the current pipe and adjust if needed
     params = skm.default_params(pipe, 'rand')
@@ -223,11 +224,18 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
                                             [ 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints']
                                         ]
         params['k_best__k'] = range(1, 9)
+    
+    if skm.model_obj == 'quantile':
+        if m == 'qr_q': pipe.steps[-1][-1].quantile = alpha
+        elif m in ('rf_q', 'knn_q'): pipe.steps[-1][-1].q = alpha
+        else: pipe.steps[-1][-1].alpha = alpha
+
     if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
     if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
+    
     if stack_model: 
         params['random_sample__frac'] = np.arange(0.3, 1, 0.05)
-        params['k_best__k'] = range(1, 30)
+        params[f'{kb}__k'] = range(1, 30)
 
     return pipe, params
 
@@ -272,26 +280,29 @@ def add_calibrator_to_pipe(pipe, params):
 
 def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores, 
                      stack_val_pred, model_obj='reg', run_adp=True, show_plots=True,
-                     calibrate=False, num_k_folds=3):
+                     calibrate=False, num_k_folds=3, print_coef=True):
 
     print(f'\n{final_m}')
 
     if model_obj == 'class': proba = True
     else: proba = False
 
+    if model_obj == 'quantile': alpha = 0.8
+    else: alpha = None
+
     skm, _, _ = get_skm(pd.concat([X_stack, y_stack], axis=1), model_obj, to_drop=[])
-    pipe, params = get_full_pipe(skm, final_m, stack_model=True)
+    pipe, params = get_full_pipe(skm, final_m, stack_model=True, alpha=alpha)
     
     if calibrate: pipe, params = add_calibrator_to_pipe(pipe, params)
 
-    if 'gbmh' in final_m or (calibrate and model_obj=='class'): print_coef = False
-    else: print_coef=True
+    if 'gbmh' in final_m or (calibrate and model_obj=='class') or 'knn' in final_m: print_coef = False
+    else: print_coef = print_coef
 
     best_model, stack_scores, stack_pred = skm.best_stack(pipe, params,
-                                                          X_stack, y_stack, n_iter=50, 
+                                                          X_stack, y_stack, n_iter=run_params['n_iters'], 
                                                           run_adp=run_adp, print_coef=print_coef,
                                                           sample_weight=False, proba=proba,
-                                                          num_k_folds=num_k_folds,
+                                                          num_k_folds=num_k_folds, alpha=alpha,
                                                           random_state=(i*12)+(i*17))
 
     best_models.append(best_model)
@@ -311,6 +322,7 @@ def fit_and_predict(m, df_predict, X, y, proba):
         check_is_fitted(m)
     except: 
         m.fit(X, y)
+    # m.fit(X,y)
 
     if proba and 'calibrate' in vers and type(m.steps[-1][1])!=sklearn.calibration.CalibratedClassifierCV:
         m = CalibratedClassifierCV(m, cv='prefit')
@@ -359,7 +371,7 @@ def stack_predictions(X_predict, best_models, final_models, model_obj='reg'):
     predictions = pd.DataFrame()
     for bm, fm in zip(best_models, final_models):
         
-        if model_obj=='reg': cur_prediction = np.round(bm.predict(X_predict), 2)
+        if model_obj in ('reg', 'quantile'): cur_prediction = np.round(bm.predict(X_predict), 2)
         elif model_obj=='class': cur_prediction = np.round(bm.predict_proba(X_predict)[:,1], 3)
         
         cur_prediction = pd.Series(cur_prediction, name=fm)
@@ -427,13 +439,17 @@ def average_stack_models(scores, final_models, y_stack, stack_val_pred, predicti
     return best_val, best_predictions, best_score
 
 
-def create_output(output_start, predictions, predictions_class=None):
+def create_output(output_start, predictions, predictions_class=None, predictions_quantile=None):
 
     output = output_start.copy()
     output['pred_fp_per_game'] = predictions.mean(axis=1)
+
     if predictions_class is not None: 
         output['pred_fp_per_game_class'] = predictions_class.mean(axis=1)
-        
+
+    if predictions_quantile is not None:
+        output['pred_fp_per_game_quantile'] = predictions_quantile.mean(axis=1)
+
     output = output.sort_values(by='dk_salary', ascending=False)
     output['dk_rank'] = range(len(output))
     output = output.sort_values(by='pred_fp_per_game', ascending=False).reset_index(drop=True)
@@ -512,16 +528,22 @@ def assign_sd_max(output, df_predict, sd_df, sd_cols, sd_m, max_m, min_m, iso_sp
     
     return output
 
-def val_std_dev(model_output_path, output, best_val, best_val_class=None, metrics={'pred_fp_per_game': 1}, iso_spline='iso', show_plot=True):
+def val_std_dev(model_output_path, output, best_val, best_val_class=None, best_val_quant=None,
+                metrics={'pred_fp_per_game': 1}, iso_spline='iso', show_plot=True):
 
-    val_data = validation_compare_df(model_output_path, best_val)
+    _, _, _, _, oof_data = mf.load_all_pickles(model_output_path, 'reg')
+    val_data = oof_data['reg_adp'][['player', 'team', 'year', 'week', 'y_act']].reset_index(drop=True)
+    
+    val_data['pred_fp_per_game'] = best_val.mean(axis=1)
 
     if 'pred_fp_per_game_class' in metrics.keys() and best_val_class is not None:
         val_data['pred_fp_per_game_class'] = best_val_class.mean(axis=1)
+    
+    if 'pred_fp_per_game_quantile' in metrics.keys() and best_val_quant is not None:
+        val_data['pred_fp_per_game_quantile'] = best_val_quant.mean(axis=1)
         
     sd_max_met = StandardScaler().fit(val_data[list(metrics.keys())]).transform(output[list(metrics.keys())])
-    if 'pred_fp_per_game_class' in metrics.keys() and best_val_class is not None:
-        sd_max_met = np.mean(sd_max_met, axis=1)
+    sd_max_met = np.mean(sd_max_met, axis=1)
 
     if iso_spline=='iso':
         sd_m, max_m, min_m = get_std_splines(val_data, metrics, show_plot=show_plot, k=2, 
@@ -599,11 +621,11 @@ def save_val_to_db(model_output_path, best_val, run_params, model_obj='reg'):
                 '''
     
     if model_obj == 'reg':
-        dm.delete_from_db('Simulation', f'Model_Validations', del_str)
+        dm.delete_from_db('Simulation', f'Model_Validations', del_str, create_backup=False)
         dm.write_to_db(df, 'Simulation', 'Model_Validations', 'append')
 
     elif model_obj == 'class': 
-        dm.delete_from_db('Simulation', f'Model_Validations_Class', del_str)
+        dm.delete_from_db('Simulation', f'Model_Validations_Class', del_str, create_backup=False)
         dm.write_to_db(df, 'Simulation', 'Model_Validations_Class', 'append')
 
 def save_test_to_db(df, run_params):
@@ -625,7 +647,7 @@ def save_test_to_db(df, run_params):
                   AND set_year={run_params['set_year']}
                   AND model_type='{model_type}'
                 '''
-    dm.delete_from_db('Simulation', f'Model_Test_Validations', del_str)
+    dm.delete_from_db('Simulation', f'Model_Test_Validations', del_str, create_backup=False)
     dm.write_to_db(df, 'Simulation', 'Model_Test_Validations', 'append')
 
 
@@ -658,7 +680,7 @@ def save_prob_to_db(output, run_params):
                   AND set_year={run_params['set_year']}
                   AND model_type='{model_type}'
                 '''
-    dm.delete_from_db('Simulation', f'Predicted_Probability', del_str)
+    dm.delete_from_db('Simulation', f'Predicted_Probability', del_str, create_backup=False)
     dm.write_to_db(df, 'Simulation', 'Predicted_Probability', 'append')
 
 
@@ -713,7 +735,7 @@ run_params = {
     'val_week_min': 14,
 
     # opt params
-    'n_iters': 25,
+    'n_iters': 50,
     'n_splits': 5,
 
     # other parameters
@@ -723,40 +745,46 @@ run_params = {
 }
 
 min_include = 2
-show_plot= True
-class_std = True
+show_plot= False
+print_coef = False
+num_k_folds = 3
 
 r2_wt = 1
 sera_wt = 10
 brier_wt = 1
-matt_wt = 0
+matt_wt = 1
 
-calibrate = True
+calibrate = False
 
 # set the model version
 set_weeks = [
-          1,2,3,4,5,6
+        1, 2, 3, 4, 5, 6, 7, 8
         ]
 
 pred_versions = [
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-]
+                'sera1_rsq0_brier1_matt1_lowsample_perc',
+                 'sera1_rsq0_brier1_matt1_lowsample_perc',
+                  'sera1_rsq0_brier1_matt1_lowsample_perc',
+                   'sera1_rsq0_brier1_matt1_lowsample_perc',
+                    'sera1_rsq0_brier1_matt1_lowsample_perc',
+                     'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+                      'sera1_rsq0_brier1_matt0_lowsample_perc',
+                       'sera1_rsq0_brier1_matt1_lowsample_perc',
+                ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',                  
- ]
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                     ]
 
-std_dev_type = 'pred_spline_class80_matt0_brier1_calibrate_check'
+std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
 for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
@@ -797,38 +825,50 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, 
                                            models_reg, models_class, models_quant)
 
-        if class_std:# and set_pos!='Defense':
-            # create the stacking models
-        
-            final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c']
-            if not calibrate: final_models.append('xgb_c')
-            stack_val_pred = pd.DataFrame(); scores = []; best_models = []
-            for i, fm in enumerate(final_models):
-                best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack_class, best_models, 
-                                                                        scores, stack_val_pred, model_obj='class',
-                                                                        run_adp=False, show_plots=False, calibrate=calibrate)
+        # class metrics
+        final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
+        stack_val_pred = pd.DataFrame(); scores = []; best_models = []
+        for i, fm in enumerate(final_models):
+            best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack_class, best_models, 
+                                                                    scores, stack_val_pred, model_obj='class',
+                                                                    run_adp=False, show_plots=False, 
+                                                                    calibrate=calibrate, num_k_folds=num_k_folds,
+                                                                    print_coef=print_coef)
 
-                if show_plot: show_calibration_curve(y_stack_class, stack_val_pred[fm], n_bins=8)
+            if show_plot: show_calibration_curve(y_stack_class, stack_val_pred[fm], n_bins=8)
 
-            # get the best stack predictions and average
-            predictions = stack_predictions(X_predict, best_models, final_models, model_obj='class')
-            best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_class, stack_val_pred, 
-                                                                             predictions, model_obj='class', show_plot=show_plot, min_include=min_include-1)
+        predictions = stack_predictions(X_predict, best_models, final_models, model_obj='class')
+        best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_class, stack_val_pred, 
+                                                                            predictions, model_obj='class', show_plot=show_plot, 
+                                                                            min_include=min_include)
 
-            if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
-            save_val_to_db(model_output_path, best_val_class, run_params, model_obj='class')
+        if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
+        save_val_to_db(model_output_path, best_val_class, run_params, model_obj='class')
 
-        else:
-            best_val_class = None; best_predictions_class = None
-
-        # create the stacking models
-        final_models = ['ridge', 'lasso', 'huber', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm', 'gbmh']
+        # quantile regression metrics
+        final_models = ['qr_q', 'gbm_q', 'lgbm_q', 'rf_q', 'knn_q']
         stack_val_pred = pd.DataFrame(); scores = []; best_models = []
         for i, fm in enumerate(final_models):
             best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, 
-                                                                   scores, stack_val_pred, show_plots=show_plot)
+                                                                    scores, stack_val_pred, model_obj='quantile',
+                                                                    run_adp=False, show_plots=show_plot, 
+                                                                    calibrate=calibrate, num_k_folds=num_k_folds,
+                                                                    print_coef=print_coef)
 
-        # get the best stack predictions and average
+        predictions = stack_predictions(X_predict, best_models, final_models, model_obj='quantile')
+        best_val_quant, best_predictions_quant, _ = average_stack_models(scores, final_models, y_stack, stack_val_pred, 
+                                                                        predictions, model_obj='quantile', show_plot=show_plot, 
+                                                                        min_include=min_include)
+
+
+        # create the stacking models
+        final_models = ['ridge', 'lasso', 'huber', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm', 'gbmh', 'knn']
+        stack_val_pred = pd.DataFrame(); scores = []; best_models = []
+        for i, fm in enumerate(final_models):
+            best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, 
+                                                                   scores, stack_val_pred, show_plots=show_plot,
+                                                                   num_k_folds=num_k_folds, print_coef=print_coef)
+
         predictions = stack_predictions(X_predict, best_models, final_models)
         best_val, best_predictions, best_score = average_stack_models(scores, final_models, y_stack, stack_val_pred, 
                                                                       predictions, model_obj='reg',
@@ -836,12 +876,11 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         save_val_to_db(model_output_path, best_val, run_params)
         
         # create the output and add standard devations / max scores
-        output = create_output(output_start, best_predictions, best_predictions_class)
+        output = create_output(output_start, best_predictions, best_predictions_class, best_predictions_quant)
         save_prob_to_db(output, run_params)
 
-        if class_std: metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1}
-        else: metrics = {'pred_fp_per_game': 1}
-        output = val_std_dev(model_output_path, output, best_val, best_val_class, metrics=metrics, 
+        metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1, 'pred_fp_per_game_quantile': 1}
+        output = val_std_dev(model_output_path, output, best_val, best_val_class, best_val_quant, metrics=metrics, 
                              iso_spline='spline', show_plot=show_plot)
         
         try:  
@@ -853,88 +892,66 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
             if show_plot: mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
             output = output.drop('actual_pts', axis=1)
         except:
-            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class', 'std_dev', 'min_score', 'max_score']])
+            print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class', 
+                                   'pred_fp_per_game_quantile', 'std_dev', 'min_score', 'max_score']])
 
         save_output_to_db(output, run_params)
 
 # print('All Runs Finished')
 #%%
 
+results = []
+for reg_wt in [0,0.5,1,1.5]:
+    for class_wt in [0,0.5, 1, 1.5]:
+        for quant_wt in [0,0.5,1,1.5]: 
+            if reg_wt + class_wt + quant_wt > 0:
+                # create the output and add standard devations / max scores
+                output = create_output(output_start, best_predictions, best_predictions_class, best_predictions_quant)
 
+                metrics = {'pred_fp_per_game': reg_wt, 'pred_fp_per_game_class': class_wt, 'pred_fp_per_game_quantile': quant_wt}
+                output = val_std_dev(model_output_path, output, best_val, best_val_class, best_val_quant, metrics=metrics, 
+                                        iso_spline='spline', show_plot=False)
 
+                output = add_actual(output)
+                output = output.rename(columns={'actual_pts': 'y_act'})
+                output, _ = create_game_date(output, run_params)
 
-#%%
+                # set up the target variable to be categorical based on Xth percentile
+                cut_perc = output.groupby('game_date')['y_act'].apply(lambda x: np.percentile(x, 80))
+                output = pd.merge(output, cut_perc.reset_index().rename(columns={'y_act': 'cut_perc'}), on=['game_date'])
+                output['y_act_class'] = np.where(output.y_act >= output.cut_perc, 1, 0)
 
-print('Calibrate:', calibrate)
+                # output = output.sort_values(by='pred_fp_per_game_class', ascending=False).reset_index(drop=True)
+                # show_calibration_curve(output.y_act_class, output.pred_fp_per_game_class, n_bins=8)
 
-# create the output and add standard devations / max scores
-output = create_output(output_start, best_predictions, best_predictions_class)
+                # display(output[['player', 'week', 'year', 'y_act', 'y_act_class', 'cut_perc', 
+                #         'pred_fp_per_game', 'pred_fp_per_game_class', 'pred_fp_per_game_quantile',
+                #          'std_dev', 'min_score', 'max_score']].iloc[:50])
 
-if class_std and set_pos!='Defense': metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1}
-else: metrics = {'pred_fp_per_game': 1}
-output = val_std_dev(model_output_path, output, best_val, best_val_class, metrics=metrics, 
-                    iso_spline='spline', show_plot=show_plot)
+                # display(output.loc[output.week==8, ['player', 'week', 'year', 'y_act', 'y_act_class', 'cut_perc', 
+                #         'pred_fp_per_game', 'pred_fp_per_game_class', 'pred_fp_per_game_quantile',
+                #         'std_dev', 'min_score', 'max_score']])
 
-output = add_actual(output)
-output = output.rename(columns={'actual_pts': 'y_act'})
-output, _ = create_game_date(output, run_params)
+                pct_min = output[output.y_act < output.min_score].shape[0] / output.shape[0]
+                pct_max = output[output.y_act > output.max_score].shape[0] / output.shape[0]
 
-# set up the target variable to be categorical based on Xth percentile
-cut_perc = output.groupby('game_date')['y_act'].apply(lambda x: np.percentile(x, 80))
-output = pd.merge(output, cut_perc.reset_index().rename(columns={'y_act': 'cut_perc'}), on=['game_date'])
-output['y_act_class'] = np.where(output.y_act >= output.cut_perc, 1, 0)
+                one_std = output[(output.y_act < (output.pred_fp_per_game + 1*output.std_dev)) & \
+                    (output.y_act > (output.pred_fp_per_game - 1*output.std_dev))].shape[0] / output.shape[0]
+                one_std -= .68
+                
+                two_std = output[(output.y_act < (output.pred_fp_per_game + 2*output.std_dev)) & \
+                    (output.y_act > (output.pred_fp_per_game - 2*output.std_dev))].shape[0] / output.shape[0]
+                two_std -= .95
 
-output = output.sort_values(by='pred_fp_per_game_class', ascending=False).reset_index(drop=True)
-show_calibration_curve(output.y_act_class, output.pred_fp_per_game_class, n_bins=8)
+                three_std = output[(output.y_act < (output.pred_fp_per_game + 3*output.std_dev)) & \
+                    (output.y_act > (output.pred_fp_per_game - 3*output.std_dev))].shape[0] / output.shape[0]
+                three_std -= .997
 
-display(output[['player', 'week', 'year', 'y_act', 'y_act_class', 'cut_perc', 
-        'pred_fp_per_game', 'pred_fp_per_game_class', 'std_dev', 'min_score', 'max_score']].iloc[:50])
-display(output.loc[output.week==6, ['player', 'week', 'year', 'y_act', 'y_act_class', 'cut_perc', 
-        'pred_fp_per_game', 'pred_fp_per_game_class', 'std_dev', 'min_score', 'max_score']])
+                results.append([reg_wt, class_wt, quant_wt, pct_min, pct_max, one_std, two_std, three_std])
+                results_df = pd.DataFrame(results, columns=['reg_wt', 'class_wt', 'quant_wt', 'pct_min', 'pct_max', 'one_std', 'two_std', 'three_std'])
+                results_df['total_error'] = results_df[['pct_min', 'pct_max', 'one_std', 'two_std', 'three_std']].abs().sum(axis=1)
+results_df.sort_values(by='total_error')
 
-print(output[output.y_act < output.min_score].shape[0] / output.shape[0])
-print(output[output.y_act > output.max_score].shape[0] / output.shape[0])
-
-print(output[(output.y_act < (output.pred_fp_per_game + 1*output.std_dev)) & \
-       (output.y_act > (output.pred_fp_per_game - 1*output.std_dev))].shape[0] / output.shape[0])
-print(output[(output.y_act < (output.pred_fp_per_game + 2*output.std_dev)) & \
-       (output.y_act > (output.pred_fp_per_game - 2*output.std_dev))].shape[0] / output.shape[0])
-print(output[(output.y_act < (output.pred_fp_per_game + 3*output.std_dev)) & \
-       (output.y_act > (output.pred_fp_per_game - 3*output.std_dev))].shape[0] / output.shape[0])
-
-#%%
-
-final_models = ['lr_c', 'lgbm_c', 'xgb_c', 'rf_c', 'gbm_c', 'gbmh_c']
-stack_val_pred = pd.DataFrame(); scores = []; best_models = []
-best_models, scores, stack_val_pred = run_stack_models('lr_c', 10, X_stack, y_stack_class, best_models, 
-                                                                        scores, stack_val_pred, model_obj='class',
-                                                                        run_adp=False, show_plots=False, calibrate=calibrate)
-
-#%%
-
-
-
-def param_select(params):
-    param_select = {}
-    for k, v in params.items():
-        param_select[k] = np.random.choice(v)
-    return param_select
-
-
-skm, _, _ = get_skm(pd.concat([X_stack, y_stack], axis=1), 'class', to_drop=[])
-pipe, params = get_full_pipe(skm, 'lr_c')
-pipe, params = add_calibrator_to_pipe(pipe, params)
-
-cur_par = param_select(params)
-pipe.set_params(**cur_par) 
-pipe.fit(X_stack, y_stack_class)
-
-pipe.predict_proba(X_stack)
-
-
-# pipe = CalibratedClassifierCV(pipe, cv='prefit')
-# pipe.fit(X_stack, y_stack_class)
-
-# pipe.predict_proba(X_predict)
+# %%
 
 # %%

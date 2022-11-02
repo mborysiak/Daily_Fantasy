@@ -43,7 +43,7 @@ class FootballSimulation:
             player_data = self.get_model_predictions()
 
         # extract the top players for each team
-        self.top_team_players = self.get_top_players_from_team(player_data)
+        self.top_team_players = self.get_top_players_from_team(player_data, top_players=5)
 
         # join in salary data to player data
         self.player_data = self.join_salary(player_data)
@@ -711,21 +711,21 @@ class FootballSimulation:
 # db_path = f'{root_path}/Data/Databases/'
 # dm = DataManage(db_path)
 
-# pred_vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
-# ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2'
-# std_dev_type = 'pred_spline_class80_matt0_brier1'
-# use_covar=True
+# pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+# ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
+# std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
+# use_covar=False
 # use_ownership=True
 
-# week = 6
+# week = 1
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-# num_iters = 200
+# num_iters = 50
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
-#                          full_model_rel_weight=1, covar_type='team_points_trunc', use_covar=use_covar, 
+#                          full_model_rel_weight=0.2, covar_type='team_points_trunc', use_covar=use_covar, 
 #                          use_ownership=use_ownership, salary_remain_max=500)
 
 # min_players_same_team = 'Auto'

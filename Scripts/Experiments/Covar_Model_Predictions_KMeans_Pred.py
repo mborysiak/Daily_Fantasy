@@ -150,28 +150,6 @@ def get_team_totals(df, col):
     return df
 
 
-def get_group_covars(corr_data):
-
-    matrices = pd.DataFrame()
-    percs = np.percentile(corr_data.team_total, [0, 20, 40, 60, 80, 100])
-    for i in range(len(percs) - 1): 
-        perc_low = percs[i]
-        perc_high =  percs[i+1]
-
-        cor_matrix = corr_data[(corr_data.team_total > perc_low) & (corr_data.team_total <= perc_high)]
-        cor_matrix = cor_matrix.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='y_act').fillna(0)
-
-        # calculate covariance matrix and convert to long format
-        cov_matrix = cor_matrix.cov()
-        cov_matrix = cov_matrix.rename_axis(None).rename_axis(None, axis=1)
-        cov_matrix = cov_matrix.stack().reset_index()
-        cov_matrix.columns = ['pos_rank1', 'pos_rank2', 'covariance']
-        cov_matrix['perc'] = i
-
-        matrices = pd.concat([matrices, cov_matrix])
-
-    return matrices, percs
-
 def get_drop_teams(week, year):
 
     import datetime as dt
@@ -191,12 +169,11 @@ def get_drop_teams(week, year):
     return drop_teams
 
 
-def get_predictions(drop_teams, pred_vers,std_dev_type, set_week, set_year, full_model_rel_weight):
+def get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_weight):
 
     preds = dm.read(f'''SELECT * 
                         FROM Model_Predictions 
                         WHERE version='{pred_vers}'
-                              AND std_dev_type = '{std_dev_type}'
                               AND ensemble_vers='{ensemble_vers}'
                               AND week = '{set_week}'
                               AND year = '{set_year}' 
@@ -228,6 +205,22 @@ def get_predictions(drop_teams, pred_vers,std_dev_type, set_week, set_year, full
     preds = preds.assign(week=set_week, year=set_year)
     
     return preds
+
+def get_val_predictions(label, val_table, pred_version, ensemble_vers, std_dev_type, set_week, set_year):
+
+    df = dm.read(f'''SELECT player, 
+                            week, 
+                            year, 
+                            AVG(pred_fp_per_game) {label}
+                     FROM {val_table}
+                     WHERE pred_version='{pred_version}'
+                              AND ensemble_vers='{ensemble_vers}' 
+                              AND std_dev_type='{std_dev_type}'
+                              AND set_week={set_week}
+                              AND set_year={set_year}
+                     GROUP BY player, week, year
+                    ''', 'Simulation')
+    return df
 
 
 def create_player_matches(preds, opponent=False):
@@ -265,23 +258,6 @@ def get_matchups():
                        )
                       WHERE rnk=1''', 'Pre_PlayerData')
 
-
-def apply_group_covar(pred_cov, matrices, percs):
-    pred_cov['perc'] = 0
-    for i in range(len(percs) - 1): 
-
-        perc_low = percs[i]
-        perc_high =  percs[i+1]
-        pred_cov.loc[(pred_cov.team_total > perc_low) & (pred_cov.team_total <= perc_high), ['perc']] = i
-
-    pred_cov.loc[(pred_cov.team_total > perc_high), ['perc']] = i
-    pred_cov = pd.merge(pred_cov, matrices, on=['pos_rank1', 'pos_rank2', 'perc'], how='left')
-
-    pred_cov.loc[pred_cov.player1==pred_cov.player2, 'covariance'] = pred_cov.loc[pred_cov.player1==pred_cov.player2, 'std_dev']**2
-    pred_cov = pd.pivot_table(pred_cov, index='player1', columns='player2', values='covariance').fillna(0)
-    pred_cov = pred_cov.rename_axis(None).rename_axis(None, axis=1)
-
-    return pred_cov
 
 
 def get_near_psd(A):
@@ -327,92 +303,178 @@ def get_mean_points(preds):
 
     return mean_points
 
+def add_projected_stats(df, good_cols=None):
+
+    proj = dm.read("SELECT * FROM PFF_Proj_Ranks", 'Pre_PlayerData')
+    proj = proj[['player', 'week', 'year' , 'passYds', 'passTd', 'passInt', 'rushYds', 'rushTd',
+                'recvReceptions', 'recvYds', 'recvTd']]
+
+    stat_proj_cols = ['passYds', 'passTd', 'passInt', 'rushYds', 'rushTd', 'recvReceptions', 'recvYds', 'recvTd']
+    proj[stat_proj_cols] = proj[stat_proj_cols] * [0.04, 4, -1, 0.1, 6, 1, 0.1, 6]
+    df = pd.merge(df, proj, on=['player', 'week', 'year'], how='left')
+
+    defense = dm.read("SELECT offTeam player, week, year, fantasyPoints defPts FROM PFF_Proj_Ranks", 'Pre_TeamData')
+    df = pd.merge(df, defense, on=['player', 'week', 'year'], how='left').fillna(0)
+    stat_proj_cols.append('defPts')
+
+    df = df[df['pos_rank'].isin(['QB0', 'RB0', 'RB1', 'WR0', 'WR1', 'WR2', 'TE0', 'Defense0', 
+                                 'OppQB0', 'OppWR0', 'OppTE0', 'OppDefense0'])]
+    df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values=stat_proj_cols).fillna(0)
+    df.columns = [f'{c[1]}_{c[0]}' for c in df.columns]
+    # df[[c for c in df.columns if 'Opp' in c]] = df[[c for c in df.columns if 'Opp' in c]] / 2
+    
+    if good_cols is None:
+        good_cols = df.sum()[abs(df.sum()) > 5].index
+    
+    df = df[good_cols]
+    df = df[(df['QB0_passYds'] > 2) & (df['OppQB0_passYds'] > 2)]
+
+    return df, good_cols
+
+
+def add_gambling_lines(df):
+
+    lines = dm.read("SELECT * FROM Gambling_Lines", 'Pre_TeamData')
+
+    away = lines[['away_team', 'away_line', 'away_moneyline', 'over_under', 'week', 'year']]
+    home = lines[['home_team', 'home_line', 'home_moneyline', 'over_under', 'week', 'year']]
+    home = home.assign(is_home=1)
+    away = away.assign(is_home=0)
+    away.columns = ['team', 'line', 'moneyline', 'over_under', 'week', 'year', 'is_home']
+    home.columns = ['team', 'line', 'moneyline', 'over_under', 'week', 'year', 'is_home']
+
+    lines = pd.concat([home, away], axis=0)
+    lines = dc.convert_to_float(lines)
+    lines['implied_points_for'] = (lines.over_under / 2) + (lines.line / 2) 
+    lines['implied_points_against'] = (lines.over_under / 2) - (lines.line / 2) 
+
+    lines = lines[['team', 'week', 'year', 'implied_points_for', 'implied_points_against']]
+    lines[['implied_points_for', 'implied_points_against']] = lines[['implied_points_for', 'implied_points_against']]/5
+    df = df.reset_index()
+    df = pd.merge(df, lines, on=['team', 'week', 'year'], how='left')
+    df = df.set_index(['team', 'week', 'year'])
+
+    return df
+
+
+def get_best_clusters(df, corr_data, min_n=5, max_n=12):
+
+    from sklearn.metrics import davies_bouldin_score
+    from sklearn.model_selection import GridSearchCV
+    from sklearn.cluster import KMeans
+
+    X = df.values
+
+    scores = []
+    n_clusters = []
+    for n in range(min_n, max_n):
+        km = KMeans(n_clusters=n, random_state=1234)
+        km.fit(X)
+
+        cur_score = np.round(davies_bouldin_score(X, km.labels_),3)
+        scores.append(cur_score)
+        n_clusters.append(n)
+
+        # print(f'{n} Clusters:', cur_score)
+
+    best_idx = np.argmin(scores)
+    best_n = n_clusters[best_idx]
+
+    print('Running best n:', best_n)
+    km = KMeans(n_clusters=best_n, random_state=1234)
+    km.fit(X)
+
+    df = df.reset_index()[['team', 'year', 'week']].drop_duplicates()
+    df['label'] = km.labels_
+    corr_data = pd.merge(df, corr_data, on=['team', 'week','year'])
+
+    return corr_data, km
+
+def show_cluster_heatmap(df, km):
+    from collections import Counter
+    import seaborn as sns
+
+    heat_map = df[df['pos_rank'].isin(['QB0', 'RB0', 'RB1', 'WR0', 'WR1', 'TE0', 'Defense0', 
+                                       'OppQB0', 'OppWR0', 'OppTE0', 'OppRB0', 'OppDefense0'])].copy()
+    heat_map = pd.pivot_table(heat_map, index='label', columns='pos_rank', values='y_act', aggfunc='mean')
+
+    print(Counter(km.labels_))
+    sns.set(rc={'figure.figsize':(15,10)})
+    sns.heatmap(heat_map, center=True, annot=True)
+
+
+def show_historical_cluster_teams(df, label):
+    return df.loc[df.label==label, ['team', 'week', 'year']].drop_duplicates() \
+        .groupby(['team', 'year']).agg(cnts=('week', 'count')) \
+            .sort_values(by=['year','cnts'], ascending=False)
+
+def get_kmeans_covar(df):
+    matrices = pd.DataFrame()
+    for i in range(len(set(df.label))): 
+
+        cor_matrix = df[df.label == i]
+        cor_matrix = cor_matrix.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='y_act').fillna(0)
+
+        # calculate covariance matrix and convert to long format
+        cov_matrix = cor_matrix.cov()
+        cov_matrix = cov_matrix.rename_axis(None).rename_axis(None, axis=1)
+        cov_matrix = cov_matrix.stack().reset_index()
+        cov_matrix.columns = ['pos_rank1', 'pos_rank2', 'covariance']
+        cov_matrix['label'] = i
+
+        matrices = pd.concat([matrices, cov_matrix])
+
+    return matrices
+
+def assign_kmean_labels(pred_cov, pred_cov_stats, km):
+
+    pred_cov_labels = pred_cov_stats.reset_index()[['team', 'week','year']].assign(label=km.predict(pred_cov_stats.values))
+    pred_cov = pd.merge(pred_cov, pred_cov_labels, on=['team', 'week', 'year'])
+
+    return pred_cov
+
+def pred_covar_matrix(pred_cov, matrices):
+
+    pred_cov = pd.merge(pred_cov, matrices, on=['pos_rank1', 'pos_rank2', 'label'], how='left')
+
+    pred_cov.loc[pred_cov.player1==pred_cov.player2, 'covariance'] = pred_cov.loc[pred_cov.player1==pred_cov.player2, 'std_dev']**2
+    pred_cov = pd.pivot_table(pred_cov, index='player1', columns='player2', values='covariance').fillna(0)
+    pred_cov = pred_cov.rename_axis(None).rename_axis(None, axis=1)
+
+    return pred_cov
+
+
+
+
 #%%
 
-covar_type = 'team_points_trunc'
+covar_type = 'kmeans_trunc'
 
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8
+   8
         ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
+      2022, 2022, 2022, 2022, 2022
 ]
 
 pred_versions = [   
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                  'sera1_rsq0_brier1_matt1_lowsample_perc',
-                   'sera1_rsq0_brier1_matt1_lowsample_perc',
-                    'sera1_rsq0_brier1_matt1_lowsample_perc',
-                     'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                      'sera1_rsq0_brier1_matt0_lowsample_perc',
-                       'sera1_rsq0_brier1_matt1_lowsample_perc',
-
 ]
 
 ensemble_versions = [
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-
 ]
 
 std_dev_types = [
                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3'
 ]
 
 
 sim_types = [
              'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
 ]
-
-# # set the model version
-# set_weeks = [
-#     8
-# ]
-
-# set_years = [
-#       2022
-# ]
-
-# pred_versions = [
-#                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                
-# ]
-
-# ensemble_versions = [
-#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-#  ]
-
-# std_dev_types = [
-#                 'pred_spline_class80_matt1_brier1_kfold3', 
-# ]
-
-
-# sim_types = [
-#              'ownership_ln_pos'
-# ]
 
 full_model_weights = [0.2, 1, 5]
 
@@ -420,9 +482,9 @@ i = 0
 iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
 for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
-    print('Week:', set_week)
-
     for full_model_rel_weight in full_model_weights:
+
+        val_pred = get_val_predictions('pred_prob', 'Model_Validations', pred_vers, ensemble_vers, std_dev_type, set_week, set_year)
 
         # get the player and opposing player data to create correlation matrices
         player_data, _ = get_max_metrics(set_week, set_year)
@@ -431,23 +493,30 @@ for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         opp_corr_data = opp_corr_data[~opp_corr_data.team.isnull()].reset_index(drop=True)
         corr_data = pd.concat([corr_data, opp_corr_data], axis=0)
 
-        # use  team level data to get the covariance for team-level groups
-        corr_data = get_team_totals(corr_data, 'pos_rank')
-        corr_data = corr_data[['team', 'week', 'year', 'pos_rank', 'max_metric', 'y_act', 'team_total']]
-        matrices, percs = get_group_covars(corr_data)
+        kmean_input, good_cols = add_projected_stats(corr_data, good_cols=None)
+        kmean_input = add_gambling_lines(kmean_input)
+
+        kmeans_out, km = get_best_clusters(kmean_input, corr_data, min_n=5, max_n=12)
+        # show_cluster_heatmap(kmeans_out, km)
+        # show_historical_cluster_teams(kmeans_out, label=8)
+        matrices = get_kmeans_covar(kmeans_out)
 
         # pull in the prediction data and create player matches for position type
         drop_teams = get_drop_teams(set_week, set_year)
-        preds = get_predictions(drop_teams, pred_vers,std_dev_type, set_week, set_year, full_model_rel_weight)
+        preds = get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_weight)
         pred_cov = create_player_matches(preds, opponent=False)
         opp_pred_cov = create_player_matches(preds, opponent=True)
         pred_cov = pd.concat([pred_cov, opp_pred_cov], axis=0).reset_index(drop=True)
 
-        # apply the clusters
-        pred_cov = get_team_totals(pred_cov, 'pos_rank2')
-        pred_cov = apply_group_covar(pred_cov, matrices, percs)
-        
-        pred_cov_final = cleanup_pred_covar(pred_cov)
+        pred_cov_stats = pred_cov[['player2', 'team', 'pos_rank2', 'week', 'year']]
+        pred_cov_stats.columns = ['player', 'team', 'pos_rank', 'week', 'year']
+        pred_cov_stats, _ = add_projected_stats(pred_cov_stats, good_cols)
+        pred_cov_stats = add_gambling_lines(pred_cov_stats)
+
+        pred_cov = assign_kmean_labels(pred_cov, pred_cov_stats, km)
+        pred_cov = pred_covar_matrix(pred_cov, matrices)
+
+        pred_cov_final = cleanup_pred_covar(pred_cov)        
         mean_points = get_mean_points(preds)
 
         if i == 0:
@@ -466,15 +535,23 @@ run_params = pd.DataFrame({
     'ensemble_vers': [ensemble_vers],
     'std_dev_type': [std_dev_type],
     'full_model_rel_weight': ['np.random.choice([1, 5], p=[0.2, 0.8])'],
-    'drop_player_multiple': ['np.random.choice([0, 4], p=[0.5, 0.5])'],
-    'covar_type': ["np.random.choice(['team_points_trunc'], p=[1])"],
-    'use_covar': ["np.random.choice([True, False], p=[0.5, 0.5])"],
-    'use_ownership': ['np.random.choice([True, False], p=[1, 0])'],
-    'adjust_select': ["np.random.choice([True, False], p=[0.7, 0.3])"],
-    'min_players_opp_team': ["np.random.choice([0, 'Auto'], p=[0, 1])"]
+    'drop_player_multiple': ['np.random.choice([0, 4], p=[0.2, 0.8])'],
+    'covar_type': ["np.random.choice(['team_points'], p=[1])"],
+    'use_covar': ["np.random.choice([False], p=[1])"],
+    'use_ownership': ['np.random.choice([True, False], p=[0.8, 0.2])'],
+    'adjust_select': ["np.random.choice([True, False], p=[0.5, 0.5])"],
+    'min_players_opp_team': ["np.random.choice([0], p=[1])"]
 })
 
 dm.delete_from_db('Simulation', 'Run_Params', f"week={set_week} AND year={set_year}")
 dm.write_to_db(run_params, 'Simulation', 'Run_Params', 'append')
 
 #%%
+
+
+
+
+#%%
+
+pred_cov_stats
+# %%
