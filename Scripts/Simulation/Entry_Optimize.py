@@ -57,14 +57,14 @@ std_dev_types = [
 
 
 sim_types = [
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
+             'ownership_ln_pos_2020_qb_first',
+             'ownership_ln_pos_2020_qb_first',
+             'ownership_ln_pos_2020_qb_first',
+             'ownership_ln_pos_2020_qb_first',
+             'ownership_ln_pos_2020_qb_first',
+             'ownership_ln_pos_2020_qb_first',
+             'ownership_ln_pos_2020_qb_first',
+             'ownership_ln_pos_2020_qb_first',
 ]
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
@@ -76,8 +76,8 @@ for repeat_num in range(10):
 
     all_winnings = []
     output_results = []
-    iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
-    for week, year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
+    iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types, sim_types)
+    for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type in iter_cats:
 
         salary_cap = 50000
         pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -227,24 +227,24 @@ for repeat_num in range(10):
         
         d = {
             'adjust_pos_counts': {
-                True: 0.3, 
-                False: 0.7
+                True: 0.5, 
+                False: 0.5
             },
 
             'player_drop_multiple': {
-                0: 0.8, 
-                4: 0.2,
+                0: 0.5, 
+                4: 0.5,
                 6: 0
             },
                         
             'matchup_drop': {
-                0: 0.8,
-                1: 0.2,
+                0: 1,
+                1: 0,
             },
 
             'top_n_choices': {
-                0: 0.8,
-                1: 0.2,
+                0: 0.5,
+                1: 0.5,
                 2: 0,
                 4: 0,
             },
@@ -262,27 +262,27 @@ for repeat_num in range(10):
             },
 
             'min_player_same_team': {
-                'Auto': 0.8,
+                'Auto': 1,
                 2: 0,
                 3: 0,
-                0: 0.2
+                0: 0
             },
 
             'min_players_opp_team': {
-                0: 0.2,
-                'Auto': 0.8
+                0: 0,
+                'Auto': 1
             },
 
             'use_ownership': {
-                True: 0.8,
-                False: 0.2
+                True: 1,
+                False: 0
             },
 
             'max_salary_remain': {
                 None: 0,
                 200: 0,
-                300: 0,
-                400: 1,
+                300: 0.5,
+                400: 0.5,
                 500: 0,
                 1000: 0
             }
@@ -382,6 +382,7 @@ for repeat_num in range(10):
 
     # save out the high level results of the overall week
     output_results = pd.DataFrame(output_results, columns=['week', 'year', 'pred_vers', 'ensemble_vers', 'std_dev_type', 'avg_winnings'])
+    output_results['sim_type'] = sim_type
     output_results['trial_num'] = trial_num
     output_results['repeat_num'] = repeat_num
     dm.write_to_db(output_results, 'Results', 'Entry_Optimize_Results', 'append')
@@ -405,6 +406,5 @@ dm.write_to_db(output, 'Results', 'Entry_Optimize_Params', 'append')
 
 # df = dm.read(f"SELECT * FROM Entry_Optimize_Results WHERE trial_num!={to_delete_num}", 'Results')
 # dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
-
 
 # %%

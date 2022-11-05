@@ -318,11 +318,11 @@ def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores,
 def fit_and_predict(m, df_predict, X, y, proba):
     import sklearn
 
-    try: 
-        check_is_fitted(m)
-    except: 
-        m.fit(X, y)
-    # m.fit(X,y)
+    # try: 
+    #     check_is_fitted(m)
+    # except: 
+    #     m.fit(X, y)
+    m.fit(X,y)
 
     if proba and 'calibrate' in vers and type(m.steps[-1][1])!=sklearn.calibration.CalibratedClassifierCV:
         m = CalibratedClassifierCV(m, cv='prefit')
@@ -708,7 +708,7 @@ def save_output_to_db(output, run_params):
                 AND model_type='{model_type}'
                 AND rush_pass="{run_params['rush_pass']}"
                 '''
-    dm.delete_from_db('Simulation', 'Model_Predictions', del_str)
+    dm.delete_from_db('Simulation', 'Model_Predictions', del_str, create_backup=False)
     dm.write_to_db(output, 'Simulation', f'Model_Predictions', 'append')
 
 #%%
@@ -745,7 +745,7 @@ run_params = {
 }
 
 min_include = 2
-show_plot= False
+show_plot= True
 print_coef = False
 num_k_folds = 3
 
@@ -758,7 +758,8 @@ calibrate = False
 
 # set the model version
 set_weeks = [
-        1, 2, 3, 4, 5, 6, 7, 8
+       # 1, 2, 3, 4, 5, 6, 7, 
+        9
         ]
 
 pred_versions = [
@@ -953,5 +954,125 @@ for reg_wt in [0,0.5,1,1.5]:
 results_df.sort_values(by='total_error')
 
 # %%
+
+def select_main_slate_teams(df):
+
+    import datetime as dt
+
+    good_teams = dm.read(f'''
+                    SELECT away_team team, gametime, week, year 
+                    FROM Gambling_Lines 
+                    WHERE year >= 2020
+                    UNION
+                    SELECT home_team team, gametime, week, year 
+                    FROM Gambling_Lines
+                    WHERE year >= 2020
+                ''', 'Pre_TeamData')
+
+    good_teams.gametime = pd.to_datetime(good_teams.gametime)
+    good_teams['day_of_week'] = good_teams.gametime.apply(lambda x: x.weekday())
+    good_teams['hour_in_day'] = good_teams.gametime.apply(lambda x: x.hour)
+
+    good_teams = good_teams[(good_teams.day_of_week==6) & (good_teams.hour_in_day <= 17) & (good_teams.hour_in_day > 10)]
+    good_teams = good_teams[['team', 'week', 'year']]
+
+    if set_pos == 'Defense': 
+        good_teams = good_teams.rename(columns={'team': 'player'})
+        df = pd.merge(df, good_teams, on=['player', 'week', 'year'])
+
+    else:
+        df = pd.merge(df, good_teams, on=['team', 'week', 'year'])
+
+    return df
+
+
+def add_sal_columns(df):
+    
+    for c in df.columns:
+        if 'expert' in c: df[c+'_salary'] = df[c] * df.dk_salary
+        if 'proj' in c: df[c+'_salary'] = df[c] / df.dk_salary
+    
+    return df
+
+def predict_million_df(df, run_params):
+
+    df = select_main_slate_teams(df)
+
+    df = df.drop('y_act', axis=1)
+    top_players = dm.read("SELECT * FROM Top_Players", "DK_Results").drop('counts', axis=1)
+
+    df = pd.merge(df, top_players, on=['player', 'week', 'year'], how='left')
+    df = df.fillna({'y_act': 0})
+
+    df_train_mil, df_predict_mil, _, min_samples_mil = train_predict_split(df, run_params)
+    run_params['n_splits'] = 4
+
+    return df_train_mil, df_predict_mil, min_samples_mil, run_params
+
+
+df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
+
+# load the regregression predictions
+pred, actual, models_mil, scores, full_hold_mil = mf.load_all_pickles(model_output_path, 'million')
+X_stack_mil, y_stack_mil = mf.X_y_stack('mil', full_hold_mil, pred, actual)
+
+
+_, X, y = get_skm(df_train_mil, 'class', to_drop=run_params['drop_cols'])
+X_predict_mil = create_stack_predict(df_predict_mil, models_mil, X, y, proba=True)
+
+
+show_plot=True
+
+# class metrics
+final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
+stack_val_pred = pd.DataFrame(); scores = []; best_models = []
+for i, fm in enumerate(final_models):
+    best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack_mil, y_stack_mil, best_models, 
+                                                            scores, stack_val_pred, model_obj='class',
+                                                            run_adp=False, show_plots=False, 
+                                                            calibrate=calibrate, num_k_folds=num_k_folds,
+                                                            print_coef=print_coef)
+
+    if show_plot: show_calibration_curve(y_stack_mil, stack_val_pred[fm], n_bins=8)
+
+predictions = stack_predictions(X_predict_mil, best_models, final_models, model_obj='class')
+best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_mil, stack_val_pred, 
+                                                                    predictions, model_obj='class', show_plot=show_plot, 
+                                                                    min_include=min_include)
+
+if show_plot: show_calibration_curve(y_stack_mil, best_val_class.mean(axis=1), n_bins=8)
+
+pd.concat([df_predict_mil[['player']], pd.Series(best_predictions_class.mean(axis=1), name='mil_pred')], axis=1).sort_values(by='mil_pred')
+
+
+# %%
+
+pred, actual, models_mil, scores, full_hold_mil = mf.load_all_pickles(model_output_path, 'million')
+scores = [s[1] for s in scores]
+
+final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
+final_models = ['class_'+m+'_million' for m in final_models]
+best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_mil, X_stack_mil, 
+                                                                    X_predict_mil, model_obj='class', show_plot=show_plot, 
+                                                                    min_include=min_include)
+
+pd.concat([df_predict_mil[['player']], pd.Series(best_predictions_class.mean(axis=1), name='mil_pred')], axis=1).sort_values(by='mil_pred')
+
+# %%
+
+
+pred, actual, models_reg, scores, full_hold_reg = mf.load_all_pickles(model_output_path, 'reg')
+scores = [s[1] for s in scores.values()]
+
+final_models = [c for c in X_stack if 'reg' in c]
+best_val_class, best_predictions_reg, _ = average_stack_models(scores, final_models, y_stack, X_stack, 
+                                                                    X_predict, model_obj='reg', show_plot=show_plot, 
+                                                                    min_include=min_include)
+
+output_no_stack = pd.concat([df_predict[['player']], pd.Series(best_predictions_reg.mean(axis=1), name='reg_pred')], axis=1).sort_values(by='reg_pred', ascending=False)
+output_no_stack = output_no_stack.assign(week=w, year=run_params['set_year'])
+output_no_stack = add_actual(output_no_stack)
+display(output_no_stack)
+if show_plot: mf.show_scatter_plot(output_no_stack.reg_pred, output_no_stack.actual_pts)
 
 # %%

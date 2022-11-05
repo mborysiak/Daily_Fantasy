@@ -389,7 +389,7 @@ sim_types = [
 
 # # set the model version
 # set_weeks = [
-#     8
+#     9
 # ]
 
 # set_years = [
@@ -406,7 +406,7 @@ sim_types = [
 #  ]
 
 # std_dev_types = [
-#                 'pred_spline_class80_matt1_brier1_kfold3', 
+#                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
 # ]
 
 
@@ -414,7 +414,7 @@ sim_types = [
 #              'ownership_ln_pos'
 # ]
 
-full_model_weights = [0.2, 1, 5]
+# full_model_weights = [0.2, 1, 5]
 
 i = 0
 iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
@@ -465,13 +465,13 @@ run_params = pd.DataFrame({
     'pred_vers': [pred_vers],
     'ensemble_vers': [ensemble_vers],
     'std_dev_type': [std_dev_type],
-    'full_model_rel_weight': ['np.random.choice([1, 5], p=[0.2, 0.8])'],
+    'full_model_rel_weight': ['np.random.choice([0.2, 5], p=[0.5 0.5])'],
     'drop_player_multiple': ['np.random.choice([0, 4], p=[0.5, 0.5])'],
     'covar_type': ["np.random.choice(['team_points_trunc'], p=[1])"],
     'use_covar': ["np.random.choice([True, False], p=[0.5, 0.5])"],
-    'use_ownership': ['np.random.choice([True, False], p=[1, 0])'],
-    'adjust_select': ["np.random.choice([True, False], p=[0.7, 0.3])"],
-    'min_players_opp_team': ["np.random.choice([0, 'Auto'], p=[0, 1])"]
+    'use_ownership': ['np.random.choice([True, False], p=[0.5, 0.5])'],
+    'adjust_select': ["np.random.choice([True, False], p=[0.5, 0.5])"],
+    'min_players_opp_team': ["np.random.choice([0, 'Auto'], p=[0.5, 0.5])"]
 })
 
 dm.delete_from_db('Simulation', 'Run_Params', f"week={set_week} AND year={set_year}")

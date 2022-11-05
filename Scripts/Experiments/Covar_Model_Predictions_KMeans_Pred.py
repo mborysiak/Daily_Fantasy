@@ -11,117 +11,46 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
-def create_sd_max_metrics(df):
- 
-    df['sd_metric'] = (df.fantasyPoints + df.ProjPts + \
-                        df.projected_points + df.roll_std) / 4
-    df['max_metric'] = (df.fantasyPoints + df.ProjPts + \
-                        df.projected_points + df.roll_max) / 4
-    
-    df = df.drop(['fantasyPoints', 'ProjPts', 'projected_points', 
-                    'roll_std', 'roll_max'], axis=1)
 
+def get_val_predictions(label, val_table, pred_version, ensemble_vers, std_dev_type, set_week, set_year):
+
+    df = dm.read(f'''SELECT player, 
+                            team,
+                            pos,
+                            week, 
+                            year, 
+                            AVG(pred_fp_per_game) {label}
+                     FROM {val_table}
+                     WHERE pred_version='{pred_version}'
+                              AND ensemble_vers='{ensemble_vers}' 
+                              AND std_dev_type='{std_dev_type}'
+                              AND set_week={set_week}
+                              AND set_year={set_year}
+                     GROUP BY player, team, pos, week, year
+                    ''', 'Simulation')
     return df
 
 
-def rolling_max_std(pos, week, year):
+def pull_actual_pts(set_pos):
 
-    if pos != 'Defense':
-        df = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
-                        FROM {pos}_Stats
-                        WHERE season >= 2020
-                              AND (
-                                    (week < {week} AND year = {year})
-                                    OR 
-                                    (year < {year})
-                                  )
-                            ''', 'FastR')
-    else:
-        df = dm.read(f'''SELECT defTeam player, defTeam team, week, season year, fantasy_pts y_act
-                         FROM {pos}_Stats
-                         WHERE season >= 2020
-                              AND (
-                                    (week < {week} AND year = {year})
-                                    OR 
-                                    (year < {year})
-                                  )
-                             ''', 'FastR')
+    if set_pos=='Defense': pl = 'defTeam'
+    else: pl = 'player'
 
-    df = df.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
-    df['roll_pts'] = df.y_act#df.groupby(['player'])['y_act'].shift(1)
-    df['roll_max'] = df.groupby('player')['roll_pts'].rolling(8, min_periods=1).apply(lambda x: pd.Series(x).nlargest(2).iloc[-1]).values
-
-    df['roll_mean'] = df.groupby('player')['roll_pts'].rolling(9, min_periods=1).apply(lambda x: pd.Series(x).nlargest(5).iloc[-1]).values
-    df['roll_std'] = df.roll_max - df.roll_mean
-    df = df.drop(['roll_pts', 'roll_mean'], axis=1)
-    
-    most_recent = df.drop_duplicates(subset=['player'], keep='last')
-    most_recent = most_recent[['player', 'roll_max', 'roll_std']]
-    most_recent = most_recent.assign(week=week, year=year)
-    return df, most_recent
+    actual_pts = dm.read(f'''SELECT {pl} player, week, season year, fantasy_pts y_act
+                             FROM {set_pos}_Stats 
+                             WHERE season >= 2020''', 'FastR')
+    return actual_pts
 
 
-def projection_data(pos):
-
-    if pos == 'Defense':
-
-        # pull in the salary and actual results data
-        proj = dm.read('''SELECT team player, team, week, year, projected_points
-                            FROM FantasyPros
-                            WHERE pos='DST'
-                                   ''', 'Pre_PlayerData')
-
-        proj_2 = dm.read('''SELECT offteam player, offTeam team, defTeam, week, year, fantasyPoints, `Proj Pts` ProjPts 
-                            FROM PFF_Expert_Ranks
-                            JOIN (SELECT offteam, week, year, fantasyPoints
-                                  FROM PFF_Proj_Ranks)
-                                  USING (offTeam, week, year)''', 'Pre_TeamData')
-        proj = pd.merge(proj, proj_2, on=['player', 'team', 'week', 'year'])
-    
-    else:
-        # pull in the salary and actual results data
-        proj = dm.read(f'''SELECT player, offTeam team, defTeam, week, year, projected_points, fantasyPoints, ProjPts
-                            FROM PFF_Proj_Ranks
-                            JOIN (SELECT player, team offTeam, week, year, projected_points 
-                                  FROM FantasyPros)
-                                  USING (player, offTeam, week, year)
-                            JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts 
-                                  FROM PFF_Expert_Ranks)
-                                  USING (player, offTeam, week, year)
-                            WHERE position='{pos.lower()}' 
-                                  ''', 'Pre_PlayerData')
-
-    return proj
-
-
-
-def get_max_metrics(week, year):
-
-    corr_data = pd.DataFrame()
-    current_data = pd.DataFrame()
-
+def add_actual(df):
+    all_points = pd.DataFrame()
     for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
-
-        proj = projection_data(pos)
-
-        if pos=='QB':
-            proj = proj[(proj.ProjPts > 8) & (proj.projected_points > 8)].reset_index(drop=True)
-
-        # get the rolling stats data    
-        stats, current = rolling_max_std(pos, week, year)
-
-        # join together and calculate sd and max metrics
-        past = pd.merge(proj, stats, on=['player', 'team', 'week', 'year'])
-        past = create_sd_max_metrics(past)
-        past['pos'] = pos
-        corr_data = pd.concat([corr_data, past], axis=0)
-
-        current = pd.merge(proj, current, on=['player', 'week', 'year'])
-        current = create_sd_max_metrics(current)
-        current['pos'] = pos
-        current_data = pd.concat([current_data, current], axis=0)
+        cur_pts = pull_actual_pts(pos)
+        all_points = pd.concat([all_points, cur_pts], axis=0)
     
-    return corr_data, current_data
+    df = pd.merge(df, all_points, on=['player', 'week', 'year'])
+    
+    return df        
 
 
 def create_pos_rank(df, opponent=False):
@@ -132,20 +61,10 @@ def create_pos_rank(df, opponent=False):
     else:
         prefix = ''
 
-    df = df.sort_values(by=['team', 'pos', 'year', 'week', 'max_metric'],
+    df = df.sort_values(by=['team', 'pos', 'year', 'week', 'pred_fp_per_game'],
                         ascending=[True, True, True, True, False]).reset_index(drop=True)
 
     df['pos_rank'] = prefix + df.pos + df.groupby(['team', 'pos', 'year', 'week']).cumcount().apply(lambda x: str(x))
-
-
-    return df
-
-def get_team_totals(df, col):
-    team_totals = df[df[col].isin(['QB0', 'RB0', 'RB1', 'WR0', 'WR1', 'WR2', 'TE0'])]
-    team_totals = team_totals[['team', 'week', 'year', 'max_metric']].drop_duplicates().reset_index(drop=True)
-    team_totals = team_totals.groupby(['week', 'year', 'team']).agg(team_total=('max_metric', 'sum')).reset_index()
-
-    df = pd.merge(df, team_totals, on=['week','year','team'])
 
     return df
 
@@ -183,17 +102,14 @@ def get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_we
     preds['weighting'] = 1
     preds.loc[preds.model_type=='full_model', 'weighting'] = full_model_rel_weight
 
-    _, current = get_max_metrics(set_week, set_year)
-    preds = pd.merge(preds, current[['player', 'pos', 'max_metric']], on=['player', 'pos'])
-
-    score_cols = ['pred_fp_per_game', 'std_dev', 'max_metric']
+    score_cols = ['pred_fp_per_game', 'std_dev']
     for c in score_cols: preds[c] = preds[c] * preds.weighting
 
     # Groupby and aggregate with namedAgg [1]:
     preds = preds.groupby(['player', 'pos'], as_index=False).agg({'pred_fp_per_game': 'sum', 
                                                                   'std_dev': 'sum',
                                                                   'weighting': 'sum',
-                                                                  'max_metric': 'sum'})
+                                                                  })
 
     for c in score_cols: preds[c] = preds[c] / preds.weighting
     preds = preds.drop('weighting', axis=1)
@@ -206,57 +122,43 @@ def get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_we
     
     return preds
 
-def get_val_predictions(label, val_table, pred_version, ensemble_vers, std_dev_type, set_week, set_year):
-
-    df = dm.read(f'''SELECT player, 
-                            week, 
-                            year, 
-                            AVG(pred_fp_per_game) {label}
-                     FROM {val_table}
-                     WHERE pred_version='{pred_version}'
-                              AND ensemble_vers='{ensemble_vers}' 
-                              AND std_dev_type='{std_dev_type}'
-                              AND set_week={set_week}
-                              AND set_year={set_year}
-                     GROUP BY player, week, year
-                    ''', 'Simulation')
-    return df
-
 
 def create_player_matches(preds, opponent=False):
 
     preds = create_pos_rank(preds)
 
     pred_cov1 = preds[['player', 'team', 'pos_rank']]
-    pred_cov2 = preds[['player', 'team', 'pos_rank', 'std_dev', 'max_metric', 'week', 'year']]
+    pred_cov2 = preds[['player', 'team', 'pos_rank', 'std_dev', 'pred_fp_per_game', 'week', 'year']]
 
     if opponent:
-        matchups = get_matchups()
-        pred_cov2 = pd.merge(pred_cov2, matchups, on=['team','week', 'year'])
+        pred_cov2 = get_matchups(pred_cov2)
         pred_cov2 = pred_cov2.drop('team', axis=1).rename(columns={'defTeam': 'team'})
         pred_cov2.pos_rank = pred_cov2.pos_rank.apply(lambda x: 'Opp'+x)
 
     pred_cov = pd.merge(pred_cov1, pred_cov2, on='team')
-    pred_cov.columns = ['player1', 'team', 'pos_rank1', 'player2', 'pos_rank2', 'std_dev', 'max_metric', 'week', 'year']
-    pred_cov = pred_cov[['player1', 'player2', 'team', 'pos_rank1', 'pos_rank2', 'std_dev', 'max_metric', 'week', 'year']]
+    pred_cov.columns = ['player1', 'team', 'pos_rank1', 'player2', 'pos_rank2', 'std_dev', 'pred_fp_per_game', 'week', 'year']
+    pred_cov = pred_cov[['player1', 'player2', 'team', 'pos_rank1', 'pos_rank2', 'std_dev', 'pred_fp_per_game', 'week', 'year']]
 
 
     return pred_cov
 
 
-def get_matchups():
-    return dm.read('''SELECT offTeam team, defTeam, week, year
-                      FROM (
-                            SELECT  *, 
-                                    row_number() OVER (PARTITION BY offTeam, week, year 
-                                                        ORDER BY cnts DESC) AS rnk
-                            FROM (
-                                    SELECT offTeam, defTeam, week, year, count(*) cnts
-                                    FROM PFF_Expert_Ranks
-                                    GROUP BY offTeam, defTeam, week, year
-                                 )
-                       )
-                      WHERE rnk=1''', 'Pre_PlayerData')
+def get_matchups(df):
+    matchups = dm.read('''SELECT offTeam team, defTeam, week, year
+                        FROM (
+                                SELECT  *, 
+                                        row_number() OVER (PARTITION BY offTeam, week, year 
+                                                            ORDER BY cnts DESC) AS rnk
+                                FROM (
+                                        SELECT offTeam, defTeam, week, year, count(*) cnts
+                                        FROM PFF_Expert_Ranks
+                                        GROUP BY offTeam, defTeam, week, year
+                                    )
+                        )
+                        WHERE rnk=1''', 'Pre_PlayerData')
+
+    df = pd.merge(df, matchups, on=['team', 'week', 'year'])
+    return df
 
 
 
@@ -303,33 +205,16 @@ def get_mean_points(preds):
 
     return mean_points
 
-def add_projected_stats(df, good_cols=None):
-
-    proj = dm.read("SELECT * FROM PFF_Proj_Ranks", 'Pre_PlayerData')
-    proj = proj[['player', 'week', 'year' , 'passYds', 'passTd', 'passInt', 'rushYds', 'rushTd',
-                'recvReceptions', 'recvYds', 'recvTd']]
-
-    stat_proj_cols = ['passYds', 'passTd', 'passInt', 'rushYds', 'rushTd', 'recvReceptions', 'recvYds', 'recvTd']
-    proj[stat_proj_cols] = proj[stat_proj_cols] * [0.04, 4, -1, 0.1, 6, 1, 0.1, 6]
-    df = pd.merge(df, proj, on=['player', 'week', 'year'], how='left')
-
-    defense = dm.read("SELECT offTeam player, week, year, fantasyPoints defPts FROM PFF_Proj_Ranks", 'Pre_TeamData')
-    df = pd.merge(df, defense, on=['player', 'week', 'year'], how='left').fillna(0)
-    stat_proj_cols.append('defPts')
+def pivot_pos_data(df):
 
     df = df[df['pos_rank'].isin(['QB0', 'RB0', 'RB1', 'WR0', 'WR1', 'WR2', 'TE0', 'Defense0', 
-                                 'OppQB0', 'OppWR0', 'OppTE0', 'OppDefense0'])]
-    df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values=stat_proj_cols).fillna(0)
-    df.columns = [f'{c[1]}_{c[0]}' for c in df.columns]
-    # df[[c for c in df.columns if 'Opp' in c]] = df[[c for c in df.columns if 'Opp' in c]] / 2
-    
-    if good_cols is None:
-        good_cols = df.sum()[abs(df.sum()) > 5].index
-    
-    df = df[good_cols]
-    df = df[(df['QB0_passYds'] > 2) & (df['OppQB0_passYds'] > 2)]
+                                 'OppQB0', 'OppDefense0', 'OppWR1'
+                                 #'OppRB0', 'OppWR0', 'OppWR1', 'OppTE0', 
+                                 ])]
+    df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='pred_fp_per_game')
+    df = df.reset_index().sort_values(by=['team', 'year', 'week']).ffill().set_index(['team', 'week', 'year'])
 
-    return df, good_cols
+    return df
 
 
 def add_gambling_lines(df):
@@ -349,7 +234,7 @@ def add_gambling_lines(df):
     lines['implied_points_against'] = (lines.over_under / 2) - (lines.line / 2) 
 
     lines = lines[['team', 'week', 'year', 'implied_points_for', 'implied_points_against']]
-    lines[['implied_points_for', 'implied_points_against']] = lines[['implied_points_for', 'implied_points_against']]/5
+    lines[['implied_points_for', 'implied_points_against']] = lines[['implied_points_for', 'implied_points_against']]
     df = df.reset_index()
     df = pd.merge(df, lines, on=['team', 'week', 'year'], how='left')
     df = df.set_index(['team', 'week', 'year'])
@@ -448,7 +333,7 @@ def pred_covar_matrix(pred_cov, matrices):
 
 #%%
 
-covar_type = 'kmeans_trunc'
+covar_type = 'kmeans_pred_trunc'
 
 # set the model version
 set_weeks = [
@@ -476,7 +361,7 @@ sim_types = [
              'ownership_ln_pos_fix',
 ]
 
-full_model_weights = [0.2, 1, 5]
+full_model_weights = [1]#[0.2, 1, 5]
 
 i = 0
 iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
@@ -484,21 +369,23 @@ for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
     for full_model_rel_weight in full_model_weights:
 
-        val_pred = get_val_predictions('pred_prob', 'Model_Validations', pred_vers, ensemble_vers, std_dev_type, set_week, set_year)
-
         # get the player and opposing player data to create correlation matrices
-        player_data, _ = get_max_metrics(set_week, set_year)
+        player_data = get_val_predictions('pred_fp_per_game', 'Model_Validations', pred_vers, ensemble_vers, std_dev_type, set_week, set_year)
+        player_data = add_actual(player_data)
+        player_data = get_matchups(player_data)
+
+        # create the rankings for self team and opposing team
         corr_data = create_pos_rank(player_data)
         opp_corr_data = create_pos_rank(player_data, opponent=True)
         opp_corr_data = opp_corr_data[~opp_corr_data.team.isnull()].reset_index(drop=True)
         corr_data = pd.concat([corr_data, opp_corr_data], axis=0)
 
-        kmean_input, good_cols = add_projected_stats(corr_data, good_cols=None)
+        kmean_input = pivot_pos_data(corr_data)
         kmean_input = add_gambling_lines(kmean_input)
 
-        kmeans_out, km = get_best_clusters(kmean_input, corr_data, min_n=5, max_n=12)
-        # show_cluster_heatmap(kmeans_out, km)
-        # show_historical_cluster_teams(kmeans_out, label=8)
+        kmeans_out, km = get_best_clusters(kmean_input, corr_data, min_n=5, max_n=10)
+        show_cluster_heatmap(kmeans_out, km)
+        show_historical_cluster_teams(kmeans_out, label=3)
         matrices = get_kmeans_covar(kmeans_out)
 
         # pull in the prediction data and create player matches for position type
@@ -508,9 +395,9 @@ for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         opp_pred_cov = create_player_matches(preds, opponent=True)
         pred_cov = pd.concat([pred_cov, opp_pred_cov], axis=0).reset_index(drop=True)
 
-        pred_cov_stats = pred_cov[['player2', 'team', 'pos_rank2', 'week', 'year']]
-        pred_cov_stats.columns = ['player', 'team', 'pos_rank', 'week', 'year']
-        pred_cov_stats, _ = add_projected_stats(pred_cov_stats, good_cols)
+        pred_cov_stats = pred_cov[['player2', 'team', 'pos_rank2', 'week', 'year', 'pred_fp_per_game']]
+        pred_cov_stats.columns = ['player', 'team', 'pos_rank', 'week', 'year', 'pred_fp_per_game']
+        pred_cov_stats = pivot_pos_data(pred_cov_stats)
         pred_cov_stats = add_gambling_lines(pred_cov_stats)
 
         pred_cov = assign_kmean_labels(pred_cov, pred_cov_stats, km)
@@ -519,13 +406,13 @@ for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         pred_cov_final = cleanup_pred_covar(pred_cov)        
         mean_points = get_mean_points(preds)
 
-        if i == 0:
-            dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
-            dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
-            i += 1
-        else:
-            dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
-            dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
+        # if i == 0:
+        #     dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
+        #     dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
+        #     i += 1
+        # else:
+        #     dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
+        #     dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
 
 
 run_params = pd.DataFrame({

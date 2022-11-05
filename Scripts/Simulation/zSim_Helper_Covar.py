@@ -187,12 +187,14 @@ class FootballSimulation:
         return matchups
 
     @staticmethod
-    def get_min_players(min_players_same_team_input):
+    def get_min_players(min_players_same_team_input, adjust_select):
         if min_players_same_team_input=='Auto': 
-                min_players_same_team= np.random.choice([-1, 2, 3], p=[0.2, 0.4, 0.4])
+                min_players_same_team= np.random.choice([-2, 2, 3], p=[0.2, 0.5, 0.3])
         else:
             min_players_same_team = min_players_same_team_input
-        min_players_same_team += 1
+
+        if adjust_select: min_players_same_team += 1
+        else: min_players_same_team += 2
 
         return min_players_same_team
 
@@ -458,15 +460,17 @@ class FootballSimulation:
         return -np.random.normal(mean_own, std_own, size=1).reshape(1, 1)
 
     @staticmethod
-    def create_G_team(team_map, player_map):
+    def create_G_team(team_map, player_map, adjust_select):
 
         pos_wt = {
-            'QB': -2,
             'WR': -1,
             'TE': -1,
             'RB': -0.5,
             'DEF': 0
         }
+
+        if adjust_select: pos_wt['QB'] = -2
+        else: pos_wt['QB'] = -3
         
         num_players = len(player_map)
         num_teams = len(team_map)
@@ -590,8 +594,9 @@ class FootballSimulation:
 
         pos_require_df = pd.DataFrame(open_pos_require, index=[0]).T.reset_index()
         pos_require_df.columns = ['pos', 'num_required']
-        pos_require_df.num_required = pos_require_df.num_required + [0, 0.5, 0.5, 0.5, 1]
-
+        # pos_require_df.num_required = pos_require_df.num_required + [0, 0.5, 0.5, 0.5, 1]
+        pos_require_df.num_required = pos_require_df.num_required + [-1, 1.5, 1.5, 1.5, 2]
+        
         df = pd.merge(df, pos_require_df, on='pos')
         df.loc[df.SelectionCounts < self.num_iters, 'SelectionCounts'] = \
             df.loc[df.SelectionCounts < self.num_iters, 'SelectionCounts'] / \
@@ -611,7 +616,7 @@ class FootballSimulation:
         for i in range(self.num_iters):
 
             self.matchups = self.get_matchups()
-            min_players_same_team = self.get_min_players(min_players_same_team_input)
+            min_players_same_team = self.get_min_players(min_players_same_team_input, adjust_select)
             min_player_opp_team = self.get_min_players_opp_team(min_players_opp_team_input)
             
             if i ==0:
@@ -648,7 +653,7 @@ class FootballSimulation:
                 G_players = self.create_G_players(player_idx_map)
                 h_players = self.create_h_players(player_idx_map, h_player_add)
 
-                G_teams = self.create_G_team(team_map, idx_player_map)
+                G_teams = self.create_G_team(team_map, idx_player_map, adjust_select)
         
             # generate the c matrix with the point values to be optimized
             self.labels, self.c_points = self.sample_c_points(predictions, num_options)
@@ -714,10 +719,10 @@ class FootballSimulation:
 # pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 # ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
 # std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
-# use_covar=False
+# use_covar=True
 # use_ownership=True
 
-# week = 1
+# week = 8
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -725,7 +730,7 @@ class FootballSimulation:
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
-#                          full_model_rel_weight=0.2, covar_type='team_points_trunc', use_covar=use_covar, 
+#                          full_model_rel_weight=5, covar_type='team_points_trunc', use_covar=use_covar, 
 #                          use_ownership=use_ownership, salary_remain_max=500)
 
 # min_players_same_team = 'Auto'
@@ -735,7 +740,7 @@ class FootballSimulation:
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                     min_players_opp_team, adjust_select=True)
+#                                     min_players_opp_team, adjust_select=False)
 
 # print(max_team_cnt)
 # results

@@ -287,10 +287,20 @@ qb_mean_cols = ['spread_line', 'total_line', 'vegas_wp',
              'drive_ended_with_score', 'drive_first_downs', 'drive_play_count', 'drive_inside20',
              'drive_time_of_possession']
 
+def get_sack(data, gcols):
+    sacks = data[data.sack==1].reset_index(drop=True)
+    sacks = sacks.groupby(gcols).agg(sack_yards_sum=('yards_gained', 'sum'),
+                                     sack_sum=('sack', 'count')).reset_index()
+    return sacks
+
 gcols =  ['week', 'season', 'posteam', 'passer_player_name']
-pass_sum = get_agg_stats(data, gcols, qb_sum_cols, 'sum', prefix='pass')
-pass_mean = get_agg_stats(data, gcols, qb_mean_cols, 'mean', prefix='pass')
+sacks = get_sack(data, gcols)
+
+gcols =  ['week', 'season', 'posteam', 'passer_player_name']
+pass_sum = get_agg_stats(data[data.sack==0], gcols, qb_sum_cols, 'sum', prefix='pass')
+pass_mean = get_agg_stats(data[data.sack==0], gcols, qb_mean_cols, 'mean', prefix='pass')
 qb = pd.merge(pass_sum, pass_mean, on=gcols)
+qb = pd.merge(qb, sacks, on=gcols, how='left').fillna({'sack_yards_sum': 0, 'sack_sum': 0})
 
 qb = qb.rename(columns={'passer_player_name': 'player', 'posteam': 'team'})
 qb_names = data.loc[(data.passer_player_position=='QB'), 
@@ -489,4 +499,24 @@ dm.write_to_db(def_scoring, 'FastR', 'Defense_Stats', if_exist='append')
 # dm.delete_from_db('FastR', 'Coach_Stats', f"season={cur_season}")
 # dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='append')
 
+# %%
+
+fp_cols = {'pass_yards_gained_sum': 0.04, 
+           'pass_pass_touchdown_sum': 4, 
+           'pass_interception_sum': -1,
+           'fumble_lost': -1,
+           'rush_yards_gained_sum': 0.1, 
+           'rush_rush_touchdown_sum': 6,
+           'rush_yd_100_bonus': 3,
+           'pass_yd_300_bonus': 3}
+
+qb = dm.read("SELECT * FROM QB_Stats WHERE player='Patrick Mahomes' AND week=15 and season=2020", 'FastR')
+qb[fp_cols.keys()]
+# %%
+
+qb[fp_cols.keys()] * list(fp_cols.values())
+
+# %%
+
+qb.iloc[0][90:]
 # %%

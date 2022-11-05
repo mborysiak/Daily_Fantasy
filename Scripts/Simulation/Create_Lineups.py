@@ -14,17 +14,18 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=8
+week=9
 
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
-std_dev_type = 'pred_spline_class80_matt1_brier1_kfold3'
+std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_iters = 35
+num_iters = 40
 
 set_max_team = None
+
 
 #%%
 
@@ -67,60 +68,54 @@ player_teams = dm.read(f'''SELECT DISTINCT player, team
 unique_teams = player_teams.team.unique()
 matchups = np.array([m for m in get_matchups() if m[0] in unique_teams and m[1] in unique_teams])
 
+#%%
+
+def pull_best_params(best_trials):
+    params = {}
+    params_opt = dm.read(f'''SELECT * 
+                             FROM Entry_Optimize_Params
+                             WHERE trial_num IN {best_trials}''', 'Results')
+    params_opt = params_opt.groupby(['param', 'param_option']).agg({'option_value': 'mean'}).reset_index()
+
+    for p, opt, val in params_opt.values:
+        if p not in params.keys(): params[p] = {}
+        if p in ('adjust_pos_counts', 'use_ownership'):
+            if opt=='0': opt=False
+            if opt=='1': opt=True
+        else:
+            try: opt = int(opt)
+            except: pass
+    
+        params[p][opt] = np.round(val,2)
+
+    for k, v in params.items():
+        if np.sum(list(v.values())) != 1:
+            print('Not summed to 1:', k)
+    print('\n')
+
+    return params
+
+best_trials = (57, 58, 59)
+
+opt_params = pull_best_params(best_trials)
+opt_params
+
+#%%
         
-d = {
-        'adjust_pos_counts': {
-            True: 0.7, 
-            False: 0.3
-        },
+d = {'adjust_pos_counts': {False: 0.47, True: 0.53},
+ 'covar_type': {'kmeans_trunc': 0.0,
+  'no_covar': 0.5,
+  'team_points_trunc': 0.5},
+ 'full_model_weight': {0.2: 0.5, 1: 0.07, 5: 0.43},
+ 'matchup_drop': {0: 0.93, 1: 0.07},
+ 'max_salary_remain': {1000: 0.0, 200: 0.17, 300: 0.33, 400: 0.5, 500: 0.0},
+ 'min_player_same_team': {0: 0.1, 2: 0.0, 3: 0.0, 'Auto': 0.9},
+ 'min_players_opp_team': {0: 0.23, 'Auto': 0.77},
+ 'player_drop_multiple': {0: 0.5, 4: 0.5, 6: 0.0},
+ 'top_n_choices': {0: 0.6, 1: 0.4, 2: 0.0, 4: 0.0},
+ 'use_ownership': {False: 0.1, True: 0.9}}
 
-        'player_drop_multiple': {
-            0: 0.7, 
-            4: 0.3
-        },
-                    
-        'matchup_drop': {
-            0: 1,
-            1: 0
-        },
-
-        'top_n_choices': {
-            0: 0,
-            1: 1
-        },
-
-        'full_model_weight': {
-            0.2: 0,
-            1: 0.2,
-            5: 0.8
-        },
-
-        'covar_type': {
-            'no_covar': 0.5,
-            'team_points_trunc': 0.5,
-        },
-
-        'min_player_same_team': {
-            'Auto': 1
-        },
-
-        'min_players_opp_team': {
-           'Auto': 1,
-            0: 0
-        },
-
-        'use_ownership': {
-            True: 1,
-            False: 0
-        },
-
-        'max_salary_remain': {
-            300: 1,
-            500: 0
-        }
-    }
-
-lineups_per_param = 5
+lineups_per_param = 2
 
 params = []
 for i in range(int(num_iters/lineups_per_param)):
@@ -133,9 +128,9 @@ for i in range(int(num_iters/lineups_per_param)):
     params.append(cur_params)
 
 #%%
-def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
-                        full_model_rel_weight, covar_type, min_players_same_team, 
-                        min_players_opp_team, use_ownership, salary_remain_max):
+def sim_winnings(adjust_select,covar_type, full_model_rel_weight,matchup_drop,salary_remain_max,
+                 min_players_same_team, min_players_opp_team, player_drop_multiplier, top_n_choices, 
+                 use_ownership):
 
     try: min_players_opp_team = int(min_players_opp_team)
     except: pass
@@ -227,12 +222,12 @@ def create_database_output(my_team, j):
 
 #%%
 
-dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={week}')
+dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={week}', create_backup=False)
 
 from joblib import Parallel, delayed
 
-par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, msr) for \
-                                                               adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, msr in params)
+par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, ct, fmw, md, msr, mpst, mpot, pdm, tn, uo) for \
+                                                               adj, ct, fmw, md, msr, mpst, mpot, pdm, tn, uo in params)
 
 lineups_list = []
 for p in par_out:
@@ -245,6 +240,5 @@ lineups = lineups.sample(frac=1)
 
 for j, i in enumerate(lineups.TeamNum.unique()):
     create_database_output(lineups[lineups.TeamNum==i], j)
-
 
 # %%

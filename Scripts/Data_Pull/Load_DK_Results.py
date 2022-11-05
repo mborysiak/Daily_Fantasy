@@ -236,6 +236,27 @@ def format_lineups(full_entries, min_place, max_place):
   
     return final_df
 
+def pull_actual_pts(set_pos):
+
+    if set_pos=='Defense': pl = 'defTeam'
+    else: pl = 'player'
+
+    actual_pts = dm.read(f'''SELECT {pl} player, week, season year, fantasy_pts y_act
+                             FROM {set_pos}_Stats 
+                             WHERE season >= 2020''', 'FastR')
+    return actual_pts
+
+
+def add_actual():
+    all_points = pd.DataFrame()
+    for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+        cur_pts = pull_actual_pts(pos)
+        all_points = pd.concat([all_points, cur_pts], axis=0)
+        
+    return all_points
+
+pts = add_actual()
+
 #%%
 
 for contest in ['Million']:#, 'ThreePointStance', 'ScreenPass']:
@@ -265,13 +286,20 @@ for contest in ['Million']:#, 'ThreePointStance', 'ScreenPass']:
     full_entries['Contest'] = contest
     player_ownership['Contest'] = contest
 
-    dm.delete_from_db('DK_Results', 'Contest_Results', f"week={set_week} AND year={set_year} AND Contest='{contest}'")
-    dm.delete_from_db('DK_Results', 'Contest_Ownership', f"week={set_week} AND year={set_year} AND Contest='{contest}'")
+#%%
 
-    dm.write_to_db(full_entries, 'DK_Results', 'Contest_Results', 'append')
-    dm.write_to_db(player_ownership, 'DK_Results', 'Contest_Ownership', 'append')
+chk = pd.merge(player_ownership, pts, on=['player', 'week', 'year'], how='left')
+chk[abs(chk.player_points-chk.y_act) > 0.2]
 
-# full_entries
+#%%
+
+dm.delete_from_db('DK_Results', 'Contest_Results', f"week={set_week} AND year={set_year} AND Contest='{contest}'", create_backup=False)
+dm.delete_from_db('DK_Results', 'Contest_Ownership', f"week={set_week} AND year={set_year} AND Contest='{contest}'", create_backup=False)
+
+dm.write_to_db(full_entries, 'DK_Results', 'Contest_Results', 'append')
+dm.write_to_db(player_ownership, 'DK_Results', 'Contest_Ownership', 'append')
+
+
 
 #%%
 

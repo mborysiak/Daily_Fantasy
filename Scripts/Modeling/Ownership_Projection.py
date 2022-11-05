@@ -14,7 +14,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 8
+set_week = 9
 contest = 'Million'
 
 #%%
@@ -345,13 +345,59 @@ def adjust_owernship(df, col, adjust_type):
     elif adjust_type == 'exp': df[col] = np.exp(df[col]+1)
     return df
 
-def remove_week15_2020(df):
+def remove_covid_games(df):
 
-    return df[~(
-                (df.team.isin(['CLE', 'LVR', 'WAS', 'PHI', 'SEA', 'LAR'])) & \
-                (df.week==15) & \
-                (df.year==2021)
-                )].reset_index(drop=True)
+    df = df[~(
+            (df.team.isin(['PIT', 'TEN', 'NE', 'KC'])) & \
+            (df.week==4) & \
+            (df.year==2020)
+            )].reset_index(drop=True)
+
+    df = df[~(
+            (df.team.isin(['BUF', 'TEN'])) & \
+            (df.week==5) & \
+            (df.year==2020)
+            )].reset_index(drop=True)
+
+    df = df[~(
+            (df.team.isin(['NE', 'DEN'])) & \
+            (df.week==6) & \
+            (df.year==2020)
+            )].reset_index(drop=True)
+
+    df = df[~(
+            (df.team.isin(['PIT', 'BAL'])) & \
+            (df.week==7) & \
+            (df.year==2020)
+            )].reset_index(drop=True)
+
+    df = df[~(
+            (df.team.isin(['LAC', 'DEN'])) & \
+            (df.week==8) & \
+            (df.year==2020)
+            )].reset_index(drop=True)
+
+    df = df[~(
+            (df.team.isin(['PIT', 'BAL'])) & \
+            (df.week==12) & \
+            (df.year==2020)
+            )].reset_index(drop=True)
+
+    df = df[~(
+            (df.team.isin(['DAL', 'BAL', 'PIT', 'WAS', 'BUF', 'SF'])) & \
+            (df.week==13) & \
+            (df.year==2020)
+            )].reset_index(drop=True)
+
+    df = df[~(
+            (df.team.isin(['CLE', 'LVR', 'WAS', 'PHI', 'SEA', 'LAR'])) & \
+            (df.week==15) & \
+            (df.year==2021)
+            )].reset_index(drop=True)
+
+    return df
+
+    
 
 def add_model_projections(df, set_week, set_year, pred_vers, ensemble_vers):
     pred = dm.read(f'''SELECT player, 
@@ -373,6 +419,12 @@ def add_model_projections(df, set_week, set_year, pred_vers, ensemble_vers):
 
     return df
     
+
+def remove_duplicates(df):
+
+    max_pts = df.groupby(['player', 'week', 'year']).agg({'avg_proj_pts': 'max'}).reset_index()
+    df = pd.merge(df, max_pts, on=['player', 'week', 'year', 'avg_proj_pts'])
+    return df
 
 
 
@@ -427,7 +479,8 @@ df = add_gambling_lines(df)
 df = feature_engineering(df)
 df = df.rename(columns={'pct_drafted': 'y_act'})
 df = filter_snap_counts(df)
-df = remove_week15_2020(df)
+df = remove_covid_games(df)
+df = remove_duplicates(df)
 
 for c in ['pos', 'practice_status', 'game_status', 'practice_game']:
     df = pd.concat([df, pd.get_dummies(df[c], drop_first=True)], axis=1).drop(c, axis=1)

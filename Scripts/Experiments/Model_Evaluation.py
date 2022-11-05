@@ -311,7 +311,7 @@ def show_calibration_curve(y_true, y_pred, n_bins=10):
 
 #         for model_type in model_types:
 
-set_week = 7
+set_week = 8
 set_year = 2022
 set_pos = 'WR'
 model_type= 'full_model'
@@ -342,12 +342,20 @@ top_players = dm.read("SELECT * FROM Top_Players", "DK_Results").drop('counts', 
 df = pd.merge(df, top_players, on=['player', 'week', 'year'], how='left')
 df = df.fillna({'y_act': 0})
 
+for c in df.columns:
+    if 'expert' in c:
+        df[c+'_salary'] = df[c] * df.dk_salary
+    if 'proj' in c:
+        df[c+'_salary'] = df[c] / df.dk_salary
+
 df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
 
 
 
 skm = SciKitModel(df_train, model_obj='class', matt_wt=0, brier_wt=1)
 X, y = skm.Xy_split('y_act', drop_cols)
+
+
 
 #------------
 # Get Regression Data
@@ -357,7 +365,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.ensemble import HistGradientBoostingRegressor
 
 all_models = []
-for i, m in enumerate(['lr_c', 'rf_c']):
+m_names = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
+for i, m in enumerate(m_names):
     pipe = skm.model_pipe([ 
                             # skm.piece('random_sample'),
                             skm.piece('std_scale'),
@@ -385,7 +394,7 @@ for i, m in enumerate(['lr_c', 'rf_c']):
                                                             random_seed=1234)
 
 
-    show_calibration_curve(oof_data['full_hold'].y_act, oof_data['full_hold'].pred, n_bins=7)
+    show_calibration_curve(oof_data['full_hold'].y_act, oof_data['full_hold'].pred, n_bins=6)
     
     oof_data['full_hold'] = oof_data['full_hold'].rename(columns={'pred': f'pred_{m}'})
     if i == 0: all_oof = oof_data['full_hold'].copy()
@@ -393,10 +402,10 @@ for i, m in enumerate(['lr_c', 'rf_c']):
     all_models.extend(best_models)
 
 all_oof['mean_pred'] = all_oof[[c for c in all_oof.columns if 'pred' in c]].mean(axis=1)
-show_calibration_curve(all_oof['y_act'], all_oof['mean_pred'], n_bins=7)
+show_calibration_curve(all_oof['y_act'], all_oof['mean_pred'], n_bins=6)
 
 all_preds = []
-for i in range(n_splits*2):
+for i in range(n_splits*len(m_names)):
     cur_pred = all_models[i].fit(X,y).predict_proba(df_predict[X.columns])[:,1]
     all_preds.append(cur_pred)
 
@@ -432,7 +441,7 @@ results['max_score'] = 1.0
 # dm.write_to_db(df, 'Simulation', 'Predicted_Ownership', 'replace')
 
 #%%
-m = best_models[2]
+m = all_models[3]
 m.fit(X,y)
 transformer = Pipeline(m.steps[:-1])
 X_shap = transformer.transform(X)
@@ -445,7 +454,7 @@ try:
     shap.summary_plot(shap_values, X_shap, feature_names=X_shap.columns, plot_size=(8,15), max_display=30, show=False)
 except:
     xx = pd.Series(m.steps[-1][1].coef_[0], index=X_shap.columns)
-    xx[np.abs(xx)>0.001].sort_values().plot.barh(figsize=(5,10))
+    xx[np.abs(xx)>0.001].sort_values().plot.barh(figsize=(5,15))
 
 #%%
 #======================================================================================================================

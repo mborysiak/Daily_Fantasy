@@ -38,7 +38,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [5]
+run_weeks = [9]
 
 run_params = {
     
@@ -61,6 +61,7 @@ run_params = {
 
     'rush_pass': ''
 }
+n_splits = run_params['n_splits']
 
 # set position and model type
 set_pos = 'RB'
@@ -261,8 +262,11 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
                                 skm.piece('k_best'), 
                                 skm.piece(m)
                                 ])
+
         if m == 'qr_q': pipe.steps[-1][-1].quantile = alpha
+        elif m in ('rf_q', 'knn_q'): pipe.steps[-1][-1].q = alpha
         else: pipe.steps[-1][-1].alpha = alpha
+    
 
 
     # get the params for the current pipe and adjust if needed
@@ -305,6 +309,7 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
                                                              col_split='game_date', time_split=run_params['cv_time_input'],
                                                              bayes_rand=run_params['opt_type'], proba=proba,
                                                              random_seed=(i+7)*19+(i*12)+6, alpha=alpha)
+
     print('Time Elapsed:', np.round((time.time()-start)/60,1), 'Minutes')
     best_models = Parallel(n_jobs=-1, verbose=0)(delayed(post_model_fit)(bm, X, y) for bm in best_models)
     
@@ -315,6 +320,66 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
     except: print(f'Param save for {model_name} failed')
 
     return out_dict, best_models, oof_data
+
+
+#------------------
+# Million Predict
+#------------------
+
+def select_main_slate_teams(df):
+
+    import datetime as dt
+
+    good_teams = dm.read(f'''
+                    SELECT away_team team, gametime, week, year 
+                    FROM Gambling_Lines 
+                    WHERE year >= 2020
+                    UNION
+                    SELECT home_team team, gametime, week, year 
+                    FROM Gambling_Lines
+                    WHERE year >= 2020
+                ''', 'Pre_TeamData')
+
+
+    good_teams.gametime = pd.to_datetime(good_teams.gametime)
+    good_teams['day_of_week'] = good_teams.gametime.apply(lambda x: x.weekday())
+    good_teams['hour_in_day'] = good_teams.gametime.apply(lambda x: x.hour)
+
+    good_teams = good_teams[(good_teams.day_of_week==6) & (good_teams.hour_in_day <= 17) & (good_teams.hour_in_day > 10)]
+    good_teams = good_teams[['team', 'week', 'year']]
+
+    if set_pos == 'Defense': 
+        good_teams = good_teams.rename(columns={'team': 'player'})
+        df = pd.merge(df, good_teams, on=['player', 'week', 'year'])
+
+    else:
+        df = pd.merge(df, good_teams, on=['team', 'week', 'year'])
+
+    return df
+
+
+def add_sal_columns(df):
+    
+    for c in df.columns:
+        if 'expert' in c: df[c+'_salary'] = df[c] * df.dk_salary
+        if 'proj' in c: df[c+'_salary'] = df[c] / df.dk_salary
+    
+    return df
+
+def predict_million_df(df, run_params):
+
+    df = select_main_slate_teams(df)
+
+    df = df.drop('y_act', axis=1)
+    top_players = dm.read("SELECT * FROM Top_Players", "DK_Results").drop('counts', axis=1)
+
+    df = pd.merge(df, top_players, on=['player', 'week', 'year'], how='left')
+    df = df.fillna({'y_act': 0})
+
+    df_train_mil, df_predict_mil, _, min_samples_mil = train_predict_split(df, run_params)
+    run_params['n_splits'] = 4
+
+    return df_train_mil, df_predict_mil, min_samples_mil, run_params
 
 
 #-----------------
@@ -385,7 +450,7 @@ for w in run_weeks:
     for set_pos, rush_pass, model_type in run_list:
 
         run_params['rush_pass'] = rush_pass
-
+        run_params['n_splits'] = n_splits
         print(f"\n==================\n{set_pos} {model_type} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
 
         #==========
@@ -398,9 +463,8 @@ for w in run_weeks:
         df, run_params = create_game_date(df, run_params)
         df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
-
         # set up blank dictionaries for all metrics
-        out_reg, out_class, out_quant = output_dict(), output_dict(), output_dict()
+        out_reg, out_class, out_quant, out_million = output_dict(), output_dict(), output_dict(), output_dict()
 
         #=========
         # Run Models
@@ -422,23 +486,30 @@ for w in run_weeks:
         save_output_dict(out_class, model_output_path, 'class')
 
         # run all other models
-        model_list = ['gbm_q', 'lgbm_q', 'qr_q']
+        model_list = ['gbm_q', 'lgbm_q', 'qr_q', 'knn_q', 'rf_q']
         for i, m in enumerate(model_list):
             for alph in [0.8, 0.95]:
                 out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
         save_output_dict(out_quant, model_output_path, 'quant')
 
+        # # run the million predict
+        # print(f"\n--------------\nRunning Million Predict\n--------------\n")
+        # n_splits = run_params['n_splits']; cut='million'
+        # df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
+
+        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
+        # for i, m in enumerate(model_list):
+        #     out_million, _, _= get_model_output(m, df_train_mil, 'class', out_class, run_params, i, min_samples)
+        # save_output_dict(out_million, model_output_path, 'million')
+
+        
+
+
 
 #%%
 
-# db_output = add_result_db_output('final', final_m, 
-#                                 [stack_scores['adp_score'], stack_scores['stack_score']], 
-#                                 db_output)
 
-# # write out tracking results to tracking DB
-# db_output_pd = pd.DataFrame(db_output)
-# db_output_pd = db_output_pd.assign(perc_low=prc[set_pos][0]).assign(perc_high=prc[set_pos][1]).assign(perc_range=prc[set_pos][2])
-# db_output_pd = db_output_pd.assign(kb_low=kbs[set_pos][0]).assign(kb_high=kbs[set_pos][1]).assign(kb_range=kbs[set_pos][2])
-# db_output_pd = db_output_pd.assign(n_iters=n_iters).assign(to_keep=to_keep).assign(val_week=val_week_min).assign(val_year=val_year_min)
-# dm.delete_from_db('Results', 'Model_Tracking',f"pkey='{pkey}'")
-# dm.write_to_db(db_output_pd, 'Results', 'Model_Tracking', 'append')
+
+
+
+# %%
