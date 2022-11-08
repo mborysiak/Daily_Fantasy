@@ -38,7 +38,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [9]
+run_weeks = [ 7, 8, 9]
 
 run_params = {
     
@@ -382,6 +382,23 @@ def predict_million_df(df, run_params):
     return df_train_mil, df_predict_mil, min_samples_mil, run_params
 
 
+def predict_million_df_roi(df, run_params):
+
+    df = select_main_slate_teams(df)
+
+    df = df.drop('y_act', axis=1)
+    top_players = dm.read('''SELECT player, week, year, prize_return_delta y_act
+                             FROM Top_Players_ROI
+                             WHERE total_lineups > 250
+                          ''', "DK_Results")
+
+    df = pd.merge(df, top_players, on=['player', 'week', 'year'], how='inner')
+
+    df_train_mil, df_predict_mil, _, min_samples_mil = train_predict_split(df, run_params)
+
+    return df_train_mil, df_predict_mil, min_samples_mil, run_params
+
+
 #-----------------
 # Saving Data / Handling
 #-----------------
@@ -466,40 +483,50 @@ for w in run_weeks:
         # set up blank dictionaries for all metrics
         out_reg, out_class, out_quant, out_million = output_dict(), output_dict(), output_dict(), output_dict()
 
-        #=========
-        # Run Models
-        #=========
+        # #=========
+        # # Run Models
+        # #=========
 
-        # run all other models
-        model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
-        for i, m in enumerate(model_list):
-            out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
-        save_output_dict(out_reg, model_output_path, 'reg')
+        # # run all other models
+        # model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
+        # for i, m in enumerate(model_list):
+        #     out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
+        # save_output_dict(out_reg, model_output_path, 'reg')
 
-        # run all other models
+        # # run all other models
+        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
+        # for cut in run_params['cuts']:
+        #     print(f"\n--------------\nPercentile {cut}\n--------------\n")
+        #     df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
+        #     for i, m in enumerate(model_list):
+        #         out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
+        # save_output_dict(out_class, model_output_path, 'class')
+
+        # # run all other models
+        # model_list = ['gbm_q', 'lgbm_q', 'qr_q', 'knn_q', 'rf_q']
+        # for i, m in enumerate(model_list):
+        #     for alph in [0.8, 0.95]:
+        #         out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
+        # save_output_dict(out_quant, model_output_path, 'quant')
+
+        # run the million predict
+        print(f"\n--------------\nRunning Million Predict\n--------------\n")
+        n_splits = run_params['n_splits']; cut='million'
+        df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
+
         model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
-        for cut in run_params['cuts']:
-            print(f"\n--------------\nPercentile {cut}\n--------------\n")
-            df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
-            for i, m in enumerate(model_list):
-                out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
-        save_output_dict(out_class, model_output_path, 'class')
-
-        # run all other models
-        model_list = ['gbm_q', 'lgbm_q', 'qr_q', 'knn_q', 'rf_q']
         for i, m in enumerate(model_list):
-            for alph in [0.8, 0.95]:
-                out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
-        save_output_dict(out_quant, model_output_path, 'quant')
+            out_million, _, _= get_model_output(m, df_train_mil, 'class', out_million, run_params, i, min_samples)
+        save_output_dict(out_million, model_output_path, 'million')
+
 
         # # run the million predict
-        # print(f"\n--------------\nRunning Million Predict\n--------------\n")
-        # n_splits = run_params['n_splits']; cut='million'
-        # df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
+        # print(f"\n--------------\nRunning Million Predict ROI\n--------------\n")
+        # df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df_roi(df, run_params)
 
-        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
+        # model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
         # for i, m in enumerate(model_list):
-        #     out_million, _, _= get_model_output(m, df_train_mil, 'class', out_class, run_params, i, min_samples)
+        #     out_million, _, _= get_model_output(m, df_train_mil, 'reg', out_million, run_params, i, min_samples)
         # save_output_dict(out_million, model_output_path, 'million')
 
         
@@ -507,9 +534,3 @@ for w in run_weeks:
 
 
 #%%
-
-
-
-
-
-# %%

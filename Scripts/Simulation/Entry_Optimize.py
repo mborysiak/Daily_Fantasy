@@ -16,7 +16,7 @@ dm = DataManage(db_path)
 # set the model version
 set_weeks = [
    1, 2, 3, 4, 5, 6, 7, 8
-        ]
+]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022,  2022
@@ -57,14 +57,14 @@ std_dev_types = [
 
 
 sim_types = [
-             'ownership_ln_pos_2020_qb_first',
-             'ownership_ln_pos_2020_qb_first',
-             'ownership_ln_pos_2020_qb_first',
-             'ownership_ln_pos_2020_qb_first',
-             'ownership_ln_pos_2020_qb_first',
-             'ownership_ln_pos_2020_qb_first',
-             'ownership_ln_pos_2020_qb_first',
-             'ownership_ln_pos_2020_qb_first',
+             'ownership_ln_pos_2020_flip',
+             'ownership_ln_pos_2020_flip',
+             'ownership_ln_pos_2020_flip',
+             'ownership_ln_pos_2020_flip',
+             'ownership_ln_pos_2020_flip',
+             'ownership_ln_pos_2020_flip',
+             'ownership_ln_pos_2020_flip',
+             'ownership_ln_pos_2020_flip',
 ]
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
@@ -227,8 +227,8 @@ for repeat_num in range(10):
         
         d = {
             'adjust_pos_counts': {
-                True: 0.5, 
-                False: 0.5
+                True: 0.3, 
+                False: 0.7
             },
 
             'player_drop_multiple': {
@@ -240,6 +240,8 @@ for repeat_num in range(10):
             'matchup_drop': {
                 0: 1,
                 1: 0,
+                2: 0,
+                3: 0
             },
 
             'top_n_choices': {
@@ -250,14 +252,14 @@ for repeat_num in range(10):
             },
 
             'full_model_weight': {
-                0.2: 0.5,
-                1: 0,
-                5: 0.5
+                0.2: 0,
+                1: 0.3,
+                5: 0.7
             },
 
             'covar_type': {
-                'no_covar': 0.5,
-                'team_points_trunc': 0.5,
+                'no_covar': 0.8,
+                'team_points_trunc': 0.2,
                 'kmeans_trunc': 0
             },
 
@@ -274,8 +276,10 @@ for repeat_num in range(10):
             },
 
             'use_ownership': {
-                True: 1,
-                False: 0
+                True: 0,
+                False: 0,
+                1: 1,
+                0.5: 0
             },
 
             'max_salary_remain': {
@@ -331,18 +335,22 @@ for repeat_num in range(10):
             for t in range(lineups_per_param):
 
                 to_add = []
-
-                if matchup_drop > 0: to_drop = rand_drop_teams(matchups, matchup_drop)
-                else: to_drop = []
+                to_drop = []
                 to_drop.extend(to_drop_selected)
+                
+                # if matchup_drop > 0: to_drop = rand_drop_teams(matchups, matchup_drop)
+                # else: to_drop = []
+                # to_drop.extend(to_drop_selected)
 
                 for i in range(9):
                     results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
                                             min_players_opp_team_input=min_players_opp_team, 
-                                            adjust_select=adjust_select)
-
+                                            adjust_select=adjust_select, num_matchup_drop=matchup_drop,
+                                            own_neg_frac=0.75)
+                    
                     prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
-                    selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
+                    try: selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
+                    except: pass
                     to_add.append(selected_player)
 
                 to_add.append(param_iter)
@@ -394,17 +402,17 @@ dm.write_to_db(output, 'Results', 'Entry_Optimize_Params', 'append')
 
 #%%
 
-# to_delete_num=54
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
+to_delete_num=70
+df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Params WHERE trial_num!={to_delete_num}", 'Results')
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace')
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params WHERE trial_num!={to_delete_num}", 'Results')
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace')
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail WHERE trial_num!={to_delete_num}", 'Results')
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail WHERE trial_num!={to_delete_num}", 'Results')
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Results WHERE trial_num!={to_delete_num}", 'Results')
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
+df = dm.read(f"SELECT * FROM Entry_Optimize_Results WHERE trial_num!={to_delete_num}", 'Results')
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 
 # %%

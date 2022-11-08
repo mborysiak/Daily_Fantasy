@@ -18,7 +18,7 @@ class FootballSimulation:
     def __init__(self, dm, week, set_year, salary_cap, pos_require_start, num_iters, 
                  pred_vers='standard', ensemble_vers='no_weight', std_dev_type='spline',
                  covar_type='team_points', full_model_rel_weight=1,
-                 use_covar=True, use_ownership=False, salary_remain_max=None):
+                 use_covar=True, use_ownership=0, salary_remain_max=None):
 
         self.week = week
         self.set_year = set_year
@@ -33,8 +33,7 @@ class FootballSimulation:
         self.full_model_rel_weight = full_model_rel_weight
         self.use_covar = use_covar
         self.use_ownership = use_ownership
-        self.salary_remain_max = salary_remain_max
-        
+        self.salary_remain_max = salary_remain_max  
 
         if self.use_covar: 
             player_data = self.get_covar_means()
@@ -48,8 +47,9 @@ class FootballSimulation:
         # join in salary data to player data
         self.player_data = self.join_salary(player_data)
 
-        if self.use_ownership:
+        if use_ownership > 0:
             self.ownership_data = self.join_ownership_pred(self.player_data)
+            self.use_own_frac = use_ownership
 
 
     def get_covar_means(self):
@@ -109,7 +109,7 @@ class FootballSimulation:
 
         for c in score_cols: df[c] = df[c] / df.weighting
         df.loc[df.pos=='Defense', 'pos'] = 'DEF'
-        teams = self.dm.read("SELECT * FROM Player_Teams", 'Simulation')
+        teams = self.dm.read(f"SELECT player, team FROM Player_Teams WHERE week={self.week} AND year={self.set_year}", 'Simulation')
         df = pd.merge(df, teams, on=['player'])
 
         drop_teams = self.get_drop_teams()
@@ -148,6 +148,30 @@ class FootballSimulation:
 
         return df
 
+    # def join_ownership_pred(self, df):
+
+    #     # add salaries to the dataframe and set index to player
+    #     ownership = self.dm.read(f'''SELECT player, pred_ownership, std_dev+0.01 as std_dev, min_score, max_score
+    #                                   FROM Predicted_Ownership
+    #                                   WHERE year={self.set_year}
+    #                                         AND week={self.week} ''', 'Simulation')
+
+    #     if self.use_covar: df = df.drop(['pred_fp_per_game'], axis=1)
+    #     else: df = df.drop(['pred_fp_per_game', 'std_dev', 'min_score','max_score'], axis=1)
+
+    #     df = pd.merge(df, ownership, how='left', on='player')
+
+    #     # df['min_score'] = df.pred_ownership.min()-0.01
+
+    #     df.pred_ownership = df.pred_ownership.fillna(df.pred_ownership.mean())
+    #     df.std_dev = df.std_dev.fillna(df.std_dev.mean())
+    #     df.min_score = df.min_score.fillna(df.min_score.min())
+        
+    #     df.loc[df.max_score.isnull(), 'max_score'] = df.loc[df.max_score.isnull(), 'pred_ownership'] + \
+    #                                                     df.loc[df.max_score.isnull(), 'std_dev']*3
+
+    #     return df
+
     def join_ownership_pred(self, df):
 
         # add salaries to the dataframe and set index to player
@@ -166,9 +190,10 @@ class FootballSimulation:
         df.pred_ownership = df.pred_ownership.fillna(df.pred_ownership.mean())
         df.std_dev = df.std_dev.fillna(df.std_dev.mean())
         df.min_score = df.min_score.fillna(df.min_score.min())
-        
-        df.loc[df.max_score.isnull(), 'max_score'] = df.loc[df.max_score.isnull(), 'pred_ownership'] + \
-                                                        df.loc[df.max_score.isnull(), 'std_dev']*3
+
+        df.loc[df.max_score < 0.05, 'max_score'] = 0.05
+        df.loc[df.pred_ownership < df.min_score, 'pred_ownership'] = df.loc[df.pred_ownership < df.min_score, 'max_score'] / 3
+        df.loc[df.max_score.isnull(), 'max_score'] = abs(df.loc[df.max_score.isnull(), 'pred_ownership']) * 2
 
         return df
 
@@ -189,18 +214,18 @@ class FootballSimulation:
     @staticmethod
     def get_min_players(min_players_same_team_input, adjust_select):
         if min_players_same_team_input=='Auto': 
-                min_players_same_team= np.random.choice([-2, 2, 3], p=[0.2, 0.5, 0.3])
+                min_players_same_team= np.random.choice([-1, 2, 3], p=[0.1, 0.5, 0.4])
         else:
             min_players_same_team = min_players_same_team_input
 
-        if adjust_select: min_players_same_team += 1
-        else: min_players_same_team += 2
+        min_players_same_team += 1
 
         return min_players_same_team
 
     @staticmethod
     def get_min_players_opp_team(min_players_opp_team_input):
         if min_players_opp_team_input=='Auto': 
+
             min_players_opp_team = np.random.choice([0, 1, 2], p=[0.3, 0.35, 0.35])
         else:
             min_players_opp_team = min_players_opp_team_input
@@ -266,9 +291,9 @@ class FootballSimulation:
         elif col=='pred_fp_per_game': df = self.player_data
 
         pred_list = []
-        for mean_val, sdev, min_sc, max_sc in df[[col, 'std_dev', 'min_score', 'max_score']].values:
+        for mean_val, sdev, min_sc, max_sc, player in df[[col, 'std_dev', 'min_score', 'max_score', 'player']].values:
             pred_list.append(self.trunc_normal(mean_val, sdev, min_sc, max_sc, num_options))
-        
+
         return pd.DataFrame(pred_list)
 
     # def covar_dist(self, num_options=500):
@@ -305,7 +330,7 @@ class FootballSimulation:
                 results = self.bounded_multivariate_dist(mean_vals, covar_vals, bound_vals, size=num_options)
                 results = pd.DataFrame(results, columns=means_sample.player).T
                 dists = pd.concat([dists, results], axis=0)
-
+            
         dists = dists.reset_index().rename(columns={'index': 'player'})
         dists = pd.merge(self.player_data[['player']], dists, on='player').drop('player', axis=1)
 
@@ -444,9 +469,9 @@ class FootballSimulation:
     def create_h_salaries(self):
         return np.array(self.salary_cap).reshape(1, 1)
 
-    @staticmethod
-    def samples_G_ownership(data, max_entries):
-        current_ownership = -data.iloc[:, np.random.choice(range(4, max_entries+4))].values
+    def samples_G_ownership(self, data, max_entries):
+
+        current_ownership = self.pos_or_neg * data.iloc[:, np.random.choice(range(4, max_entries+4))].values
         current_ownership = current_ownership.reshape(1, len(current_ownership))
         return current_ownership
 
@@ -457,20 +482,20 @@ class FootballSimulation:
                                               WHERE week={self.week}
                                                     AND year={self.set_year}
                                         ''', 'Simulation').values[0]
-        return -np.random.normal(mean_own, std_own, size=1).reshape(1, 1)
+
+        mean_own = self.pos_or_neg * np.random.normal(mean_own, std_own, size=1).reshape(1, 1)
+        return mean_own
 
     @staticmethod
     def create_G_team(team_map, player_map, adjust_select):
 
         pos_wt = {
+            'QB': -2,
             'WR': -1,
             'TE': -1,
             'RB': -0.5,
             'DEF': 0
         }
-
-        if adjust_select: pos_wt['QB'] = -2
-        else: pos_wt['QB'] = -3
         
         num_players = len(player_map)
         num_teams = len(team_map)
@@ -594,8 +619,8 @@ class FootballSimulation:
 
         pos_require_df = pd.DataFrame(open_pos_require, index=[0]).T.reset_index()
         pos_require_df.columns = ['pos', 'num_required']
-        # pos_require_df.num_required = pos_require_df.num_required + [0, 0.5, 0.5, 0.5, 1]
-        pos_require_df.num_required = pos_require_df.num_required + [-1, 1.5, 1.5, 1.5, 2]
+        pos_require_df.num_required = pos_require_df.num_required + [0, 0.5, 0.5, 0.5, 1]
+        # pos_require_df.num_required = pos_require_df.num_required + [-1, 2, 0, 1, 2]
         
         df = pd.merge(df, pos_require_df, on='pos')
         df.loc[df.SelectionCounts < self.num_iters, 'SelectionCounts'] = \
@@ -606,16 +631,43 @@ class FootballSimulation:
         return df
 
 
-    def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team, min_players_opp_team_input=0, adjust_select=False):
+    def player_matchup_drop(self, to_drop, to_add, num_matchup_drop):
+
+        drop_teams = np.random.choice(list(self.matchups.keys()), num_matchup_drop, replace=False)
+        lineup_teams = self.player_data.loc[self.player_data.player.isin(to_add), 'team'].unique()
+        print(drop_teams)
+        matchup_to_drop = []
+        for t in drop_teams:
+            if t not in lineup_teams and self.matchups[t] not in lineup_teams: 
+                matchup_to_drop.extend([t, self.matchups[t]])
+
+        print(matchup_to_drop)
+        to_drop.extend(self.player_data.loc[self.player_data.team.isin(matchup_to_drop), 'player'].values)
+
+        return to_drop
+
+
+    def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team, 
+                min_players_opp_team_input=0, adjust_select=False, num_matchup_drop=0,
+                own_neg_frac=1):
         
         # can set as argument, but static set for now
-        num_options=500
+        num_options=250
         player_selections = self.init_select_cnts()
         max_team_cnt = []
         success_trials = 0
+       
+        self.matchups = self.get_matchups()
+        if num_matchup_drop > 0:
+            to_drop = self.player_matchup_drop(to_drop, to_add, num_matchup_drop)
+
+        self.pos_or_neg = np.random.choice([-1, 1], p=[own_neg_frac, 1-own_neg_frac])
+        print(self.pos_or_neg)
+
+        self.use_ownership = np.random.choice([True, False], p=[self.use_own_frac, 1-self.use_own_frac])
+        print(self.use_ownership)
         for i in range(self.num_iters):
 
-            self.matchups = self.get_matchups()
             min_players_same_team = self.get_min_players(min_players_same_team_input, adjust_select)
             min_player_opp_team = self.get_min_players_opp_team(min_players_opp_team_input)
             
@@ -629,15 +681,20 @@ class FootballSimulation:
             cur_pos_require = self.add_flex(open_pos_require)
             b_position = self.create_b_matrix(cur_pos_require)
 
-            if i % 100 == 0:
+            if i % 25 == 0:
+                
                 # get predictions and remove to drop players
                 predictions = self.get_predictions(col='pred_fp_per_game', num_options=num_options)
                 predictions = self.drop_players(predictions, to_drop)
 
                 if self.use_ownership:
-                    # get ownership and remove to drop players
-                    ownership = self.get_predictions(col='pred_ownership', ownership=True, num_options=num_options)
-                    ownership = self.drop_players(ownership, to_drop)
+                    try:
+                        # get ownership and remove to drop players
+                        ownership = self.get_predictions(col='pred_ownership', ownership=True, num_options=num_options)
+                        ownership = self.drop_players(ownership, to_drop)
+                    except:
+                        self.use_ownership = False
+                        print('Ownership failed')
 
             if i == 0:
 
@@ -719,8 +776,8 @@ class FootballSimulation:
 # pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 # ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
 # std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
-# use_covar=True
-# use_ownership=True
+# use_covar=False
+# use_ownership=1
 
 # week = 8
 # year = 2022
@@ -731,7 +788,7 @@ class FootballSimulation:
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
 #                          full_model_rel_weight=5, covar_type='team_points_trunc', use_covar=use_covar, 
-#                          use_ownership=use_ownership, salary_remain_max=500)
+#                          use_ownership=use_ownership, salary_remain_max=200)
 
 # min_players_same_team = 'Auto'
 # min_players_opp_team = 'Auto'
@@ -740,7 +797,8 @@ class FootballSimulation:
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                     min_players_opp_team, adjust_select=False)
+#                                     min_players_opp_team, adjust_select=True, num_matchup_drop=0, 
+#                                     own_neg_frac=0.5)
 
 # print(max_team_cnt)
 # results

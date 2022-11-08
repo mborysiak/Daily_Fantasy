@@ -13,8 +13,12 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
+pred_version = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+ens_version = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
+std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
+
 set_year = 2022
-set_week = 9
+set_week = 8
 contest = 'Million'
 
 #%%
@@ -180,13 +184,23 @@ def add_injuries(df):
 
     return df
 
+
+def add_team_points(df, c):
+    team_pts = df.groupby(['team', 'week', 'year']).agg({c: 'sum'}).reset_index()
+    team_pts = team_pts.rename(columns={c: 'team_' + c})
+    df = pd.merge(df, team_pts, on=['team','week', 'year'])
+    df['team_frac_' + c] = df[c] / df['team_' + c]
+    return df
+
 def feature_engineering(df):
 
-    for c in ['projected_points', 'fantasyPoints', 'ProjPts']:
-        df[c+'_over_sal'] = df[c] / (df.dk_salary + 1000)
+    for c in ['projected_points', 'fantasyPoints', 'ProjPts', 'pred_fp_per_game', 'pred_prob']:
+        try: df[c+'_over_sal'] = df[c] / (df.dk_salary + 1000)
+        except: pass
 
-    team_pts = df.groupby(['team', 'week', 'year']).agg(team_projected_points=('projected_points', 'sum')).reset_index()
-    df = pd.merge(df, team_pts, on=['team','week', 'year'])
+    for c in ['projected_points', 'pred_fp_per_game', 'pred_prob']:
+        try: df = add_team_points(df, c)
+        except: pass
 
     df = df.sort_values(by=['team', 'pos', 'year', 'week', 'avg_proj_pts']).reset_index(drop=True)
     df['team_pos_week_order'] = df.groupby(['team', 'pos', 'week', 'year']).cumcount().values
@@ -213,37 +227,6 @@ def create_game_date(df, val_year_min, val_week_min, year_week_to_date):
     train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
 
     return df, cv_time_input, train_time_split
-
-
-def run_model_alpha(val_predict, test_predict, X_test, alpha, time_split):
-
-    skm = SciKitModel(df_train, model_obj='quantile')
-
-    # get the model pipe for stacking setup and train it on meta features
-    pipe = skm.model_pipe([
-                           skm.piece('k_best'),
-                           skm.piece('gbm_q')
-                        ])
-
-    params = skm.default_params(pipe)
-    pipe.steps[-1][-1].alpha = alpha
-    
-    # run the model with parameter search
-    best_models, oof_data, _ = skm.time_series_cv(pipe, X, y, 
-                                                    params, n_iter=25,
-                                                    bayes_rand='custom_rand',
-                                                    col_split='game_date',
-                                                    time_split=time_split)
-
-    val_predict[f'Perc{int(alpha*100)}'] = oof_data['full_hold'].pred
-
-    predictions = pd.DataFrame()
-    for bm in best_models:
-        predictions = pd.concat([predictions, pd.Series(bm.fit(X,y).predict(X_test))], axis=1)
-    
-    test_predict[f'Perc{int(alpha*100)}'] = predictions.mean(axis=1)
-
-    return val_predict, test_predict
 
 
 def run_model_mean(m, test_predict, X_test, time_split):
@@ -284,7 +267,7 @@ def drop_teams(data):
 
     df = dm.read(f'''SELECT week, year, away_team, home_team, gametime
                     FROM Gambling_Lines 
-                    WHERE year >= 2021
+                    WHERE year >= 2020
             ''', 'Pre_TeamData')
     df.gametime = pd.to_datetime(df.gametime)
     df['day_of_week'] = df.gametime.apply(lambda x: x.weekday())
@@ -399,21 +382,33 @@ def remove_covid_games(df):
 
     
 
-def add_model_projections(df, set_week, set_year, pred_vers, ensemble_vers):
+def add_model_projections(df, set_week, set_year, pred_vers, ensemble_vers, table_name):
+    
+    if table_name in ('Model_Predictions', 'Predicted_Probability'):
+        w = 'week'
+        y = 'year'
+        v = 'version'
+    else:
+        w = 'set_week'
+        y = 'set_year'
+        v = 'pred_version'
     pred = dm.read(f'''SELECT player, 
                             week, 
                             year, 
                             AVG(pred_fp_per_game) pred_fp_per_game
-                         FROM Model_Validations
-                         WHERE set_week={set_week}
-                               AND set_year={set_year}
-                               AND version='{pred_vers}'
+                         FROM {table_name}
+                         WHERE {w}={set_week}
+                               AND {y}={set_year}
+                               AND {v}='{pred_vers}'
                                AND ensemble_vers='{ensemble_vers}'
                                AND std_dev_type='{std_dev_type}'
                                AND pos !='K'
                                AND pos IS NOT NULL
                                AND player!='Ryan Griffin'
+                        GROUP BY player, week, year
                                 ''', 'Simulation')
+
+    if 'Class' in table_name: pred = pred.rename(columns={'pred_fp_per_game': 'pred_prob'})
 
     df = pd.merge(df, pred, on=['player', 'week', 'year'])
 
@@ -456,8 +451,10 @@ model_players = dm.read(f'''SELECT DISTINCT player
                             WHERE week={set_week}
                                 AND year={set_year}
                             ''', 'Simulation').player.values
-ty_players = dm.read(f'''SELECT DISTINCT player, team, 0 as pct_drafted, {set_week} week, {set_year} year
-                        FROM Player_Teams
+ty_players = dm.read(f'''SELECT DISTINCT player, team, 0 as pct_drafted, week, year
+                         FROM Player_Teams
+                         WHERE week = {set_week}
+                               AND year = {set_year}
                             ''', 'Simulation')
 
 drop_teams = get_drop_teams(set_week, set_year)
@@ -476,6 +473,10 @@ drop_list = ['Dalvin Cook32021', 'Calvin Ridley82021', 'Odell Beckham152021', 'C
 df = drop_player_weeks(df, drop_list)
 df = add_injuries(df)
 df = add_gambling_lines(df)
+
+# df = add_model_projections(df, set_week, set_year, pred_version, ens_version, 'Model_Validations')
+# df = add_model_projections(df, set_week, set_year, pred_version, ens_version, 'Model_Validations_Class')
+
 df = feature_engineering(df)
 df = df.rename(columns={'pct_drafted': 'y_act'})
 df = filter_snap_counts(df)
@@ -578,9 +579,6 @@ player_ownership = dm.read(f"SELECT * FROM Contest_Ownership WHERE Contest='{con
 
 #%%
 
-pred_version = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-ens_version = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
-std_dev_type = 'pred_spline_class80_matt1_brier1_kfold3'
 
 def create_constraint_metrics(prob_table, ownership_table, pred_version, ensemble_vers, std_dev_type, week, year):
 
@@ -616,7 +614,7 @@ def create_constraint_metrics(prob_table, ownership_table, pred_version, ensembl
 
     return pred_player_ownership
 
-pred_player_ownership = create_constraint_metrics('Model_Validations_Class', 'Predicted_Ownership_Validation', 
+pred_player_ownership = create_constraint_metrics('Model_Validations_Million', 'Predicted_Ownership_Validation', 
                                                   pred_version, ens_version, std_dev_type, set_week, set_year)
 
 
@@ -642,7 +640,9 @@ for base_place, places in zip(base_places, [50, 1000, 1000, 1000, 1000, 1000, 10
            df_lineups.loc[df_lineups.lineup_position=='FLEX', 'pos'].shape[0])
 
     # print the number of players from the same team
-    teams = dm.read('''SELECT * FROM Player_Teams''', 'Simulation')
+    teams = dm.read(f'''SELECT player, team
+                        FROM Player_Teams 
+                        WHERE week={set_week} AND year={set_year}''', 'Simulation')
     df_lineups = pd.merge(df_lineups, teams, on=['player'])
 
     team_cnts = df_lineups[df_lineups.pos.isin(['QB', 'RB', 'WR', 'TE'])].groupby(['place', 'team', 'week', 'year']).agg(player_cnts=('player', 'count')).reset_index()
@@ -701,10 +701,11 @@ for bp in base_places[1:]:
 
 # %%
 
-sim_values = create_constraint_metrics('Predicted_Probability', 'Predicted_Ownership_Only',
+sim_values = create_constraint_metrics('Predicted_Million', 'Predicted_Ownership_Only',
                                        pred_version, ens_version, std_dev_type, set_week, set_year)
 sim_values = sim_values.loc[(sim_values.week==set_week) & (sim_values.year==set_year),
                             ['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
+sim_values.sort_values(by='pred_ownership', ascending=True).iloc[:50]
 
 dm.delete_from_db('Simulation', 'Predicted_Ownership', f'week={set_week} AND year={set_year}')
 dm.write_to_db(sim_values, 'Simulation', 'Predicted_Ownership', 'append')

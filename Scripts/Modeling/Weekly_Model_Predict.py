@@ -383,14 +383,17 @@ def stack_predictions(X_predict, best_models, final_models, model_obj='reg'):
 def show_calibration_curve(y_true, y_pred, n_bins=10, strategy='quantile'):
 
     from sklearn.calibration import calibration_curve
-    
-    x, y = calibration_curve(y_true, y_pred, n_bins=n_bins, strategy=strategy)
 
     # Plot perfectly calibrated
     plt.plot([0, 1], [0, 1], linestyle = '--', label = 'Ideally Calibrated')
     
     # Plot model's calibration curve
-    plt.plot(y, x, marker = '.', label = 'Model')
+    x, y = calibration_curve(y_true, y_pred, n_bins=n_bins, strategy='quantile')
+    plt.plot(y, x, marker = '.', label = 'Quantile')
+
+    # Plot model's calibration curve
+    x, y = calibration_curve(y_true, y_pred, n_bins=n_bins, strategy='uniform')
+    plt.plot(y, x, marker = '+', label = 'Uniform')
     
     leg = plt.legend(loc = 'upper left')
     plt.xlabel('Average Predicted Probability in each bin')
@@ -589,6 +592,7 @@ def validation_compare_df(model_output_path, best_val, model_obj='reg'):
     
     if model_obj == 'reg': label='reg_adp'
     elif model_obj == 'class': label = 'class_lr_c_80'
+    elif model_obj == 'million': label = 'class_lr_c_million'
     oof_data = oof_data[label][['player', 'team', 'year', 'week', 'y_act']].reset_index(drop=True)
     best_val = pd.Series(best_val.mean(axis=1), name='pred_fp_per_game')
     val_compare = pd.concat([oof_data, best_val], axis=1)
@@ -596,7 +600,7 @@ def validation_compare_df(model_output_path, best_val, model_obj='reg'):
     return val_compare
 
 
-def save_val_to_db(model_output_path, best_val, run_params, model_obj='reg'):
+def save_val_to_db(model_output_path, best_val, run_params, model_obj, table_name):
 
     df = validation_compare_df(model_output_path, best_val, model_obj)
 
@@ -620,13 +624,11 @@ def save_val_to_db(model_output_path, best_val, run_params, model_obj='reg'):
                   AND model_type='{model_type}'
                 '''
     
-    if model_obj == 'reg':
-        dm.delete_from_db('Simulation', f'Model_Validations', del_str, create_backup=False)
-        dm.write_to_db(df, 'Simulation', 'Model_Validations', 'append')
+ 
+    dm.delete_from_db('Simulation', table_name, del_str, create_backup=False)
+    dm.write_to_db(df, 'Simulation', table_name, 'append')
 
-    elif model_obj == 'class': 
-        dm.delete_from_db('Simulation', f'Model_Validations_Class', del_str, create_backup=False)
-        dm.write_to_db(df, 'Simulation', 'Model_Validations_Class', 'append')
+  
 
 def save_test_to_db(df, run_params):
 
@@ -651,7 +653,7 @@ def save_test_to_db(df, run_params):
     dm.write_to_db(df, 'Simulation', 'Model_Test_Validations', 'append')
 
 
-def save_prob_to_db(output, run_params):
+def save_prob_to_db(output, run_params, table_name):
 
     
     df = output[['player', 'team', 'week', 'year', 'pred_fp_per_game_class']].copy()
@@ -680,8 +682,8 @@ def save_prob_to_db(output, run_params):
                   AND set_year={run_params['set_year']}
                   AND model_type='{model_type}'
                 '''
-    dm.delete_from_db('Simulation', f'Predicted_Probability', del_str, create_backup=False)
-    dm.write_to_db(df, 'Simulation', 'Predicted_Probability', 'append')
+    dm.delete_from_db('Simulation', table_name, del_str, create_backup=False)
+    dm.write_to_db(df, 'Simulation', table_name, 'append')
 
 
 def save_output_to_db(output, run_params):
@@ -758,7 +760,7 @@ calibrate = False
 
 # set the model version
 set_weeks = [
-       # 1, 2, 3, 4, 5, 6, 7, 
+        1, 2, 3, 4, 5, 6, 7, 8,
         9
         ]
 
@@ -768,7 +770,7 @@ pred_versions = [
                   'sera1_rsq0_brier1_matt1_lowsample_perc',
                    'sera1_rsq0_brier1_matt1_lowsample_perc',
                     'sera1_rsq0_brier1_matt1_lowsample_perc',
-                     'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+                     'sera1_rsq0_brier1_matt1_lowsample_perc',
                       'sera1_rsq0_brier1_matt0_lowsample_perc',
                        'sera1_rsq0_brier1_matt1_lowsample_perc',
                 ]
@@ -844,7 +846,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
                                                                             min_include=min_include)
 
         if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
-        save_val_to_db(model_output_path, best_val_class, run_params, model_obj='class')
+        save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
 
         # quantile regression metrics
         final_models = ['qr_q', 'gbm_q', 'lgbm_q', 'rf_q', 'knn_q']
@@ -874,11 +876,11 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         best_val, best_predictions, best_score = average_stack_models(scores, final_models, y_stack, stack_val_pred, 
                                                                       predictions, model_obj='reg',
                                                                       show_plot=show_plot, min_include=min_include)
-        save_val_to_db(model_output_path, best_val, run_params)
+        save_val_to_db(model_output_path, best_val, run_params, 'reg', table_name='Model_Validations')
         
         # create the output and add standard devations / max scores
         output = create_output(output_start, best_predictions, best_predictions_class, best_predictions_quant)
-        save_prob_to_db(output, run_params)
+        save_prob_to_db(output, run_params, 'Predicted Probability')
 
         metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1, 'pred_fp_per_game_quantile': 1}
         output = val_std_dev(model_output_path, output, best_val, best_val_class, best_val_quant, metrics=metrics, 
@@ -886,8 +888,8 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         
         try:  
             output = add_actual(output)
-            print(output.loc[:50, ['player', 'week', 'year', 'dk_salary', 'dk_rank', 
-                                   'pred_fp_per_game', 'pred_fp_per_game_class', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
+            print(output.loc[:50, ['player', 'week', 'year', 'dk_salary', 'dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class',
+                                   'pred_fp_per_game_quantile', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
             save_test_to_db(output, run_params)
             
             if show_plot: mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
@@ -1010,53 +1012,115 @@ def predict_million_df(df, run_params):
     return df_train_mil, df_predict_mil, min_samples_mil, run_params
 
 
-df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
+for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
-# load the regregression predictions
-pred, actual, models_mil, scores, full_hold_mil = mf.load_all_pickles(model_output_path, 'million')
-X_stack_mil, y_stack_mil = mf.X_y_stack('mil', full_hold_mil, pred, actual)
+    run_params['set_week'] = w
+    runs = [
+        ['QB', 'full_model', ''],
+        ['RB', 'full_model', ''],
+        ['WR', 'full_model', ''],
+        ['TE', 'full_model', ''],
+        ['Defense', 'full_model', ''],
+        ['QB', 'backfill', ''],
+        ['RB', 'backfill', ''],
+        ['WR', 'backfill', ''],
+        ['TE', 'backfill', '']
+    ]
+    for set_pos, model_type, rush_pass in runs:
+
+        print(f'\n----------\n{set_pos} week {w} {model_type}\n----------\n')
+        run_params['rush_pass'] = rush_pass
+
+        # load data and filter down
+        pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
+        df, run_params = load_data(model_type, set_pos, run_params)
+        df, run_params = create_game_date(df, run_params)
+        df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
+            
+        df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
+
+        # load the regregression predictions
+        pred, actual, models_mil, scores, full_hold_mil = mf.load_all_pickles(model_output_path, 'million')
+        X_stack_mil, y_stack_mil = mf.X_y_stack('mil', full_hold_mil, pred, actual)
 
 
-_, X, y = get_skm(df_train_mil, 'class', to_drop=run_params['drop_cols'])
-X_predict_mil = create_stack_predict(df_predict_mil, models_mil, X, y, proba=True)
+        _, X, y = get_skm(df_train_mil, 'class', to_drop=run_params['drop_cols'])
+        X_predict_mil = create_stack_predict(df_predict_mil, models_mil, X, y, proba=True)
 
 
-show_plot=True
+        show_plot=True
 
-# class metrics
-final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
-stack_val_pred = pd.DataFrame(); scores = []; best_models = []
-for i, fm in enumerate(final_models):
-    best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack_mil, y_stack_mil, best_models, 
-                                                            scores, stack_val_pred, model_obj='class',
-                                                            run_adp=False, show_plots=False, 
-                                                            calibrate=calibrate, num_k_folds=num_k_folds,
-                                                            print_coef=print_coef)
+        # class metrics
+        final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
+        stack_val_pred = pd.DataFrame(); scores = []; best_models = []
+        for i, fm in enumerate(final_models):
+            best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack_mil, y_stack_mil, best_models, 
+                                                                    scores, stack_val_pred, model_obj='class',
+                                                                    run_adp=False, show_plots=False, 
+                                                                    calibrate=calibrate, num_k_folds=num_k_folds,
+                                                                    print_coef=print_coef)
 
-    if show_plot: show_calibration_curve(y_stack_mil, stack_val_pred[fm], n_bins=8)
+            if show_plot: show_calibration_curve(y_stack_mil, stack_val_pred[fm], n_bins=8)
 
-predictions = stack_predictions(X_predict_mil, best_models, final_models, model_obj='class')
-best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_mil, stack_val_pred, 
-                                                                    predictions, model_obj='class', show_plot=show_plot, 
-                                                                    min_include=min_include)
+        predictions = stack_predictions(X_predict_mil, best_models, final_models, model_obj='class')
+        best_val_mil, best_predictions_mil, _ = average_stack_models(scores, final_models, y_stack_mil, stack_val_pred, 
+                                                                            predictions, model_obj='class', show_plot=show_plot, 
+                                                                            min_include=min_include)
 
-if show_plot: show_calibration_curve(y_stack_mil, best_val_class.mean(axis=1), n_bins=8)
+        if show_plot: show_calibration_curve(y_stack_mil, best_val_mil.mean(axis=1), n_bins=8)
 
-pd.concat([df_predict_mil[['player']], pd.Series(best_predictions_class.mean(axis=1), name='mil_pred')], axis=1).sort_values(by='mil_pred')
+        test_output = pd.concat([df_predict_mil[['player', 'team', 'week', 'year']], 
+                                 pd.Series(best_predictions_mil.mean(axis=1), name='pred_fp_per_game_class')], 
+                                 axis=1).sort_values(by='pred_fp_per_game_class', ascending=False)
+        display(test_output)
 
+        save_val_to_db(model_output_path, best_val_mil, run_params, 'million', table_name='Model_Validations_Million')
+        save_prob_to_db(test_output, run_params, 'Predicted_Million')
 
 # %%
+output[['player', 'team', 'week', 'year', 'pred_fp_per_game_class']]
 
-pred, actual, models_mil, scores, full_hold_mil = mf.load_all_pickles(model_output_path, 'million')
-scores = [s[1] for s in scores]
+for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
-final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
-final_models = ['class_'+m+'_million' for m in final_models]
-best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_mil, X_stack_mil, 
-                                                                    X_predict_mil, model_obj='class', show_plot=show_plot, 
-                                                                    min_include=min_include)
+    run_params['set_week'] = w
+    runs = [
+        ['QB', 'full_model', ''],
+        ['RB', 'full_model', ''],
+        ['WR', 'full_model', ''],
+        ['TE', 'full_model', ''],
+        ['Defense', 'full_model', ''],
+        ['QB', 'backfill', ''],
+        ['RB', 'backfill', ''],
+        ['WR', 'backfill', ''],
+        ['TE', 'backfill', '']
+    ]
+    for set_pos, model_type, rush_pass in runs:
 
-pd.concat([df_predict_mil[['player']], pd.Series(best_predictions_class.mean(axis=1), name='mil_pred')], axis=1).sort_values(by='mil_pred')
+        run_params['rush_pass'] = rush_pass
+
+        # load data and filter down
+        pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
+        df, run_params = load_data(model_type, set_pos, run_params)
+        df, run_params = create_game_date(df, run_params)
+        df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
+
+        df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
+                
+        pred, actual, models_mil, scores, full_hold_mil = mf.load_all_pickles(model_output_path, 'million')
+        X_stack_mil, y_stack_mil = mf.X_y_stack('mil', full_hold_mil, pred, actual)
+        _, X, y = get_skm(df_train_mil, 'class', to_drop=run_params['drop_cols'])
+        X_predict_mil = create_stack_predict(df_predict_mil, models_mil, X, y, proba=True)
+        scores = [s[1] for s in scores]
+
+        final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
+        final_models = ['class_'+m+'_million' for m in final_models]
+        best_val_mil, best_predictions_mil, _ = average_stack_models(scores, final_models, y_stack_mil, X_stack_mil, 
+                                                                            X_predict_mil, model_obj='class', show_plot=True, 
+                                                                            min_include=min_include)
+
+        display(pd.concat([df_predict_mil[['player']],
+                        pd.Series(best_predictions_mil.mean(axis=1), name='mil_pred')], axis=1).sort_values(by='mil_pred', ascending=False))
+        save_val_to_db(model_output_path, best_val_mil, run_params, 'million', table_name='Model_Validations_Million')
 
 # %%
 
@@ -1076,3 +1140,5 @@ display(output_no_stack)
 if show_plot: mf.show_scatter_plot(output_no_stack.reg_pred, output_no_stack.actual_pts)
 
 # %%
+
+save_val_to_db(model_output_path, best_val, run_params, table_name='Model_Validations')

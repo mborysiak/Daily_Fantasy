@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 8
+set_week = 9
 
 download_path = '//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/Mborysiak/DK/'
 extract_path = download_path + f'Results/{set_year}/'
@@ -241,7 +241,7 @@ def pull_actual_pts(set_pos):
     if set_pos=='Defense': pl = 'defTeam'
     else: pl = 'player'
 
-    actual_pts = dm.read(f'''SELECT {pl} player, week, season year, fantasy_pts y_act
+    actual_pts = dm.read(f'''SELECT {pl} player, week, season year, fantasy_pts fpts
                              FROM {set_pos}_Stats 
                              WHERE season >= 2020''', 'FastR')
     return actual_pts
@@ -289,7 +289,7 @@ for contest in ['Million']:#, 'ThreePointStance', 'ScreenPass']:
 #%%
 
 chk = pd.merge(player_ownership, pts, on=['player', 'week', 'year'], how='left')
-chk[abs(chk.player_points-chk.y_act) > 0.2]
+chk[abs(chk.player_points-chk.fpts) > 0.2]
 
 #%%
 
@@ -305,15 +305,50 @@ dm.write_to_db(player_ownership, 'DK_Results', 'Contest_Ownership', 'append')
 
 contest = 'Million'
 base_place = 1
-places = 25
+places = 100
 
-full_entries = dm.read(f"SELECT * FROM Contest_Results WHERE Contest='{contest}'", 'DK_Results')
+full_entries = dm.read(f'''SELECT * 
+                           FROM Contest_Results 
+                           WHERE Contest='{contest}'
+                                 AND week = {set_week}
+                                 AND year = {set_year}
+                        ''', 'DK_Results')
+
 df_lineups = format_lineups(full_entries, min_place=base_place, max_place=base_place+places)
 df_lineups.player = df_lineups.player.apply(dc.name_clean)
 df_lineups.loc[df_lineups.lineup_position=='DST', 'player'] = df_lineups.loc[df_lineups.lineup_position=='DST', 'player'].map(team_map)
 
-df_lineups = df_lineups.groupby(['player', 'week', 'year']).agg(counts=('place', 'count')).reset_index()
-df_lineups['y_act'] = np.where(df_lineups.counts >= 5, 1, 0)
+df_lineups_top = df_lineups.groupby(['player', 'week', 'year']).agg(counts=('place', 'count')).reset_index()
+df_lineups_top = pd.merge(df_lineups_top, pts, on=['player', 'week', 'year'], how='left')
 
-dm.write_to_db(df_lineups, 'DK_Results', 'Top_Players', 'replace')
+df_lineups_top['y_act'] = 0
+df_lineups_top.loc[(df_lineups_top.counts >= 5) & (df_lineups_top.fpts > 10), 'y_act'] = 1
+
+dm.delete_from_db('DK_Results', 'Top_Players', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df_lineups_top, 'DK_Results', 'Top_Players', 'append')
+
+# %%
+
+full_entries = dm.read(f'''SELECT * 
+                           FROM Contest_Results 
+                           WHERE Contest='{contest}'
+                                 AND week = {set_week}
+                                 AND year = {set_year}
+                        ''', 'DK_Results')
+
+df_lineups_roi = format_lineups(full_entries, min_place=1, max_place=200000)
+df_lineups_roi.player = df_lineups_roi.player.apply(dc.name_clean)
+df_lineups_roi.loc[df_lineups_roi.lineup_position=='DST', 'player'] = \
+    df_lineups_roi.loc[df_lineups_roi.lineup_position=='DST', 'player'].map(team_map)
+
+prizes = full_entries[['Rank', 'week', 'year', 'prize']].rename(columns={'Rank': 'place'})
+df_lineups_roi = pd.merge(df_lineups_roi, prizes, on=['place', 'week', 'year'])
+df_lineups_roi = df_lineups_roi.groupby(['player', 'week', 'year']).agg(total_prize=('prize', 'sum'), 
+                                                                        total_lineups=('prize', 'count')).reset_index()
+
+df_lineups_roi['prize_return_delta'] = (df_lineups_roi.total_prize - (df_lineups_roi.total_lineups*20))
+df_lineups_roi['prize_return_pct'] = (df_lineups_roi.total_prize - (df_lineups_roi.total_lineups*20)) / (df_lineups_roi.total_lineups*20)
+
+dm.delete_from_db('DK_Results', 'Top_Players_ROI', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df_lineups_roi, 'DK_Results', 'Top_Players_ROI', 'append')
 # %%

@@ -796,9 +796,7 @@ def get_defense_stats(prev_years=1):
 def add_injuries(df, pos=None, def_join=False, oline_join=False):
 
     inj = dm.read('''SELECT * FROM PlayerInjuries''', 'Pre_PlayerData')
-    inj = pd.concat([inj, pd.get_dummies(inj.game_status),
-  #  pd.get_dummies(inj.practice_status)
-    ], axis=1)
+    inj = pd.concat([inj, pd.get_dummies(inj.game_status),  pd.get_dummies(inj.practice_status)], axis=1)
     inj = inj.dropna(subset=['injuries']).reset_index(drop=True)
 
     inj['leg_muscle_injury'] = 0
@@ -815,19 +813,24 @@ def add_injuries(df, pos=None, def_join=False, oline_join=False):
 
     inj = inj[['player', 'pos', 'week', 'year', 'Questionable', 'Doubtful', 'Out',
             'leg_muscle_injury', 'ankle_foot_injury', 'knee_hip_injury', 'upper_body_injury',
-            # 'Did Not Participate In Practice', 'Full Participation in Practice',
-            # 'Limited Participation in Practice'
+             'Did Not Participate In Practice', 'Full Participation in Practice',
+             'Limited Participation in Practice'
             ]]
+
+    rcols = ['Did Not Participate In Practice', 'Limited Participation in Practice', 'Questionable', 'Out']
+    inj = inj.sort_values(by=['player','year', 'week']).reset_index(drop=True)
+    inj = add_rolling_stats(inj, ['player'], rcols).fillna(0)
 
     if def_join: df = pd.merge(df.drop('pos', axis=1), inj, on=['player', 'week', 'year'], how='left')
     elif oline_join: df = pd.merge(df, inj.drop('pos', axis=1), on=['player', 'week', 'year'], how='left')
     else:  df = pd.merge(df, inj, on=['player', 'pos', 'week', 'year'], how='left')
 
     cols = ['Questionable', 'Doubtful', 'Out', 'leg_muscle_injury', 'ankle_foot_injury',
-            'knee_hip_injury', 'upper_body_injury'
-            # 'Did Not Participate In Practice', 'Full Participation in Practice',
-            # 'Limited Participation in Practice'
+            'knee_hip_injury', 'upper_body_injury',
+            'Did Not Participate In Practice', 'Full Participation in Practice',
+            'Limited Participation in Practice'
             ]
+    
     df[cols] = df[cols].fillna(0)
 
     players = list(df.loc[(df.week==WEEK) & (df.year==YEAR), 'player'].values)

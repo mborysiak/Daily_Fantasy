@@ -221,7 +221,7 @@ def get_predictions(drop_teams, pred_vers,std_dev_type, set_week, set_year, full
     for c in score_cols: preds[c] = preds[c] / preds.weighting
     preds = preds.drop('weighting', axis=1)
 
-    teams = dm.read("SELECT * FROM Player_Teams", 'Simulation')
+    teams = dm.read(f"SELECT player, team FROM Player_Teams WHERE week={set_week} AND year={set_year}", 'Simulation')
     preds = pd.merge(preds, teams, on=['player'])
     preds = preds[~preds.team.isin(drop_teams)].reset_index(drop=True)
 
@@ -333,7 +333,8 @@ covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8
+    1, 2, 3, 4, 5, 6,
+    7, 8
         ]
 
 set_years = [
@@ -414,7 +415,7 @@ sim_types = [
 #              'ownership_ln_pos'
 # ]
 
-# full_model_weights = [0.2, 1, 5]
+full_model_weights = [0.2, 1, 5]
 
 i = 0
 iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
@@ -465,7 +466,7 @@ run_params = pd.DataFrame({
     'pred_vers': [pred_vers],
     'ensemble_vers': [ensemble_vers],
     'std_dev_type': [std_dev_type],
-    'full_model_rel_weight': ['np.random.choice([0.2, 5], p=[0.5 0.5])'],
+    'full_model_rel_weight': ['np.random.choice([0.2, 5], p=[0.5, 0.5])'],
     'drop_player_multiple': ['np.random.choice([0, 4], p=[0.5, 0.5])'],
     'covar_type': ["np.random.choice(['team_points_trunc'], p=[1])"],
     'use_covar': ["np.random.choice([True, False], p=[0.5, 0.5])"],

@@ -214,19 +214,18 @@ for t, d in zip(['WR_CB', 'TE', 'Oline_Dline'], [wr_cb, te, ol_dl]):
 
 #%%
 
-teams = dm.read(f'''SELECT player, team
+teams = dm.read(f'''SELECT player, team, week, year
                     FROM (
                     SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
                                 team,
-                                row_number() OVER (PARTITION BY player 
-                                                   ORDER BY year DESC, 
-                                                            week DESC, 
-                                                            projected_points DESC) rn 
+                                week, 
+                                year,
+                                rank() OVER (PARTITION BY player, year, week
+                                                   ORDER BY  projected_points DESC) rn 
                     FROM FantasyPros
                     ) WHERE rn=1''', 'Pre_PlayerData').drop_duplicates()
 
 dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'replace')
-
 
 
 #%%

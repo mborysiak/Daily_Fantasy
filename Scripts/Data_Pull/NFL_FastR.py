@@ -498,25 +498,3 @@ dm.write_to_db(def_scoring, 'FastR', 'Defense_Stats', if_exist='append')
 # coaches.team = coaches.team.map(team_map)
 # dm.delete_from_db('FastR', 'Coach_Stats', f"season={cur_season}")
 # dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='append')
-
-# %%
-
-fp_cols = {'pass_yards_gained_sum': 0.04, 
-           'pass_pass_touchdown_sum': 4, 
-           'pass_interception_sum': -1,
-           'fumble_lost': -1,
-           'rush_yards_gained_sum': 0.1, 
-           'rush_rush_touchdown_sum': 6,
-           'rush_yd_100_bonus': 3,
-           'pass_yd_300_bonus': 3}
-
-qb = dm.read("SELECT * FROM QB_Stats WHERE player='Patrick Mahomes' AND week=15 and season=2020", 'FastR')
-qb[fp_cols.keys()]
-# %%
-
-qb[fp_cols.keys()] * list(fp_cols.values())
-
-# %%
-
-qb.iloc[0][90:]
-# %%
