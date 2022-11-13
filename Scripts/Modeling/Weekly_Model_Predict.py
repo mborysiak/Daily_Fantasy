@@ -225,6 +225,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
                                         ]
         params['k_best__k'] = range(1, 9)
     
+    
     if skm.model_obj == 'quantile':
         if m == 'qr_q': pipe.steps[-1][-1].quantile = alpha
         elif m in ('rf_q', 'knn_q'): pipe.steps[-1][-1].q = alpha
@@ -760,31 +761,32 @@ calibrate = False
 
 # set the model version
 set_weeks = [
-        1, 2, 3, 4, 5, 6, 7, 8,
-        9
+        # 1, 2, 3, 4, 5, 6, 7, 8, 9,
+        10
         ]
 
 pred_versions = [
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                  'sera1_rsq0_brier1_matt1_lowsample_perc',
-                   'sera1_rsq0_brier1_matt1_lowsample_perc',
-                    'sera1_rsq0_brier1_matt1_lowsample_perc',
-                     'sera1_rsq0_brier1_matt1_lowsample_perc',
-                      'sera1_rsq0_brier1_matt0_lowsample_perc',
-                       'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #  'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #   'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #    'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #     'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #      'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #       'sera1_rsq0_brier1_matt0_lowsample_perc',
+                #        'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #        'sera1_rsq0_brier1_matt1_lowsample_perc'
                 ]
 
 ensemble_versions = [
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
                      ]
 
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
@@ -794,14 +796,14 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     run_params['set_week'] = w
     runs = [
         ['QB', 'full_model', ''],
-        ['RB', 'full_model', ''],
-        ['WR', 'full_model', ''],
-        ['TE', 'full_model', ''],
-        ['Defense', 'full_model', ''],
-        ['QB', 'backfill', ''],
-        ['RB', 'backfill', ''],
-        ['WR', 'backfill', ''],
-        ['TE', 'backfill', '']
+        # ['RB', 'full_model', ''],
+        # ['WR', 'full_model', ''],
+        # ['TE', 'full_model', ''],
+        # ['Defense', 'full_model', ''],
+        # ['QB', 'backfill', ''],
+        # ['RB', 'backfill', ''],
+        # ['WR', 'backfill', ''],
+        # ['TE', 'backfill', '']
     ]
     for set_pos, model_type, rush_pass in runs:
 
@@ -880,7 +882,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         
         # create the output and add standard devations / max scores
         output = create_output(output_start, best_predictions, best_predictions_class, best_predictions_quant)
-        save_prob_to_db(output, run_params, 'Predicted Probability')
+        save_prob_to_db(output, run_params, 'Predicted_Probability')
 
         metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1, 'pred_fp_per_game_quantile': 1}
         output = val_std_dev(model_output_path, output, best_val, best_val_class, best_val_quant, metrics=metrics, 

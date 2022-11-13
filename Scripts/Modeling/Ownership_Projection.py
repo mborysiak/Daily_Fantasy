@@ -18,7 +18,7 @@ ens_version = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
 set_year = 2022
-set_week = 8
+set_week = 10
 contest = 'Million'
 
 #%%

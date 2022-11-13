@@ -38,7 +38,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [ 7, 8, 9]
+run_weeks = [1, 2, 3, 4, 5, 7, 7, 8, 9, 10]
 
 run_params = {
     
@@ -59,8 +59,18 @@ run_params = {
     'cuts': [33, 80, 95],
     'met': 'y_act',
 
+    # set number of weeks back to begin validation
+    'back_weeks': {
+        'QB': 28,
+        'RB': 24,
+        'WR': 24,
+        'TE': 28,
+        'Defense': 28
+    },
+
     'rush_pass': ''
 }
+
 n_splits = run_params['n_splits']
 
 # set position and model type
@@ -82,7 +92,7 @@ vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 
 def create_pkey_output_path(set_pos, run_params, model_type, vers):
 
-    pkey = f"{set_pos}_year{run_params['set_year']}_week{run_params['set_week']}_{model_type}{vers}{run_params['rush_pass']}"
+    pkey = f"{set_pos}_year{run_params['set_year']}_week{run_params['set_week']}_{model_type}{vers}"
     db_output = {
                 'pkey': [], 
                 'set_pos': [], 
@@ -128,11 +138,28 @@ def load_data(model_type, set_pos, run_params):
 def year_week_to_date(x):
     return int(dt.datetime(x[0], 1, x[1]).strftime('%Y%m%d'))
 
+
+def get_cv_time_input(df, back_weeks):
+    max_date = str(df.game_date.max())
+    year = int(max_date[:4])
+    week = int(max_date[-2:])
+
+    for i in range(back_weeks):
+        if week > 1:
+            week -= 1
+        else:
+            year -= 1
+            week = 17
+    cv_time_input = int(dt.datetime(year, 1, week).strftime('%Y%m%d'))
+    print(f'Begin Validation on Week {week}, {year}')
+    return cv_time_input
+
+
 def create_game_date(df, run_params):
     
     # set up the date column for sorting
     df['game_date'] = df[['year', 'week']].apply(year_week_to_date, axis=1)
-    cv_time_input = int(dt.datetime(run_params['val_year_min'], 1, run_params['val_week_min']).strftime('%Y%m%d'))
+    cv_time_input = get_cv_time_input(df, run_params['back_weeks'][set_pos])
     train_time_split = int(dt.datetime(run_params['set_year'], 1, run_params['set_week']).strftime('%Y%m%d'))
 
     run_params['cv_time_input'] = cv_time_input
@@ -313,7 +340,8 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
     print('Time Elapsed:', np.round((time.time()-start)/60,1), 'Minutes')
     best_models = Parallel(n_jobs=-1, verbose=0)(delayed(post_model_fit)(bm, X, y) for bm in best_models)
     
-    out_dict = update_output_dict(model_obj, model_name, str(alpha), out_dict, oof_data, best_models)
+    col_label = str(alpha)+run_params['rush_pass']
+    out_dict = update_output_dict(model_obj, model_name, col_label, out_dict, oof_data, best_models)
     # db_output = add_result_db_output('reg', m, oof_data['scores'], db_output, run_params)
 
     try: save_param_scores(param_scores, model_obj, model_name, run_params)
@@ -438,27 +466,31 @@ def save_param_scores(df, obj_type, model, run_params):
 
     dm.write_to_db(df, 'Results', f'{obj_type}_{model}', 'replace')
 
-def save_output_dict(out_dict, model_output_path, label):
+def save_output_dict(out_dict, model_output_path, label, rush_pass):
 
-    save_pickle(out_dict['pred'], model_output_path, f'{label}_pred')
-    save_pickle(out_dict['actual'], model_output_path, f'{label}_actual')
-    save_pickle(out_dict['models'], model_output_path, f'{label}_models')
-    save_pickle(out_dict['scores'], model_output_path, f'{label}_scores')
-    save_pickle(out_dict['full_hold'], model_output_path, f'{label}_full_hold')
+    save_pickle(out_dict['pred'], model_output_path, f'{rush_pass}{label}_pred')
+    save_pickle(out_dict['actual'], model_output_path, f'{rush_pass}{label}_actual')
+    save_pickle(out_dict['models'], model_output_path, f'{rush_pass}{label}_models')
+    save_pickle(out_dict['scores'], model_output_path, f'{rush_pass}{label}_scores')
+    save_pickle(out_dict['full_hold'], model_output_path, f'{rush_pass}{label}_full_hold')
 
 
 
 #%%
 run_list = [
             ['QB', '', 'full_model'],
-            ['RB', '', 'full_model'],
-            ['WR', '', 'full_model'],
-            ['TE', '', 'full_model'],
-            ['Defense', '', 'full_model'],
-            ['QB', '', 'backfill'],
-            ['RB', '', 'backfill'],
-            ['WR', '', 'backfill'],
-            ['TE', '', 'backfill'],
+            ['QB', 'rush', 'full_model'],
+            # ['QB', 'pass', 'full_model'],
+            # ['RB', '', 'full_model'],
+            # ['WR', '', 'full_model'],
+            # ['TE', '', 'full_model'],
+            # ['Defense', '', 'full_model'],
+            # ['QB', '', 'backfill'],
+            ['QB', 'rush', 'backfill'],
+            ['QB', 'pass', 'backfill'],
+            # ['RB', '', 'backfill'],
+            # ['WR', '', 'backfill'],
+            # ['TE', '', 'backfill'],
 ]
 
 for w in run_weeks:
@@ -468,7 +500,7 @@ for w in run_weeks:
 
         run_params['rush_pass'] = rush_pass
         run_params['n_splits'] = n_splits
-        print(f"\n==================\n{set_pos} {model_type} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
+        print(f"\n==================\n{set_pos} {model_type} {rush_pass} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
 
         #==========
         # Pull and clean compiled data
@@ -480,6 +512,8 @@ for w in run_weeks:
         df, run_params = create_game_date(df, run_params)
         df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
+        run_params['cv_time_input'] = 20200114
+
         # set up blank dictionaries for all metrics
         out_reg, out_class, out_quant, out_million = output_dict(), output_dict(), output_dict(), output_dict()
 
@@ -487,37 +521,37 @@ for w in run_weeks:
         # # Run Models
         # #=========
 
-        # # run all other models
-        # model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
-        # for i, m in enumerate(model_list):
-        #     out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
-        # save_output_dict(out_reg, model_output_path, 'reg')
-
-        # # run all other models
-        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
-        # for cut in run_params['cuts']:
-        #     print(f"\n--------------\nPercentile {cut}\n--------------\n")
-        #     df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
-        #     for i, m in enumerate(model_list):
-        #         out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
-        # save_output_dict(out_class, model_output_path, 'class')
-
-        # # run all other models
-        # model_list = ['gbm_q', 'lgbm_q', 'qr_q', 'knn_q', 'rf_q']
-        # for i, m in enumerate(model_list):
-        #     for alph in [0.8, 0.95]:
-        #         out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
-        # save_output_dict(out_quant, model_output_path, 'quant')
-
-        # run the million predict
-        print(f"\n--------------\nRunning Million Predict\n--------------\n")
-        n_splits = run_params['n_splits']; cut='million'
-        df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
-
-        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
+        # run all other models
+        model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
         for i, m in enumerate(model_list):
-            out_million, _, _= get_model_output(m, df_train_mil, 'class', out_million, run_params, i, min_samples)
-        save_output_dict(out_million, model_output_path, 'million')
+            out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
+        save_output_dict(out_reg, model_output_path, 'reg', rush_pass)
+
+        # run all other models
+        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
+        for cut in run_params['cuts']:
+            print(f"\n--------------\nPercentile {cut}\n--------------\n")
+            df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
+            for i, m in enumerate(model_list):
+                out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
+        save_output_dict(out_class, model_output_path, 'class', rush_pass)
+
+        # run all other models
+        model_list = ['gbm_q', 'lgbm_q', 'qr_q', 'knn_q', 'rf_q']
+        for i, m in enumerate(model_list):
+            for alph in [0.8, 0.95]:
+                out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
+        save_output_dict(out_quant, model_output_path, 'quant', rush_pass)
+
+        # # run the million predict
+        # print(f"\n--------------\nRunning Million Predict\n--------------\n")
+        # n_splits = run_params['n_splits']; cut='million'
+        # df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
+
+        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
+        # for i, m in enumerate(model_list):
+        #     out_million, _, _= get_model_output(m, df_train_mil, 'class', out_million, run_params, i, min_samples)
+        # save_output_dict(out_million, model_output_path, 'million')
 
 
         # # run the million predict

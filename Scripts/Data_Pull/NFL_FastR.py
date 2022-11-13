@@ -498,3 +498,5 @@ dm.write_to_db(def_scoring, 'FastR', 'Defense_Stats', if_exist='append')
 # coaches.team = coaches.team.map(team_map)
 # dm.delete_from_db('FastR', 'Coach_Stats', f"season={cur_season}")
 # dm.write_to_db(coaches, 'FastR', 'Coach_Stats', if_exist='append')
+
+# %%

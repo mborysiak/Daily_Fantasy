@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2022
-set_week = 9
+set_week = 10
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -28,7 +28,6 @@ dm = DataManage(db_path)
 # Fantasy Pros
 #=============
 
-# for set_pos in ['RB']:
 for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
 
     try:

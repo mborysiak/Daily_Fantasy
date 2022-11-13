@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2022
-WEEK = 9
+WEEK = 10
 
 #%%
 import pandas as pd 
@@ -817,20 +817,18 @@ def add_injuries(df, pos=None, def_join=False, oline_join=False):
              'Limited Participation in Practice'
             ]]
 
-    rcols = ['Did Not Participate In Practice', 'Limited Participation in Practice', 'Questionable', 'Out']
-    inj = inj.sort_values(by=['player','year', 'week']).reset_index(drop=True)
-    inj = add_rolling_stats(inj, ['player'], rcols).fillna(0)
+    # rcols = ['Did Not Participate In Practice', 'Limited Participation in Practice', 'Questionable', 'Out']
+    # inj = inj.sort_values(by=['player','year', 'week']).reset_index(drop=True)
+    # inj = add_rolling_stats(inj, ['player'], rcols).fillna(0)
 
     if def_join: df = pd.merge(df.drop('pos', axis=1), inj, on=['player', 'week', 'year'], how='left')
     elif oline_join: df = pd.merge(df, inj.drop('pos', axis=1), on=['player', 'week', 'year'], how='left')
     else:  df = pd.merge(df, inj, on=['player', 'pos', 'week', 'year'], how='left')
 
     cols = ['Questionable', 'Doubtful', 'Out', 'leg_muscle_injury', 'ankle_foot_injury',
-            'knee_hip_injury', 'upper_body_injury',
-            'Did Not Participate In Practice', 'Full Participation in Practice',
-            'Limited Participation in Practice'
-            ]
-    
+            'knee_hip_injury', 'upper_body_injury', 'Did Not Participate In Practice', 
+            'Limited Participation in Practice']
+    df['Full Participation in Practice'] = df['Full Participation in Practice'].fillna(1)
     df[cols] = df[cols].fillna(0)
 
     players = list(df.loc[(df.week==WEEK) & (df.year==YEAR), 'player'].values)
@@ -1388,9 +1386,9 @@ def qb_pull(rush_or_pass):
 
     return df
 
-qb_both = qb_pull('')
-# qb_rush = qb_pull('_rush')
-# qb_pass = qb_pull('_pass')
+# qb_both = qb_pull('')
+qb_rush = qb_pull('_rush')
+qb_pass = qb_pull('_pass')
 
 #%%
 for pos in [
@@ -1598,7 +1596,9 @@ backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={WEEK} AND year=
 sal = dm.read(f"SELECT player, salary FROM Salaries WHERE league={WEEK} AND year={YEAR}", 'Simulation')
 sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
 
-
+#%%
+count_chk = dm.read(f"SELECT player, count(*) cnts FROM Backfill WHERE week={WEEK} AND year={YEAR} GROUP BY player", 'Model_Features')
+count_chk[count_chk.cnts > 1]
 # %%
 # TO DO LIST
 # - add in PFF scores

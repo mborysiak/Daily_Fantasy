@@ -14,7 +14,7 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=9
+week=10
 
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
@@ -22,8 +22,7 @@ std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_iters = 30
-
+num_lineups = 30
 set_max_team = None
 
 
@@ -79,7 +78,7 @@ def pull_best_params(best_trials):
 
     for p, opt, val in params_opt.values:
         if p not in params.keys(): params[p] = {}
-        if p in ('adjust_pos_counts', 'use_ownership'):
+        if p in ('adjust_pos_counts'):
             if opt=='0': opt=False
             if opt=='1': opt=True
         else:
@@ -95,30 +94,32 @@ def pull_best_params(best_trials):
 
     return params
 
-best_trials = (57, 58, 59)
+best_trials = (84,88)
 
 opt_params = pull_best_params(best_trials)
 opt_params
 
 #%%
         
-d = {'adjust_pos_counts': {False: 0.47, True: 0.53},
+d = {'adjust_pos_counts': {False: 0.3, True: 0.7},
  'covar_type': {'kmeans_trunc': 0.0,
-  'no_covar': 0.5,
-  'team_points_trunc': 0.5},
- 'full_model_weight': {0.2: 0.5, 1: 0.07, 5: 0.43},
- 'matchup_drop': {0: 0.93, 1: 0.07},
- 'max_salary_remain': {1000: 0.0, 200: 0.17, 300: 0.33, 400: 0.5, 500: 0.0},
- 'min_player_same_team': {0: 0.1, 2: 0.0, 3: 0.0, 'Auto': 0.9},
- 'min_players_opp_team': {0: 0.23, 'Auto': 0.77},
- 'player_drop_multiple': {0: 0.5, 4: 0.5, 6: 0.0},
- 'top_n_choices': {0: 0.6, 1: 0.4, 2: 0.0, 4: 0.0},
- 'use_ownership': {False: 0.1, True: 0.9}}
+  'no_covar': 1.0,
+  'team_points_trunc': 0.0},
+ 'full_model_weight': {0.2: 0.3, 1: 0.0, 5: 0.7},
+ 'matchup_drop': {0: 1.0, 1: 0.0, 2: 0.0, 3: 0.0},
+ 'max_salary_remain': {1000: 0.0, 200: 0.2, 300: 0.8, 400: 0.0, 500: 0.0},
+ 'min_player_same_team': {0: 0.0, 2: 0.0, 3: 0.0, 'Auto': 1.0},
+ 'min_players_opp_team': {0: 0.0, 'Auto': 1.0},
+ 'num_iters': {100: 1.0},
+ 'own_neg_frac': {0.5: 0.5, 0.75: 0.5},
+ 'player_drop_multiple': {0: 0.7, 4: 0.3, 6: 0.0},
+ 'top_n_choices': {0: 0.8, 1: 0.2, 2: 0.0, 4: 0.0},
+ 'use_ownership': {0: 0.0, 0.5: 0.0, 1: 1.0}}
 
 lineups_per_param = 2
 
 params = []
-for i in range(int(num_iters/lineups_per_param)):
+for i in range(int(num_lineups/lineups_per_param)):
     cur_params = []
     for param, param_options in d.items():
         param_vars = list(param_options.keys())
@@ -129,7 +130,7 @@ for i in range(int(num_iters/lineups_per_param)):
 
 #%%
 def sim_winnings(adjust_select,covar_type, full_model_rel_weight,matchup_drop,salary_remain_max,
-                 min_players_same_team, min_players_opp_team, player_drop_multiplier, top_n_choices, 
+                 min_players_same_team, min_players_opp_team, num_iters, own_neg_frac, player_drop_multiplier, top_n_choices, 
                  use_ownership):
 
     try: min_players_opp_team = int(min_players_opp_team)
@@ -152,12 +153,12 @@ def sim_winnings(adjust_select,covar_type, full_model_rel_weight,matchup_drop,sa
     for _ in range(lineups_per_param):
         
         to_add = []
-        if matchup_drop > 0: to_drop = rand_drop_teams(matchups, matchup_drop)
-        else: to_drop = []
+        to_drop = []
         to_drop.extend(to_drop_selected)
 
         for i in range(9):
-            results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, None, min_players_opp_team, adjust_select)
+            results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, None, min_players_opp_team, adjust_select,
+                                      num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac)
             
             prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
             selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
@@ -226,8 +227,8 @@ dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={wee
 
 from joblib import Parallel, delayed
 
-par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, ct, fmw, md, msr, mpst, mpot, pdm, tn, uo) for \
-                                                               adj, ct, fmw, md, msr, mpst, mpot, pdm, tn, uo in params)
+par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, ct, fmw, md, msr, mpst, mpot, ni, onf, pdm, tn, uo) for \
+                                                               adj, ct, fmw, md, msr, mpst, mpot, ni, onf, pdm, tn, uo in params)
 
 lineups_list = []
 for p in par_out:

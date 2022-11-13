@@ -15,11 +15,11 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8
+   1, 2, 3, 4, 5, 6, 7, 8, 9
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022,  2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022,  2022, 2022
 ]
 
 pred_versions = [   
@@ -28,12 +28,14 @@ pred_versions = [
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+                'sera1_rsq0_brier1_matt1_lowsample_perc',
                 'sera1_rsq0_brier1_matt0_lowsample_perc',
+                'sera1_rsq0_brier1_matt1_lowsample_perc',
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
 ]
 
 ensemble_versions = [
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
@@ -52,6 +54,7 @@ std_dev_types = [
                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
                 'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
                 'pred_spline_class80_q80_matt1_brier1_kfold3'
 ]
 
@@ -65,6 +68,7 @@ sim_types = [
              'ownership_ln_pos_2020_flip',
              'ownership_ln_pos_2020_flip',
              'ownership_ln_pos_2020_flip',
+              'ownership_ln_pos_2020_flip',
 ]
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
@@ -81,7 +85,6 @@ for repeat_num in range(10):
 
         salary_cap = 50000
         pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-        num_iters = 50
         adjust_winnings = False
 
         print(f'\nWeek {week}, Repeat {repeat_num}\n---------\n')
@@ -227,8 +230,8 @@ for repeat_num in range(10):
         
         d = {
             'adjust_pos_counts': {
-                True: 0.3, 
-                False: 0.7
+                True: 0.5, 
+                False: 0.5
             },
 
             'player_drop_multiple': {
@@ -245,21 +248,21 @@ for repeat_num in range(10):
             },
 
             'top_n_choices': {
-                0: 0.5,
-                1: 0.5,
+                0: 0.8,
+                1: 0.2,
                 2: 0,
                 4: 0,
             },
 
             'full_model_weight': {
-                0.2: 0,
-                1: 0.3,
-                5: 0.7
+                0.2: 0.2,
+                1: 0,
+                5: 0.8
             },
 
             'covar_type': {
-                'no_covar': 0.8,
-                'team_points_trunc': 0.2,
+                'no_covar': 1,
+                'team_points_trunc': 0,
                 'kmeans_trunc': 0
             },
 
@@ -278,21 +281,30 @@ for repeat_num in range(10):
             'use_ownership': {
                 True: 0,
                 False: 0,
-                1: 1,
-                0.5: 0
+                1: 0.8,
+                0.5: 0.2
+            },
+
+            'own_neg_frac': {
+                0.5: 0.5,
+                0.75: 0.5
             },
 
             'max_salary_remain': {
                 None: 0,
                 200: 0,
-                300: 0.5,
-                400: 0.5,
+                300: 1,
+                400: 0,
                 500: 0,
                 1000: 0
+            },
+
+            'num_iters': {
+                200: 1
             }
         }
 
-        lineups_per_param = 2
+        lineups_per_param = 3
 
         params = []
         for i in range(int(30/lineups_per_param)):
@@ -308,7 +320,8 @@ for repeat_num in range(10):
         
         def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
                         full_model_rel_weight, covar_type, min_players_same_team, 
-                        min_players_opp_team, use_ownership, max_salary_remain, param_iter,
+                        min_players_opp_team, use_ownership, own_neg_frac, max_salary_remain, 
+                        num_iters, param_iter
                         ):
             
             try: min_players_opp_team = int(min_players_opp_team)
@@ -346,12 +359,15 @@ for repeat_num in range(10):
                     results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
                                             min_players_opp_team_input=min_players_opp_team, 
                                             adjust_select=adjust_select, num_matchup_drop=matchup_drop,
-                                            own_neg_frac=0.75)
+                                            own_neg_frac=own_neg_frac)
                     
                     prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
-                    try: selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
-                    except: pass
-                    to_add.append(selected_player)
+                    try: 
+                        selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
+                        to_add.append(selected_player)
+                    except: 
+                        pass
+                    
 
                 to_add.append(param_iter)
 
@@ -370,8 +386,8 @@ for repeat_num in range(10):
             return sim_results, lineup_pts
 
   
-        par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, msr, param_i) for \
-                                                                       adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, msr, param_i in params)
+        par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, onf, msr, ni, param_i) for \
+                                                                       adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, onf, msr, ni, param_i in params)
 
         weighted_winnings = avg_winnings_contest(par_out)
         cur_week_avg_winnings = np.sum(weighted_winnings)
@@ -416,3 +432,20 @@ df = dm.read(f"SELECT * FROM Entry_Optimize_Results WHERE trial_num!={to_delete_
 dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 
 # %%
+
+# df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
+# add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
+# add_on = add_on.assign(param='num_iters', param_option=50, option_value=1)
+# add_on = add_on[df.columns]
+
+# df = pd.concat([df, add_on], axis=0)
+# df = df.sort_values(by='trial_num')
+# df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace')
+
+# #%%
+# df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'Results')
+# df['num_iters'] = 50
+# df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace', create_backup=True)
+
