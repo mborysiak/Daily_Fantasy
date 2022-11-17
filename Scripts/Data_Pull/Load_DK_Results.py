@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 9
+set_week = 10
 
 download_path = '//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/Mborysiak/DK/'
 extract_path = download_path + f'Results/{set_year}/'
@@ -305,7 +305,7 @@ dm.write_to_db(player_ownership, 'DK_Results', 'Contest_Ownership', 'append')
 
 contest = 'Million'
 base_place = 1
-places = 100
+places = 50
 
 full_entries = dm.read(f'''SELECT * 
                            FROM Contest_Results 
@@ -319,13 +319,20 @@ df_lineups.player = df_lineups.player.apply(dc.name_clean)
 df_lineups.loc[df_lineups.lineup_position=='DST', 'player'] = df_lineups.loc[df_lineups.lineup_position=='DST', 'player'].map(team_map)
 
 df_lineups_top = df_lineups.groupby(['player', 'week', 'year']).agg(counts=('place', 'count')).reset_index()
+
+salaries = dm.read('''SELECT player, week, year, dk_salary/1000.0 dk_salary FROM Daily_Salaries''', 'Pre_PlayerData')
+team_salaries = dm.read('''SELECT team player, week, year, dk_salary/1000.0 dk_salary FROM Daily_Salaries''', 'Pre_TeamData')
+salaries = pd.concat([salaries, team_salaries], axis=0)
+
 df_lineups_top = pd.merge(df_lineups_top, pts, on=['player', 'week', 'year'], how='left')
+df_lineups_top = pd.merge(df_lineups_top, salaries, on=['player', 'week', 'year'], how='left')
+df_lineups_top['value'] = df_lineups_top.fpts / df_lineups_top.dk_salary
 
 df_lineups_top['y_act'] = 0
-df_lineups_top.loc[(df_lineups_top.counts >= 5) & (df_lineups_top.fpts > 10), 'y_act'] = 1
+df_lineups_top.loc[(df_lineups_top.counts >= 5) & (df_lineups_top.value > 3), 'y_act'] = 1
 
 dm.delete_from_db('DK_Results', 'Top_Players', f"week={set_week} AND year={set_year}", create_backup=False)
-dm.write_to_db(df_lineups_top, 'DK_Results', 'Top_Players', 'append')
+dm.write_to_db(df_lineups_top, 'DK_Results', 'Top_Players', 'replace')
 
 # %%
 

@@ -38,7 +38,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [1, 2, 3, 4, 5, 7, 7, 8, 9, 10]
+run_weeks = [11]
 
 run_params = {
     
@@ -399,7 +399,7 @@ def predict_million_df(df, run_params):
     df = select_main_slate_teams(df)
 
     df = df.drop('y_act', axis=1)
-    top_players = dm.read("SELECT * FROM Top_Players", "DK_Results").drop('counts', axis=1)
+    top_players = dm.read("SELECT player, week, year, y_act FROM Top_Players", "DK_Results")
 
     df = pd.merge(df, top_players, on=['player', 'week', 'year'], how='left')
     df = df.fillna({'y_act': 0})
@@ -479,18 +479,19 @@ def save_output_dict(out_dict, model_output_path, label, rush_pass):
 #%%
 run_list = [
             ['QB', '', 'full_model'],
-            ['QB', 'rush', 'full_model'],
+            ['RB', '', 'full_model'],
+            ['WR', '', 'full_model'],
+            ['TE', '', 'full_model'],
+            ['Defense', '', 'full_model'],
+            ['QB', '', 'backfill'],
+            ['RB', '', 'backfill'],
+            ['WR', '', 'backfill'],
+            ['TE', '', 'backfill'],
+
+            # ['QB', 'rush', 'full_model'],
             # ['QB', 'pass', 'full_model'],
-            # ['RB', '', 'full_model'],
-            # ['WR', '', 'full_model'],
-            # ['TE', '', 'full_model'],
-            # ['Defense', '', 'full_model'],
-            # ['QB', '', 'backfill'],
-            ['QB', 'rush', 'backfill'],
-            ['QB', 'pass', 'backfill'],
-            # ['RB', '', 'backfill'],
-            # ['WR', '', 'backfill'],
-            # ['TE', '', 'backfill'],
+            # ['QB', 'rush', 'backfill'],
+            # ['QB', 'pass', 'backfill'],
 ]
 
 for w in run_weeks:
@@ -512,14 +513,12 @@ for w in run_weeks:
         df, run_params = create_game_date(df, run_params)
         df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
-        run_params['cv_time_input'] = 20200114
-
         # set up blank dictionaries for all metrics
         out_reg, out_class, out_quant, out_million = output_dict(), output_dict(), output_dict(), output_dict()
 
-        # #=========
-        # # Run Models
-        # #=========
+        #=========
+        # Run Models
+        #=========
 
         # run all other models
         model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
@@ -551,7 +550,7 @@ for w in run_weeks:
         # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
         # for i, m in enumerate(model_list):
         #     out_million, _, _= get_model_output(m, df_train_mil, 'class', out_million, run_params, i, min_samples)
-        # save_output_dict(out_million, model_output_path, 'million')
+        # save_output_dict(out_million, model_output_path, 'million', rush_pass)
 
 
         # # run the million predict
@@ -561,7 +560,7 @@ for w in run_weeks:
         # model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
         # for i, m in enumerate(model_list):
         #     out_million, _, _= get_model_output(m, df_train_mil, 'reg', out_million, run_params, i, min_samples)
-        # save_output_dict(out_million, model_output_path, 'million')
+        # save_output_dict(out_million, model_output_path, 'million', rush_pass)
 
         
 

@@ -331,93 +331,101 @@ def get_mean_points(preds):
 
 covar_type = 'team_points_trunc'
 
-# # set the model version
-# set_weeks = [
-#     1, 2, 3, 4, 5, 6,
-#     7, 8, 9
-#         ]
-
-# set_years = [
-#       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
-# ]
-
-# pred_versions = [   
-#                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-#                  'sera1_rsq0_brier1_matt1_lowsample_perc',
-#                   'sera1_rsq0_brier1_matt1_lowsample_perc',
-#                    'sera1_rsq0_brier1_matt1_lowsample_perc',
-#                     'sera1_rsq0_brier1_matt1_lowsample_perc',
-#                      'sera1_rsq0_brier1_matt1_lowsample_perc',
-#                       'sera1_rsq0_brier1_matt0_lowsample_perc',
-#                        'sera1_rsq0_brier1_matt1_lowsample_perc',
-#                        'sera1_rsq0_brier1_matt1_lowsample_perc',
-
-# ]
-
-# ensemble_versions = [
-#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-
-# ]
-
-# std_dev_types = [
-#                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
-#                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
-#                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
-#                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
-#                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
-#                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
-#                 'pred_spline_class80_q80_matt1_brier1_kfold3',
-#                 'pred_spline_class80_q80_matt1_brier1_kfold3',
-#                 'pred_spline_class80_q80_matt1_brier1_kfold3'
-# ]
-
-
-# sim_types = [
-#              'ownership_ln_pos_fix',
-#              'ownership_ln_pos_fix',
-#              'ownership_ln_pos_fix',
-#              'ownership_ln_pos_fix',
-#              'ownership_ln_pos_fix',
-#              'ownership_ln_pos_fix',
-#              'ownership_ln_pos_fix',
-#              'ownership_ln_pos_fix',
-#              'ownership_ln_pos_fix',
-# ]
-
 # set the model version
 set_weeks = [
-    10
-]
+    1, 2, 3, 4, 5, 6,
+    7, 8, 9, 10
+        ]
 
 set_years = [
-      2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
-pred_versions = [
+pred_versions = [   
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                
+                 'sera1_rsq0_brier1_matt1_lowsample_perc',
+                  'sera1_rsq0_brier1_matt1_lowsample_perc',
+                   'sera1_rsq0_brier1_matt1_lowsample_perc',
+                    'sera1_rsq0_brier1_matt1_lowsample_perc',
+                     'sera1_rsq0_brier1_matt1_lowsample_perc',
+                      'sera1_rsq0_brier1_matt1_lowsample_perc',
+                       'sera1_rsq0_brier1_matt1_lowsample_perc',
+                       'sera1_rsq0_brier1_matt1_lowsample_perc',
+                       'sera1_rsq0_brier1_matt1_lowsample_perc',
+
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
- ]
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3'
+
+]
 
 std_dev_types = [
                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
+                'pred_spline_class80_q80_matt1_brier1_kfold3', 
+                'pred_spline_class80_q80_matt1_brier1_kfold3', 
+                'pred_spline_class80_q80_matt1_brier1_kfold3', 
+                'pred_spline_class80_q80_matt1_brier1_kfold3', 
+                'pred_spline_class80_q80_matt1_brier1_kfold3', 
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3'
 ]
 
 
 sim_types = [
-             'ownership_ln_pos'
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix',
+             'ownership_ln_pos_fix'
 ]
+
+# # set the model version
+# set_weeks = [
+#     10, 10
+# ]
+
+# set_years = [
+#       2022, 2022
+# ]
+
+# pred_versions = [
+#                 'sera1_rsq0_brier1_matt1_lowsample_perc',
+#                  'sera1_rsq0_brier1_matt1_lowsample_perc',
+                
+# ]
+
+# ensemble_versions = [
+#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+#                     'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+#  ]
+
+# std_dev_types = [
+#                 'pred_spline_class80_q80_matt1_brier1_kfold3',
+#                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
+# ]
+
+
+# sim_types = [
+#              'ownership_ln_pos',
+#               'ownership_ln_pos'
+# ]
 
 full_model_weights = [0.2, 1, 5]
 

@@ -15,11 +15,11 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8, 9
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022,  2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
 pred_versions = [   
@@ -29,21 +29,23 @@ pred_versions = [
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                'sera1_rsq0_brier1_matt0_lowsample_perc',
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
+                'sera1_rsq0_brier1_matt1_lowsample_perc',
+                'sera1_rsq0_brier1_matt1_lowsample_perc'
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
 ]
 
 std_dev_types = [
@@ -53,6 +55,7 @@ std_dev_types = [
                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
                 'pred_spline_class80_q80_matt1_brier1_kfold3',
                 'pred_spline_class80_q80_matt1_brier1_kfold3',
                 'pred_spline_class80_q80_matt1_brier1_kfold3'
@@ -68,7 +71,8 @@ sim_types = [
              'ownership_ln_pos_2020_flip',
              'ownership_ln_pos_2020_flip',
              'ownership_ln_pos_2020_flip',
-              'ownership_ln_pos_2020_flip',
+             'ownership_ln_pos_2020_flip',
+             'ownership_ln_pos_2020_flip'
 ]
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
@@ -255,14 +259,14 @@ for repeat_num in range(10):
             },
 
             'full_model_weight': {
-                0.2: 0.2,
+                0.2: 0.5,
                 1: 0,
-                5: 0.8
+                5: 0.5
             },
 
             'covar_type': {
-                'no_covar': 1,
-                'team_points_trunc': 0,
+                'no_covar': 0.7,
+                'team_points_trunc': 0.3,
                 'kmeans_trunc': 0
             },
 
@@ -281,8 +285,8 @@ for repeat_num in range(10):
             'use_ownership': {
                 True: 0,
                 False: 0,
-                1: 0.8,
-                0.5: 0.2
+                1: 1,
+                0.5: 0
             },
 
             'own_neg_frac': {
@@ -292,19 +296,19 @@ for repeat_num in range(10):
 
             'max_salary_remain': {
                 None: 0,
-                200: 0,
-                300: 1,
+                200: 0.2,
+                300: 0.6,
                 400: 0,
-                500: 0,
+                500: 0.2,
                 1000: 0
             },
 
             'num_iters': {
-                200: 1
+                50: 1
             }
         }
 
-        lineups_per_param = 3
+        lineups_per_param = 2
 
         params = []
         for i in range(int(30/lineups_per_param)):
@@ -418,7 +422,7 @@ dm.write_to_db(output, 'Results', 'Entry_Optimize_Params', 'append')
 
 #%%
 
-to_delete_num=70
+to_delete_num=92
 df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
 dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
 
@@ -448,4 +452,10 @@ dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 # df['num_iters'] = 50
 # df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
 # dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace', create_backup=True)
+
+#%%
+
+# for adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, onf, msr, ni, param_i in params:
+#     print(param_i)
+#     sim_winnings(adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, onf, msr, ni, param_i)
 

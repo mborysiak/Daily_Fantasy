@@ -774,31 +774,37 @@ class FootballSimulation:
 # dm = DataManage(db_path)
 
 # pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-# ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
+# ens_vers = 'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3'
 # std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
-# use_covar=False
-# use_ownership=1
 
-# week = 8
+# adjust_select = True
+# matchup_drop = 0
+# full_model_weight = 5
+# use_covar=False
+# min_players_same_team = 'Auto'
+# min_players_opp_team = 'Auto'
+# use_ownership=1
+# own_neg_frac = 0.75
+
+# week = 7
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-# num_iters = 50
+# num_iters = 100
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
-#                          full_model_rel_weight=5, covar_type='team_points_trunc', use_covar=use_covar, 
+#                          full_model_rel_weight=full_model_weight, covar_type='team_points_trunc', use_covar=use_covar, 
 #                          use_ownership=use_ownership, salary_remain_max=200)
 
-# min_players_same_team = 'Auto'
-# min_players_opp_team = 'Auto'
+
 # set_max_team = None
 # to_add = []
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                     min_players_opp_team, adjust_select=True, num_matchup_drop=0, 
-#                                     own_neg_frac=0.5)
+#                                     min_players_opp_team, adjust_select=adjust_select, 
+#                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac)
 
 # print(max_team_cnt)
 # results

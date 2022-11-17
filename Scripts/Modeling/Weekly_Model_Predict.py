@@ -42,7 +42,7 @@ set_config(display='text')
 def create_pkey_output_path(set_pos, run_params, model_type, vers):
 
 
-    pkey = f"{set_pos}_year{run_params['set_year']}_week{run_params['set_week']}_{model_type}{vers}{run_params['rush_pass']}"
+    pkey = f"{set_pos}_year{run_params['set_year']}_week{run_params['set_week']}_{model_type}{vers}"
     db_output = {
                 'pkey': [], 
                 'set_pos': [], 
@@ -240,25 +240,29 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
 
     return pipe, params
 
-def load_all_stack_pred(model_output_path, stack_cut=95):
+def load_all_stack_pred(model_output_path, stack_cut=80, prefix=''):
 
     # load the regregression predictions
-    pred, actual, models_reg, _, full_hold_reg = mf.load_all_pickles(model_output_path, 'reg')
-    X_stack, y_stack = mf.X_y_stack('reg', full_hold_reg, pred, actual)
+    pred, actual, models_reg, _, full_hold_reg = mf.load_all_pickles(model_output_path, prefix+'reg')
+    X_stack, y_stack, _ = mf.X_y_stack('reg', full_hold_reg, pred, actual)
 
     # load the class predictions
-    pred_class, actual_class, models_class, _, full_hold_class = mf.load_all_pickles(model_output_path, 'class')
-    X_stack_class, _ = mf.X_y_stack('class', full_hold_class, pred_class, actual_class)
+    pred_class, actual_class, models_class, _, full_hold_class = mf.load_all_pickles(model_output_path, prefix+'class')
+    X_stack_class, _, _ = mf.X_y_stack('class', full_hold_class, pred_class, actual_class)
     _, _, _, _, y_stack_class = mf.load_all_pickles(model_output_path, 'class')
 
-    y_stack_class = y_stack_class[f'class_lr_c_{stack_cut}'].y_act.reset_index(drop=True)
+    if prefix=='': y_stack_class = y_stack_class[f'class_lr_c_{stack_cut}'].y_act.reset_index(drop=True)
 
     # load the quantile predictions
-    pred_quant, actual_quant, models_quant, _, full_hold_quant = mf.load_all_pickles(model_output_path, 'quant')
-    X_stack_quant, _ = mf.X_y_stack('quant', full_hold_quant, pred_quant, actual_quant)
+    pred_quant, actual_quant, models_quant, _, full_hold_quant = mf.load_all_pickles(model_output_path, prefix+'quant')
+    X_stack_quant, _, df_labels = mf.X_y_stack('quant', full_hold_quant, pred_quant, actual_quant)
 
     # concat all the predictions together
-    X_stack = pd.concat([X_stack, X_stack_quant, X_stack_class], axis=1)
+    X_stack = pd.concat([df_labels[['player', 'week', 'year']], X_stack, X_stack_quant, X_stack_class], axis=1)
+    
+    if prefix=='':
+        y_stack = pd.concat([df_labels[['player', 'week', 'year']], y_stack], axis=1)
+        y_stack_class = pd.concat([df_labels[['player', 'week', 'year']], y_stack_class], axis=1)
 
     return X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant
 
@@ -379,6 +383,43 @@ def stack_predictions(X_predict, best_models, final_models, model_obj='reg'):
         predictions = pd.concat([predictions, cur_prediction], axis=1)
 
     return predictions
+
+
+def add_rush_pass(X_stack, X_predict, y_stack, y_stack_class, run_params):
+
+    X_stack_rush, X_predict_rush, run_params = pull_X_rush_pass('rush', run_params)
+    X_stack_pass, X_predict_pass, run_params = pull_X_rush_pass('pass', run_params)
+
+    X_stack = pd.merge(X_stack, X_stack_rush, on=['player', 'week', 'year'])
+    X_stack = pd.merge(X_stack, X_stack_pass, on=['player', 'week', 'year'])
+
+    y_stack = pd.merge(X_stack[['player', 'week', 'year']], y_stack, on=['player', 'week', 'year'])
+    y_stack_class = pd.merge(X_stack[['player', 'week', 'year']], y_stack_class, on=['player', 'week', 'year'])
+
+    X_predict = pd.concat([X_predict, X_predict_rush, X_predict_pass], axis=1)
+
+    return X_stack, X_predict, y_stack, y_stack_class, run_params
+
+
+def pull_X_rush_pass(rp, run_params):
+
+    run_params['rush_pass'] = rp
+
+    # load data and filter down
+    _, _, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
+    df, run_params = load_data(model_type, set_pos, run_params)
+    df, run_params = create_game_date(df, run_params)
+    df_train, df_predict, _, _ = train_predict_split(df, run_params)
+
+    # get the training data for stacking and prediction data after stacking
+    X_stack_rush, _, _, models_reg_rush, models_class_rush, models_quant_rush = \
+        load_all_stack_pred(model_output_path, 80, prefix=rp)
+    X_predict_rush = get_stack_predict_data(df_train, df_predict, df, run_params, 
+                                            models_reg_rush, models_class_rush, models_quant_rush) 
+
+    run_params['rush_pass'] = ''
+    
+    return X_stack_rush, X_predict_rush, run_params
 
 
 def show_calibration_curve(y_true, y_pred, n_bins=10, strategy='quantile'):
@@ -752,8 +793,8 @@ show_plot= True
 print_coef = False
 num_k_folds = 3
 
-r2_wt = 1
-sera_wt = 10
+r2_wt = 0
+sera_wt = 1
 brier_wt = 1
 matt_wt = 1
 
@@ -761,32 +802,34 @@ calibrate = False
 
 # set the model version
 set_weeks = [
-        # 1, 2, 3, 4, 5, 6, 7, 8, 9,
-        10
+         #1, 2, 3, 4, 5, 6, 7, 
+          8, 9, 10
         ]
 
 pred_versions = [
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                #  'sera1_rsq0_brier1_matt1_lowsample_perc',
-                #   'sera1_rsq0_brier1_matt1_lowsample_perc',
+                 'sera1_rsq0_brier1_matt1_lowsample_perc',
+                  'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #    'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #     'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #      'sera1_rsq0_brier1_matt1_lowsample_perc',
-                #       'sera1_rsq0_brier1_matt0_lowsample_perc',
+                #       'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #        'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #        'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #        'sera1_rsq0_brier1_matt1_lowsample_perc'
                 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
                      ]
 
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
@@ -796,14 +839,14 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     run_params['set_week'] = w
     runs = [
         ['QB', 'full_model', ''],
-        # ['RB', 'full_model', ''],
-        # ['WR', 'full_model', ''],
-        # ['TE', 'full_model', ''],
-        # ['Defense', 'full_model', ''],
-        # ['QB', 'backfill', ''],
-        # ['RB', 'backfill', ''],
-        # ['WR', 'backfill', ''],
-        # ['TE', 'backfill', '']
+        ['RB', 'full_model', ''],
+        ['WR', 'full_model', ''],
+        ['TE', 'full_model', ''],
+        ['Defense', 'full_model', ''],
+        ['QB', 'backfill', ''],
+        ['RB', 'backfill', ''],
+        ['WR', 'backfill', ''],
+        ['TE', 'backfill', '']
     ]
     for set_pos, model_type, rush_pass in runs:
 
@@ -829,6 +872,16 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path, class_cut)
         X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, 
                                            models_reg, models_class, models_quant)
+
+        # if set_pos=='QB':
+        #     try: X_stack, X_predict, y_stack, y_stack_class, run_params = \
+        #             add_rush_pass(X_stack, X_predict, y_stack, y_stack_class, run_params)
+        #     except: print('No rush / pass data available')
+
+        X_stack = X_stack.drop(['player', 'week', 'year'], axis=1).dropna(axis=0)
+        y_stack = y_stack[y_stack.index.isin(X_stack.index)].y_act
+        y_stack_class = y_stack_class[y_stack_class.index.isin(X_stack.index)].y_act
+        X_stack, y_stack, y_stack_class = X_stack.reset_index(drop=True), y_stack.reset_index(drop=True), y_stack_class.reset_index(drop=True)
 
         # class metrics
         final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
@@ -1043,7 +1096,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
         # load the regregression predictions
         pred, actual, models_mil, scores, full_hold_mil = mf.load_all_pickles(model_output_path, 'million')
-        X_stack_mil, y_stack_mil = mf.X_y_stack('mil', full_hold_mil, pred, actual)
+        X_stack_mil, y_stack_mil, _ = mf.X_y_stack('mil', full_hold_mil, pred, actual)
 
 
         _, X, y = get_skm(df_train_mil, 'class', to_drop=run_params['drop_cols'])
@@ -1109,7 +1162,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
                 
         pred, actual, models_mil, scores, full_hold_mil = mf.load_all_pickles(model_output_path, 'million')
-        X_stack_mil, y_stack_mil = mf.X_y_stack('mil', full_hold_mil, pred, actual)
+        X_stack_mil, y_stack_mil, _ = mf.X_y_stack('mil', full_hold_mil, pred, actual)
         _, X, y = get_skm(df_train_mil, 'class', to_drop=run_params['drop_cols'])
         X_predict_mil = create_stack_predict(df_predict_mil, models_mil, X, y, proba=True)
         scores = [s[1] for s in scores]
@@ -1141,6 +1194,28 @@ output_no_stack = add_actual(output_no_stack)
 display(output_no_stack)
 if show_plot: mf.show_scatter_plot(output_no_stack.reg_pred, output_no_stack.actual_pts)
 
-# %%
 
-save_val_to_db(model_output_path, best_val, run_params, table_name='Model_Validations')
+#%%
+
+# df = dm.read('''SELECT * FROM Model_Predictions 
+#                  WHERE version= 'sera1_rsq0_brier1_matt0_lowsample_perc'
+#                        AND ensemble_vers='no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
+#                        AND std_dev_type='pred_spline_class80_q80_matt1_brier1_kfold3'
+#                        AND week=7
+#                        AND year =2022
+#                        AND pos!='QB'
+                       
+# ''', 'Simulation')
+
+# df['ensemble_vers'] = 'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3'
+# df['version'] = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+
+# del_str = f'''pos='QB' 
+#                 AND version='sera1_rsq0_brier1_matt1_lowsample_perc'
+#                 AND ensemble_vers='no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3'
+#                 '''
+# dm.delete_from_db('Simulation', 'Model_Predictions', del_str, create_backup=False)
+# dm.write_to_db(df, 'Simulation', 'Model_Predictions', 'append')
+
+
+# %%

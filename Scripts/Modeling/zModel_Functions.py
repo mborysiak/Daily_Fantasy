@@ -67,11 +67,11 @@ def X_y_stack_full(met, full_hold):
 
 def X_y_stack(met, full_hold, pred, actual):
     if full_hold is not None:
-        X_stack, y_stack, _ = X_y_stack_full(met, full_hold)
+        X_stack, y_stack, df = X_y_stack_full(met, full_hold)
     else:
         X_stack, y_stack = X_y_stack(met, pred, actual)
 
-    return X_stack, y_stack
+    return X_stack, y_stack, df
 
 
 def get_quant_predictions(df_predict, models, X, y):

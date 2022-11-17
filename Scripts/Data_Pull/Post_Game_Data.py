@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2022
-set_week = 9
+set_week = 10
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -242,6 +242,8 @@ for pos in ['rb', 'wr']:
 rb = pd.read_csv(f'{root_path}/Data/OtherData/pfr_adv_stats/{set_year}/rb_week{set_week}.csv')
 rec = pd.read_csv(f'{root_path}/Data/OtherData/pfr_adv_stats/{set_year}/wr_week{set_week}.csv')
 
+# drop the td column added in middle of 2022
+rb = rb.drop('Unnamed: 9', axis=1)
 rb_cols = ['rank', 'player', 'team', 'age', 'position', 'games', 'games_started', 'rush_att', 'rush_yds',
            'first_downs', 'yds_before_contact', 'yds_before_contact_att', 'yds_after_contact', 'yac_att', 
            'broke_tackles', 'att_broken']

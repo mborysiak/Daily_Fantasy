@@ -642,7 +642,7 @@ df = dm.read('''SELECT *
                       SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num > 60
+                WHERE trial_num > 90
                 ''', 'Results')
 
 m = model_type['enet']
@@ -666,7 +666,7 @@ for w, yr in zip(weeks, years):
                             WHERE week = {w}
                                 AND year = {yr}
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num > 60
+                     WHERE trial_num > 90
                      ''', 'Results')
 
     model_name = 'enet'
