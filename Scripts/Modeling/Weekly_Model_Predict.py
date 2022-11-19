@@ -802,14 +802,15 @@ calibrate = False
 
 # set the model version
 set_weeks = [
-         #1, 2, 3, 4, 5, 6, 7, 
-          8, 9, 10
+         # 1, 2, 3, 4, 5, 
+         # 6, 7, 8, 9, 10,
+         11
         ]
 
 pred_versions = [
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                  'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #  'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #   'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #    'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #     'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #      'sera1_rsq0_brier1_matt1_lowsample_perc',
@@ -821,8 +822,8 @@ pred_versions = [
 
 ensemble_versions = [
                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
@@ -1056,7 +1057,7 @@ def predict_million_df(df, run_params):
     df = select_main_slate_teams(df)
 
     df = df.drop('y_act', axis=1)
-    top_players = dm.read("SELECT * FROM Top_Players", "DK_Results").drop('counts', axis=1)
+    top_players = dm.read("SELECT player, week, year, y_act FROM Top_Players", "DK_Results")
 
     df = pd.merge(df, top_players, on=['player', 'week', 'year'], how='left')
     df = df.fillna({'y_act': 0})
@@ -1129,8 +1130,8 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
                                  axis=1).sort_values(by='pred_fp_per_game_class', ascending=False)
         display(test_output)
 
-        save_val_to_db(model_output_path, best_val_mil, run_params, 'million', table_name='Model_Validations_Million')
-        save_prob_to_db(test_output, run_params, 'Predicted_Million')
+        # save_val_to_db(model_output_path, best_val_mil, run_params, 'million', table_name='Model_Validations_Million')
+        # save_prob_to_db(test_output, run_params, 'Predicted_Million')
 
 # %%
 output[['player', 'team', 'week', 'year', 'pred_fp_per_game_class']]
@@ -1139,15 +1140,15 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
     run_params['set_week'] = w
     runs = [
-        ['QB', 'full_model', ''],
+        # ['QB', 'full_model', ''],
         ['RB', 'full_model', ''],
-        ['WR', 'full_model', ''],
-        ['TE', 'full_model', ''],
-        ['Defense', 'full_model', ''],
-        ['QB', 'backfill', ''],
-        ['RB', 'backfill', ''],
-        ['WR', 'backfill', ''],
-        ['TE', 'backfill', '']
+        # ['WR', 'full_model', ''],
+        # ['TE', 'full_model', ''],
+        # ['Defense', 'full_model', ''],
+        # ['QB', 'backfill', ''],
+        # ['RB', 'backfill', ''],
+        # ['WR', 'backfill', ''],
+        # ['TE', 'backfill', '']
     ]
     for set_pos, model_type, rush_pass in runs:
 
@@ -1173,9 +1174,11 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
                                                                             X_predict_mil, model_obj='class', show_plot=True, 
                                                                             min_include=min_include)
 
-        display(pd.concat([df_predict_mil[['player']],
-                        pd.Series(best_predictions_mil.mean(axis=1), name='mil_pred')], axis=1).sort_values(by='mil_pred', ascending=False))
+        test_output = pd.concat([df_predict_mil[['player', 'team', 'week', 'year']], 
+                                 pd.Series(best_predictions_mil.mean(axis=1), name='pred_fp_per_game_class')], 
+                                 axis=1).sort_values(by='pred_fp_per_game_class', ascending=False)
         save_val_to_db(model_output_path, best_val_mil, run_params, 'million', table_name='Model_Validations_Million')
+        save_prob_to_db(test_output, run_params, 'Predicted_Million')
 
 # %%
 
@@ -1203,16 +1206,16 @@ if show_plot: mf.show_scatter_plot(output_no_stack.reg_pred, output_no_stack.act
 #                        AND std_dev_type='pred_spline_class80_q80_matt1_brier1_kfold3'
 #                        AND week=7
 #                        AND year =2022
-#                        AND pos!='QB'
                        
 # ''', 'Simulation')
 
-# df['ensemble_vers'] = 'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3'
+# df['ensemble_vers'] = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
 # df['version'] = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 
-# del_str = f'''pos='QB' 
-#                 AND version='sera1_rsq0_brier1_matt1_lowsample_perc'
-#                 AND ensemble_vers='no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3'
+# del_str = f'''week=7 
+#               AND year=2022
+#               AND version='sera1_rsq0_brier1_matt1_lowsample_perc'
+#               AND ensemble_vers='no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
 #                 '''
 # dm.delete_from_db('Simulation', 'Model_Predictions', del_str, create_backup=False)
 # dm.write_to_db(df, 'Simulation', 'Model_Predictions', 'append')

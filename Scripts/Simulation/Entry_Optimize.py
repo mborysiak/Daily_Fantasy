@@ -22,58 +22,14 @@ set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
-pred_versions = [   
-                'sera1_rsq0_brier1_matt1_lowsample_perc',
-                'sera1_rsq0_brier1_matt1_lowsample_perc',
-                'sera1_rsq0_brier1_matt1_lowsample_perc',
-                'sera1_rsq0_brier1_matt1_lowsample_perc',
-                'sera1_rsq0_brier1_matt1_lowsample_perc',
-                'sera1_rsq0_brier1_matt1_lowsample_perc',
-                'sera1_rsq0_brier1_matt1_lowsample_perc',
-                'sera1_rsq0_brier1_matt1_lowsample_perc',
-                'sera1_rsq0_brier1_matt1_lowsample_perc',
-                'sera1_rsq0_brier1_matt1_lowsample_perc'
-]
 
-ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
-]
+pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc']
 
-std_dev_types = [
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3'
-]
+ensemble_versions = len(set_weeks)*['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3']
 
+std_dev_types = len(set_weeks)*['pred_spline_class80_q80_matt1_brier1_kfold3']
 
-sim_types = [
-             'ownership_ln_pos_2020_flip',
-             'ownership_ln_pos_2020_flip',
-             'ownership_ln_pos_2020_flip',
-             'ownership_ln_pos_2020_flip',
-             'ownership_ln_pos_2020_flip',
-             'ownership_ln_pos_2020_flip',
-             'ownership_ln_pos_2020_flip',
-             'ownership_ln_pos_2020_flip',
-             'ownership_ln_pos_2020_flip',
-             'ownership_ln_pos_2020_flip'
-]
+sim_types = len(set_weeks) * ['ownership_ln_pos_fix_flip']
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
 trial_num = max_trial_num + 1
@@ -234,13 +190,13 @@ for repeat_num in range(10):
         
         d = {
             'adjust_pos_counts': {
-                True: 0.5, 
-                False: 0.5
+                True: 0.7, 
+                False: 0.3
             },
 
             'player_drop_multiple': {
-                0: 0.5, 
-                4: 0.5,
+                0: 0.7, 
+                4: 0.3,
                 6: 0
             },
                         
@@ -259,14 +215,14 @@ for repeat_num in range(10):
             },
 
             'full_model_weight': {
-                0.2: 0.5,
+                0.2: 0.3,
                 1: 0,
-                5: 0.5
+                5: 0.7
             },
 
             'covar_type': {
-                'no_covar': 0.7,
-                'team_points_trunc': 0.3,
+                'no_covar': 1,
+                'team_points_trunc': 0,
                 'kmeans_trunc': 0
             },
 
@@ -282,6 +238,16 @@ for repeat_num in range(10):
                 'Auto': 1
             },
 
+            'num_top_players': {
+                3: 0.5,
+                4: 0.5
+            },
+            
+            'static_top_players': {
+                True: 0.5,
+                False: 0.5
+            },
+
             'use_ownership': {
                 True: 0,
                 False: 0,
@@ -290,25 +256,25 @@ for repeat_num in range(10):
             },
 
             'own_neg_frac': {
-                0.5: 0.5,
-                0.75: 0.5
+                0.5: 0,
+                0.75: 1
             },
 
             'max_salary_remain': {
                 None: 0,
-                200: 0.2,
-                300: 0.6,
+                200: 0.5,
+                300: 0,
                 400: 0,
-                500: 0.2,
+                500: 0.5,
                 1000: 0
             },
 
             'num_iters': {
-                50: 1
+                100: 1
             }
         }
 
-        lineups_per_param = 2
+        lineups_per_param = 3
 
         params = []
         for i in range(int(30/lineups_per_param)):
@@ -324,7 +290,8 @@ for repeat_num in range(10):
         
         def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
                         full_model_rel_weight, covar_type, min_players_same_team, 
-                        min_players_opp_team, use_ownership, own_neg_frac, max_salary_remain, 
+                        min_players_opp_team, num_top_players, static_top_players,
+                        use_ownership, own_neg_frac, max_salary_remain, 
                         num_iters, param_iter
                         ):
             
@@ -363,7 +330,8 @@ for repeat_num in range(10):
                     results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
                                             min_players_opp_team_input=min_players_opp_team, 
                                             adjust_select=adjust_select, num_matchup_drop=matchup_drop,
-                                            own_neg_frac=own_neg_frac)
+                                            own_neg_frac=own_neg_frac, n_top_players=num_top_players,
+                                            static_top_players=static_top_players)
                     
                     prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
                     try: 
@@ -390,8 +358,8 @@ for repeat_num in range(10):
             return sim_results, lineup_pts
 
   
-        par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, onf, msr, ni, param_i) for \
-                                                                       adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, onf, msr, ni, param_i in params)
+        par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, stp, uo, onf, msr, ni, param_i) for \
+                                                                       adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, stp, uo, onf, msr, ni, param_i in params)
 
         weighted_winnings = avg_winnings_contest(par_out)
         cur_week_avg_winnings = np.sum(weighted_winnings)
@@ -422,34 +390,36 @@ dm.write_to_db(output, 'Results', 'Entry_Optimize_Params', 'append')
 
 #%%
 
-to_delete_num=92
-df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
-dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
+# to_delete_num=94
+# df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
 
-df = dm.read(f"SELECT * FROM Entry_Optimize_Params WHERE trial_num!={to_delete_num}", 'Results')
-dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace')
+# df = dm.read(f"SELECT * FROM Entry_Optimize_Params WHERE trial_num!={to_delete_num}", 'Results')
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace')
 
-df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail WHERE trial_num!={to_delete_num}", 'Results')
-dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
+# df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail WHERE trial_num!={to_delete_num}", 'Results')
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
 
-df = dm.read(f"SELECT * FROM Entry_Optimize_Results WHERE trial_num!={to_delete_num}", 'Results')
-dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
+# df = dm.read(f"SELECT * FROM Entry_Optimize_Results WHERE trial_num!={to_delete_num}", 'Results')
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 
 # %%
 
 # df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
 # add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
-# add_on = add_on.assign(param='num_iters', param_option=50, option_value=1)
+# add_on = add_on.assign(param='static_top_players', param_option=True, option_value=1)
 # add_on = add_on[df.columns]
 
 # df = pd.concat([df, add_on], axis=0)
 # df = df.sort_values(by='trial_num')
+
 # df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
 # dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace')
 
-# #%%
+#%%
 # df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'Results')
-# df['num_iters'] = 50
+# df['num_top_players'] = 5
+# df['static_top_players'] = True
 # df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
 # dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace', create_backup=True)
 

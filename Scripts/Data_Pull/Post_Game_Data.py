@@ -57,9 +57,27 @@ rush_rz_df = rush_rz_df.drop(['link'], axis=1)
 rec_rz_df = rec_rz_df.drop(['link'], axis=1)
 pass_rz_df = pass_rz_df.drop(['link'], axis=1)
 
+trade_fix = [['James Robinson', 'NYJ'],
+             ['Jeff Wilson', 'MIA'],
+             ['Christian McCaffrey', 'SF'],
+             ['Latavius Murray', 'DEN'],
+             ['TJ Hockenson', 'MIN']]
+for p, t in trade_fix:
+    rush_rz_df.loc[rush_rz_df.player==p, 'team'] = t
+    rec_rz_df.loc[rec_rz_df.player==p, 'team'] = t
+
+
 rush_rz_df.team = rush_rz_df.team.map(team_map)
 rec_rz_df.team = rec_rz_df.team.map(team_map)
 pass_rz_df.team = pass_rz_df.team.map(team_map)
+
+for df in [rush_rz_df, rec_rz_df, pass_rz_df]:
+    for c in df.columns:
+        try:
+            df[c] = df[c].apply(lambda x: float(str(x).replace('%', '')))
+        except:
+            pass
+        #df[c] = df[c].fillna(0)
 
 rush_rz_df['week'] = set_week
 rec_rz_df['week'] = set_week
@@ -68,14 +86,6 @@ pass_rz_df['week'] = set_week
 rush_rz_df['year'] = set_year
 rec_rz_df['year'] = set_year
 pass_rz_df['year'] = set_year
-
-for df in [rush_rz_df, rec_rz_df, pass_rz_df]:
-    for c in df.columns:
-        try:
-            df[c] = df[c].apply(lambda x: float(str(x).replace('%', '')))
-        except:
-            pass
-        df[c] = df[c].fillna(0)
         
 #%%
 rush_rz_df.player = rush_rz_df.player.apply(dc.name_clean)
@@ -83,7 +93,7 @@ rec_rz_df.player = rec_rz_df.player.apply(dc.name_clean)
 pass_rz_df.player = pass_rz_df.player.apply(dc.name_clean)
 
 for df, t in zip([rush_rz_df, rec_rz_df, pass_rz_df], ['Rush', 'Rec', 'Pass']):
-    dm.delete_from_db('Post_PlayerData', f'PFR_Redzone_{t}', f"week={set_week} AND year-{set_year}")
+    dm.delete_from_db('Post_PlayerData', f'PFR_Redzone_{t}', f"week={set_week} AND year={set_year}")
     dm.write_to_db(df, 'Post_PlayerData', f'PFR_Redzone_{t}', 'append')
 
 #%%
@@ -262,6 +272,17 @@ rec.columns = rec_cols
 
 # drop columns that were added in 2020 (td, adot, int, rating)
 rec = rec.drop(['position', 'rec_td', 'adot', 'targ_int', 'targ_rating'], axis=1).fillna(0)
+
+
+trade_fix = [['James Robinson', 'NYJ'],
+             ['Jeff Wilson', 'MIA'],
+             ['Christian McCaffrey', 'SF'],
+             ['Latavius Murray', 'DEN'],
+             ['TJ Hockenson', 'MIN']]
+
+for p, t in trade_fix:
+    rb.loc[rb.player==p, 'team'] = t
+    rec.loc[rec.player==p, 'team'] = t
 
 #%%
 

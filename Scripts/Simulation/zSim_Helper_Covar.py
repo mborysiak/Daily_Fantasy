@@ -41,9 +41,6 @@ class FootballSimulation:
         else:
             player_data = self.get_model_predictions()
 
-        # extract the top players for each team
-        self.top_team_players = self.get_top_players_from_team(player_data, top_players=5)
-
         # join in salary data to player data
         self.player_data = self.join_salary(player_data)
 
@@ -214,7 +211,7 @@ class FootballSimulation:
     @staticmethod
     def get_min_players(min_players_same_team_input, adjust_select):
         if min_players_same_team_input=='Auto': 
-                min_players_same_team= np.random.choice([-1, 2, 3], p=[0.1, 0.5, 0.4])
+                min_players_same_team= np.random.choice([-1, 2, 3, 4], p=[0.1, 0.5, 0.4, 0])
         else:
             min_players_same_team = min_players_same_team_input
 
@@ -234,11 +231,11 @@ class FootballSimulation:
 
     @staticmethod
     def get_top_players_from_team(df, top_players=5):
-                
-        df = df[df.pos!='DEF']
+        
+        df = df[df.pos.isin(['QB', 'WR', 'TE'])]
         df = df.sort_values(by=['team', 'pred_fp_per_game'], ascending=[True, False])
         df['player_rank'] = df.groupby('team').cumcount()
-        df = df.loc[df.player_rank <= top_players-1, ['player', 'team']].reset_index(drop=True)
+        df = df.loc[df.player_rank <= top_players-1, ['player', 'team', 'pred_fp_per_game']].reset_index(drop=True)
 
         return df
 
@@ -512,13 +509,16 @@ class FootballSimulation:
 
     def get_max_team(self, labels, c_points, added_teams):
 
-        team_pts = pd.concat([labels, c_points], axis=1)
-        team_pts = team_pts[~team_pts.pos.isin(['DEF'])]
-        team_pts = pd.merge(team_pts, self.top_team_players, on=['player', 'team'])
-        team_pts = team_pts.drop(['salary', 'player', 'pos'], axis=1)
-        team_pts = team_pts.groupby('team').sum()
-
-        best_teams = team_pts.apply(lambda x: pd.Series(x.nsmallest(3).index))
+        team_pts = pd.concat([labels, -c_points], axis=1)
+        team_pts.columns = ['player', 'pos', 'team', 'salary', 'pred_fp_per_game']
+        
+        if self.static_top_players: 
+            team_pts = pd.merge(team_pts, self.top_team_players.drop('pred_fp_per_game', axis=1), on=['player', 'team'])
+        else:
+            team_pts = self.get_top_players_from_team(team_pts, top_players=self.n_top_players)
+        
+        team_pts = team_pts.groupby('team').agg({'pred_fp_per_game': 'sum'})
+        best_teams = team_pts.apply(lambda x: pd.Series(x.nlargest(3).index))
         best_teams = [b[0] for b in best_teams.values]
         best_teams.extend(added_teams)
 
@@ -649,7 +649,7 @@ class FootballSimulation:
 
     def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team, 
                 min_players_opp_team_input=0, adjust_select=False, num_matchup_drop=0,
-                own_neg_frac=1):
+                own_neg_frac=1, n_top_players=5, static_top_players=True):
         
         # can set as argument, but static set for now
         num_options=250
@@ -661,11 +661,17 @@ class FootballSimulation:
         if num_matchup_drop > 0:
             to_drop = self.player_matchup_drop(to_drop, to_add, num_matchup_drop)
 
+        # decide whether to use above or below ownership threshold
         self.pos_or_neg = np.random.choice([-1, 1], p=[own_neg_frac, 1-own_neg_frac])
-        print(self.pos_or_neg)
 
+        # randomly decide to use threshold or not
         self.use_ownership = np.random.choice([True, False], p=[self.use_own_frac, 1-self.use_own_frac])
-        print(self.use_ownership)
+
+        # extract the top players for each team
+        self.n_top_players = n_top_players
+        self.static_top_players = static_top_players
+        self.top_team_players = self.get_top_players_from_team(self.player_data, top_players=self.n_top_players)
+
         for i in range(self.num_iters):
 
             min_players_same_team = self.get_min_players(min_players_same_team_input, adjust_select)
@@ -774,19 +780,19 @@ class FootballSimulation:
 # dm = DataManage(db_path)
 
 # pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-# ens_vers = 'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3'
+# ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
 # std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
 # adjust_select = True
-# matchup_drop = 0
-# full_model_weight = 5
+# matchup_drop = 2
+# full_model_weight = 0.2
 # use_covar=False
 # min_players_same_team = 'Auto'
 # min_players_opp_team = 'Auto'
 # use_ownership=1
-# own_neg_frac = 0.75
+# own_neg_frac = 0.5
 
-# week = 7
+# week = 10
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -797,14 +803,14 @@ class FootballSimulation:
 #                          full_model_rel_weight=full_model_weight, covar_type='team_points_trunc', use_covar=use_covar, 
 #                          use_ownership=use_ownership, salary_remain_max=200)
 
-
 # set_max_team = None
 # to_add = []
 # to_drop = []
 
-# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                     min_players_opp_team, adjust_select=adjust_select, 
-#                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac)
+# results, max_team_cnt, player_selections = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
+#                                                        min_players_opp_team, adjust_select=adjust_select, 
+#                                                        num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
+#                                                        n_top_players=3, static_top_players=True)
 
 # print(max_team_cnt)
 # results

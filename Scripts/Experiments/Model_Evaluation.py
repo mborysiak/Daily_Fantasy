@@ -602,7 +602,7 @@ df = dm.read(f'''SELECT *
                       and max_winnings < 50000
                 ORDER BY year, week''', 'Results')
 
-m = model_type[model_name]
+m = model_type['lgbm']
 X, y = winnings_importance(df)
 coef_vals, X = get_model_coef(X, y, m)
 show_coef(coef_vals, X)
@@ -620,7 +620,8 @@ def entry_optimize_params(df, max_adjust):
     df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
     str_cols = ['week', 'year', 'top_n_choices', 'matchup_drop', 'adjust_pos_counts', 
                 'pred_vers', 'ensemble_vers', 'std_dev_type', 'player_drop_multiple',
-                'full_model_weight', 'max_lineup_num', 'use_ownership', 'own_neg_frac']
+                'full_model_weight', 'max_lineup_num', 'use_ownership', 'own_neg_frac',
+                'num_top_players', 'static_top_players']
     df[str_cols] = df[str_cols].astype('str')
 
     df = df.drop(['trial_num', 'lineup_num'], axis=1)
@@ -639,11 +640,19 @@ def entry_optimize_params(df, max_adjust):
 df = dm.read('''SELECT *  
                 FROM Entry_Optimize_Params_Detail 
                 JOIN (
-                      SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
+                      SELECT week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num > 90
+                WHERE trial_num > 65
                 ''', 'Results')
+
+model_type = {
+ 'enet': ElasticNet(alpha=5, l1_ratio=0.1),
+ 'ridge': Ridge(alpha=100),
+ 'rf': RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1),
+ 'lgbm': LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
+
+}
 
 m = model_type['enet']
 X, y = entry_optimize_params(df, max_adjust=5000)
@@ -652,8 +661,8 @@ show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7, 8]
-years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
+weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
 
 i=0
 all_coef = None; X_all = None
@@ -666,7 +675,7 @@ for w, yr in zip(weeks, years):
                             WHERE week = {w}
                                 AND year = {yr}
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num > 90
+                     WHERE trial_num > 65
                      ''', 'Results')
 
     model_name = 'enet'

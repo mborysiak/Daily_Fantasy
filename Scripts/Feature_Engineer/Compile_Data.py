@@ -568,7 +568,7 @@ def add_rz_stats(df):
         if 'pct' not in c and 'rz' in c:
             rz[c] = rz[c] / rz.week
 
-    rz = rz.fillna(0)
+    rz = forward_fill(rz).fillna(0)
     rz.week = rz.week + 1
     rz = fix_bye_week(rz).drop('team', axis=1)
     rz = switch_seasons(rz)
@@ -845,7 +845,7 @@ def add_injuries(df, pos=None, def_join=False, oline_join=False):
     player_inj =  list(df.loc[(df.week==WEEK) & (df.year==YEAR), 'player'].values)
     print(f'Players out this week: {[p for p in players if p not in player_inj]}')
 
-    return df
+    return df, player_inj
 
 
 def pts_allowed_data(pos):
@@ -927,7 +927,7 @@ def pff_defense_rollup():
     def_players.week = def_players.week + 1
     def_players = fix_bye_week(def_players)
     def_players = switch_seasons(def_players)
-    def_players = add_injuries(def_players, def_join=True)
+    def_players, _ = add_injuries(def_players, def_join=True)
 
     stat_cols = ['grades_coverage_defense', 'grades_defense',  
                     'grades_pass_rush_defense', 'grades_run_defense', 'grades_tackle',
@@ -985,7 +985,7 @@ def pff_oline_rollup():
     oline.week = oline.week + 1
     oline = fix_bye_week(oline)
     oline = switch_seasons(oline)
-    oline = add_injuries(oline, oline_join=True)
+    oline, _ = add_injuries(oline, oline_join=True)
 
     stat_cols1 = ['snap_counts_offense', 'grades_offense', 'grades_pass_block', 
                 'grades_run_block', 'pbe']
@@ -1327,7 +1327,7 @@ def qb_pull(rush_or_pass):
 
     # pre-game data
     df = fantasy_pros(pos); print(df.shape[0])
-    df = add_injuries(df, pos); print(df.shape[0])
+    df, _ = add_injuries(df, pos); print(df.shape[0])
     df = add_fp_rolling(df, pos); print(df.shape[0])
     df = fantasy_pros_rolling(df); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
@@ -1386,9 +1386,9 @@ def qb_pull(rush_or_pass):
 
     return df
 
-# qb_both = qb_pull('')
-qb_rush = qb_pull('_rush')
-qb_pass = qb_pull('_pass')
+qb_both = qb_pull('')
+# # qb_rush = qb_pull('_rush')
+# # qb_pass = qb_pull('_pass')
 
 #%%
 for pos in [
@@ -1402,7 +1402,7 @@ for pos in [
     #--------------------
 
     df = fantasy_pros(pos); print(df.shape[0])
-    df = add_injuries(df, pos); print(df.shape[0])
+    df, _ = add_injuries(df, pos); print(df.shape[0])
     df = add_fp_rolling(df, pos); print(df.shape[0])
     df = fantasy_pros_rolling(df); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
@@ -1422,6 +1422,7 @@ for pos in [
     #-----------------------
     # Post-Game Data
     #----------------------
+
     df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
     
     team_stats = get_team_stats(YEAR, prev_years=1)
@@ -1534,7 +1535,7 @@ output = pd.DataFrame()
 for pos in ['QB', 'RB', 'WR', 'TE']:
     
     df = fantasy_pros(pos); print(df.shape[0])
-    df = add_injuries(df, pos); print(df.shape[0])
+    df, _ = add_injuries(df, pos); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
     df = get_experts(df, pos, add_rolling=False); print(df.shape[0])
     dst = add_team_matchups().drop('offTeam', axis=1)
@@ -1695,62 +1696,31 @@ data
 # df.fantasy_pts.plot.hist()
 # # %%
 
-#%%
-
-y_act = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
-                            FROM RB_Stats
-                            WHERE season >= 2020''', 'FastR')
-
-
-def get_snap_data():
-
-    snaps = dm.read('''SELECT player, team, snap_counts, week, year
-                    FROM Snap_Counts_V2
-                    WHERE snap_counts!='bye' 
-                            AND week != 18
-                    ''', 'Post_PlayerData')
-
-    snaps.snap_counts = snaps.snap_counts.apply(lambda x: int(float(x)))
-    snaps.week = snaps.week.astype('int')
-
-    team_snaps = snaps.groupby(['team', 'week','year']).agg(team_snap_count=('snap_counts', 'max'))
-    snaps = pd.merge(snaps, team_snaps, on=['team', 'week', 'year']).drop('team', axis=1)
-    snaps['snap_pct'] = snaps.snap_counts / snaps.team_snap_count
-
-    snaps = snaps[snaps.snap_counts > 0].sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
-    snaps['avg_snap_pct'] = snaps.snap_pct.rolling(4).mean()
-
-    return snaps
-
-snaps = get_snap_data()
-proj = dm.read('''SELECT player, week, year, fantasyPoints
-                  FROM PFF_Proj_Ranks''', 'Pre_PlayerData')
-
-y_act = pd.merge(y_act, snaps, on=['player', 'week', 'year'], how='left')
-y_act = pd.merge(y_act, proj, on=['player', 'week', 'year'], how='left')
-
-y_act[((y_act.fantasyPoints > 12) & \
-                (y_act.snap_pct < y_act.avg_snap_pct*0.5) & \
-                (y_act.snap_pct <= 0.5) & \
-                (y_act.snap_pct > 0))].drop(['snap_pct', 'avg_snap_pct', 'fantasyPoints'], axis=1)
-                
 # %%
 
-snaps = dm.read('''SELECT player, team, snap_counts, week, year
-                   FROM Snap_Counts_V2
-                   WHERE snap_counts!='bye' 
-                   ''', 'Post_PlayerData')
+rush_rz = dm.read('''SELECT * FROM PFR_Redzone_Rush''', 'Post_PlayerData')
+rec_rz = dm.read('''SELECT * FROM PFR_Redzone_Rec''', 'Post_PlayerData')
 
-snaps.snap_counts = snaps.snap_counts.apply(lambda x: int(float(x)))
+rush_rz.player = rush_rz.player.apply(dc.name_clean)
+rec_rz.player = rec_rz.player.apply(dc.name_clean)
 
-team_snaps = snaps.groupby(['team', 'week','year']).agg(team_snap_count=('snap_counts', 'max'))
-snaps = pd.merge(snaps, team_snaps, on=['team', 'week', 'year'])
-snaps['snap_pct'] = snaps.snap_counts / snaps.team_snap_count
+rz = pd.merge(rush_rz, rec_rz, on=['player', 'team', 'week', 'year'])
 
-snaps = snaps[snaps.snap_counts > 0].sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
-snaps['avg_snap_pct'] = snaps.snap_pct.rolling(4).mean()
-snaps
-# %%
-snaps[snaps.player=='Christian Mccaffrey']
+# the red zone data is duplicated into the bye week, so
+# this chunk of code removes the duplicated week where games
+# weren't actually played
+rz = drop_extra_bye_week(rz)
 
+for c in rz:
+    if 'pct' not in c and 'rz' in c:
+        rz[c] = rz[c] / rz.week
+
+rz = rz.groupby(['player'], as_index=False).apply(lambda group: group.ffill()).fillna(0)
+rz.week = rz.week + 1
+rz = fix_bye_week(rz).drop('team', axis=1)
+# rz = switch_seasons(rz)
+
+# rz_cols = [c for c in rz.columns if 'rz' in c]
+# rz = add_rolling_stats(rz, gcols=['player'], rcols=rz_cols)
+rz[rz.player=='Jeff Wilson']
 # %%

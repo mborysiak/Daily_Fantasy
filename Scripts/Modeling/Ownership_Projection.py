@@ -8,13 +8,14 @@ from ff.db_operations import DataManage
 import ff.general as ffgeneral 
 from skmodel import SciKitModel
 import zModel_Functions as mf
+
 # set the root path and database management object
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 pred_version = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-ens_version = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
+ens_version = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
 set_year = 2022
