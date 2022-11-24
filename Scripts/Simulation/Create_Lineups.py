@@ -14,15 +14,15 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=10
+week=12
 
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
+ensemble_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 30
+num_lineups = 5
 set_max_team = None
 
 
@@ -78,12 +78,14 @@ def pull_best_params(best_trials):
 
     for p, opt, val in params_opt.values:
         if p not in params.keys(): params[p] = {}
-        if p in ('adjust_pos_counts'):
+        if p in ('adjust_pos_counts', 'static_top_players', 'qb_set_max_max', 'qb_solo_start'):
             if opt=='0': opt=False
             if opt=='1': opt=True
         else:
             try: opt = int(opt)
-            except: pass
+            except: 
+                try: opt = float(opt)
+                except: pass
     
         params[p][opt] = np.round(val,2)
 
@@ -94,29 +96,35 @@ def pull_best_params(best_trials):
 
     return params
 
-best_trials = (84,88)
+best_trials = (113, 114)
 
 opt_params = pull_best_params(best_trials)
 opt_params
 
 #%%
         
-d = {'adjust_pos_counts': {False: 0.3, True: 0.7},
+d = {'adjust_pos_counts': {False: 0.0, True: 1.0},
  'covar_type': {'kmeans_trunc': 0.0,
   'no_covar': 1.0,
   'team_points_trunc': 0.0},
- 'full_model_weight': {0.2: 0.3, 1: 0.0, 5: 0.7},
+ 'full_model_weight': {0.2: 0.5, 0.5: 0.0, 1: 0.0, 3: 0.0, 5: 0.5},
+ 'lineups_per_param': {1: 1.0},
  'matchup_drop': {0: 1.0, 1: 0.0, 2: 0.0, 3: 0.0},
- 'max_salary_remain': {1000: 0.0, 200: 0.2, 300: 0.8, 400: 0.0, 500: 0.0},
- 'min_player_same_team': {0: 0.0, 2: 0.0, 3: 0.0, 'Auto': 1.0},
- 'min_players_opp_team': {0: 0.0, 'Auto': 1.0},
+ 'max_salary_remain': {1000: 0.0, 200: 0.2, 300: 0.3, 400: 0.0, 500: 0.5},
+ 'min_player_same_team': {-1: 0.0, 2: 0.25, 3: 0.0, 'Auto': 0.75},
+ 'min_players_opp_team': {0: 0.0, 1: 0.25, 'Auto': 0.75},
  'num_iters': {100: 1.0},
- 'own_neg_frac': {0.5: 0.5, 0.75: 0.5},
- 'player_drop_multiple': {0: 0.7, 4: 0.3, 6: 0.0},
- 'top_n_choices': {0: 0.8, 1: 0.2, 2: 0.0, 4: 0.0},
- 'use_ownership': {0: 0.0, 0.5: 0.0, 1: 1.0}}
+ 'num_top_players': {2: 0.3, 3: 0.5, 4: 0.1, 5: 0.1},
+ 'own_neg_frac': {0.5: 0.0, 0.65: 0.0, 0.75: 0.5, 1: 0.5},
+ 'player_drop_multiple': {0: 0.5, 4: 0.5, 6: 0.0},
+ 'qb_min_iter': {0: 0.8, 1: 0.0, 9: 0.2},
+ 'qb_set_max_team': {0: 0.0, 1: 1.0},
+ 'qb_solo_start': {False: 0.8, True: 0.2},
+ 'static_top_players': {False: 0.5, True: 0.5},
+ 'top_n_choices': {0: 0.75, 1: 0.25, 2: 0.0, 4: 0.0},
+ 'use_ownership': {0: 0.0, 0.5: 0.1, 0.75: 0.0, 1: 0.9}}
 
-lineups_per_param = 2
+lineups_per_param = 3
 
 params = []
 for i in range(int(num_lineups/lineups_per_param)):
@@ -130,8 +138,8 @@ for i in range(int(num_lineups/lineups_per_param)):
 
 #%%
 def sim_winnings(adjust_select,covar_type, full_model_rel_weight,matchup_drop,salary_remain_max,
-                 min_players_same_team, min_players_opp_team, num_iters, own_neg_frac, player_drop_multiplier, top_n_choices, 
-                 use_ownership):
+                 min_players_same_team, min_players_opp_team, num_iters, num_top_players,
+                 own_neg_frac, player_drop_multiplier, static_top_players, top_n_choices, use_ownership):
 
     try: min_players_opp_team = int(min_players_opp_team)
     except: pass
@@ -158,7 +166,8 @@ def sim_winnings(adjust_select,covar_type, full_model_rel_weight,matchup_drop,sa
 
         for i in range(9):
             results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, None, min_players_opp_team, adjust_select,
-                                      num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac)
+                                      num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
+                                      n_top_players=num_top_players, static_top_players=static_top_players)
             
             prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
             selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
@@ -227,8 +236,8 @@ dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={wee
 
 from joblib import Parallel, delayed
 
-par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, ct, fmw, md, msr, mpst, mpot, ni, onf, pdm, tn, uo) for \
-                                                               adj, ct, fmw, md, msr, mpst, mpot, ni, onf, pdm, tn, uo in params)
+par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, ct, fmw, md, msr, mpst, mpot, ni, ntp, onf, pdm, stp, tn, uo) for \
+                                                               adj, ct, fmw, md, msr, mpst, mpot, ni, ntp, onf, pdm, stp, tn, uo in params)
 
 lineups_list = []
 for p in par_out:
@@ -242,4 +251,22 @@ lineups = lineups.sample(frac=1)
 for j, i in enumerate(lineups.TeamNum.unique()):
     create_database_output(lineups[lineups.TeamNum==i], j)
 
+# %%
+
+run_params_dict = {
+    'week': [week],
+    'year': [year],
+    'pred_vers': [pred_vers],
+    'ensemble_vers': [ensemble_vers],
+    'std_dev_type': [std_dev_type],
+}
+for param, param_options in d.items():
+    param_vars = list(param_options.keys())
+    param_prob = list(param_options.values())
+    run_params_dict[param] = ['np.random.choice(' + str(param_vars) + ', p=' + str(param_prob) + ')']
+
+run_params_df = pd.DataFrame(run_params_dict)
+
+dm.delete_from_db('Simulation', 'Run_Params', f"week={week} AND year={year}", create_backup=False)
+dm.write_to_db(run_params_df, 'Simulation', 'Run_Params', 'replace')
 # %%

@@ -15,17 +15,27 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc']
 
-ensemble_versions = len(set_weeks)*['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3']
+ensemble_versions =['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include3_kfold3']
 
 std_dev_types = len(set_weeks)*['pred_spline_class80_q80_matt1_brier1_kfold3']
 
@@ -190,13 +200,13 @@ for repeat_num in range(10):
         
         d = {
             'adjust_pos_counts': {
-                True: 0.7, 
-                False: 0.3
+                True: 1, 
+                False: 0
             },
 
             'player_drop_multiple': {
-                0: 0.7, 
-                4: 0.3,
+                0: 0.3,
+                4: 0.7,
                 6: 0
             },
                         
@@ -215,9 +225,11 @@ for repeat_num in range(10):
             },
 
             'full_model_weight': {
-                0.2: 0.3,
+                0.2: 0.5,
+                0.5: 0,
                 1: 0,
-                5: 0.7
+                3: 0,
+                5: 0.5
             },
 
             'covar_type': {
@@ -230,17 +242,36 @@ for repeat_num in range(10):
                 'Auto': 1,
                 2: 0,
                 3: 0,
-                0: 0
+                -1: 0
             },
 
             'min_players_opp_team': {
                 0: 0,
+                1: 0,
                 'Auto': 1
             },
 
             'num_top_players': {
+                2: 0.3, 
                 3: 0.5,
-                4: 0.5
+                4: 0,
+                5: 0.2
+            },
+            
+            'qb_min_iter': {
+                0: 0.8,
+                1: 0,
+                9: 0.2
+            },
+
+            'qb_set_max_team': {
+                True: 1,
+                False: 0
+            },
+
+            'qb_solo_start': {
+                True: 0.2,
+                False: 0.8
             },
             
             'static_top_players': {
@@ -251,19 +282,22 @@ for repeat_num in range(10):
             'use_ownership': {
                 True: 0,
                 False: 0,
-                1: 1,
-                0.5: 0
+                1: 0.8,
+                0.75: 0,
+                0.5: 0.2
             },
 
             'own_neg_frac': {
                 0.5: 0,
-                0.75: 1
+                0.75: 0.5,
+                1: 0.5,
+                0.65: 0
             },
 
             'max_salary_remain': {
                 None: 0,
-                200: 0.5,
-                300: 0,
+                200: 0.2,
+                300: 0.3,
                 400: 0,
                 500: 0.5,
                 1000: 0
@@ -274,7 +308,7 @@ for repeat_num in range(10):
             }
         }
 
-        lineups_per_param = 3
+        lineups_per_param = 2
 
         params = []
         for i in range(int(30/lineups_per_param)):
@@ -290,8 +324,8 @@ for repeat_num in range(10):
         
         def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
                         full_model_rel_weight, covar_type, min_players_same_team, 
-                        min_players_opp_team, num_top_players, static_top_players,
-                        use_ownership, own_neg_frac, max_salary_remain, 
+                        min_players_opp_team, num_top_players, qb_min_iter, qb_set_max_team, qb_solo_start,
+                        static_top_players, use_ownership, own_neg_frac, max_salary_remain, 
                         num_iters, param_iter
                         ):
             
@@ -331,7 +365,8 @@ for repeat_num in range(10):
                                             min_players_opp_team_input=min_players_opp_team, 
                                             adjust_select=adjust_select, num_matchup_drop=matchup_drop,
                                             own_neg_frac=own_neg_frac, n_top_players=num_top_players,
-                                            static_top_players=static_top_players)
+                                            static_top_players=static_top_players, qb_min_iter=qb_min_iter,
+                                            qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
                     
                     prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
                     try: 
@@ -358,8 +393,8 @@ for repeat_num in range(10):
             return sim_results, lineup_pts
 
   
-        par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, stp, uo, onf, msr, ni, param_i) for \
-                                                                       adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, stp, uo, onf, msr, ni, param_i in params)
+        par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i) for \
+                                                                       adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i in params)
 
         weighted_winnings = avg_winnings_contest(par_out)
         cur_week_avg_winnings = np.sum(weighted_winnings)
@@ -390,7 +425,7 @@ dm.write_to_db(output, 'Results', 'Entry_Optimize_Params', 'append')
 
 #%%
 
-# to_delete_num=94
+# to_delete_num=105
 # df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
 # dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
 
@@ -407,21 +442,22 @@ dm.write_to_db(output, 'Results', 'Entry_Optimize_Params', 'append')
 
 # df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
 # add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
-# add_on = add_on.assign(param='static_top_players', param_option=True, option_value=1)
+# add_on = add_on.assign(param='qb_solo_start', param_option=False, option_value=1)
 # add_on = add_on[df.columns]
 
 # df = pd.concat([df, add_on], axis=0)
 # df = df.sort_values(by='trial_num')
 
-# df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace')
+# # df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
 
 #%%
 # df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'Results')
-# df['num_top_players'] = 5
-# df['static_top_players'] = True
-# df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace', create_backup=True)
+# df['qb_min_iter'] = 9
+# df['qb_set_max_team'] = False
+# df['qb_solo_start'] = False
+# # df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
 
 #%%
 

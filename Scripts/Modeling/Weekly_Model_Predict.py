@@ -804,7 +804,7 @@ calibrate = False
 set_weeks = [
          # 1, 2, 3, 4, 5, 
          # 6, 7, 8, 9, 10,
-         11
+         12
         ]
 
 pred_versions = [
@@ -846,8 +846,8 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         ['Defense', 'full_model', ''],
         ['QB', 'backfill', ''],
         ['RB', 'backfill', ''],
-        ['WR', 'backfill', ''],
-        ['TE', 'backfill', '']
+        # ['WR', 'backfill', ''],
+        # ['TE', 'backfill', '']
     ]
     for set_pos, model_type, rush_pass in runs:
 
@@ -1200,25 +1200,25 @@ if show_plot: mf.show_scatter_plot(output_no_stack.reg_pred, output_no_stack.act
 
 #%%
 
-# df = dm.read('''SELECT * FROM Model_Predictions 
-#                  WHERE version= 'sera1_rsq0_brier1_matt0_lowsample_perc'
-#                        AND ensemble_vers='no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
-#                        AND std_dev_type='pred_spline_class80_q80_matt1_brier1_kfold3'
-#                        AND week=7
-#                        AND year =2022
+df = dm.read('''SELECT * FROM Model_Predictions 
+                 WHERE version= 'sera1_rsq0_brier1_matt1_lowsample_perc'
+                       AND ensemble_vers='no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
+                       AND std_dev_type='pred_spline_class80_q80_matt1_brier1_kfold3'
+                       AND week=11
+                       AND year =2022
                        
-# ''', 'Simulation')
+''', 'Simulation')
 
-# df['ensemble_vers'] = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
+df['ensemble_vers'] = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
 # df['version'] = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 
-# del_str = f'''week=7 
-#               AND year=2022
-#               AND version='sera1_rsq0_brier1_matt1_lowsample_perc'
-#               AND ensemble_vers='no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
-#                 '''
-# dm.delete_from_db('Simulation', 'Model_Predictions', del_str, create_backup=False)
-# dm.write_to_db(df, 'Simulation', 'Model_Predictions', 'append')
+del_str = f'''week=11
+              AND year=2022
+              AND version='sera1_rsq0_brier1_matt1_lowsample_perc'
+              AND ensemble_vers='no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
+                '''
+dm.delete_from_db('Simulation', 'Model_Predictions', del_str, create_backup=False)
+dm.write_to_db(df, 'Simulation', 'Model_Predictions', 'append')
 
 
 # %%

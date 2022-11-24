@@ -329,53 +329,43 @@ def get_mean_points(preds):
 
 #%%
 
-covar_type = 'team_points_trunc'
-
 # set the model version
 set_weeks = [
-     1, 2, 3, 4, 5, 6,
-     7, 8, 9, 10
+    #  1, 2, 3, 4, 5, 6,
+    #  7, 8, 9, 10, 
+     11
         ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,2022
 ]
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc']
-ensemble_versions = len(set_weeks)*['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3']
+ensemble_versions = [
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include3_kfold3'
+                    ]
 std_dev_types = len(set_weeks)*['pred_spline_class80_q80_matt1_brier1_kfold3']
 sim_types = len(set_weeks) * ['ownership_ln_pos_2020_flip']
 
 # # set the model version
-# set_weeks = [
-#     10, 10
-# ]
+# set_weeks = [11]
 
-# set_years = [
-#       2022, 2022
-# ]
+# set_years = [2022]
 
-# pred_versions = [
-#                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-#                  'sera1_rsq0_brier1_matt1_lowsample_perc',
-                
-# ]
-
-# ensemble_versions = [
-#                     'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-#                     'no_weight_yes_kbest_randsample_rp_sera10_rsq1_include2_kfold3',
-#  ]
-
-# std_dev_types = [
-#                 'pred_spline_class80_q80_matt1_brier1_kfold3',
-#                 'pred_spline_class80_q80_matt1_brier1_kfold3', 
-# ]
-
-
-# sim_types = [
-#              'ownership_ln_pos',
-#               'ownership_ln_pos'
-# ]
+# pred_versions = ['sera1_rsq0_brier1_matt1_lowsample_perc']
+# ensemble_versions = ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3']
+# std_dev_types = ['pred_spline_class80_q80_matt1_brier1_kfold3']
+# sim_types = ['ownership_ln_pos']
 
 full_model_weights = [0.2, 1, 5]
 
@@ -420,24 +410,5 @@ for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         else:
             dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
             dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
-
-
-run_params = pd.DataFrame({
-    'week': [set_week],
-    'year': [set_year],
-    'pred_vers': [pred_vers],
-    'ensemble_vers': [ensemble_vers],
-    'std_dev_type': [std_dev_type],
-    'full_model_rel_weight': ['np.random.choice([0.2, 5], p=[0.5, 0.5])'],
-    'drop_player_multiple': ['np.random.choice([0, 4], p=[0.5, 0.5])'],
-    'covar_type': ["np.random.choice(['team_points_trunc'], p=[1])"],
-    'use_covar': ["np.random.choice([True, False], p=[0.5, 0.5])"],
-    'use_ownership': ['np.random.choice([True, False], p=[0.5, 0.5])'],
-    'adjust_select': ["np.random.choice([True, False], p=[0.5, 0.5])"],
-    'min_players_opp_team': ["np.random.choice([0, 'Auto'], p=[0.5, 0.5])"]
-})
-
-dm.delete_from_db('Simulation', 'Run_Params', f"week={set_week} AND year={set_year}")
-dm.write_to_db(run_params, 'Simulation', 'Run_Params', 'append')
 
 #%%

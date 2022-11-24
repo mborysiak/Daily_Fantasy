@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2022
-WEEK = 11
+WEEK = 12
 
 #%%
 import pandas as pd 
@@ -159,14 +159,16 @@ def fantasy_pros(pos):
     fp = name_cleanup(fp)
     if pos == 'DST': fp = fp.drop('player', axis=1).rename(columns={'team': 'player'})
     
-    fp['log_fp_rank'] = np.log(fp.fp_rank+1)
+    for c in ['fp_rank', 'rankadj_fp_rank', 'playeradj_fp_rank']:
+        fp['log_' + c] = np.log(fp[c]+1)
 
     return fp
 
 
 def fantasy_pros_rolling(df):
 
-    fp_cols = ['log_fp_rank', 'fp_rank', 'projected_points']
+    fp_cols = ['log_fp_rank', 'fp_rank', 'projected_points', 'rankadj_fp_rank', 'playeradj_fp_rank', 
+               'log_rankadj_fp_rank', 'log_playeradj_fp_rank']
     df = add_rolling_stats(df, ['player'], fp_cols)
     df = forward_fill(df)
 
@@ -212,7 +214,10 @@ def get_experts(df, pos, add_rolling=True):
                             expertConsensus, expertNathanJahnke,
                             expertKevinCole, expertAndrewErickson,
                             expertIanHartitz,expertDwainMcFarland, 
-                            expertBenBrown, expertJaradEvans
+                            expertBenBrown, expertJaradEvans,
+                            rankadj_expertConsensus, rankadj_expertNathanJahnke,
+                            rankadj_expertKevinCole,playeradj_expertConsensus, 
+                            playeradj_expertNathanJahnke, playeradj_expertKevinCole
                     FROM PFF_Proj_Ranks a
                     JOIN (SELECT *
                             FROM PFF_Expert_Ranks 
@@ -227,7 +232,10 @@ def get_experts(df, pos, add_rolling=True):
                     'expertConsensus', 'expertNathanJahnke',
                     'expertKevinCole', 'expertAndrewErickson',
                     'expertIanHartitz', 'expertDwainMcFarland', 
-                    'expertBenBrown', 'expertJaradEvans']
+                    'expertBenBrown', 'expertJaradEvans',
+                    'rankadj_expertConsensus', 'rankadj_expertNathanJahnke',
+                    'rankadj_expertKevinCole','playeradj_expertConsensus', 
+                    'playeradj_expertNathanJahnke', 'playeradj_expertKevinCole']
 
     # convert all the expert rankings to log values
     for c in expert_cols:
@@ -754,14 +762,19 @@ def add_next_gen(df, pos, stat_type):
     try: next_gen = next_gen.drop('pos', axis=1)
     except: pass
     teams = dm.read(f'''SELECT player, week, year, team 
-                        FROM FantasyPros
-                        WHERE pos='{pos}' ''', 'Pre_PlayerData')
+                        FROM Player_Teams
+                         ''', 'Simulation')
     next_gen = pd.merge(next_gen, teams, on=['player', 'week', 'year'])
 
     next_gen = drop_extra_bye_week(next_gen)
     next_gen.week = next_gen.week + 1
     next_gen = fix_bye_week(next_gen)
     next_gen = switch_seasons(next_gen)
+
+    # issue with bye week creating duplicates after trading
+    next_gen.loc[(next_gen.player=='Chase Claypool') & \
+                 (next_gen.week==10) & (next_gen.year==2022) & \
+                  (next_gen.team=='PIT'), 'week'] = 9
 
     df = pd.merge(df, next_gen.drop('team', axis=1), on=['player', 'week', 'year'], how='left')
 

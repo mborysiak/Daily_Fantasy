@@ -102,6 +102,41 @@ def copy_db(db_name, root_path, week=set_week, year=set_year):
     db2.close()
 
 
+import datetime as dt
+def year_week_to_date(x):
+    return int(dt.datetime(x[0], 1, x[1]).strftime('%Y%m%d'))
+
+def create_adj_ranks(df, rank_col, where_pos, table_name, dm):
+    
+    all_data = dm.read(f"SELECT * FROM {table_name} {where_pos}", 'Pre_PlayerData')
+    all_data = all_data.sort_values(by=['year', 'week']).reset_index(drop=True)
+    all_data['game_date'] = all_data[['year', 'week']].apply(year_week_to_date, axis=1)
+
+    # get the mean rankings for past 6 weeks
+    past_6_weeks = all_data.game_date.unique()[-6]
+    mean_rank = all_data[all_data.game_date >= past_6_weeks].reset_index(drop=True)
+    mean_rank = mean_rank.groupby('player').agg({rank_col: 'mean'}).reset_index().sort_values(by=rank_col)
+    mean_rank[rank_col] = range(1, len(mean_rank)+1)
+
+    # join in the current rankings and find missing players
+    cur_rank = df.copy()
+    mean_rank = pd.merge(mean_rank, cur_rank[['player', 'week']], on=['player'], how='outer')
+    mean_rank['to_add'] = np.where(mean_rank.week.isnull(), 1, 0)
+    mean_rank['to_add'] = mean_rank.to_add.cumsum()
+    
+    # join current back to the mean and adjust the rankings for missing players
+    cur_rank = pd.merge(cur_rank, mean_rank[[rank_col, 'to_add']], on=rank_col)
+    cur_rank['rankadj_' + rank_col] = cur_rank[rank_col] + cur_rank.to_add
+    cur_rank = cur_rank.drop(['to_add'], axis=1)
+
+    # join current back to the mean and adjust the rankings for missing players
+    cur_rank = pd.merge(cur_rank, mean_rank[['player', 'to_add']], on='player', how='left')
+    cur_rank['playeradj_' + rank_col] = cur_rank[rank_col] + cur_rank.to_add
+    cur_rank = cur_rank.drop(['to_add'], axis=1)
+
+    return cur_rank
+
+
 team_map = {
     'ARI': 'ARI',
     'ARZ': 'ARI',

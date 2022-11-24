@@ -25,7 +25,7 @@ dm = DataManage(db_path)
 #===============
 
 year = 2022
-week = 8
+week = 11
 num_iters = 100
 
 total_lineups = 8
@@ -104,17 +104,20 @@ def initiate_class(op_params):
     pred_vers = op_params['pred_vers']
     ensemble_vers = op_params['ensemble_vers']
     std_dev_type = op_params['std_dev_type']
-    full_model_rel_weight = eval(op_params['full_model_rel_weight'])
+    full_model_rel_weight = eval(op_params['full_model_weight'])
     covar_type = eval(op_params['covar_type'])
-    use_covar = eval(op_params['use_covar'])
     use_ownership = eval(op_params['use_ownership'])
+    salary_remain_max = eval(op_params['max_salary_remain'])
 
-    print('Full Model Weight:', full_model_rel_weight, 'Use Covar:', use_covar, 'Use Ownership:', use_ownership)
+    print('Full Model Weight:', full_model_rel_weight, 'Use Ownership:', use_ownership)
 
+    if covar_type == 'no_covar': use_covar=False
+    else: use_covar=True
     # instantiate simulation class and add salary information to data
     sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters,
                             pred_vers, ensemble_vers, std_dev_type, covar_type,
-                            full_model_rel_weight, use_covar, use_ownership)
+                            full_model_rel_weight, use_covar, use_ownership=1,
+                            salary_remain_max=salary_remain_max)
 
     return sim
 
@@ -347,12 +350,20 @@ def init_download_dash_button():
 
 def app_layout():
 
-    global sim, adjust_select, drop_player_multiple, min_players_opp_team
+    global sim, adjust_select, drop_player_multiple, min_players_opp_team, num_matchup_drop
+    global own_neg_frac, n_top_players, static_top_players, qb_min_iter, qb_set_max_team, qb_solo_start
 
     sim = initiate_class(op_params)
-    adjust_select = eval(op_params['adjust_select'])
-    drop_player_multiple = eval(op_params['drop_player_multiple'])
+    adjust_select = eval(op_params['adjust_pos_counts'])
+    drop_player_multiple = eval(op_params['player_drop_multiple'])
     min_players_opp_team = eval(op_params['min_players_opp_team'])
+    num_matchup_drop = eval(op_params['matchup_drop']) 
+    own_neg_frac = eval(op_params['own_neg_frac'])
+    n_top_players = eval(op_params['num_top_players'])
+    static_top_players = eval(op_params['static_top_players'])
+    qb_min_iter = eval(op_params['qb_min_iter'])
+    qb_set_max_team = eval(op_params['qb_set_max_team'])
+    qb_solo_start = eval(op_params['qb_solo_start'])
 
     print('adjust_select:', adjust_select, 'drop_multiple:', drop_player_multiple, 'opp_players:', min_players_opp_team)
 
@@ -622,7 +633,12 @@ def update_output(nc, nc2, player_dash_table_data, player_dash_table_columns, st
         set_max_team, min_players_same_team = update_stack_data(stack_data)
         
         results, max_team_cnt = sim.run_sim(to_add_players, to_drop_players, min_players_same_team, 
-                                            set_max_team, min_players_opp_team, adjust_select=adjust_select)
+                                            set_max_team, min_players_opp_team, adjust_select=adjust_select,
+                                            num_matchup_drop=num_matchup_drop, own_neg_frac=own_neg_frac,
+                                            n_top_players=n_top_players, static_top_players=static_top_players,
+                                            qb_min_iter=qb_min_iter, qb_set_max_team=qb_set_max_team,
+                                            qb_solo_start=qb_solo_start)
+
         results = format_results(results, my_team_player_cnt)
         player_select_graph = update_player_selection_chart(results)
         top_team_graph = update_top_team_chart(max_team_cnt)

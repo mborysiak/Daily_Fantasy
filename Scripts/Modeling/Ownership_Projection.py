@@ -19,7 +19,7 @@ ens_version = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
 set_year = 2022
-set_week = 10
+set_week = 11
 contest = 'Million'
 
 #%%
@@ -706,8 +706,9 @@ sim_values = create_constraint_metrics('Predicted_Million', 'Predicted_Ownership
                                        pred_version, ens_version, std_dev_type, set_week, set_year)
 sim_values = sim_values.loc[(sim_values.week==set_week) & (sim_values.year==set_year),
                             ['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
-sim_values.sort_values(by='pred_ownership', ascending=True).iloc[:50]
+sim_values.sort_values(by='pred_ownership', ascending=False).iloc[:50]
 
+#%%
 dm.delete_from_db('Simulation', 'Predicted_Ownership', f'week={set_week} AND year={set_year}')
 dm.write_to_db(sim_values, 'Simulation', 'Predicted_Ownership', 'append')
 # %%

@@ -38,7 +38,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [10]
+run_weeks = [12]
 
 run_params = {
     
@@ -478,13 +478,13 @@ def save_output_dict(out_dict, model_output_path, label, rush_pass):
 
 #%%
 run_list = [
-            ['QB', '', 'full_model'],
-            ['RB', '', 'full_model'],
-            ['WR', '', 'full_model'],
-            ['TE', '', 'full_model'],
-            ['Defense', '', 'full_model'],
-            ['QB', '', 'backfill'],
-            ['RB', '', 'backfill'],
+            # ['QB', '', 'full_model'],
+            # ['RB', '', 'full_model'],
+            # ['WR', '', 'full_model'],
+            # ['TE', '', 'full_model'],
+            # ['Defense', '', 'full_model'],
+            # ['QB', '', 'backfill'],
+            # ['RB', '', 'backfill'],
             ['WR', '', 'backfill'],
             ['TE', '', 'backfill'],
 
@@ -520,37 +520,37 @@ for w in run_weeks:
         # Run Models
         #=========
 
-        # # run all other models
-        # model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
-        # for i, m in enumerate(model_list):
-        #     out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
-        # save_output_dict(out_reg, model_output_path, 'reg', rush_pass)
-
-        # # run all other models
-        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
-        # for cut in run_params['cuts']:
-        #     print(f"\n--------------\nPercentile {cut}\n--------------\n")
-        #     df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
-        #     for i, m in enumerate(model_list):
-        #         out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
-        # save_output_dict(out_class, model_output_path, 'class', rush_pass)
-
-        # # run all other models
-        # model_list = ['gbm_q', 'lgbm_q', 'qr_q', 'knn_q', 'rf_q']
-        # for i, m in enumerate(model_list):
-        #     for alph in [0.8, 0.95]:
-        #         out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
-        # save_output_dict(out_quant, model_output_path, 'quant', rush_pass)
-
-        # run the million predict
-        print(f"\n--------------\nRunning Million Predict\n--------------\n")
-        n_splits = run_params['n_splits']; cut='million'
-        df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
-
-        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
+        # run all other models
+        model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
         for i, m in enumerate(model_list):
-            out_million, _, _= get_model_output(m, df_train_mil, 'class', out_million, run_params, i, min_samples)
-        save_output_dict(out_million, model_output_path, 'million', rush_pass)
+            out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
+        save_output_dict(out_reg, model_output_path, 'reg', rush_pass)
+
+        # run all other models
+        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
+        for cut in run_params['cuts']:
+            print(f"\n--------------\nPercentile {cut}\n--------------\n")
+            df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
+            for i, m in enumerate(model_list):
+                out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
+        save_output_dict(out_class, model_output_path, 'class', rush_pass)
+
+        # run all other models
+        model_list = ['gbm_q', 'lgbm_q', 'qr_q', 'knn_q', 'rf_q']
+        for i, m in enumerate(model_list):
+            for alph in [0.8, 0.95]:
+                out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
+        save_output_dict(out_quant, model_output_path, 'quant', rush_pass)
+
+        # # run the million predict
+        # print(f"\n--------------\nRunning Million Predict\n--------------\n")
+        # n_splits = run_params['n_splits']; cut='million'
+        # df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
+
+        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
+        # for i, m in enumerate(model_list):
+        #     out_million, _, _= get_model_output(m, df_train_mil, 'class', out_million, run_params, i, min_samples)
+        # save_output_dict(out_million, model_output_path, 'million', rush_pass)
 
 
         # # run the million predict

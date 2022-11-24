@@ -598,7 +598,7 @@ class FootballSimulation:
     
     def final_results(self, player_selections, success_trials):
         results = pd.DataFrame(player_selections, index=['SelectionCounts']).T
-        results = results.sort_values(by='SelectionCounts', ascending=False).iloc[:29]
+        results = results.sort_values(by='SelectionCounts', ascending=False).iloc[:59]
         salaries = self.player_data[['player', 'salary']].set_index('player')
         results = pd.merge(results, salaries, left_index=True, right_index=True)
         results = results.reset_index().rename(columns={'index': 'player'})
@@ -649,7 +649,8 @@ class FootballSimulation:
 
     def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team, 
                 min_players_opp_team_input=0, adjust_select=False, num_matchup_drop=0,
-                own_neg_frac=1, n_top_players=5, static_top_players=True):
+                own_neg_frac=1, n_top_players=5, static_top_players=True,
+                qb_min_iter=9, qb_set_max_team=False, qb_solo_start=True):
         
         # can set as argument, but static set for now
         num_options=250
@@ -723,6 +724,14 @@ class FootballSimulation:
             
             if remaining_pos_cnt > (min_players_same_team+min_player_opp_team-1) and max_added_team_cnt < min_players_same_team:
              
+                if open_pos_require['QB'] == 0 and qb_set_max_team:
+                    set_max_team = self.player_data.loc[(self.player_data.player.isin(to_add)) & \
+                                                        (self.player_data.pos=='QB'), 'team'].values[0]
+
+                if open_pos_require['QB'] == 1 and qb_solo_start:
+                    min_players_same_team = -1
+                    min_player_opp_team = -1
+               
                 h_teams, max_team = self.create_h_teams(team_map, added_teams, set_max_team, min_players_same_team, min_player_opp_team)
                 max_team_cnt.append(max_team)
                 G = np.concatenate([G_salaries, G_teams, G_players])
@@ -765,6 +774,12 @@ class FootballSimulation:
 
         team_cnts = self.final_team_cnts(max_team_cnt)
 
+        if len(to_add) == qb_min_iter and open_pos_require['QB'] == 1:
+            results = pd.merge(results, self.player_data[['player', 'pos']], on='player')
+            results = results[results.pos=='QB'].reset_index(drop=True).drop('pos', axis=1)
+
+        results = results.iloc[:30]
+
         return results, team_cnts
 
 
@@ -780,17 +795,21 @@ class FootballSimulation:
 # dm = DataManage(db_path)
 
 # pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-# ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
+# ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
 # std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
 # adjust_select = True
-# matchup_drop = 2
-# full_model_weight = 0.2
-# use_covar=False
+# matchup_drop = 0
+# full_model_weight = 5
+# use_covar = False
 # min_players_same_team = 'Auto'
 # min_players_opp_team = 'Auto'
-# use_ownership=1
+# use_ownership = 1
 # own_neg_frac = 0.5
+
+# qb_solo_start = True
+# qb_set_max_team = True
+# qb_min_iter = 0
 
 # week = 10
 # year = 2022
@@ -801,16 +820,17 @@ class FootballSimulation:
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
 #                          full_model_rel_weight=full_model_weight, covar_type='team_points_trunc', use_covar=use_covar, 
-#                          use_ownership=use_ownership, salary_remain_max=200)
+#                          use_ownership=use_ownership, salary_remain_max=500)
 
 # set_max_team = None
 # to_add = []
 # to_drop = []
 
-# results, max_team_cnt, player_selections = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                                        min_players_opp_team, adjust_select=adjust_select, 
-#                                                        num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
-#                                                        n_top_players=3, static_top_players=True)
+# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
+#                                     min_players_opp_team, adjust_select=adjust_select, 
+#                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
+#                                     n_top_players=3, static_top_players=True,
+#                                     qb_solo_start=qb_solo_start, qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter)
 
 # print(max_team_cnt)
 # results

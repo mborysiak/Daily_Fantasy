@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2022
-set_week = 11
+set_week = 12
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -21,6 +21,8 @@ import ff.data_clean as dc
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
+
+
 
 #%%
 
@@ -63,6 +65,8 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
         df = df[df.player != 'Cordarrelle Patterson']
 
     df.loc[df.projected_points=='-', 'projected_points'] = 0
+
+    df = create_adj_ranks(df, 'fp_rank', f"WHERE pos='{set_pos}'", 'FantasyPros', dm)
     
     dm.delete_from_db('Pre_PlayerData', 'FantasyPros', f"week={set_week} and year={set_year} and pos='{set_pos}'")
     dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros', if_exist='append')
@@ -136,7 +140,16 @@ rank1_pl.Name = rank1_pl.Name.apply(dc.name_clean)
 proj_pl = proj_pl.rename(columns={'playerName': 'player'})
 rank1_pl = rank1_pl.rename(columns={'Name': 'player'})
 
+all_df = pd.DataFrame()
+for p in ['QB', 'RB', 'WR', 'TE', 'K']:
+    base_df = rank1_pl[rank1_pl.Position==p].copy()
 
+    for c in ['expertKevinCole', 'expertConsensus', 'expertNathanJahnke']:
+        cur_df = create_adj_ranks(base_df, c, f"WHERE Position='{p}'", 'PFF_Expert_Ranks', dm)
+        base_df = pd.merge(base_df, cur_df[['player', 'offTeam', f'rankadj_{c}', f'playeradj_{c}']], on=['player', 'offTeam'], how='left')
+    all_df = pd.concat([all_df, base_df], axis=0)
+
+rank1_pl = all_df.copy()
 # if set_week==7 and set_year==2022:
 #     old = dm.read("SELECT * FROM PFF_Proj_Ranks", 'Pre_PlayerData')
 #     old = old[(old.player=='Sterling Shepard') & (old.week==3) & (old.year==2022)]
@@ -501,7 +514,7 @@ dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
 
 # %%
 
-# https://www.nfl.com/injuries/league/2021/reg11
+# https://www.nfl.com/injuries/league/2022/reg12
 
 df = pd.read_csv(f'{root_path}/Data/OtherData/Injury_Status/{set_year}/week{set_week}.csv', 
                  encoding='latin', skip_blank_lines=True, error_bad_lines=False)
@@ -609,71 +622,152 @@ dm.write_to_db(k_points, 'Simulation', 'Model_Predictions', 'append')
 
 # %%
 
+# def clean_alt_salary(df, sal):
+#     cols = ['player', 'position', 'year', 'week', 'salary', 'score', 'factor', 'rank']
+#     df.columns = cols
+#     df.salary = df.salary.apply(lambda x: int(x.replace('$', '')))
+
+#     if sal == 'fd': df.loc[df.position=='D', 'position'] = 'DST'
+#     df_pl = df[df.position != 'DST'].reset_index(drop=True)
+#     df_team = df[df.position == 'DST'].reset_index(drop=True)
+
+#     df_pl.player = df_pl.player.apply(lambda x: x.split(',')[1].lstrip() + ' ' + x.split(',')[0])
+#     df_pl.player = df_pl.player.apply(dc.name_clean)
+
+#     if sal == 'dk':
+#         df_team.player = df_team.player.apply(lambda x: x.replace(',', ''))
+#         df_team.player = df_team.player.map(full_team_map)
+#     else:    
+#         alt_team_map = {' '.join(k.split(' ')[:-1]): v for k, v in full_team_map.items()}
+#         df_team.player = df_team.player.map(alt_team_map)
+
+#     df_team['team'] = df_team.player
+#     df_team = df_team[['player', 'team', 'position', 'salary']].rename(columns={'salary': f'{sal}_salary'})
+
+#     teams = dm.read(f'''SELECT player, team
+#                         FROM (
+#                         SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
+#                             team,
+#                             row_number() OVER (PARTITION BY player ORDER BY year, week, projected_points DESC) rn 
+#                         FROM FantasyPros
+#                         ) WHERE rn=1''', 'Pre_PlayerData')
+
+#     df_pl = pd.merge(df_pl, teams, on=['player'])
+
+#     df_pl = df_pl[['player', 'team', 'position', 'salary']].rename(columns={'salary': f'{sal}_salary'})
 
 
-def clean_alt_salary(df, sal):
-    cols = ['player', 'position', 'year', 'week', 'salary', 'score', 'factor', 'rank']
-    df.columns = cols
-    df.salary = df.salary.apply(lambda x: int(x.replace('$', '')))
+#     return df_pl, df_team
 
-    if sal == 'fd': df.loc[df.position=='D', 'position'] = 'DST'
-    df_pl = df[df.position != 'DST'].reset_index(drop=True)
-    df_team = df[df.position == 'DST'].reset_index(drop=True)
+# dk = pd.read_html('https://www.footballdiehards.com/fantasyfootball/dailygames/Draftkings-Salary-data.cfm')[0]
+# dk_pl, dk_team = clean_alt_salary(dk, 'dk')
 
-    df_pl.player = df_pl.player.apply(lambda x: x.split(',')[1].lstrip() + ' ' + x.split(',')[0])
-    df_pl.player = df_pl.player.apply(dc.name_clean)
-
-    if sal == 'dk':
-        df_team.player = df_team.player.apply(lambda x: x.replace(',', ''))
-        df_team.player = df_team.player.map(full_team_map)
-    else:    
-        alt_team_map = {' '.join(k.split(' ')[:-1]): v for k, v in full_team_map.items()}
-        df_team.player = df_team.player.map(alt_team_map)
-
-    df_team['team'] = df_team.player
-    df_team = df_team[['player', 'team', 'position', 'salary']].rename(columns={'salary': f'{sal}_salary'})
-
-    teams = dm.read(f'''SELECT player, team
-                        FROM (
-                        SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
-                            team,
-                            row_number() OVER (PARTITION BY player ORDER BY year, week, projected_points DESC) rn 
-                        FROM FantasyPros
-                        ) WHERE rn=1''', 'Pre_PlayerData')
-
-    df_pl = pd.merge(df_pl, teams, on=['player'])
-
-    df_pl = df_pl[['player', 'team', 'position', 'salary']].rename(columns={'salary': f'{sal}_salary'})
+# fd = pd.read_html('https://www.footballdiehards.com/fantasyfootball/dailygames/Fanduel-Salary-data.cfm')[0]
+# fd_pl, fd_team = clean_alt_salary(fd, 'fd')
 
 
-    return df_pl, df_team
+# yahoo_pl = dm.read('''SELECT player, team, position, yahoo_salary
+#                           FROM Daily_Salaries
+#                           WHERE week=11 AND year=2021''', 'Pre_PlayerData')
+# yahoo_team = dm.read('''SELECT team, position, yahoo_salary
+#                         FROM Daily_Salaries
+#                         WHERE week=9 AND year=2021''', 'Pre_TeamData')
+# df_pl = pd.merge(dk_pl, fd_pl, on=['player', 'team', 'position'], how='left')
+# df_pl = pd.merge(df_pl, yahoo_pl, on=['player', 'team', 'position'], how='left')
+# df_pl = df_pl.assign(week=set_week).assign(year=set_year)
 
-dk = pd.read_html('https://www.footballdiehards.com/fantasyfootball/dailygames/Draftkings-Salary-data.cfm')[0]
-dk_pl, dk_team = clean_alt_salary(dk, 'dk')
+# df_team = pd.merge(dk_team, fd_team, on=['player', 'team', 'position'], how='left')
+# df_team = pd.merge(df_team, yahoo_team, on=['team', 'position'], how='left')
+# df_team = df_team.assign(week=set_week).assign(year=set_year)
 
-fd = pd.read_html('https://www.footballdiehards.com/fantasyfootball/dailygames/Fanduel-Salary-data.cfm')[0]
-fd_pl, fd_team = clean_alt_salary(fd, 'fd')
+# dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
+# dm.write_to_db(df_pl, 'Pre_PlayerData', 'Daily_Salaries', 'append')
 
-
-yahoo_pl = dm.read('''SELECT player, team, position, yahoo_salary
-                          FROM Daily_Salaries
-                          WHERE week=11 AND year=2021''', 'Pre_PlayerData')
-yahoo_team = dm.read('''SELECT team, position, yahoo_salary
-                        FROM Daily_Salaries
-                        WHERE week=9 AND year=2021''', 'Pre_TeamData')
-df_pl = pd.merge(dk_pl, fd_pl, on=['player', 'team', 'position'], how='left')
-df_pl = pd.merge(df_pl, yahoo_pl, on=['player', 'team', 'position'], how='left')
-df_pl = df_pl.assign(week=set_week).assign(year=set_year)
-
-df_team = pd.merge(dk_team, fd_team, on=['player', 'team', 'position'], how='left')
-df_team = pd.merge(df_team, yahoo_team, on=['team', 'position'], how='left')
-df_team = df_team.assign(week=set_week).assign(year=set_year)
-
-dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
-dm.write_to_db(df_pl, 'Pre_PlayerData', 'Daily_Salaries', 'append')
-
-dm.delete_from_db('Pre_TeamData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
-dm.write_to_db(df_team, 'Pre_TeamData', 'Daily_Salaries', 'append')
+# dm.delete_from_db('Pre_TeamData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
+# dm.write_to_db(df_team, 'Pre_TeamData', 'Daily_Salaries', 'append')
 
 
+# %%
+to_upload = pd.DataFrame()
+rank_c = 'expertKevinCole'
+for pos in ['QB', 'RB', 'WR', 'TE', 'K']:
+    fp = dm.read(f'''SELECT * 
+                    FROM PFF_Expert_Ranks 
+                    WHERE Position='{pos}' 
+                            ''', 'Pre_PlayerData')
+    fp.player = fp.player.apply(dc.name_clean)
+    # if pos == 'DST': fp = fp.drop('player', axis=1).rename(columns={'team': 'player'})
+
+    import datetime as dt
+    def year_week_to_date(x):
+        return int(dt.datetime(x[0], 1, x[1]).strftime('%Y%m%d'))
+
+    fp = fp.sort_values(by=['year', 'week', rank_c]).reset_index(drop=True)
+    fp['game_date'] = fp[['year', 'week']].apply(year_week_to_date, axis=1)
+
+
+    def create_adj_ranks(df, rank_col):
+        
+        # get the mean rankings for past 6 weeks
+        past_6_weeks = df.game_date.unique()[-6]
+        mean_rank = df[df.game_date >= past_6_weeks].reset_index(drop=True)
+        mean_rank = mean_rank.groupby('player').agg({rank_col: 'mean'}).reset_index().sort_values(by=rank_col)
+        mean_rank[rank_col] = range(1, len(mean_rank)+1)
+
+        # join in the current rankings and find missing players
+        cur_rank = df[df.game_date == df.game_date.unique()[-1]].reset_index(drop=True)
+        mean_rank = pd.merge(mean_rank, cur_rank[['player', 'game_date']], on=['player'], how='outer')
+        mean_rank['to_add'] = np.where(mean_rank.game_date.isnull(), 1, 0)
+        mean_rank['to_add'] = mean_rank.to_add.cumsum()
+        
+        # join current back to the mean and adjust the rankings for missing players
+        cur_rank = pd.merge(cur_rank, mean_rank[[rank_col, 'to_add']], on=rank_col)
+        cur_rank['rankadj_' + rank_col] = cur_rank[rank_col] + cur_rank.to_add
+        cur_rank = cur_rank.drop(['game_date', 'to_add'], axis=1)
+
+        # join current back to the mean and adjust the rankings for missing players
+        cur_rank = pd.merge(cur_rank, mean_rank[['player', 'to_add']], on='player', how='left')
+        cur_rank['playeradj_' + rank_col] = cur_rank[rank_col] + cur_rank.to_add
+        cur_rank = cur_rank.drop(['to_add'], axis=1)
+
+        return cur_rank
+
+    with_adj = fp[fp.game_date <= fp.game_date.unique()[5]].copy().drop('game_date', axis=1)
+    for i in fp.game_date.unique()[6:]:
+        cur_df = create_adj_ranks(fp[fp.game_date <= i], rank_c)
+        with_adj = pd.concat([with_adj, cur_df], axis=0)
+
+    with_adj.loc[with_adj['rankadj_' + rank_c].isnull(), 'rankadj_' + rank_c] = with_adj.loc[with_adj['rankadj_' + rank_c].isnull(), rank_c]
+    with_adj.loc[with_adj['playeradj_' + rank_c].isnull(), 'playeradj_' + rank_c] = with_adj.loc[with_adj['playeradj_'+ rank_c].isnull(), rank_c]
+
+    with_adj = pd.merge(fp, with_adj[['player', 'offTeam', 'week', 'year', 
+                             'rankadj_' + rank_c, 'playeradj_' + rank_c]],
+                             on=['player', 'offTeam', 'week', 'year'], how='left')
+    to_upload = pd.concat([to_upload, with_adj], axis=0)
+
+#%%
+xx = to_upload[['player', 'offTeam', 'week', 'year', 'rankadj_expertConsensus', 'playeradj_expertConsensus']].copy()
+
+#%%
+yy = to_upload[['player', 'offTeam', 'week', 'year', 'rankadj_expertNathanJahnke', 'playeradj_expertNathanJahnke']].copy()
+
+#%%
+
+to_upload = pd.merge(to_upload, xx,on=['player', 'offTeam', 'week', 'year'], how='left')
+to_upload = pd.merge(to_upload, yy,on=['player', 'offTeam', 'week', 'year'], how='left')
+
+# %%
+
+dm.write_to_db(to_upload.drop_duplicates(), 'Pre_PlayerData', 'PFF_Expert_Ranks', 'replace', True)
+
+# %%
+all_data = dm.read("SELECT * FROM PFF_Expert_Ranks", 'Pre_PlayerData')
+all_data.week= all_data.week.astype('str')
+all_data.year = all_data.year.astype('str')
+all_data['pkey'] = all_data.player + all_data.week + all_data.year
+
+to_upload.week= to_upload.week.astype('str')
+to_upload.year = to_upload.year.astype('str')
+to_upload['pkey'] = to_upload.player + to_upload.week + to_upload.year
+all_data[(~all_data.pkey.isin(to_upload.pkey)) ]#.groupby('player').agg({'Id': 'count'}).sort_values(by='Id', ascending=False)
 # %%

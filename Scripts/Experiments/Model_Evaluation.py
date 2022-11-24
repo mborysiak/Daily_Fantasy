@@ -8,7 +8,7 @@ import os
 import pickle
 import datetime as dt
 import gzip
-from sklearn.linear_model import Ridge, ElasticNet
+from sklearn.linear_model import Ridge, ElasticNet, Lasso
 import sklearn
 from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import StandardScaler
@@ -35,52 +35,80 @@ def load_all_pickles(model_output_path, label):
     except: full_hold = None
     return pred, actual, models, scores, full_hold
 
-def load_data(model_type, set_pos):
+
+def load_data(model_type, set_pos, run_params):
 
     # load data and filter down
-    if model_type=='full_model': df = dm.read(f'''SELECT * FROM {set_pos}_Data''', 'Model_Features')
-    elif model_type=='backfill': df = dm.read(f'''SELECT * FROM Backfill WHERE pos='{set_pos}' ''', 'Model_Features')
+    if model_type=='full_model': df = dm.read(f'''SELECT * 
+                                                  FROM {set_pos}_Data{run_params['rush_pass']}
+                                                ''', 'Model_Features')
+    elif model_type=='backfill': df = dm.read(f'''SELECT * 
+                                                  FROM Backfill 
+                                                  WHERE pos='{set_pos}' ''', 'Model_Features')
 
     if df.shape[1]==2000:
-        df2 = dm.read(f'''SELECT * FROM {set_pos}_Data2''', 'Model_Features')
+        df2 = dm.read(f'''SELECT * 
+                          FROM {set_pos}_Data{run_params['rush_pass']}2
+                       ''', 'Model_Features')
         df = pd.concat([df, df2], axis=1)
-    df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
 
+    df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
+    if set_pos == 'Defense':
+        df['team'] = df.player
+        
     drop_cols = list(df.dtypes[df.dtypes=='object'].index)
+    run_params['drop_cols'] = drop_cols
     print(drop_cols)
 
-    return df, drop_cols
-
+    return df, run_params
 
 def year_week_to_date(x):
     return int(dt.datetime(x[0], 1, x[1]).strftime('%Y%m%d'))
 
 
-def create_game_date(df):
+def get_cv_time_input(df, back_weeks):
+    max_date = str(df.game_date.max())
+    year = int(max_date[:4])
+    week = int(max_date[-2:])
+
+    for i in range(back_weeks):
+        if week > 1:
+            week -= 1
+        else:
+            year -= 1
+            week = 17
+    cv_time_input = int(dt.datetime(year, 1, week).strftime('%Y%m%d'))
+    print(f'Begin Validation on Week {week}, {year}')
+    return cv_time_input
+
+
+def create_game_date(df, run_params):
     
     # set up the date column for sorting
     df['game_date'] = df[['year', 'week']].apply(year_week_to_date, axis=1)
-    cv_time_input = int(dt.datetime(val_year_min, 1, val_week_min).strftime('%Y%m%d'))
-    train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
+    cv_time_input = get_cv_time_input(df, run_params['back_weeks'][set_pos])
+    train_time_split = int(dt.datetime(run_params['set_year'], 1, run_params['set_week']).strftime('%Y%m%d'))
 
-    return df, cv_time_input, train_time_split
+    run_params['cv_time_input'] = cv_time_input
+    run_params['train_time_split'] = train_time_split
+
+    return df, run_params
 
 
-def train_predict_split(df, train_time_split, cv_time_input):
+def train_predict_split(df, run_params):
 
     # # get the train / predict dataframes and output dataframe
-    df_train = df[df.game_date < train_time_split].reset_index(drop=True)
+    df_train = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 
-    df_predict = df[df.game_date == train_time_split].reset_index(drop=True)
+    df_predict = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
     output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
-    min_samples = int(df_train[df_train.game_date < cv_time_input].shape[0])  
+    min_samples = int(df_train[df_train.game_date < run_params['cv_time_input']].shape[0])  
     print('Shape of Train Set', df_train.shape)
 
     return df_train, df_predict, output_start, min_samples
-
 
 def get_class_data(df, cut, run_params):
 
@@ -111,33 +139,60 @@ def get_class_data(df, cut, run_params):
 #==================================================================
 
 # set year to analyze
-set_year = 2022
-set_week = 8
 
-# set the earliest date to begin the validation set
-val_year_min = 2020
-val_week_min = 14
 
 # set the model version
 model_type ='full_model'
 set_pos = 'QB'
 
+run_params = {
+    
+    # set year and week to analyze
+    'set_year': 2022,
+    'set_week': 10,
+
+    # set beginning of validation period
+    'val_year_min': 2020,
+    'val_week_min': 14,
+
+    # opt params
+    'n_iters': 25,
+    'n_splits': 5,
+
+    # other parameters
+    'use_sample_weight': False,
+    'opt_type': 'custom_rand',
+    'cuts': [33, 80, 95],
+    'met': 'y_act',
+
+    # set number of weeks back to begin validation
+    'back_weeks': {
+        'QB': 28,
+        'RB': 24,
+        'WR': 24,
+        'TE': 28,
+        'Defense': 28
+    },
+
+    'rush_pass': ''
+}
+
+
 #==========
 # Pull and clean compiled data
 #==========
 
-df, drop_cols = load_data(model_type, set_pos)
-# drop_cols = ['team', 'pos', 'defTeam']
+df, run_params = load_data(model_type, set_pos, run_params)
+df, run_params = create_game_date(df, run_params)
+df['y_act'] = 1000*df.y_act / df.dk_salary
 
-df, cv_time_input, train_time_split = create_game_date(df)
-df_train, df_predict, output_start, min_samples = train_predict_split(df, train_time_split, cv_time_input)
+df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
 cut = 95
-run_params = {'train_time_split': train_time_split}
 df_train_class, df_predict_class = get_class_data(df, cut, run_params)
 
 skm = SciKitModel(df_train, model_obj='reg')
-X_all, y = skm.Xy_split('y_act', drop_cols)
+X_all, y = skm.Xy_split('y_act', run_params['drop_cols'])
 
 X = X_all.sample(frac=1, axis=1)
 if 'game_date' not in X.columns:
@@ -163,12 +218,12 @@ pipe = skm.model_pipe([ #('cbe', CatBoostEncoder()),
                                         skm.piece('pca')
                                         ]),
                         skm.piece('k_best'),
-                        skm.piece('knn_q')
+                        skm.piece('rf')
                         
                      ])
 
 # pipe.steps[-1][-1].quantile = 0.95
-pipe.steps[-1][-1].q = 0.8
+# pipe.steps[-1][-1].q = 0.8
 # set params
 params = skm.default_params(pipe, 'rand')
 
@@ -190,7 +245,7 @@ params = skm.default_params(pipe, 'rand')
 # run the model with parameter search
 best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=25,
                                                         col_split='game_date',n_splits=5,
-                                                        time_split=cv_time_input,
+                                                        time_split=run_params['cv_time_input'],
                                                         bayes_rand='custom_rand',
                                                         sample_weight=False,
                                                         random_seed=12345)
@@ -198,7 +253,9 @@ best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_i
 
 mf.show_scatter_plot(oof_data['full_hold']['pred'], oof_data['full_hold']['y_act'])
 
-skm.print_coef(best_models[0])
+#%%
+best_models[3].fit(X,y)
+skm.print_coef(best_models[3])
 
 #%%
 
@@ -235,6 +292,7 @@ except:
     import shap
     shap_values = shap.TreeExplainer(m).shap_values(X)
     shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(8,10), max_display=20, show=False)
+
 
 #%%
 
@@ -563,7 +621,7 @@ def join_coef(i, all_coef, coef_vals, X_all, X, m):
 def show_coef(all_coef, X_all):
     try:
         all_coef = pd.Series(all_coef.mean(axis=1).values, index=all_coef.metric)
-        all_coef[abs(all_coef) > 0.01].sort_values().plot.barh(figsize=(10,10))
+        all_coef[abs(all_coef) > 0.005].sort_values().plot.barh(figsize=(10,10))
     except:
         shap.summary_plot(all_coef.values, X_all, feature_names=X_all.columns, plot_size=(8,10), max_display=30, show=False)
 
@@ -602,14 +660,14 @@ df = dm.read(f'''SELECT *
                       and max_winnings < 50000
                 ORDER BY year, week''', 'Results')
 
-m = model_type['lgbm']
+m = model_type['enet']
 X, y = winnings_importance(df)
 coef_vals, X = get_model_coef(X, y, m)
 show_coef(coef_vals, X)
 
 #%%
 
-def entry_optimize_params(df, max_adjust):
+def entry_optimize_params(df, max_adjust, model_name):
 
     adjust_winnings = df.groupby(['trial_num']).agg(max_lineup_num=('lineup_num', 'max')).reset_index()
     adjust_winnings.max_lineup_num = 30 / (adjust_winnings.max_lineup_num+1)
@@ -618,10 +676,12 @@ def entry_optimize_params(df, max_adjust):
     df.winnings = df.winnings / df.max_lineup_num
 
     df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
-    str_cols = ['week', 'year', 'top_n_choices', 'matchup_drop', 'adjust_pos_counts', 
-                'pred_vers', 'ensemble_vers', 'std_dev_type', 'player_drop_multiple',
-                'full_model_weight', 'max_lineup_num', 'use_ownership', 'own_neg_frac',
-                'num_top_players', 'static_top_players']
+    str_cols = ['week', 'year']# ['week', 'year', 'pred_vers', 'ensemble_vers', 'std_dev_type']
+    if model_name in ('enet', 'lasso',' ridge'):
+        str_cols.extend( ['player_drop_multiple','top_n_choices', 'matchup_drop', 'adjust_pos_counts', 
+                         'full_model_weight', 'max_lineup_num', 'use_ownership', 'own_neg_frac',
+                         'num_top_players', 'static_top_players',
+                         'qb_min_iter', 'qb_solo_start', 'qb_set_max_team'])
     df[str_cols] = df[str_cols].astype('str')
 
     df = df.drop(['trial_num', 'lineup_num'], axis=1)
@@ -640,29 +700,31 @@ def entry_optimize_params(df, max_adjust):
 df = dm.read('''SELECT *  
                 FROM Entry_Optimize_Params_Detail 
                 JOIN (
-                      SELECT week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, trial_num, repeat_num
+                     SELECT week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num > 65
+                WHERE trial_num > 90
                 ''', 'Results')
 
 model_type = {
- 'enet': ElasticNet(alpha=5, l1_ratio=0.1),
+ 'enet': ElasticNet(alpha=1, l1_ratio=0.1),
+ 'lasso': Lasso(alpha=0.1),
  'ridge': Ridge(alpha=100),
  'rf': RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1),
  'lgbm': LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
 
 }
 
-m = model_type['enet']
-X, y = entry_optimize_params(df, max_adjust=5000)
+model_name='lgbm'
+m = model_type[model_name] 
+X, y = entry_optimize_params(df, max_adjust=5000, model_name=model_name)
 coef_vals, X = get_model_coef(X, y, m)
 show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
+weeks = [ 2,  4, 5, 6, 7, 8, 9, 10, 11]
+years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
 
 i=0
 all_coef = None; X_all = None
@@ -671,16 +733,16 @@ for w, yr in zip(weeks, years):
                      FROM Entry_Optimize_Params_Detail 
                      JOIN (
                             SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
-                            FROM Entry_Optimize_Results
-                            WHERE week = {w}
-                                AND year = {yr}
+                            FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num > 65
+                     WHERE trial_num > 90
+                           AND week = {w}
+                           AND year = {yr}
                      ''', 'Results')
 
     model_name = 'enet'
     m = model_type[model_name]
-    X, y = entry_optimize_params(df, max_adjust=5000)
+    X, y = entry_optimize_params(df, max_adjust=5000, model_name=model_name)
     coef_vals, X = get_model_coef(X, y, m)
     all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1
 
