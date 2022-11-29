@@ -198,7 +198,7 @@ def get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_we
     for c in score_cols: preds[c] = preds[c] / preds.weighting
     preds = preds.drop('weighting', axis=1)
 
-    teams = dm.read("SELECT * FROM Player_Teams", 'Simulation')
+    teams = dm.read(f"SELECT player, team FROM Player_Teams WHERE week={set_week} AND year={set_year}", 'Simulation')
     preds = pd.merge(preds, teams, on=['player'])
     preds = preds[~preds.team.isin(drop_teams)].reset_index(drop=True)
 
@@ -301,8 +301,10 @@ def add_projected_stats(df, good_cols=None):
     df = pd.merge(df, defense, on=['player', 'week', 'year'], how='left').fillna(0)
     stat_proj_cols.append('defPts')
 
-    df = df[df['pos_rank'].isin(['QB0', 'RB0', 'RB1', 'WR0', 'WR1', 'WR2', 'TE0', 'Defense0', 
-                                 'OppQB0', 'OppWR0', 'OppTE0', 'OppDefense0'])]
+    df = df[df['pos_rank'].isin([
+                                'QB0', 'RB0', 'WR0', 'WR1', 'TE0', 'Defense0', 
+                                 'OppQB0', 'OppWR0', 'OppDefense0'
+                                 ])]
     df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values=stat_proj_cols).fillna(0)
     df.columns = [f'{c[1]}_{c[0]}' for c in df.columns]
     # df[[c for c in df.columns if 'Opp' in c]] = df[[c for c in df.columns if 'Opp' in c]] / 2
@@ -436,48 +438,36 @@ covar_type = 'kmeans_trunc'
 
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5
+   10
         ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022
+    2022
 ]
 
 pred_versions = [   
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
                 'sera1_rsq0_brier1_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
-                'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate',
+        
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2',
+                
 
 ]
 
 std_dev_types = [
                 'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
-                'pred_spline_class80_matt1_brier1_calibrate', 
+             
 ]
 
 
 sim_types = [
              'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
-             'ownership_ln_pos_fix',
+          
 ]
 
-full_model_weights = [0.2, 1, 5]
+full_model_weights = [1]
 
 i = 0
 iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
@@ -518,39 +508,45 @@ for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         pred_cov_final = cleanup_pred_covar(pred_cov)        
         mean_points = get_mean_points(preds)
 
-        if i == 0:
-            dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
-            dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
-            i += 1
-        else:
-            dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
-            dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
+        # if i == 0:
+        #     dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
+        #     dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
+        #     i += 1
+        # else:
+        #     dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
+        #     dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
 
 
-run_params = pd.DataFrame({
-    'week': [set_week],
-    'year': [set_year],
-    'pred_vers': [pred_vers],
-    'ensemble_vers': [ensemble_vers],
-    'std_dev_type': [std_dev_type],
-    'full_model_rel_weight': ['np.random.choice([1, 5], p=[0.2, 0.8])'],
-    'drop_player_multiple': ['np.random.choice([0, 4], p=[0.2, 0.8])'],
-    'covar_type': ["np.random.choice(['team_points'], p=[1])"],
-    'use_covar': ["np.random.choice([False], p=[1])"],
-    'use_ownership': ['np.random.choice([True, False], p=[0.8, 0.2])'],
-    'adjust_select': ["np.random.choice([True, False], p=[0.5, 0.5])"],
-    'min_players_opp_team': ["np.random.choice([0], p=[1])"]
-})
-
-dm.delete_from_db('Simulation', 'Run_Params', f"week={set_week} AND year={set_year}")
-dm.write_to_db(run_params, 'Simulation', 'Run_Params', 'append')
-
-#%%
-
-
-
-
-#%%
-
-pred_cov_stats
 # %%
+
+teams = dm.read(f'''SELECT * 
+                        FROM Player_Teams
+                       ''', 'Simulation').rename(columns={'team': 'past_teams'})
+corr_data = pd.merge(corr_data, teams, on=['player', 'week', 'year'])
+
+#%%
+pl1 = corr_data.loc[corr_data.team==corr_data.past_teams, 
+                 ['player', 'week', 'year', 'past_teams', 'y_act']].rename(columns={'player': 'player1', 'y_act': 'y_act1'})
+pl2 = corr_data.loc[corr_data.team==corr_data.past_teams, 
+                  ['player', 'week', 'year', 'past_teams', 'y_act']].rename(columns={'player': 'player2', 'y_act': 'y_act2'})
+compare = pd.merge(pl1, pl2, on=['week','year', 'past_teams'])
+compare = compare[compare.player1!=compare.player2].reset_index(drop=True)
+cnts = compare.groupby(['player1', 'player2']).agg(game_cnts=('week', 'count')).reset_index()
+compare = pd.merge(compare, cnts, on=['player1', 'player2'])
+compare = compare[compare.game_cnts > 16]
+compare = compare.groupby(['player1', 'player2'])[['y_act1', 'y_act2']].cov()['y_act1'].unstack()['y_act2']
+compare = compare.reset_index().rename(columns={'player1': 'player', 'player2': 'player_two'}).sort_values(by='y_act2')
+
+# pred_cov_final = dm.read("SELECT * FROM Covar_Matrix WHERE full_model_rel_weight=1 AND week=9", 'Simulation')
+
+compare = pd.merge(compare, pred_cov_final, on=['player', 'player_two'])
+compare = compare[compare.covar!=0]
+
+# %%
+
+from sklearn.metrics import mean_squared_error, r2_score
+
+print(np.sqrt(mean_squared_error(compare.y_act2, compare.covar)))
+print(np.sqrt(r2_score(compare.y_act2, compare.covar)))
+
+compare.plot.scatter(x='covar', y='y_act2')

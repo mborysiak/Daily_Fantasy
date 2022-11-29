@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 11
+set_week = 12
 
 download_path = '//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/Mborysiak/DK/'
 extract_path = download_path + f'Results/{set_year}/'
@@ -310,8 +310,8 @@ places = 50
 full_entries = dm.read(f'''SELECT * 
                            FROM Contest_Results 
                            WHERE Contest='{contest}'
-                                 AND week = {set_week}
-                                 AND year = {set_year}
+                             --    AND week = {set_week}
+                             --    AND year = {set_year}
                         ''', 'DK_Results')
 
 df_lineups = format_lineups(full_entries, min_place=base_place, max_place=base_place+places)
@@ -332,7 +332,7 @@ df_lineups_top['y_act'] = 0
 df_lineups_top.loc[(df_lineups_top.counts >= 5) & (df_lineups_top.value > 3), 'y_act'] = 1
 
 dm.delete_from_db('DK_Results', 'Top_Players', f"week={set_week} AND year={set_year}", create_backup=False)
-dm.write_to_db(df_lineups_top, 'DK_Results', 'Top_Players', 'replace')
+dm.write_to_db(df_lineups_top, 'DK_Results', 'Top_Players', 'append')
 
 # %%
 

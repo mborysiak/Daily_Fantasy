@@ -25,10 +25,10 @@ dm = DataManage(db_path)
 #===============
 
 year = 2022
-week = 11
+week = 12
 num_iters = 100
 
-total_lineups = 8
+total_lineups = 10
 
 #-----------------
 # Model and Sim Settings

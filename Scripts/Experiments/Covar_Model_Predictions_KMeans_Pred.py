@@ -88,12 +88,13 @@ def get_drop_teams(week, year):
     return drop_teams
 
 
-def get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_weight):
+def get_predictions(drop_teams, pred_vers, std_dev_type, set_week, set_year, full_model_rel_weight):
 
     preds = dm.read(f'''SELECT * 
                         FROM Model_Predictions 
                         WHERE version='{pred_vers}'
                               AND ensemble_vers='{ensemble_vers}'
+                              AND std_dev_type='{std_dev_type}'
                               AND week = '{set_week}'
                               AND year = '{set_year}' 
                               AND player != 'Ryan Griffin'
@@ -114,7 +115,11 @@ def get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_we
     for c in score_cols: preds[c] = preds[c] / preds.weighting
     preds = preds.drop('weighting', axis=1)
 
-    teams = dm.read("SELECT * FROM Player_Teams", 'Simulation')
+    teams = dm.read(f'''SELECT * 
+                        FROM Player_Teams
+                        WHERe week={set_week}
+                             AND year={set_year}
+                       ''', 'Simulation')
     preds = pd.merge(preds, teams, on=['player'])
     preds = preds[~preds.team.isin(drop_teams)].reset_index(drop=True)
 
@@ -208,12 +213,12 @@ def get_mean_points(preds):
 def pivot_pos_data(df):
 
     df = df[df['pos_rank'].isin(['QB0', 'RB0', 'RB1', 'WR0', 'WR1', 'WR2', 'TE0', 'Defense0', 
-                                 'OppQB0', 'OppDefense0', 'OppWR1'
+                                'OppQB0', 'OppDefense0', 'OppWR1'
                                  #'OppRB0', 'OppWR0', 'OppWR1', 'OppTE0', 
                                  ])]
     df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='pred_fp_per_game')
     df = df.reset_index().sort_values(by=['team', 'year', 'week']).ffill().set_index(['team', 'week', 'year'])
-
+    df = df.dropna(axis=0)
     return df
 
 
@@ -313,6 +318,7 @@ def get_kmeans_covar(df):
 
 def assign_kmean_labels(pred_cov, pred_cov_stats, km):
 
+    pred_cov_stats = pred_cov_stats.dropna()
     pred_cov_labels = pred_cov_stats.reset_index()[['team', 'week','year']].assign(label=km.predict(pred_cov_stats.values))
     pred_cov = pd.merge(pred_cov, pred_cov_labels, on=['team', 'week', 'year'])
 
@@ -337,7 +343,7 @@ covar_type = 'kmeans_pred_trunc'
 
 # set the model version
 set_weeks = [
-   8
+   9
         ]
 
 set_years = [
@@ -349,7 +355,7 @@ pred_versions = [
 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
 ]
 
 std_dev_types = [
@@ -383,14 +389,14 @@ for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         kmean_input = pivot_pos_data(corr_data)
         kmean_input = add_gambling_lines(kmean_input)
 
-        kmeans_out, km = get_best_clusters(kmean_input, corr_data, min_n=5, max_n=10)
+        kmeans_out, km = get_best_clusters(kmean_input, corr_data, min_n=10, max_n=20)
         show_cluster_heatmap(kmeans_out, km)
         show_historical_cluster_teams(kmeans_out, label=3)
         matrices = get_kmeans_covar(kmeans_out)
 
         # pull in the prediction data and create player matches for position type
         drop_teams = get_drop_teams(set_week, set_year)
-        preds = get_predictions(drop_teams, pred_vers, set_week, set_year, full_model_rel_weight)
+        preds = get_predictions(drop_teams, pred_vers, std_dev_type, set_week, set_year, full_model_rel_weight)
         pred_cov = create_player_matches(preds, opponent=False)
         opp_pred_cov = create_player_matches(preds, opponent=True)
         pred_cov = pd.concat([pred_cov, opp_pred_cov], axis=0).reset_index(drop=True)
@@ -415,30 +421,38 @@ for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         #     dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
 
 
-run_params = pd.DataFrame({
-    'week': [set_week],
-    'year': [set_year],
-    'pred_vers': [pred_vers],
-    'ensemble_vers': [ensemble_vers],
-    'std_dev_type': [std_dev_type],
-    'full_model_rel_weight': ['np.random.choice([1, 5], p=[0.2, 0.8])'],
-    'drop_player_multiple': ['np.random.choice([0, 4], p=[0.2, 0.8])'],
-    'covar_type': ["np.random.choice(['team_points'], p=[1])"],
-    'use_covar': ["np.random.choice([False], p=[1])"],
-    'use_ownership': ['np.random.choice([True, False], p=[0.8, 0.2])'],
-    'adjust_select': ["np.random.choice([True, False], p=[0.5, 0.5])"],
-    'min_players_opp_team': ["np.random.choice([0], p=[1])"]
-})
-
-dm.delete_from_db('Simulation', 'Run_Params', f"week={set_week} AND year={set_year}")
-dm.write_to_db(run_params, 'Simulation', 'Run_Params', 'append')
-
-#%%
-
-
-
-
-#%%
-
-pred_cov_stats
 # %%
+teams = dm.read(f'''SELECT * 
+                        FROM Player_Teams
+                       ''', 'Simulation').rename(columns={'team': 'past_teams'})
+corr_data = pd.merge(corr_data, teams, on=['player', 'week', 'year'])
+
+#%%
+pl1 = corr_data.loc[corr_data.team==corr_data.past_teams, 
+                 ['player', 'week', 'year', 'past_teams', 'y_act']].rename(columns={'player': 'player1', 'y_act': 'y_act1'})
+pl2 = corr_data.loc[corr_data.team==corr_data.past_teams, 
+                  ['player', 'week', 'year', 'past_teams', 'y_act']].rename(columns={'player': 'player2', 'y_act': 'y_act2'})
+compare = pd.merge(pl1, pl2, on=['week','year', 'past_teams'])
+compare = compare[compare.player1!=compare.player2].reset_index(drop=True)
+cnts = compare.groupby(['player1', 'player2']).agg(game_cnts=('week', 'count')).reset_index()
+compare = pd.merge(compare, cnts, on=['player1', 'player2'])
+compare = compare[compare.game_cnts > 16]
+compare = compare.groupby(['player1', 'player2'])[['y_act1', 'y_act2']].cov()['y_act1'].unstack()['y_act2']
+compare = compare.reset_index().rename(columns={'player1': 'player', 'player2': 'player_two'}).sort_values(by='y_act2')
+
+# pred_cov_final = dm.read("SELECT * FROM Covar_Matrix WHERE full_model_rel_weight=1 AND week=9", 'Simulation')
+
+compare = pd.merge(compare, pred_cov_final, on=['player', 'player_two'])
+compare = compare[compare.covar!=0]
+
+# %%
+
+from sklearn.metrics import mean_squared_error, r2_score
+
+print(np.sqrt(mean_squared_error(compare.y_act2, compare.covar)))
+print(np.sqrt(r2_score(compare.y_act2, compare.covar)))
+
+compare.plot.scatter(x='covar', y='y_act2')
+
+# %%
+

@@ -211,7 +211,7 @@ class FootballSimulation:
     @staticmethod
     def get_min_players(min_players_same_team_input, adjust_select):
         if min_players_same_team_input=='Auto': 
-                min_players_same_team= np.random.choice([-1, 2, 3, 4], p=[0.1, 0.5, 0.4, 0])
+                min_players_same_team= np.random.choice([-1, 2, 3, 4], p=[0.1, 0.4, 0.4, .1])
         else:
             min_players_same_team = min_players_same_team_input
 
@@ -223,7 +223,7 @@ class FootballSimulation:
     def get_min_players_opp_team(min_players_opp_team_input):
         if min_players_opp_team_input=='Auto': 
 
-            min_players_opp_team = np.random.choice([0, 1, 2], p=[0.3, 0.35, 0.35])
+            min_players_opp_team = np.random.choice([0, 1, 2], p=[0.25, 0.4, 0.35])
         else:
             min_players_opp_team = min_players_opp_team_input
 
@@ -232,7 +232,7 @@ class FootballSimulation:
     @staticmethod
     def get_top_players_from_team(df, top_players=5):
         
-        df = df[df.pos.isin(['QB', 'WR', 'TE'])]
+        df = df[df.pos.isin(['QB', 'WR', 'TE', 'RB'])]
         df = df.sort_values(by=['team', 'pred_fp_per_game'], ascending=[True, False])
         df['player_rank'] = df.groupby('team').cumcount()
         df = df.loc[df.player_rank <= top_players-1, ['player', 'team', 'pred_fp_per_game']].reset_index(drop=True)
@@ -384,7 +384,7 @@ class FootballSimulation:
     def get_current_team_cnts(self, to_add):
 
         added_teams = self.player_data.loc[(self.player_data.player.isin(to_add)) & \
-                                           (self.player_data.pos.isin(['QB', 'WR', 'TE'])), 
+                                           (self.player_data.pos.isin(['QB', 'WR', 'TE', 'RB'])), 
                                            ['player', 'team']].drop_duplicates()
         added_teams = list(added_teams.team)
 
@@ -689,6 +689,14 @@ class FootballSimulation:
             b_position = self.create_b_matrix(cur_pos_require)
 
             if i % 25 == 0:
+
+                # remove QB defense opponent from dataset
+                if open_pos_require['QB'] == 0:
+                    qb_team = self.player_data.loc[(self.player_data.player.isin(to_add)) & \
+                                                   (self.player_data.pos=='QB'), 'team'].values[0]
+                    qb_def_team = self.matchups[qb_team]
+                    if qb_def_team not in to_add: 
+                        to_drop.append(qb_def_team)
                 
                 # get predictions and remove to drop players
                 predictions = self.get_predictions(col='pred_fp_per_game', num_options=num_options)
@@ -795,23 +803,23 @@ class FootballSimulation:
 # dm = DataManage(db_path)
 
 # pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-# ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
+# ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
 # std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
 # adjust_select = True
 # matchup_drop = 0
 # full_model_weight = 5
 # use_covar = False
-# min_players_same_team = 'Auto'
-# min_players_opp_team = 'Auto'
+# min_players_same_team = 2.5
+# min_players_opp_team = 1
 # use_ownership = 1
-# own_neg_frac = 0.5
+# own_neg_frac = 0.8
 
-# qb_solo_start = True
+# qb_solo_start = False
 # qb_set_max_team = True
 # qb_min_iter = 0
 
-# week = 10
+# week = 12
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -819,9 +827,8 @@ class FootballSimulation:
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
-#                          full_model_rel_weight=full_model_weight, covar_type='team_points_trunc', use_covar=use_covar, 
+#                          full_model_rel_weight=full_model_weight, covar_type='no_covar', use_covar=use_covar, 
 #                          use_ownership=use_ownership, salary_remain_max=500)
-
 # set_max_team = None
 # to_add = []
 # to_drop = []
@@ -829,7 +836,7 @@ class FootballSimulation:
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
 #                                     min_players_opp_team, adjust_select=adjust_select, 
 #                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
-#                                     n_top_players=3, static_top_players=True,
+#                                     n_top_players=5, static_top_players=False,
 #                                     qb_solo_start=qb_solo_start, qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter)
 
 # print(max_team_cnt)

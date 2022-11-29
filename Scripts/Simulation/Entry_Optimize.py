@@ -15,17 +15,17 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc']
 
-ensemble_versions =['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+ensemble_versions =[
                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
@@ -35,9 +35,25 @@ ensemble_versions =['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
                     'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include3_kfold3']
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    ]
 
-std_dev_types = len(set_weeks)*['pred_spline_class80_q80_matt1_brier1_kfold3']
+std_dev_types = [
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                'pred_spline_class80_q80_matt1_brier1_kfold3',
+                ]
 
 sim_types = len(set_weeks) * ['ownership_ln_pos_fix_flip']
 
@@ -205,8 +221,10 @@ for repeat_num in range(10):
             },
 
             'player_drop_multiple': {
-                0: 0.3,
-                4: 0.7,
+                0: 0.5,
+                1: 0.5,
+                2: 0,
+                4: 0,
                 6: 0
             },
                         
@@ -218,50 +236,52 @@ for repeat_num in range(10):
             },
 
             'top_n_choices': {
-                0: 0.8,
-                1: 0.2,
+                0: 1,
+                1: 0,
                 2: 0,
                 4: 0,
             },
 
             'full_model_weight': {
-                0.2: 0.5,
+                0.2: 0.3,
                 0.5: 0,
                 1: 0,
                 3: 0,
-                5: 0.5
+                5: 0.7
             },
 
             'covar_type': {
-                'no_covar': 1,
-                'team_points_trunc': 0,
+                'no_covar': 0.7,
+                'team_points_trunc': 0.3,
                 'kmeans_trunc': 0
             },
 
             'min_player_same_team': {
-                'Auto': 1,
+                'Auto': 0.5,
                 2: 0,
+                2.5: 0.5,
                 3: 0,
                 -1: 0
             },
 
             'min_players_opp_team': {
                 0: 0,
-                1: 0,
-                'Auto': 1
+                1: 0.3,
+                2: 0.1,
+                'Auto': 0.6
             },
 
             'num_top_players': {
-                2: 0.3, 
-                3: 0.5,
-                4: 0,
-                5: 0.2
+                2: 0.2, 
+                3: 0.2,
+                4: 0.3,
+                5: 0.3
             },
             
             'qb_min_iter': {
-                0: 0.8,
+                0: 1,
                 1: 0,
-                9: 0.2
+                9: 0
             },
 
             'qb_set_max_team': {
@@ -275,29 +295,30 @@ for repeat_num in range(10):
             },
             
             'static_top_players': {
-                True: 0.5,
-                False: 0.5
+                True: 0.8,
+                False: 0.2
             },
 
             'use_ownership': {
                 True: 0,
                 False: 0,
-                1: 0.8,
-                0.75: 0,
-                0.5: 0.2
+                1: 1,
+                0.85: 0,
+                0.5: 0
             },
 
             'own_neg_frac': {
                 0.5: 0,
-                0.75: 0.5,
-                1: 0.5,
+                0.75: 0,
+                0.85: 0.3,
+                1: 0.7,
                 0.65: 0
             },
 
             'max_salary_remain': {
                 None: 0,
-                200: 0.2,
-                300: 0.3,
+                200: 0.5,
+                300: 0,
                 400: 0,
                 500: 0.5,
                 1000: 0
@@ -332,7 +353,7 @@ for repeat_num in range(10):
             try: min_players_opp_team = int(min_players_opp_team)
             except: pass
 
-            try: min_players_same_team = int(min_players_same_team)
+            try: min_players_same_team = float(min_players_same_team)
             except: pass
 
             if covar_type=='no_covar': use_covar=False
@@ -425,18 +446,19 @@ dm.write_to_db(output, 'Results', 'Entry_Optimize_Params', 'append')
 
 #%%
 
-# to_delete_num=105
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
+to_delete_num=134
+df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Params WHERE trial_num!={to_delete_num}", 'Results')
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace')
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params WHERE trial_num!={to_delete_num}", 'Results')
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace')
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail WHERE trial_num!={to_delete_num}", 'Results')
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail WHERE trial_num!={to_delete_num}", 'Results')
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Results WHERE trial_num!={to_delete_num}", 'Results')
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
+df = dm.read(f"SELECT * FROM Entry_Optimize_Results WHERE trial_num!={to_delete_num}", 'Results')
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
+
 
 # %%
 

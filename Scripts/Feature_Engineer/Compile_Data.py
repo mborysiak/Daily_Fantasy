@@ -1288,9 +1288,10 @@ def remove_non_uniques(df):
 
 def one_qb_per_week(df):
     max_qb = df.groupby(['team', 'year', 'week']).agg({'projected_points': 'max',
-                                                       'dk_salary': 'max'}).reset_index()
+                                                       'fp_rank': 'min'}).reset_index()
     cols = df.columns
-    df = pd.merge(df, max_qb, on=['team', 'year', 'week', 'projected_points', 'dk_salary'])
+    df = pd.merge(df, max_qb.drop('fp_rank', axis=1), on=['team', 'year', 'week', 'projected_points'])
+    df = pd.merge(df, max_qb.drop('projected_points', axis=1), on=['team', 'year', 'week', 'fp_rank'])
     df = df[cols]
 
     return df
@@ -1711,29 +1712,6 @@ data
 
 # %%
 
-rush_rz = dm.read('''SELECT * FROM PFR_Redzone_Rush''', 'Post_PlayerData')
-rec_rz = dm.read('''SELECT * FROM PFR_Redzone_Rec''', 'Post_PlayerData')
-
-rush_rz.player = rush_rz.player.apply(dc.name_clean)
-rec_rz.player = rec_rz.player.apply(dc.name_clean)
-
-rz = pd.merge(rush_rz, rec_rz, on=['player', 'team', 'week', 'year'])
-
-# the red zone data is duplicated into the bye week, so
-# this chunk of code removes the duplicated week where games
-# weren't actually played
-rz = drop_extra_bye_week(rz)
-
-for c in rz:
-    if 'pct' not in c and 'rz' in c:
-        rz[c] = rz[c] / rz.week
-
-rz = rz.groupby(['player'], as_index=False).apply(lambda group: group.ffill()).fillna(0)
-rz.week = rz.week + 1
-rz = fix_bye_week(rz).drop('team', axis=1)
-# rz = switch_seasons(rz)
-
-# rz_cols = [c for c in rz.columns if 'rz' in c]
-# rz = add_rolling_stats(rz, gcols=['player'], rcols=rz_cols)
-rz[rz.player=='Jeff Wilson']
+ownership = dm.read("SELECT * FROM Contest_Ownership WHERE Contest='Million'", 'DK_Results')
+ownership[ownership.year==2020]
 # %%

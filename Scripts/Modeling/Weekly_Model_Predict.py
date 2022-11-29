@@ -145,7 +145,7 @@ def get_class_data(df, cut, run_params):
 def get_skm(skm_df, model_obj, to_drop):
     
     skm_options = {
-        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt),
+        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt, mse_wt=mse_wt),
         'class': SciKitModel(skm_df, model_obj='class', brier_wt=brier_wt, matt_wt=matt_wt),
         'quantile': SciKitModel(skm_df, model_obj='quantile')
     }
@@ -794,9 +794,10 @@ print_coef = False
 num_k_folds = 3
 
 r2_wt = 0
-sera_wt = 1
+sera_wt = 0
+mse_wt = 1
 brier_wt = 1
-matt_wt = 1
+matt_wt = 0
 
 calibrate = False
 
@@ -805,7 +806,7 @@ set_weeks = [
          # 1, 2, 3, 4, 5, 
          # 6, 7, 8, 9, 10,
          12
-        ]
+                 ]
 
 pred_versions = [
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
@@ -821,7 +822,7 @@ pred_versions = [
                 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera0_rsq0_mse1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
@@ -833,7 +834,7 @@ ensemble_versions = [
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
                      ]
 
-std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
+std_dev_type = 'pred_spline_class80_q80_matt0_brier1_kfold3'
 
 for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
@@ -846,8 +847,8 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         ['Defense', 'full_model', ''],
         ['QB', 'backfill', ''],
         ['RB', 'backfill', ''],
-        # ['WR', 'backfill', ''],
-        # ['TE', 'backfill', '']
+        ['WR', 'backfill', ''],
+        ['TE', 'backfill', '']
     ]
     for set_pos, model_type, rush_pass in runs:
 
@@ -1074,13 +1075,13 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     runs = [
         ['QB', 'full_model', ''],
         ['RB', 'full_model', ''],
-        ['WR', 'full_model', ''],
-        ['TE', 'full_model', ''],
-        ['Defense', 'full_model', ''],
-        ['QB', 'backfill', ''],
-        ['RB', 'backfill', ''],
-        ['WR', 'backfill', ''],
-        ['TE', 'backfill', '']
+        # ['WR', 'full_model', ''],
+        # ['TE', 'full_model', ''],
+        # ['Defense', 'full_model', ''],
+        # ['QB', 'backfill', ''],
+        # ['RB', 'backfill', ''],
+        # ['WR', 'backfill', ''],
+        # ['TE', 'backfill', '']
     ]
     for set_pos, model_type, rush_pass in runs:
 
@@ -1219,6 +1220,33 @@ del_str = f'''week=11
                 '''
 dm.delete_from_db('Simulation', 'Model_Predictions', del_str, create_backup=False)
 dm.write_to_db(df, 'Simulation', 'Model_Predictions', 'append')
+
+
+# %%
+week=12
+year=2022
+
+df = dm.read(f'''SELECT player_id, AVG(pred_fp_per_game) projection, pred_ownership ownership
+                FROM Model_Predictions
+                JOIN (
+                      SELECT player, player_id
+                      FROM Player_Ids
+                      WHERE league={week}
+                            AND year={year}
+                     ) USING (player)
+                JOIN (
+                      SELECT player, pred_ownership
+                      FROM Predicted_Ownership
+                      WHERE week={week}
+                            AND year={year}
+                    ) USING (player)
+                WHERE week={week}
+                      AND year={year}
+                GROUP BY player
+             ''', 'Simulation')
+
+df['ownership'] = np.exp(df.ownership) * 100
+df.to_csv('c:/Users/mborysia/Downloads/sim_saber.csv', index=False)
 
 
 # %%

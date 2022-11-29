@@ -420,6 +420,8 @@ def remove_duplicates(df):
 
     max_pts = df.groupby(['player', 'week', 'year']).agg({'avg_proj_pts': 'max'}).reset_index()
     df = pd.merge(df, max_pts, on=['player', 'week', 'year', 'avg_proj_pts'])
+    df = df.drop_duplicates(subset=['player', 'week', 'year']).reset_index(drop=True)
+
     return df
 
 
