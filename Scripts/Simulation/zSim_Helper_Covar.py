@@ -232,7 +232,7 @@ class FootballSimulation:
     @staticmethod
     def get_top_players_from_team(df, top_players=5):
         
-        df = df[df.pos.isin(['QB', 'WR', 'TE', 'RB'])]
+        df = df[df.pos.isin(['QB', 'WR', 'TE'])]
         df = df.sort_values(by=['team', 'pred_fp_per_game'], ascending=[True, False])
         df['player_rank'] = df.groupby('team').cumcount()
         df = df.loc[df.player_rank <= top_players-1, ['player', 'team', 'pred_fp_per_game']].reset_index(drop=True)
@@ -384,7 +384,7 @@ class FootballSimulation:
     def get_current_team_cnts(self, to_add):
 
         added_teams = self.player_data.loc[(self.player_data.player.isin(to_add)) & \
-                                           (self.player_data.pos.isin(['QB', 'WR', 'TE', 'RB'])), 
+                                           (self.player_data.pos.isin(['QB', 'WR', 'TE'])), 
                                            ['player', 'team']].drop_duplicates()
         added_teams = list(added_teams.team)
 

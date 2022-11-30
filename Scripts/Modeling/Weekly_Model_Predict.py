@@ -794,10 +794,10 @@ print_coef = False
 num_k_folds = 3
 
 r2_wt = 0
-sera_wt = 0
-mse_wt = 1
+sera_wt = 1
+mse_wt = 0
 brier_wt = 1
-matt_wt = 0
+matt_wt = 1
 
 calibrate = False
 
@@ -822,7 +822,7 @@ pred_versions = [
                 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera0_rsq0_mse1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
@@ -834,7 +834,7 @@ ensemble_versions = [
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
                      ]
 
-std_dev_type = 'pred_spline_class80_q80_matt0_brier1_kfold3'
+std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
 for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
@@ -1075,13 +1075,13 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     runs = [
         ['QB', 'full_model', ''],
         ['RB', 'full_model', ''],
-        # ['WR', 'full_model', ''],
-        # ['TE', 'full_model', ''],
-        # ['Defense', 'full_model', ''],
-        # ['QB', 'backfill', ''],
-        # ['RB', 'backfill', ''],
-        # ['WR', 'backfill', ''],
-        # ['TE', 'backfill', '']
+        ['WR', 'full_model', ''],
+        ['TE', 'full_model', ''],
+        ['Defense', 'full_model', ''],
+        ['QB', 'backfill', ''],
+        ['RB', 'backfill', ''],
+        ['WR', 'backfill', ''],
+        ['TE', 'backfill', '']
     ]
     for set_pos, model_type, rush_pass in runs:
 
@@ -1131,18 +1131,17 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
                                  axis=1).sort_values(by='pred_fp_per_game_class', ascending=False)
         display(test_output)
 
-        # save_val_to_db(model_output_path, best_val_mil, run_params, 'million', table_name='Model_Validations_Million')
-        # save_prob_to_db(test_output, run_params, 'Predicted_Million')
+        save_val_to_db(model_output_path, best_val_mil, run_params, 'million', table_name='Model_Validations_Million')
+        save_prob_to_db(test_output, run_params, 'Predicted_Million')
 
 # %%
-output[['player', 'team', 'week', 'year', 'pred_fp_per_game_class']]
 
 for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
     run_params['set_week'] = w
     runs = [
         # ['QB', 'full_model', ''],
-        ['RB', 'full_model', ''],
+        # ['RB', 'full_model', ''],
         # ['WR', 'full_model', ''],
         # ['TE', 'full_model', ''],
         # ['Defense', 'full_model', ''],
@@ -1178,6 +1177,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         test_output = pd.concat([df_predict_mil[['player', 'team', 'week', 'year']], 
                                  pd.Series(best_predictions_mil.mean(axis=1), name='pred_fp_per_game_class')], 
                                  axis=1).sort_values(by='pred_fp_per_game_class', ascending=False)
+        display(test_output)
         save_val_to_db(model_output_path, best_val_mil, run_params, 'million', table_name='Model_Validations_Million')
         save_prob_to_db(test_output, run_params, 'Predicted_Million')
 

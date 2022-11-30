@@ -457,7 +457,7 @@ def entry_optimize_params(df, max_adjust, model_name):
     df.winnings = df.winnings / df.max_lineup_num
 
     df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
-    str_cols = ['week', 'year']# ['week', 'year', 'pred_vers', 'ensemble_vers', 'std_dev_type']
+    str_cols = ['week', 'year', 'pred_vers', 'ensemble_vers', 'std_dev_type']
     if model_name in ('enet', 'lasso',' ridge'):
         str_cols.extend( ['player_drop_multiple','top_n_choices', 'matchup_drop', 'adjust_pos_counts', 
                          'full_model_weight', 'max_lineup_num', 'use_ownership', 'own_neg_frac',

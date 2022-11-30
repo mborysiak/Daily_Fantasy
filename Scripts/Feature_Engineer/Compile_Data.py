@@ -1709,9 +1709,3 @@ data
 # df = dm.read('''SELECT * FROM WR_Stats WHERE season>=2020 AND rec_yards_gained_sum > 10 ''', 'FastR')
 # df.fantasy_pts.plot.hist()
 # # %%
-
-# %%
-
-ownership = dm.read("SELECT * FROM Contest_Ownership WHERE Contest='Million'", 'DK_Results')
-ownership[ownership.year==2020]
-# %%

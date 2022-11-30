@@ -16,10 +16,10 @@ dm = DataManage(db_path)
 
 pred_version = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 ens_version = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
-std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
+std_dev_type = 'pred_spline_class80_q80_matt0_brier1_kfold3'
 
 set_year = 2022
-set_week = 11
+set_week = 12
 contest = 'Million'
 
 #%%
@@ -233,7 +233,7 @@ def create_game_date(df, val_year_min, val_week_min, year_week_to_date):
 def run_model_mean(m, test_predict, X_test, time_split):
     
     print(f"\n===========Running {m}=============\n")
-    skm = SciKitModel(df_train, model_obj='reg', r2_wt=1, sera_wt=5)
+    skm = SciKitModel(df_train, model_obj='reg', r2_wt=0, sera_wt=1, mse_wt=0)
 
     # get the model pipe for stacking setup and train it on meta features
     pipe = skm.model_pipe([
@@ -613,7 +613,7 @@ def create_constraint_metrics(prob_table, ownership_table, pred_version, ensembl
     # pred_player_ownership = pd.merge(pred_player_ownership, df, on=['player', 'week', 'year'])
 
     # for c in ['pred_ownership', 'std_dev', 'min_score', 'max_score']:
-    #     pred_player_ownership[c] = pred_player_ownership.pred_prob * pred_player_ownership[c]
+    #     pred_player_ownership[c] = pred_player_ownership.pred_prob# / pred_player_ownership[c]
 
     return pred_player_ownership
 

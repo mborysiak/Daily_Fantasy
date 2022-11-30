@@ -216,28 +216,28 @@ for repeat_num in range(10):
         
         d = {
             'adjust_pos_counts': {
-                True: 1, 
-                False: 0
+                True: 0.8, 
+                False: 0.2
             },
 
             'player_drop_multiple': {
-                0: 0.5,
-                1: 0.5,
-                2: 0,
-                4: 0,
+                0: 0.2,
+                1: 0.3,
+                2: 0.2,
+                4: 0.3,
                 6: 0
             },
                         
             'matchup_drop': {
-                0: 1,
-                1: 0,
+                0: 0.7,
+                1: 0.3,
                 2: 0,
                 3: 0
             },
 
             'top_n_choices': {
-                0: 1,
-                1: 0,
+                0: 0.8,
+                1: 0.2,
                 2: 0,
                 4: 0,
             },
@@ -259,23 +259,23 @@ for repeat_num in range(10):
             'min_player_same_team': {
                 'Auto': 0.5,
                 2: 0,
-                2.5: 0.5,
-                3: 0,
+                2.5: 0,
+                3: 0.5,
                 -1: 0
             },
 
             'min_players_opp_team': {
                 0: 0,
-                1: 0.3,
-                2: 0.1,
+                1: 0.4,
+                2: 0,
                 'Auto': 0.6
             },
 
             'num_top_players': {
-                2: 0.2, 
-                3: 0.2,
-                4: 0.3,
-                5: 0.3
+                2: 0.5, 
+                3: 0,
+                4: 0,
+                5: 0.5
             },
             
             'qb_min_iter': {
@@ -290,38 +290,39 @@ for repeat_num in range(10):
             },
 
             'qb_solo_start': {
-                True: 0.2,
-                False: 0.8
+                True: 0.3,
+                False: 0.7
             },
             
             'static_top_players': {
-                True: 0.8,
-                False: 0.2
+                True: 0.7,
+                False: 0.3
             },
 
             'use_ownership': {
                 True: 0,
                 False: 0,
-                1: 1,
-                0.85: 0,
+                1: 0,
+                0.9: 0.6,
+                0.8: 0.4,
                 0.5: 0
             },
 
             'own_neg_frac': {
                 0.5: 0,
                 0.75: 0,
-                0.85: 0.3,
-                1: 0.7,
+                0.85: 0,
+                1: 1,
                 0.65: 0
             },
 
             'max_salary_remain': {
                 None: 0,
-                200: 0.5,
+                200: 0.3,
                 300: 0,
                 400: 0,
-                500: 0.5,
-                1000: 0
+                500: 0.4,
+                1000: 0.3
             },
 
             'num_iters': {
@@ -462,18 +463,21 @@ dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 
 # %%
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
-# add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
-# add_on = add_on.assign(param='qb_solo_start', param_option=False, option_value=1)
-# add_on = add_on[df.columns]
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
+add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
+add_on = add_on.assign(param='qb_solo_start', param_option=False, option_value=1)
+add_on = add_on[df.columns]
 
-# df = pd.concat([df, add_on], axis=0)
-# df = df.sort_values(by='trial_num')
+df = pd.concat([df, add_on], axis=0)
+df = df.sort_values(by='trial_num')
 
-# # df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
+# df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
 
 #%%
+
+"134-138 include rb in stack"
+
 # df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'Results')
 # df['qb_min_iter'] = 9
 # df['qb_set_max_team'] = False
