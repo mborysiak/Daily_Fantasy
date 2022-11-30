@@ -635,13 +635,13 @@ class FootballSimulation:
 
         drop_teams = np.random.choice(list(self.matchups.keys()), num_matchup_drop, replace=False)
         lineup_teams = self.player_data.loc[self.player_data.player.isin(to_add), 'team'].unique()
-        print(drop_teams)
+        
         matchup_to_drop = []
         for t in drop_teams:
             if t not in lineup_teams and self.matchups[t] not in lineup_teams: 
                 matchup_to_drop.extend([t, self.matchups[t]])
 
-        print(matchup_to_drop)
+        
         to_drop.extend(self.player_data.loc[self.player_data.team.isin(matchup_to_drop), 'player'].values)
 
         return to_drop

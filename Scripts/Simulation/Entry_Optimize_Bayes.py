@@ -181,17 +181,6 @@ def param_set_output(d):
 
     return output
 
-
-
-
-
-#%%
-week=1
-year=2022
-pred_vers = pred_versions[0]
-ensemble_vers=ensemble_versions[0]
-std_dev_type = std_dev_types[0]
-
 def get_prizes(week, year):
     prizes = dm.read(f'''SELECT Rank, Points, prize
                         FROM Contest_Results
@@ -327,17 +316,20 @@ def objective(params):
                                                                    p7, p8, p9, p10, p11, p12,
                                                                    p13, p14, p15, p16, p17, p18,
                                                                    p19, p20, p21, p22, p23 in input_args)
-            
-    return -np.sum(winnings)
+    
+    print({'Week'+str(i+1): w for i, w in enumerate(winnings)}) 
+    print('Total Winnings:', np.sum(winnings))
+    
+    return -np.mean(winnings)-np.percentile(winnings, 50)
         
 #%%
-from hyperopt import fmin, tpe, hp
+from hyperopt import fmin, tpe, hp, space_eval
 
 space = {
-        'adjust_pos_counts': hp.uniform('adjust_pos_counts', 0, 1),
-        'player_drop_multiple': hp.uniform('player_drop_multiple', 0, 1),
+        'adjust_pos_counts': hp.choice('adjust_pos_counts', [True, False]),
+        'player_drop_multiple': hp.choice('player_drop_multiple',  np.arange(0, 5, dtype=int)),
         'matchup_drop': hp.choice('matchup_drop', np.arange(0, 3, dtype=int)),
-        'top_n_choices': hp.uniform('top_n_choices', 0, 1),
+        'top_n_choices': hp.choice('top_n_choices',  np.arange(0, 4, dtype=int)),
         'full_model_weight': hp.choice('full_model_weight', [0.2, 1, 5]),
         'covar_type': hp.choice('covar_type', ['no_covar', 'team_points_trunc']),
         'min_player_same_team': hp.choice('min_player_same_team', ['Auto', 2, 3]),
@@ -350,11 +342,31 @@ space = {
         'use_ownership': hp.uniform('use_ownership', 0, 1),
         'own_neg_frac': hp.uniform('own_neg_frac', 0, 1),
         'max_salary_remain': hp.choice('max_salary_remain', np.arange(200, 2100, 100, dtype=int)),
-        'num_iters': hp.choice('num_iters', np.arange(50, 225, 25, dtype=int)),
+        'num_iters': hp.choice('num_iters', np.arange(50, 175, 25, dtype=int)),
         'lineups_per_param': hp.choice('lineups_per_param', [2,3])
 }
 
-fmin(objective, space, algo=tpe.suggest, max_evals=10)
+fmin_result = fmin(objective, space, algo=tpe.suggest, max_evals=100)
+print(space_eval(space, fmin_result))
 
 # %%
+fmin_result = {'adjust_pos_counts': 0.74564620653125,
+ 'covar_type': 0,
+ 'full_model_weight': 2,
+ 'lineups_per_param': 0,
+ 'matchup_drop': 0,
+ 'max_salary_remain': 4,
+ 'min_player_same_team': 0,
+ 'min_players_opp_team': 0,
+ 'num_iters': 5,
+ 'num_top_players': 3,
+ 'own_neg_frac': 0.7065411384909316,
+ 'player_drop_multiple': 0.9807781565825981,
+ 'qb_min_iter': 1,
+ 'qb_set_max_team': 1,
+ 'qb_solo_start': 1,
+ 'static_top_players': 1,
+ 'top_n_choices': 0.18001757324562861,
+ 'use_ownership': 0.6085929357842961}
 
+# %%
