@@ -82,6 +82,7 @@ def surrogate(model, X):
  
 # probability of improvement acquisition function
 def acquisition(X, Xsamples, model):
+    
 	# calculate the best surrogate score found so far
 	yhat, _ = surrogate(model, X)
 	best = max(yhat)
@@ -109,10 +110,6 @@ def opt_acquisition(X, y, model):
 	return Xsamples[ix, 0]
  
 
-# define the model
-model = GaussianProcessRegressor()
-# fit the model
-model.fit(X, y)
 
 # perform the optimization process
 for i in range(100):
@@ -146,13 +143,33 @@ params = dm.read("SELECT * FROM Entry_Optimize_Params", 'Results')
 params['param'] = params.param + '_' + params.param_option
 params = pd.pivot_table(params, index='trial_num', columns='param').fillna(0)
 params.columns = [c[1] for c in params.columns]
+params = params.reset_index()
+
+trial_results = dm.read("SELECT * FROM Entry_Optimize_Results", 'Results')
+df = pd.merge(trial_results, params, on='trial_num')
+
+str_cols = ['week', 'year', 'pred_vers', 'ensemble_vers', 'std_dev_type', ]
+df[str_cols] = df[str_cols].astype('str')
+df = df.drop(['trial_num', 'repeat_num', 'sim_type'], axis=1)
+
+for c in df.columns:
+    if df.dtypes[c] == 'object': 
+        df = pd.concat([df, pd.get_dummies(df[c], prefix=c)], axis=1).drop(c, axis=1)
 
 from sklearn.feature_selection import VarianceThreshold
 selector = VarianceThreshold(threshold=0.01)
-selector.fit(params)
-params = params.loc[:, selector.get_support()].reset_index()
-params
+selector.fit(df)
+df = df.loc[:, selector.get_support()]
 
-# %%
+X, y = df.drop('avg_winnings', axis=1), df.avg_winnings
+
+#%%
+from sklearn.gaussian_process import GaussianProcessRegressor
+
+# define the model
+model = GaussianProcessRegressor()
+
+# fit the model
+model.fit(X, y)
 
 # %%

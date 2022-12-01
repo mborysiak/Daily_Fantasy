@@ -96,7 +96,7 @@ def pull_best_params(best_trials):
 
     return params
 
-best_trials = (121, 127)
+best_trials = (127, 140, 145)
 
 opt_params = pull_best_params(best_trials)
 opt_params
