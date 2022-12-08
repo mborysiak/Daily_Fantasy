@@ -7,6 +7,7 @@ from ff import general as ffgeneral
 from joblib import Parallel, delayed
 import pickle
 import gzip
+import os
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -151,187 +152,6 @@ def create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_ver
         params.append(cur_params)
     return params
 
-#%%
-
-# def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
-#                 full_model_rel_weight, covar_type, min_players_same_team, 
-#                 min_players_opp_team, num_top_players, qb_min_iter, qb_set_max_team, qb_solo_start,
-#                 static_top_players, use_ownership, own_neg_frac, max_salary_remain, 
-#                 num_iters, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type
-#                 ):
-    
-#     prizes = get_prizes(week, year)
-#     player_teams, matchups = pull_matchups(week, year, pred_vers)
-#     points = pull_points(week, year)
-
-#     try: min_players_opp_team = int(min_players_opp_team)
-#     except: pass
-
-#     try: min_players_same_team = float(min_players_same_team)
-#     except: pass
-
-#     if covar_type=='no_covar': use_covar=False
-#     else: use_covar=True
-
-#     sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-#                                 pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
-#                                 covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
-#                                 use_covar=use_covar, use_ownership=use_ownership, 
-#                                 salary_remain_max=max_salary_remain)
-
-#     winnings = []
-#     for _ in range(int(6/lineups_per_param)):
-        
-#         total_add = []
-#         to_drop_selected = []
-#         for t in range(lineups_per_param):
-
-#             to_add = []
-#             to_drop = []
-#             to_drop.extend(to_drop_selected)
-            
-#             # if matchup_drop > 0: to_drop = rand_drop_teams(matchups, matchup_drop)
-#             # else: to_drop = []
-#             # to_drop.extend(to_drop_selected)
-
-#             for i in range(9):
-#                 results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                         min_players_opp_team_input=min_players_opp_team, 
-#                                         adjust_select=adjust_select, num_matchup_drop=matchup_drop,
-#                                         own_neg_frac=own_neg_frac, n_top_players=num_top_players,
-#                                         static_top_players=static_top_players, qb_min_iter=qb_min_iter,
-#                                         qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
-                
-#                 prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
-#                 try: 
-#                     selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
-#                     to_add.append(selected_player)
-#                 except: 
-#                     pass
-                
-#             prize_money = calc_winnings(to_add, points, prizes)
-#             winnings.append(prize_money)
-
-#             total_add.extend(to_add)
-#             to_drop_selected = rand_drop_selected(total_add, player_drop_multiplier, lineups_per_param)
-
-#     return np.mean(winnings)
-
-
-# def objective(params):
-    
-#     iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
-#     input_args = []
-#     for week, year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
-#         input_args.append([params['adjust_pos_counts'], 
-#                            params['player_drop_multiple'], 
-#                            params['matchup_drop'], 
-#                            params['top_n_choices'], 
-#                            params['full_model_weight'], 
-#                            params['covar_type'], 
-#                            params['min_player_same_team'], 
-#                            params['min_players_opp_team'], 
-#                            params['num_top_players'], 
-#                            params['qb_min_iter'], 
-#                            params['qb_set_max_team'], 
-#                            params['qb_solo_start'], 
-#                            params['static_top_players'], 
-#                            params['use_ownership'], 
-#                            params['own_neg_frac'], 
-#                            params['max_salary_remain'], 
-#                            params['num_iters'], 
-#                            params['lineups_per_param'],
-#                            week, year, pred_vers, ensemble_vers, std_dev_type])
-
-#     # for p1, p2, p3, p4, p5, p6,p7, p8, p9, p10, p11, p12,p13, p14, p15, p16, p17, p18,p19, p20, p21, p22, p23 in input_args[:3]:
-
-#     #     winnings = sim_winnings(p1, p2, p3, p4, p5, p6,
-#     #                 p7, p8, p9, p10, p11, p12,
-#     #                 p13, p14, p15, p16, p17, p18,
-#     #                 p19, p20, p21, p22, p23)
-#     #     print(winnings)
-                
-#     winnings = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(p1, p2, p3, p4, p5, p6,
-#                                                                    p7, p8, p9, p10, p11, p12,
-#                                                                    p13, p14, p15, p16, p17, p18,
-#                                                                    p19, p20, p21, p22, p23) for 
-#                                                                    p1, p2, p3, p4, p5, p6,
-#                                                                    p7, p8, p9, p10, p11, p12,
-#                                                                    p13, p14, p15, p16, p17, p18,
-#                                                                    p19, p20, p21, p22, p23 in input_args)
-    
-#     print(input_args[0])
-#     print({'Week'+str(i+1): w for i, w in enumerate(winnings)}) 
-#     print('Total Winnings:', np.sum(winnings))
-    
-#     return -np.mean(winnings)-np.percentile(winnings, 50)
-        
-# #%%
-# from hyperopt import fmin, tpe, hp, space_eval, Trials
-
-# space = {
-#         'adjust_pos_counts_True': hp.choice('adjust_pos_counts_True', [True, False]),
-#         'player_drop_multiple': hp.choice('player_drop_multiple',  np.arange(0, 5, dtype=int)),
-#         'matchup_drop': hp.choice('matchup_drop', np.arange(0, 3, dtype=int)),
-#         'top_n_choices': hp.choice('top_n_choices',  np.arange(0, 4, dtype=int)),
-#         'full_model_weight': hp.choice('full_model_weight', [0.2, 1, 5]),
-#         'covar_type': hp.choice('covar_type', ['no_covar', 'team_points_trunc']),
-#         'min_player_same_team': hp.choice('min_player_same_team', ['Auto', 2, 3]),
-#         'min_players_opp_team': hp.choice('min_players_opp_team', ['Auto', 1, 2]),
-#         'num_top_players': hp.choice('num_top_players', np.arange(2, 6, dtype=int)),
-#         'qb_min_iter': hp.choice('qb_min_iter', [0, 1, 9]),
-#         'qb_set_max_team': hp.choice('qb_set_max_team', [True, False]),
-#         'qb_solo_start': hp.choice('qb_solo_start', [True, False]),
-#         'static_top_players': hp.choice('static_top_players', [True, False]),
-#         'use_ownership': hp.uniform('use_ownership', 0, 1),
-#         'own_neg_frac': hp.uniform('own_neg_frac', 0, 1),
-#         'max_salary_remain': hp.choice('max_salary_remain', np.arange(200, 2100, 100, dtype=int)),
-#         'num_iters': hp.choice('num_iters', np.arange(50, 175, 25, dtype=int)),
-#         'lineups_per_param': hp.choice('lineups_per_param', [2,3])
-# }
-# trials = Trials()
-# fmin_result = fmin(objective, space, trials=trials, algo=tpe.suggest, max_evals=100)
-# print(space_eval(space, fmin_result))
-
-# # %%
-# fmin_result = {'adjust_pos_counts': 0.74564620653125,
-#  'covar_type': 0,
-#  'full_model_weight': 2,
-#  'lineups_per_param': 0,
-#  'matchup_drop': 0,
-#  'max_salary_remain': 4,
-#  'min_player_same_team': 0,
-#  'min_players_opp_team': 0,
-#  'num_iters': 5,
-#  'num_top_players': 3,
-#  'own_neg_frac': 0.7065411384909316,
-#  'player_drop_multiple': 0.9807781565825981,
-#  'qb_min_iter': 1,
-#  'qb_set_max_team': 1,
-#  'qb_solo_start': 1,
-#  'static_top_players': 1,
-#  'top_n_choices': 0.18001757324562861,
-#  'use_ownership': 0.6085929357842961}
- 
-# fmin_result_2 = {'adjust_pos_counts': True,
-#  'covar_type': 'team_points_trunc',
-#  'full_model_weight': 5,
-#  'lineups_per_param': 2,
-#  'matchup_drop': 2,
-#  'max_salary_remain': 600,
-#  'min_player_same_team': 'Auto',
-#  'min_players_opp_team': 2,
-#  'num_iters': 50,
-#  'num_top_players': 2,
-#  'own_neg_frac': 0.8994698832136082,
-#  'player_drop_multiple': 1,
-#  'qb_min_iter': 1,
-#  'qb_set_max_team': True,
-#  'qb_solo_start': False,
-#  'static_top_players': True,
-#  'top_n_choices': 0,
-#  'use_ownership': 0.6761495505970899}
-
 # %%
 
 def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
@@ -390,6 +210,11 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choi
         to_drop_selected = rand_drop_selected(total_add, player_drop_multiplier, lineups_per_param)
 
     return winnings
+
+def adjust_high_winnings(tw, max_adjust=10000):
+    tw = np.array(tw)
+    tw[tw>max_adjust] = max_adjust
+    return tw
 
 
 def objective(bayes_params):
@@ -520,57 +345,18 @@ def objective(bayes_params):
         print(f'Week {week} Winnings: {winnings}') 
         print(f'Total Cumulative Winnings: {int(np.sum(total_winnings))}\n')
     
-    return -np.mean(total_winnings)-np.percentile(total_winnings, 50)
-        
+    total_winnings = adjust_high_winnings(total_winnings, max_adjust=10000)
+    
+    mean_loss = -np.mean(total_winnings)
+    median_loss = -np.percentile(total_winnings, 50)
+    loss = mean_loss #+ median_loss    
+    print('Mean Loss:', mean_loss, 'Median Loss:', median_loss, ' Current Loss:', loss)
+    return loss
+
+
 #%%
+
 from hyperopt import fmin, tpe, hp, space_eval, Trials
-
-full_space = {
-        'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0, 1),
-
-        'player_drop_multiple_4': hp.uniform('player_drop_multiple_4', 0, 0.5),
-        'player_drop_multiple_2': hp.uniform('player_drop_multiple_2', 0, 0.5),
-
-        'matchup_drop_1': hp.uniform('matchup_drop_1', 0, 0.5),
-        'matchup_drop_2': hp.uniform('matchup_drop_2', 0, 0.5),
-
-        'top_n_choices_1': hp.uniform('top_n_choices_1', 0, 0.5),
-        'top_n_choices_2': hp.uniform('top_n_choices_2', 0, 0.5),
-
-        'full_model_weight_5': hp.uniform('full_model_weight_5', 0, 1),
-
-        'covar_type_no_covar': hp.uniform('covar_type_no_covar', 0, 1),
-
-        'min_player_same_team_2': hp.uniform('min_player_same_team_2', 0, 0.5),
-        'min_player_same_team_3': hp.uniform('min_player_same_team_3', 0, 0.5),
-
-        'min_player_opp_team_1': hp.uniform('min_player_opp_team_1', 0, 0.5),
-        'min_player_opp_team_2': hp.uniform('min_player_opp_team_2', 0, 0.5),
-
-        'num_top_players_2': hp.uniform('num_top_players_2', 0, 0.5),
-        'num_top_players_3': hp.uniform('num_top_players_3', 0, 0.5),
-
-        'qb_min_iter_0': hp.uniform('qb_min_iter_0', 0, 1),
-
-        'qb_set_max_team_True': hp.uniform('qb_set_max_team_True', 0, 1),
-
-        'qb_solo_start_True': hp.uniform('qb_solo_start_True', 0, 1),
-
-        'static_top_players_True': hp.uniform('static_top_players_True', 0, 1),
-
-        'use_ownership_0.9': hp.uniform('use_ownership_0.9', 0, 0.4),
-        'use_ownership_0.8': hp.uniform('use_ownership_0.8', 0, 0.4),
-
-        'own_neg_frac_0.8': hp.uniform('own_neg_frac_0.8', 0, 1),
-
-        'max_salary_remain_200': hp.uniform('max_salary_remain_200', 0, 0.3),
-        'max_salary_remain_500': hp.uniform('max_salary_remain_500', 0, 0.3),
-        'max_salary_remain_1000': hp.uniform('max_salary_remain_1000', 0, 0.3),
-
-        'num_iters_100': hp.uniform('num_iters_100', 0, 1),
-
-        'lineups_per_param': hp.choice('lineups_per_param', [2, 3])
-}
 
 
 init_space = {
@@ -620,33 +406,96 @@ init_space = {
         'lineups_per_param': hp.choice('lineups_per_param', [2, 3])
 }
 
-import os
 
-save_path = "c:/Users/mborysia/Documents/Github/Daily_Fantasy/Model_Outputs/Bayes_Sim_Opt/"
-if os.path.exists(save_path):
-    # load saved initial parameters if they exist
-    trials  = pickle.load(open(save_path, "rb"))
+full_space = {
+        'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0, 1),
+
+        'player_drop_multiple_4': hp.uniform('player_drop_multiple_4', 0, 0.5),
+        'player_drop_multiple_2': hp.uniform('player_drop_multiple_2', 0, 0.5),
+
+        'matchup_drop_1': hp.uniform('matchup_drop_1', 0, 0.5),
+        'matchup_drop_2': hp.uniform('matchup_drop_2', 0, 0.5),
+
+        'top_n_choices_1': hp.uniform('top_n_choices_1', 0, 0.5),
+        'top_n_choices_2': hp.uniform('top_n_choices_2', 0, 0.5),
+
+        'full_model_weight_5': hp.uniform('full_model_weight_5', 0, 1),
+
+        'covar_type_no_covar': hp.uniform('covar_type_no_covar', 0, 1),
+
+        'min_player_same_team_2': hp.uniform('min_player_same_team_2', 0, 0.5),
+        'min_player_same_team_3': hp.uniform('min_player_same_team_3', 0, 0.5),
+
+        'min_player_opp_team_1': hp.uniform('min_player_opp_team_1', 0, 0.5),
+        'min_player_opp_team_2': hp.uniform('min_player_opp_team_2', 0, 0.5),
+
+        'num_top_players_2': hp.uniform('num_top_players_2', 0, 0.5),
+        'num_top_players_3': hp.uniform('num_top_players_3', 0, 0.5),
+
+        'qb_min_iter_0': hp.uniform('qb_min_iter_0', 0, 1),
+
+        'qb_set_max_team_True': hp.uniform('qb_set_max_team_True', 0, 1),
+
+        'qb_solo_start_True': hp.uniform('qb_solo_start_True', 0, 1),
+
+        'static_top_players_True': hp.uniform('static_top_players_True', 0, 1),
+
+        'use_ownership_0.9': hp.uniform('use_ownership_0.9', 0, 0.4),
+        'use_ownership_0.8': hp.uniform('use_ownership_0.8', 0, 0.4),
+
+        'own_neg_frac_0.8': hp.uniform('own_neg_frac_0.8', 0, 1),
+
+        'max_salary_remain_200': hp.uniform('max_salary_remain_200', 0, 0.3),
+        'max_salary_remain_500': hp.uniform('max_salary_remain_500', 0, 0.3),
+        'max_salary_remain_1000': hp.uniform('max_salary_remain_1000', 0, 0.3),
+
+        'num_iters_100': hp.uniform('num_iters_100', 0, 1),
+
+        'lineups_per_param': hp.choice('lineups_per_param', [2, 3])
+}
+
+
+trial_name = 'adjust10000_nomedian_week12'
+
+#%%
+if os.path.exists(save_path+f'warm_start_{trial_name}.p'):
+    trials  = load_pickle(save_path, f'warm_start_{trial_name}')
+    print('Loading Warm Start')
 else:
     trials = Trials()
+    print('Running Warm Start')
+    best = fmin(objective, space=init_space, algo=tpe.suggest, trials=trials, max_evals=10)
+    save_pickle(trials, save_path, f'warm_start_{trial_name}')
+    
 
-    # fill the trials object with 5 evals of the first restriction
-    best = fmin(
-        objective, space=init_space, algo=tpe.suggest, trials=trials, max_evals=10
-    )
-
-    # save for later
-    pickle.dump(trials, open(save_path, 'wb'))
-
-# run 10 evals after the 'warm start'
-best = fmin(
-    objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=25
-)
-
+print('Running Full Space')
+best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=35)
 print(space_eval(full_space, best))
 
-pickle.dump(trials, open("c:/Users/mborysia/Documents/Github/Daily_Fantasy/Model_Outputs/Bayes_Sim_Opt/full_trials.p", "wb"))
+save_pickle(trials, save_path, f'full_space_{trial_name}')
+# %%
+print('Running Full Space')
+best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=75)
+print(space_eval(full_space, best))
+
+save_pickle(trials, save_path, f'full_space_{trial_name}')
+
+
+
 # %%
 
+trials = load_pickle(save_path, 'full_space_adjust10000_week12')
 
-save_pickle(trials, save_path, 'warm_start_week12')
+results_tmp = pd.DataFrame(trials.vals)
 
+results = pd.DataFrame()
+for idx, row in results_tmp.iterrows():
+    if idx < 10:
+        results = pd.concat([results, pd.DataFrame(space_eval(init_space, row), index=[idx])], axis=0)
+    else:
+        results = pd.concat([results, pd.DataFrame(space_eval(full_space, row), index=[idx])], axis=0)
+
+results['loss'] = [l['loss'] for l in trials.results]
+results = results.sort_values(by='loss').reset_index(drop=True)
+results.iloc[:50]
+# %%

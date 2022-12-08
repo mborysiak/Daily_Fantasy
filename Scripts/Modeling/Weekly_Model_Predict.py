@@ -793,8 +793,8 @@ show_plot= True
 print_coef = False
 num_k_folds = 3
 
-r2_wt = 0
-sera_wt = 1
+r2_wt = 1
+sera_wt = 10
 mse_wt = 0
 brier_wt = 1
 matt_wt = 1
@@ -805,12 +805,13 @@ calibrate = False
 set_weeks = [
          # 1, 2, 3, 4, 5, 
          # 6, 7, 8, 9, 10,
-         12
+        #  13, 14, 15, 16
+        12, 13
                  ]
 
 pred_versions = [
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                #  'sera1_rsq0_brier1_matt1_lowsample_perc',
+                 'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #   'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #    'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #     'sera1_rsq0_brier1_matt1_lowsample_perc',
@@ -822,8 +823,8 @@ pred_versions = [
                 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',

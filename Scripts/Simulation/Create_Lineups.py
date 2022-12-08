@@ -14,7 +14,7 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=12
+week=13
 
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 ensemble_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
@@ -96,32 +96,32 @@ def pull_best_params(best_trials):
 
     return params
 
-best_trials = (127, 140, 145)
+best_trials = (140, 140)
 
 opt_params = pull_best_params(best_trials)
 opt_params
 
 #%%
         
-d = {'adjust_pos_counts': {False: 0.0, True: 1.0},
+d = {'adjust_pos_counts': {False: 0.3, True: 0.7},
  'covar_type': {'kmeans_trunc': 0.0,
-  'no_covar': 0.75,
-  'team_points_trunc': 0.25},
+  'no_covar': 0.7,
+  'team_points_trunc': 0.3},
  'full_model_weight': {0.2: 0.3, 0.5: 0.0, 1: 0.0, 3: 0.0, 5: 0.7},
- 'matchup_drop': {0: 1.0, 1: 0.0, 2: 0.0, 3: 0.0},
- 'max_salary_remain': {1000: 0.25, 200: 0.35, 300: 0.0, 400: 0.0, 500: 0.4},
- 'min_player_same_team': {-1: 0.0, 2: 0.25, 3: 0.1, 'Auto': 0.65},
- 'min_players_opp_team': {0: 0.0, 1: 0.15, 'Auto': 0.85},
+ 'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
+ 'max_salary_remain': {1000: 0.3, 200: 0.3, 300: 0.0, 400: 0.0, 500: 0.4},
+ 'min_player_same_team': {-1: 0.0, 2: 0.0, 2.5: 0.0, 3: 0.4, 'Auto': 0.6},
+ 'min_players_opp_team': {0: 0.0, 1: 0.3, 2: 0.0, 'Auto': 0.7},
  'num_iters': {100: 1.0},
- 'num_top_players': {2: 0.4, 3: 0.15, 4: 0.0, 5: 0.45},
- 'own_neg_frac': {0.5: 0.0, 0.65: 0.0, 0.75: 0.5, 1: 0.5},
- 'player_drop_multiple': {0: 0.5, 4: 0.5, 6: 0.0},
- 'qb_min_iter': {0: 0.9, 1: 0.0, 9: 0.1},
+ 'num_top_players': {2: 0.5, 3: 0.0, 4: 0.0, 5: 0.5},
+ 'own_neg_frac': {0.5: 0.0, 0.65: 0.0, 0.75: 0.0, 0.85: 0.0, 1: 1.0},
+ 'player_drop_multiple': {0: 0.4, 1: 0.3, 2: 0.0, 4: 0.3, 6: 0.0},
+ 'qb_min_iter': {0: 1.0, 1: 0.0, 9: 0.0},
  'qb_set_max_team': {0: 0.0, 1: 1.0},
- 'qb_solo_start': {False: 0.9, True: 0.1},
- 'static_top_players': {False: 0.45, True: 0.55},
- 'top_n_choices': {0: 0.9, 1: 0.1, 2: 0.0, 4: 0.0},
- 'use_ownership': {0: 0.0, 0.5: 0.0, 0.75: 0.0, 0.85: 0.0, 1: 1.0}}
+ 'qb_solo_start': {False: 0.7, True: 0.3},
+ 'static_top_players': {False: 0.3, True: 0.7},
+ 'top_n_choices': {0: 0.8, 1: 0.2, 2: 0.0, 4: 0.0},
+ 'use_ownership': {0: 0.0, 0.5: 0.0, 0.9: 1.0, 1: 0.0}}
 
 lineups_per_param = 2
 

@@ -221,117 +221,119 @@ for repeat_num in range(10):
             },
 
             'player_drop_multiple': {
-                0: 0.3,
-                1: 0.3,
-                2: 0,
-                4: 0.4,
+                0: 0.5,
+                1: 0,
+                2: 0.3,
+                4: 0.2,
                 6: 0
             },
                         
             'matchup_drop': {
-                0: 0.87,
-                1: 0.13,
-                2: 0,
+                0: 0.25,
+                1: 0.42,
+                2: 0.33,
                 3: 0
             },
 
             'top_n_choices': {
-                0: 0.87,
-                1: 0.13,
-                2: 0,
+                0: 0.75,
+                1: 0.2,
+                2: 0.05,
                 4: 0,
             },
 
             'full_model_weight': {
-                0.2: 0.73,
+                0.2: 0.28,
                 0.5: 0,
                 1: 0,
                 3: 0,
-                5: 0.27
+                5: 0.72
             },
 
             'covar_type': {
-                'no_covar': 0.67,
-                'team_points_trunc': 0.33,
+                'no_covar': 0.19,
+                'team_points_trunc': 0.81,
                 'kmeans_trunc': 0
             },
 
             'min_player_same_team': {
-                'Auto': 0.63,
-                2: 0,
+                'Auto': 0.64,
+                2: 0.28,
                 2.5: 0,
-                3: 0.37,
+                3: 0.08,
                 -1: 0
             },
 
             'min_players_opp_team': {
                 0: 0,
-                1: 0.3,
-                2: 0.1,
-                'Auto': 0.6
+                1: 0,
+                2: 0.44,
+                'Auto': 0.56
             },
 
             'num_top_players': {
-                2: 0.57, 
-                3: 0,
+                2: 0.42, 
+                3: 0.14,
                 4: 0,
-                5: 0.43
+                5: 0.44
             },
             
             'qb_min_iter': {
-                0: 0.9,
-                1: 0.1,
-                9: 0
+                0: 0.46,
+                1: 0,
+                9: 0.54
             },
 
             'qb_set_max_team': {
-                True: 1,
-                False: 0
+                True: .82,
+                False: 0.18
             },
 
             'qb_solo_start': {
-                True: 0.23,
-                False: 0.77
+                True: 0.08,
+                False: 0.92
             },
             
             'static_top_players': {
-                True: 0.63,
-                False: 0.37
+                True: 0.6,
+                False: 0.4
             },
 
             'use_ownership': {
                 True: 0,
                 False: 0,
-                1: 0.25,
-                0.9: 0.5,
+                1: 0.47,
+                0.9: 0.26,
                 0.95: 0,
-                0.8: 0.25,
+                0.8: 0.27,
                 0.5: 0
             },
 
             'own_neg_frac': {
                 0.5: 0,
-                0.75: 0.1,
-                0.85: 0.23,
-                1: 0.67,
+                0.75: 0,
+                0.8: 0.54,
+                1: 0.46,
                 0.65: 0
             },
 
             'max_salary_remain': {
                 None: 0,
-                200: 0.1,
+                200: 0.13,
                 300: 0,
                 400: 0,
-                500: 0.47,
-                1000: 0.43
+                500: 0.2,
+                1000: 0.1,
+                1500: 0.57
             },
 
             'num_iters': {
-                100: 1
+                100: 0.34,
+                50: 0.66
             }
         }
 
-        lineups_per_param = 2
+        lineups_per_param = 3
 
         params = []
         for i in range(int(30/lineups_per_param)):

@@ -8,6 +8,7 @@ from ff.db_operations import DataManage
 import ff.general as ffgeneral 
 from skmodel import SciKitModel
 import zModel_Functions as mf
+from Fix_Standard_Dev import *
 
 # set the root path and database management object
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
@@ -18,8 +19,11 @@ pred_version = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 ens_version = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
 std_dev_type = 'pred_spline_class80_q80_matt0_brier1_kfold3'
 
+use_rank = False
+ownership_vers = 'standard_ln'
+
 set_year = 2022
-set_week = 12
+set_week = 13
 contest = 'Million'
 
 #%%
@@ -60,78 +64,81 @@ team_map = {'Cardinals': 'ARI',
             'Football Team': 'WAS',
             'Commanders': 'WAS'}
 
-def get_best_lineups(full_entries, min_place, max_place):
 
-    best_lineups = full_entries[(full_entries.Rank >= min_place) & (full_entries.Rank <= max_place)].copy().reset_index(drop=True)
-    best_lineups = best_lineups.sort_values(by=['year', 'week', 'Points'], ascending=[True, True, False]).reset_index(drop=True)
-    # best_lineups['Rank'] = best_lineups.groupby(['year', 'week']).cumcount()
+def pull_player_ownership(contest, set_week, set_year):
+    player_ownership = dm.read(f'''SELECT * 
+                                FROM Contest_Ownership
+                                WHERE week <= 16
+                                        AND Contest='{contest}' ''', 'DK_Results').drop(['Contest', 'player_points'], axis=1)
 
-    return best_lineups
+    # rename defenses
+    player_ownership.loc[player_ownership.player.isin(team_map.keys()), 'player'] = \
+        player_ownership.loc[player_ownership.player.isin(team_map.keys()), 'player'].map(team_map)
 
-
-def extract_players(lineup):
-    positions = ['QB', 'RB', 'WR', 'TE', 'DST', 'FLEX']
-    for p in positions:
-        lineup = lineup.replace(p, ',')
-    lineup = lineup.split(',')[1:]
-    lineup = [p.rstrip().lstrip() for p in lineup]
-
-    return lineup
+    # remove players from current week
+    player_ownership = player_ownership[~((player_ownership.week==set_week) & \
+                                          (player_ownership.year==set_year))].reset_index(drop=True)
+    return player_ownership
 
 
-def extract_positions(lineup):
-    positions = ('QB', 'RB', 'WR', 'TE', 'DST', 'FLEX')
-    lineup = lineup.split(' ')
-    lineup = [p for p in lineup if p in positions]
-    return lineup
+def pull_this_week_players(set_week, set_year):
 
 
+    model_players = dm.read(f'''SELECT DISTINCT player
+                                FROM Model_Predictions
+                                WHERE week={set_week}
+                                    AND year={set_year}
+                                ''', 'Simulation').player.values
+    current_players = dm.read(f'''SELECT DISTINCT player, team, 0 as pct_drafted, week, year
+                            FROM Player_Teams
+                            WHERE week = {set_week}
+                                AND year = {set_year}
+                                ''', 'Simulation')
 
-def format_lineups(full_entries, min_place, max_place):
+    drop_teams = get_drop_teams(set_week, set_year)
+    current_players = current_players[~(current_players.team.isin(drop_teams)) & \
+                                       (current_players.player.isin(model_players))] \
+                                        .drop('team', axis=1).reset_index(drop=True)
+    return current_players
 
-    best_lineups = get_best_lineups(full_entries, min_place=min_place, max_place=max_place)
-
-    players = [extract_players(l) for l in best_lineups.Lineup.values]
-    positions = [extract_positions(l) for l in best_lineups.Lineup.values]
-
-    players = pd.DataFrame(players)
-    positions = pd.DataFrame(positions)
-
-    df = pd.concat([players, positions], axis=1)
-    df = pd.concat([df, best_lineups.drop('Lineup', axis=1)], axis=1)
-
-    final_df = pd.DataFrame()
-    for i in range(9):
-        tmp_df = df[[i, 'Rank', 'Points', 'week', 'year']]
-        tmp_df.columns = ['player', 'lineup_position', 'place', 'team_points', 'week', 'year']
-        final_df = pd.concat([final_df, tmp_df], axis=0)
-  
-    return final_df
 
 # calculate ownership projections
-def add_proj(df):
+def add_proj(df, use_rank=False):
 
     # pull in the salary and actual results data
-    def_proj1 = dm.read('''SELECT team player, team, week, year, projected_points
-                        FROM FantasyPros
-                        WHERE pos='DST'
+    def_proj1 = dm.read('''SELECT team player, team, week, year, projected_points, 
+                                  fp_rank, rankadj_fp_rank, playeradj_fp_rank
+                           FROM FantasyPros
+                           WHERE pos='DST'
                                 ''', 'Pre_PlayerData')
 
     def_proj2 = dm.read('''SELECT offteam player, position pos, offTeam team, week, year, 
-                                  dk_salary, fantasyPoints, `Proj Pts` ProjPts 
+                                  dk_salary, fantasyPoints, `Proj Pts` ProjPts, 
+                                  expertConsensus, expertIanHartitz
                            FROM PFF_Expert_Ranks
                            JOIN (SELECT offteam, week, year, salary dk_salary, fantasyPoints
                                  FROM PFF_Proj_Ranks)
                                  USING (offTeam, week, year)''', 'Pre_TeamData')
     def_proj = pd.merge(def_proj1, def_proj2, on=['player', 'team', 'week', 'year']).dropna()
 
+    if use_rank:
+        def_proj['rankadj_expertConsensus'] = def_proj.expertConsensus
+        def_proj['playeradj_expertConsensus'] = def_proj.expertConsensus
+
     # pull in the salary and actual results data
-    proj = dm.read('''SELECT player, position pos, offTeam team, week, year, dk_salary, projected_points, fantasyPoints, ProjPts
+    proj = dm.read('''SELECT player, position pos, offTeam team, week, year, 
+                             dk_salary, projected_points, fantasyPoints, ProjPts,
+                             fp_rank, rankadj_fp_rank, playeradj_fp_rank,  
+                             expertConsensus, expertIanHartitz,
+                             rankadj_expertConsensus, playeradj_expertConsensus
                       FROM PFF_Proj_Ranks
-                      JOIN (SELECT player, team offTeam, week, year, projected_points 
+                      JOIN (SELECT player, team offTeam, week, year, projected_points,
+                            fp_rank, rankadj_fp_rank, playeradj_fp_rank
                             FROM FantasyPros)
                             USING (player, offTeam, week, year)
-                      JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts 
+                      JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts,  
+                                   expertConsensus, expertIanHartitz,
+                                   rankadj_expertConsensus, playeradj_expertConsensus
                             FROM PFF_Expert_Ranks)
                             USING (player, offTeam, week, year)
                       JOIN (SELECT player, team offTeam, week, year, dk_salary 
@@ -141,6 +148,18 @@ def add_proj(df):
     proj = pd.concat([proj, def_proj], axis=0)
 
     proj['avg_proj_pts'] = proj[['projected_points', 'fantasyPoints', 'ProjPts']].mean(axis=1)
+    
+    if use_rank:
+        proj['avg_rank'] = proj[['fp_rank', 'rankadj_fp_rank', 'playeradj_fp_rank']].mean(axis=1)
+        proj['avg_expert'] = proj[['expertConsensus', 'expertIanHartitz','rankadj_expertConsensus', 'playeradj_expertConsensus']].mean(axis=1)
+        proj['avg_expert_rank'] = proj[['avg_rank', 'avg_expert']].mean(axis=1)
+
+        for c in ['avg_rank', 'avg_expert', 'avg_expert_rank']:
+            proj['log_' + c] = np.log(proj[c]+1)
+    else:
+        rank_cols = [c for c in proj.columns if 'expert' in c or 'rank' in c]
+        proj = proj.drop(rank_cols, axis=1)
+        print(f'Dropped {rank_cols} from dataset')
 
     proj.pos = proj.pos.apply(lambda x: x.upper())
     df = pd.merge(df, proj, on=['player', 'week', 'year'])
@@ -148,7 +167,11 @@ def add_proj(df):
     return df
 
 
-def drop_player_weeks(df, drop_list):
+def drop_player_weeks(df):
+    drop_list = ['Dalvin Cook32021', 'Calvin Ridley82021', 'Odell Beckham152021', 'Cooper Kupp152021', 'Van Jefferson152021',
+                 "D'Andre Swift112021", 'Josh Johnson162021', 'Kyler Murray92021', 'Darren Waller72021',
+                 'Kyler Murray132021', 'Deandre Hopkins92021', 'Lamar Jackson112021']
+
     df['to_drop'] = df.player + df.week.astype('str') + df.year.astype('str')
     df = df[~df.to_drop.isin(drop_list)].reset_index(drop=True).drop('to_drop', axis=1)
     return df
@@ -203,6 +226,10 @@ def feature_engineering(df):
         try: df = add_team_points(df, c)
         except: pass
 
+    for c in ['avg_rank', 'avg_expert', 'avg_expert_rank', 'log_avg_rank', 'log_avg_expert', 'log_avg_expert_rank']:
+        try: df[c+'_times_sal'] = df[c] * df.dk_salary
+        except: pass
+
     df = df.sort_values(by=['team', 'pos', 'year', 'week', 'avg_proj_pts']).reset_index(drop=True)
     df['team_pos_week_order'] = df.groupby(['team', 'pos', 'week', 'year']).cumcount().values
 
@@ -228,40 +255,6 @@ def create_game_date(df, val_year_min, val_week_min, year_week_to_date):
     train_time_split = int(dt.datetime(set_year, 1, set_week).strftime('%Y%m%d'))
 
     return df, cv_time_input, train_time_split
-
-
-def run_model_mean(m, test_predict, X_test, time_split):
-    
-    print(f"\n===========Running {m}=============\n")
-    skm = SciKitModel(df_train, model_obj='reg', r2_wt=0, sera_wt=1, mse_wt=0)
-
-    # get the model pipe for stacking setup and train it on meta features
-    pipe = skm.model_pipe([
-                           skm.piece('std_scale'),
-                           skm.piece('k_best'),
-                           skm.piece(m)
-                        ])
-
-    params = skm.default_params(pipe)
-    params['k_best__k'] = range(1, X.shape[1]+1)
-    
-    # run the model with parameter search
-    best_models, oof_data, _ = skm.time_series_cv(pipe, X, y, 
-                                                 params, n_iter=25,
-                                                 bayes_rand='custom_rand',
-                                                 col_split='game_date',
-                                                 time_split=time_split)
-
-    val_predict = oof_data['full_hold'].copy()
-    val_predict = val_predict.rename(columns={'pred': f'pred_ownership'})
-
-    predictions = []
-    for bm in best_models:
-        predictions.append(bm.fit(X, y).predict(X_test))
-
-    test_predict[f'pred_ownership'] = pd.DataFrame(predictions).T.mean(axis=1)
-
-    return val_predict, test_predict, best_models
 
 
 def drop_teams(data):
@@ -424,7 +417,266 @@ def remove_duplicates(df):
 
     return df
 
+def train_test_split(df, train_time_split):
+    df_train = df[df.game_date < train_time_split].reset_index(drop=True)
+    df_test = df[df.game_date == train_time_split].reset_index(drop=True)
+    df_train = df_train[df_train.y_act > 0].reset_index(drop=True)
+    return df_train, df_test
 
+
+def run_model_mean(m, df_train, df_test, time_split):   
+
+    print(f"\n===========Running {m}=============\n")
+    skm = SciKitModel(df_train, model_obj='reg', r2_wt=0, sera_wt=1, mse_wt=0)
+    X, y = skm.Xy_split('y_act', to_drop=['player', 'team'])
+
+    # get the model pipe for stacking setup and train it on meta features
+    pipe = skm.model_pipe([
+                           skm.piece('std_scale'),
+                           skm.piece('k_best'),
+                           skm.piece(m)
+                        ])
+
+    params = skm.default_params(pipe)
+    params['k_best__k'] = range(1, X.shape[1]+1)
+    
+    # run the model with parameter search
+    best_models, oof_data, _ = skm.time_series_cv(pipe, X, y, 
+                                                 params, n_iter=25,
+                                                 bayes_rand='custom_rand',
+                                                 col_split='game_date',
+                                                 time_split=time_split)
+
+    val_predict = oof_data['full_hold'].copy()
+    val_predict = val_predict.rename(columns={'pred': f'pred_ownership'})
+
+    skm_test = SciKitModel(df_test)
+    X_test, y_test = skm_test.Xy_split('y_act', to_drop=['player', 'team'])
+
+    predictions = []
+    for bm in best_models:
+        predictions.append(bm.fit(X, y).predict(X_test))
+
+    test_predict = df_test[['player', 'team', 'week', 'year']].copy()
+    test_predict[f'pred_ownership'] = pd.DataFrame(predictions).T.mean(axis=1)
+
+    return val_predict, test_predict, best_models
+
+
+def calc_std_dev(val_predict, test_predict):
+    
+    sd_m, max_m, min_m = get_std_splines(val_predict, {'pred_ownership': 1}, 
+                                                        show_plot=True, k=2, 
+                                                        min_grps_den=int(val_predict.shape[0]*0.15), 
+                                                        max_grps_den=int(val_predict.shape[0]*0.05),
+                                                        iso_spline='spline')
+
+    sc = StandardScaler().fit(val_predict[['pred_ownership']])
+
+    sd_max_val = sc.transform(val_predict[['pred_ownership']])
+    val_predict['std_dev'] = sd_m(sd_max_val)
+    val_predict['max_score'] = max_m(sd_max_val)
+    val_predict['min_score'] = min_m(sd_max_val)
+
+    sd_max_test = sc.transform(test_predict[['pred_ownership']])
+    test_predict['std_dev'] = sd_m(sd_max_test)
+    test_predict['max_score'] = max_m(sd_max_test)
+    test_predict['min_score'] = min_m(sd_max_test)
+
+    test_predict = test_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
+    test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'max_score'] = \
+        test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'pred_ownership'] * 1.5
+
+    return val_predict, test_predict
+
+
+def check_std_dev(val_predict):
+
+    for i in [3, 2, 1]:
+        val_predict['std_dev_test'] = i*val_predict.std_dev
+        val_predict.loc[val_predict.std_dev < 0, 'std_dev_test'] = 1
+        val_predict['upper_range'] = val_predict.pred_ownership + val_predict.std_dev_test
+        val_predict['lower_range'] = val_predict.pred_ownership - val_predict.std_dev_test
+
+        print(f'Num samples within {i} std dev:',
+            val_predict[(val_predict.y_act > val_predict.lower_range) & (val_predict.y_act < val_predict.upper_range)].shape[0] / \
+                val_predict.shape[0])
+
+    print('Num Samples Greater than Max:',
+        val_predict[(val_predict.y_act > val_predict.max_score)].shape[0] / \
+                val_predict.shape[0])
+
+
+#===================
+# Functions for past results
+#===================
+
+def get_best_lineups(full_entries, min_place, max_place):
+
+    best_lineups = full_entries[(full_entries.Rank >= min_place) & (full_entries.Rank <= max_place)].copy().reset_index(drop=True)
+    best_lineups = best_lineups.sort_values(by=['year', 'week', 'Points'], ascending=[True, True, False]).reset_index(drop=True)
+    # best_lineups['Rank'] = best_lineups.groupby(['year', 'week']).cumcount()
+
+    return best_lineups
+
+def extract_players(lineup):
+    positions = ['QB', 'RB', 'WR', 'TE', 'DST', 'FLEX']
+    for p in positions:
+        lineup = lineup.replace(p, ',')
+    lineup = lineup.split(',')[1:]
+    lineup = [p.rstrip().lstrip() for p in lineup]
+
+    return lineup
+
+def extract_positions(lineup):
+    positions = ('QB', 'RB', 'WR', 'TE', 'DST', 'FLEX')
+    lineup = lineup.split(' ')
+    lineup = [p for p in lineup if p in positions]
+    return lineup
+
+def format_lineups(full_entries, min_place, max_place):
+
+    best_lineups = get_best_lineups(full_entries, min_place=min_place, max_place=max_place)
+
+    players = [extract_players(l) for l in best_lineups.Lineup.values]
+    positions = [extract_positions(l) for l in best_lineups.Lineup.values]
+
+    players = pd.DataFrame(players)
+    positions = pd.DataFrame(positions)
+
+    df = pd.concat([players, positions], axis=1)
+    df = pd.concat([df, best_lineups.drop('Lineup', axis=1)], axis=1)
+
+    final_df = pd.DataFrame()
+    for i in range(9):
+        tmp_df = df[[i, 'Rank', 'Points', 'week', 'year']]
+        tmp_df.columns = ['player', 'lineup_position', 'place', 'team_points', 'week', 'year']
+        final_df = pd.concat([final_df, tmp_df], axis=0)
+  
+    return final_df
+
+def create_millions_lineups(full_entries, base_place, places):
+        df = format_lineups(full_entries, min_place=base_place, max_place=base_place+places)
+        df.player = df.player.apply(dc.name_clean)
+        df.loc[df.lineup_position=='DST', 'player'] = df.loc[df.lineup_position=='DST', 'player'].map(team_map)
+        return df
+
+def add_pos_to_million(df):
+    
+    player_pos = dm.read('''SELECT player, pos, week, year
+                            FROM (
+                                    SELECT player, pos, week, year, 
+                                    row_number() OVER (PARTITION BY player, week, year ORDER BY projected_points DESC) rn 
+                                    FROM FantasyPros
+                            )
+                            WHERE rn=1
+                            ''', 'Pre_PlayerData')
+    df = pd.merge(df, player_pos, on=['player', 'week', 'year'], how='left')
+    df.loc[df.pos.isnull(), 'pos'] = df.loc[df.pos.isnull(), 'lineup_position']
+
+    # print the flex numbers by position
+    print('Flex Pct by Position\n',
+            df.loc[df.lineup_position=='FLEX', 'pos'].value_counts() / \
+            df.loc[df.lineup_position=='FLEX', 'pos'].shape[0])
+    
+    return df
+
+def add_team_to_million(df):
+    
+    # print the number of players from the same team
+    teams = dm.read(f'''SELECT player, team, week, year
+                    FROM Player_Teams 
+                    ''', 'Simulation')
+    df = pd.merge(df, teams, on=['player', 'week', 'year'])
+    
+    # count the lineups with QB, WR, TE on same team
+    team_cnts = df[df.pos.isin(['QB', 'WR', 'TE'])].groupby(['place', 'team', 'week', 'year']).agg(player_cnts=('player', 'count')).reset_index()
+    max_cnts = team_cnts.groupby(['place', 'week', 'year']).agg(player_cnts=('player_cnts', 'max')).reset_index()
+    team_cnts = pd.merge(team_cnts, max_cnts, on=['place', 'week','year', 'player_cnts'])
+    print('Number of players on same team:\n', 
+            team_cnts.player_cnts.value_counts() / team_cnts.shape[0])
+
+    return df
+
+def agg_ownership_group(df, full_dist):
+
+    drafted_pct = df.groupby(['place', 'week']).agg(pct_drafted=('pct_drafted', 'sum'),
+                                                    pred_drafted=('pred_ownership', 'sum'),
+                                                    lineup_position=('player', 'count'))
+
+    drafted_pct = drafted_pct[drafted_pct.lineup_position==9]
+    full_dist[str(base_place)] = drafted_pct.pred_drafted
+
+    pred_drafted_mean = np.mean(drafted_pct.pred_drafted)
+    pred_drafted_std = np.std(drafted_pct.pred_drafted)
+
+    mean_output = pd.DataFrame([pred_drafted_mean, pred_drafted_std, set_week, set_year], 
+                                index=['ownership_mean', 'ownership_std', 'week', 'year']).T
+    mean_output['ownership_vers'] = ownership_vers
+
+    print('\nAvg Pct Drafted:', np.mean(drafted_pct.pct_drafted), 
+            '\nAvg Projected Drafted:', pred_drafted_mean, 
+            '\nStd Perc Drafted:', pred_drafted_std)
+
+    return full_dist, mean_output
+
+
+def run_ttest(full_dist, greater_or_less='greater'):
+    from scipy.stats import ttest_ind
+    for bp in base_places[1:]:
+        print('Base Place:', bp, 'ttest p_value:', ttest_ind(full_dist['1'], 
+              full_dist[str(bp)], axis=0, equal_var=True, alternative=greater_or_less)[1])
+
+def pull_ownership(ownership_table, ownership_vers):
+
+    pred_player_ownership = dm.read(f'''SELECT player, 
+                                            team,
+                                            week, 
+                                            year, 
+                                            AVG(pred_ownership) pred_ownership, 
+                                            AVG(std_dev) std_dev,
+                                            AVG(min_score) min_score,
+                                            AVG(max_score) max_score
+                                        FROM {ownership_table} 
+                                        WHERE ownership_vers='{ownership_vers}'
+                                        GROUP BY player, week, year
+                                        ''', 'Simulation')
+
+    return pred_player_ownership
+
+
+def add_pred_values(ownership_df, prob_table, pred_version, ensemble_vers, std_dev_type, week, year):
+    df = dm.read(f'''SELECT player, 
+                            week, 
+                            year, 
+                            AVG(pred_fp_per_game) pred_prob
+                     FROM {prob_table}
+                     WHERE pred_version='{pred_version}'
+                              AND ensemble_vers='{ensemble_vers}' 
+                              AND std_dev_type='{std_dev_type}'
+                              AND set_week={week}
+                              AND set_year={year}
+                     GROUP BY player, week, year
+                    ''', 'Simulation')
+
+    ownership_df = pd.merge(ownership_df, df, on=['player', 'week', 'year'])
+
+    for c in ['pred_ownership', 'std_dev', 'min_score', 'max_score']:
+        ownership_df[c] = ownership_df.pred_prob / ownership_df[c]
+
+    return ownership_df
+
+
+def save_current_week_pred(ownership_vers, set_week, set_year):
+
+    sim_values = pull_ownership('Predicted_Ownership_Only', ownership_vers)
+    sim_values = sim_values.loc[(sim_values.week==set_week) & (sim_values.year==set_year),
+                                ['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
+    sim_values.sort_values(by='pred_ownership', ascending=False).iloc[:50]
+    sim_values['ownership_vers'] = ownership_vers
+
+    dm.delete_from_db('Simulation', 'Predicted_Ownership', f"week={set_week} AND year={set_year} AND ownership_vers='{ownership_vers}'")
+    dm.write_to_db(sim_values, 'Simulation', 'Predicted_Ownership', 'append')
 
 #%%
 #================
@@ -438,48 +690,17 @@ print(f'Running week {set_week} year {set_year}')
 val_week_min = 8
 val_year_min = 2021
 
-player_ownership = dm.read(f'''SELECT * 
-                            FROM Contest_Ownership
-                            WHERE week <= 16
-                                    AND Contest='{contest}' ''', 'DK_Results').drop('player_points', axis=1)
+player_ownership = pull_player_ownership(contest, set_week, set_year)
+current_players = pull_this_week_players(set_week, set_year)
+player_ownership = pd.concat([player_ownership, current_players])
 
-player_ownership.loc[player_ownership.player.isin(team_map.keys()), 'player'] = \
-    player_ownership.loc[player_ownership.player.isin(team_map.keys()), 'player'].map(team_map)
+df = add_proj(player_ownership, use_rank=use_rank)
 
-player_ownership = player_ownership[~((player_ownership.week==set_week) & \
-                                        (player_ownership.year==set_year))].drop('Contest', axis=1).reset_index(drop=True)
-
-model_players = dm.read(f'''SELECT DISTINCT player
-                            FROM Model_Predictions
-                            WHERE week={set_week}
-                                AND year={set_year}
-                            ''', 'Simulation').player.values
-ty_players = dm.read(f'''SELECT DISTINCT player, team, 0 as pct_drafted, week, year
-                         FROM Player_Teams
-                         WHERE week = {set_week}
-                               AND year = {set_year}
-                            ''', 'Simulation')
-
-drop_teams = get_drop_teams(set_week, set_year)
-ty_players = ty_players[~ty_players.team.isin(drop_teams)].drop('team', axis=1).reset_index(drop=True)
-ty_players = ty_players[ty_players.player.isin(model_players)].reset_index(drop=True)
-
-player_ownership = pd.concat([player_ownership, ty_players])
-
-
-df = add_proj(player_ownership)
-
-drop_list = ['Dalvin Cook32021', 'Calvin Ridley82021', 'Odell Beckham152021', 'Cooper Kupp152021', 'Van Jefferson152021',
-            "D'Andre Swift112021", 'Josh Johnson162021', 'Kyler Murray92021', 'Darren Waller72021',
-            'Kyler Murray132021', 'Deandre Hopkins92021', 'Lamar Jackson112021']
-
-df = drop_player_weeks(df, drop_list)
+df = drop_player_weeks(df)
 df = add_injuries(df)
 df = add_gambling_lines(df)
-
 # df = add_model_projections(df, set_week, set_year, pred_version, ens_version, 'Model_Validations')
 # df = add_model_projections(df, set_week, set_year, pred_version, ens_version, 'Model_Validations_Class')
-
 df = feature_engineering(df)
 df = df.rename(columns={'pct_drafted': 'y_act'})
 df = filter_snap_counts(df)
@@ -490,227 +711,63 @@ for c in ['pos', 'practice_status', 'game_status', 'practice_game']:
     df = pd.concat([df, pd.get_dummies(df[c], drop_first=True)], axis=1).drop(c, axis=1)
 
 df, cv_time_input, train_time_split = create_game_date(df, val_year_min, val_week_min, year_week_to_date)
-
-df_train = df[df.game_date < train_time_split].reset_index(drop=True)
-df_test = df[df.game_date == train_time_split].reset_index(drop=True)
-df_train = df_train[df_train.y_act!=0].reset_index(drop=True)
+df_train, df_test = train_test_split(df, train_time_split)
 
 df_train = adjust_owernship(df_train, 'y_act', 'ln')
 df_test = adjust_owernship(df_test, 'y_act', 'ln')
 
-skm = SciKitModel(df_train)
-X, y = skm.Xy_split('y_act', to_drop=['player', 'team'])
-
-skm_test = SciKitModel(df_test)
-X_test, y_test = skm_test.Xy_split('y_act', to_drop=['player', 'team'])
-
-
-test_predict = df_test[['player', 'team', 'week', 'year']].copy()
-val_predict, test_predict, best_models = run_model_mean('lgbm', test_predict, X_test, cv_time_input)
-
+val_predict, test_predict, best_models = run_model_mean('lgbm', df_train, df_test, cv_time_input)
 mf.show_scatter_plot(val_predict.pred_ownership, val_predict.y_act)
-# val_predict = pd.merge(val_predict_gbm, val_predict_rf.drop('y_act', axis=1), on=['player', 'team', 'week', 'year'])
-# val_predict['pred_ownership'] = val_predict[[c for c in val_predict.columns if 'pred' in c]].mean(axis=1)
-# test_predict['pred_ownership'] = test_predict[[c for c in test_predict.columns if 'pred' in c]].mean(axis=1)
 
-from Fix_Standard_Dev import *
-sd_m, max_m, min_m = get_std_splines(val_predict, {'pred_ownership': 1}, 
-                                                    show_plot=True, k=2, 
-                                                    min_grps_den=int(val_predict.shape[0]*0.15), 
-                                                    max_grps_den=int(val_predict.shape[0]*0.05),
-                                                    iso_spline='spline')
-
-sc = StandardScaler().fit(val_predict[['pred_ownership']])
-sd_max_val = sc.transform(val_predict[['pred_ownership']])
-val_predict['std_dev'] = sd_m(sd_max_val)
-val_predict['max_score'] = max_m(sd_max_val)
-val_predict['min_score'] = min_m(sd_max_val)
-
-for i in [3, 2, 1]:
-    val_predict['std_dev_test'] = i*val_predict.std_dev
-    val_predict.loc[val_predict.std_dev < 0, 'std_dev_test'] = 1
-    val_predict['upper_range'] = val_predict.pred_ownership + val_predict.std_dev_test
-    val_predict['lower_range'] = val_predict.pred_ownership - val_predict.std_dev_test
-
-    print(f'Num samples within {i} std dev:',
-        val_predict[(val_predict.y_act > val_predict.lower_range) & (val_predict.y_act < val_predict.upper_range)].shape[0] / \
-            val_predict.shape[0])
-
-print('Num Samples Greater than Max:',
-    val_predict[(val_predict.y_act > val_predict.max_score)].shape[0] / \
-            val_predict.shape[0])
-
-sd_max_test = sc.transform(test_predict[['pred_ownership']])
-
-test_predict['std_dev'] = sd_m(sd_max_test)
-test_predict['max_score'] = max_m(sd_max_test)
-test_predict['min_score'] = min_m(sd_max_test)
-
-try:
-    test_predict['y_act'] = df_test.y_act
-    test_predict.plot.scatter(x='pred_ownership', y='y_act')
-    test_predict = test_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'y_act', 'std_dev', 'min_score', 'max_score']]
-    display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
-    test_predict = test_predict.drop('y_act', axis=1)
-except:
-    pass
-    test_predict = test_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
-    display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
-
-# test_predict.loc[test_predict.min_score < 0, 'min_score'] = 0 
-test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'max_score'] = \
-    test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'pred_ownership'] * 1.5
-# test_predict.loc[test_predict.std_dev < 0, 'std_dev'] = 1
-
-dm.delete_from_db('Simulation', 'Predicted_Ownership_Only', f'week={set_week} AND year={set_year}')
-dm.write_to_db(test_predict, 'Simulation', 'Predicted_Ownership_Only', 'append')
-
-val_predict = val_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
-dm.write_to_db(val_predict, 'Simulation', 'Predicted_Ownership_Validation', 'replace')
-
-#%%
+val_predict, test_predict = calc_std_dev(val_predict, test_predict)
+check_std_dev(val_predict)
 
 val_predict_chk = pd.merge(df_train[['player', 'week', 'year', 'y_act']], val_predict, on=['player', 'week', 'year'])
 val_predict_chk['error'] = val_predict_chk.pred_ownership - val_predict_chk.y_act
+
+display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
 display(val_predict_chk.sort_values(by='error').iloc[-25:])
 display(val_predict_chk.sort_values(by='error').iloc[:25])
 
 #%%
+dm.delete_from_db('Simulation', 'Predicted_Ownership_Only', f"week={set_week} AND year={set_year} AND ownership_vers='{ownership_vers}'", create_backup=False)
+dm.write_to_db(test_predict, 'Simulation', 'Predicted_Ownership_Only', 'append')
+
+val_predict = val_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
+val_predict['ownership_vers'] = ownership_vers
+dm.delete_from_db('Simulation', 'Predicted_Ownership_Validation', f"ownership_vers='{ownership_vers}'", create_backup=False)
+dm.write_to_db(val_predict, 'Simulation', 'Predicted_Ownership_Validation', 'append')
+
+#%%
+#==================
+# Compare predicted ownership to past entries
+#==================
 
 full_entries = dm.read(f"SELECT * FROM Contest_Results WHERE Contest='{contest}'", 'DK_Results')
 player_ownership = dm.read(f"SELECT * FROM Contest_Ownership WHERE Contest='{contest}'", 'DK_Results')
 
 #%%
+pred_player_ownership = pull_ownership('Predicted_Ownership_Validation', ownership_vers)
 
-
-def create_constraint_metrics(prob_table, ownership_table, pred_version, ensemble_vers, std_dev_type, week, year):
-
-    pred_player_ownership = dm.read(f'''SELECT player, 
-                                            team,
-                                            week, 
-                                            year, 
-                                            AVG(pred_ownership) pred_ownership, 
-                                            AVG(std_dev) std_dev,
-                                            AVG(min_score) min_score,
-                                            AVG(max_score) max_score
-                                        FROM {ownership_table} 
-                                        GROUP BY player, week, year
-                                        ''', 'Simulation')
-
-    # df = dm.read(f'''SELECT player, 
-    #                         week, 
-    #                         year, 
-    #                         AVG(pred_fp_per_game) pred_prob
-    #                  FROM {prob_table}
-    #                  WHERE pred_version='{pred_version}'
-    #                           AND ensemble_vers='{ensemble_vers}' 
-    #                           AND std_dev_type='{std_dev_type}'
-    #                           AND set_week={week}
-    #                           AND set_year={year}
-    #                  GROUP BY player, week, year
-    #                 ''', 'Simulation')
-
-    # pred_player_ownership = pd.merge(pred_player_ownership, df, on=['player', 'week', 'year'])
-
-    # for c in ['pred_ownership', 'std_dev', 'min_score', 'max_score']:
-    #     pred_player_ownership[c] = pred_player_ownership.pred_prob# / pred_player_ownership[c]
-
-    return pred_player_ownership
-
-pred_player_ownership = create_constraint_metrics('Model_Validations_Million', 'Predicted_Ownership_Validation', 
-                                                  pred_version, ens_version, std_dev_type, set_week, set_year)
-
-
-
-#%%
 mean_var = []
 full_dist = {}
 base_places = [1, 10000, 25000, 50000, 75000, 100000, 150000]
 for base_place, places in zip(base_places, [50, 1000, 1000, 1000, 1000, 1000, 1000]):
     print(f'\nPlaces {base_place}-{places+base_place}\n==================')
 
-    df_lineups = format_lineups(full_entries, min_place=base_place, max_place=base_place+places)
-    df_lineups.player = df_lineups.player.apply(dc.name_clean)
-    df_lineups.loc[df_lineups.lineup_position=='DST', 'player'] = df_lineups.loc[df_lineups.lineup_position=='DST', 'player'].map(team_map)
+    df_lineups = create_millions_lineups(full_entries, base_place, places)
+    df_lineups = add_pos_to_million(df_lineups)
+    df_lineups = add_team_to_million(df_lineups)
     
-    player_pos = dm.read('''SELECT DISTINCT player, pos FROM FantasyPros''', 'Pre_PlayerData')
-    df_lineups = pd.merge(df_lineups, player_pos, on='player', how='left')
-    df_lineups.loc[df_lineups.pos.isnull(), 'pos'] = df_lineups.loc[df_lineups.pos.isnull(), 'lineup_position']
-
-    # print the flex numbers by position
-    print('Flex Pct by Position\n',
-           df_lineups.loc[df_lineups.lineup_position=='FLEX', 'pos'].value_counts() / \
-           df_lineups.loc[df_lineups.lineup_position=='FLEX', 'pos'].shape[0])
-
-    # print the number of players from the same team
-    teams = dm.read(f'''SELECT player, team
-                        FROM Player_Teams 
-                        WHERE week={set_week} AND year={set_year}''', 'Simulation')
-    df_lineups = pd.merge(df_lineups, teams, on=['player'])
-
-    team_cnts = df_lineups[df_lineups.pos.isin(['QB', 'RB', 'WR', 'TE'])].groupby(['place', 'team', 'week', 'year']).agg(player_cnts=('player', 'count')).reset_index()
-    max_cnts = team_cnts.groupby(['place', 'week', 'year']).agg(player_cnts=('player_cnts', 'max')).reset_index()
-    team_cnts = pd.merge(team_cnts, max_cnts, on=['place', 'week','year', 'player_cnts'])
-    print('Number of players on same team:\n', 
-          team_cnts.player_cnts.value_counts() / team_cnts.shape[0])
-
     df_lineups = pd.merge(df_lineups, player_ownership, on=['player', 'week', 'year'], how='left')
     df_lineups = pd.merge(df_lineups, pred_player_ownership, on=['player', 'week', 'year'])
-
-    # df_lineups.pred_ownership = df_lineups.pred_ownership / df_lineups.avg_proj_pts
-    
-    # df_lineups = adjust_owernship(df_lineups, 'pct_drafted', 'ln')
-    # df_lineups = adjust_owernship(df_lineups, 'pred_ownership', 'ln_prob')
-
-    def product_sum(x):
-        return np.sum(x)
-
-    drafted_pct = df_lineups.groupby(['place', 'week']).agg(pct_drafted=('pct_drafted', lambda x: product_sum(x)),
-                                                            pred_drafted=('pred_ownership', lambda x: product_sum(x)),
-                                                            lineup_position=('player', 'count'))
-    
-    drafted_pct = drafted_pct[drafted_pct.lineup_position==9]
-
-    full_dist[str(base_place)] = drafted_pct.pred_drafted
-                                                            
-    # drafted_pct['pct_drafted'] = drafted_pct.pct_drafted / (drafted_pct.lineup_position / 9)
-    # drafted_pct['pred_drafted'] = drafted_pct.pred_drafted / (drafted_pct.lineup_position / 9)
-
-    pred_drafted_mean = np.mean(drafted_pct.pred_drafted)
-    pred_drafted_std = np.std(drafted_pct.pred_drafted)
-
-    print('\nAvg Pct Drafted:', np.mean(drafted_pct.pct_drafted), 
-            '\nAvg Projected Drafted:', pred_drafted_mean, 
-            '\nStd Perc Drafted:', pred_drafted_std,
-            )
-
-
-    mean_var.append([pred_drafted_mean, pred_drafted_std, base_place])
+    full_dist, mean_output = agg_ownership_group(df_lineups, full_dist)
 
     if base_place==1:
-        mean_output = pd.DataFrame([pred_drafted_mean, pred_drafted_std, set_week, set_year], 
-                                    index=['ownership_mean', 'ownership_std', 'week', 'year']).T
-        dm.delete_from_db('Simulation', 'Mean_Ownership', f"year={set_year} AND week={set_week}")
+        
+        dm.delete_from_db('Simulation', 'Mean_Ownership', f"year={set_year} AND week={set_week} AND ownership_vers='{ownership_vers}'")
         dm.write_to_db(mean_output, 'Simulation', 'Mean_Ownership', 'append')
 
+run_ttest(full_dist, greater_or_less='greater')
+save_current_week_pred(ownership_vers, set_week, set_year)
 
-# %%
-
-from scipy.stats import ttest_ind
-
-for bp in base_places[1:]:
-    print('Base Place:', bp, 'ttest p_value:', ttest_ind(full_dist['1'], full_dist[str(bp)], axis=0, equal_var=True, alternative='greater')[1])
-
-
-# %%
-
-sim_values = create_constraint_metrics('Predicted_Million', 'Predicted_Ownership_Only',
-                                       pred_version, ens_version, std_dev_type, set_week, set_year)
-sim_values = sim_values.loc[(sim_values.week==set_week) & (sim_values.year==set_year),
-                            ['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
-sim_values.sort_values(by='pred_ownership', ascending=False).iloc[:50]
-
-#%%
-dm.delete_from_db('Simulation', 'Predicted_Ownership', f'week={set_week} AND year={set_year}')
-dm.write_to_db(sim_values, 'Simulation', 'Predicted_Ownership', 'append')
-# %%

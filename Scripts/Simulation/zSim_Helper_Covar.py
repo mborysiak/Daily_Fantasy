@@ -17,7 +17,7 @@ class FootballSimulation:
 
     def __init__(self, dm, week, set_year, salary_cap, pos_require_start, num_iters, 
                  pred_vers='standard', ensemble_vers='no_weight', std_dev_type='spline',
-                 covar_type='team_points', full_model_rel_weight=1,
+                 covar_type='team_points', ownership_vers='standard_ln', full_model_rel_weight=1,
                  use_covar=True, use_ownership=0, salary_remain_max=None):
 
         self.week = week
@@ -30,6 +30,7 @@ class FootballSimulation:
         self.ensemble_vers = ensemble_vers
         self.std_dev_type = std_dev_type
         self.covar_type = covar_type
+        self.ownership_vers = ownership_vers
         self.full_model_rel_weight = full_model_rel_weight
         self.use_covar = use_covar
         self.use_ownership = use_ownership
@@ -145,37 +146,14 @@ class FootballSimulation:
 
         return df
 
-    # def join_ownership_pred(self, df):
-
-    #     # add salaries to the dataframe and set index to player
-    #     ownership = self.dm.read(f'''SELECT player, pred_ownership, std_dev+0.01 as std_dev, min_score, max_score
-    #                                   FROM Predicted_Ownership
-    #                                   WHERE year={self.set_year}
-    #                                         AND week={self.week} ''', 'Simulation')
-
-    #     if self.use_covar: df = df.drop(['pred_fp_per_game'], axis=1)
-    #     else: df = df.drop(['pred_fp_per_game', 'std_dev', 'min_score','max_score'], axis=1)
-
-    #     df = pd.merge(df, ownership, how='left', on='player')
-
-    #     # df['min_score'] = df.pred_ownership.min()-0.01
-
-    #     df.pred_ownership = df.pred_ownership.fillna(df.pred_ownership.mean())
-    #     df.std_dev = df.std_dev.fillna(df.std_dev.mean())
-    #     df.min_score = df.min_score.fillna(df.min_score.min())
-        
-    #     df.loc[df.max_score.isnull(), 'max_score'] = df.loc[df.max_score.isnull(), 'pred_ownership'] + \
-    #                                                     df.loc[df.max_score.isnull(), 'std_dev']*3
-
-    #     return df
-
     def join_ownership_pred(self, df):
 
         # add salaries to the dataframe and set index to player
         ownership = self.dm.read(f'''SELECT player, pred_ownership, std_dev+0.01 as std_dev, min_score, max_score
                                       FROM Predicted_Ownership
                                       WHERE year={self.set_year}
-                                            AND week={self.week} ''', 'Simulation')
+                                            AND week={self.week}
+                                            AND ownership_vers='{self.ownership_vers}' ''', 'Simulation')
 
         if self.use_covar: df = df.drop(['pred_fp_per_game'], axis=1)
         else: df = df.drop(['pred_fp_per_game', 'std_dev', 'min_score','max_score'], axis=1)
@@ -209,9 +187,9 @@ class FootballSimulation:
         return matchups
 
     @staticmethod
-    def get_min_players(min_players_same_team_input, adjust_select):
+    def get_min_players(min_players_same_team_input):
         if min_players_same_team_input=='Auto': 
-                min_players_same_team= np.random.choice([-1, 2, 3, 4], p=[0.1, 0.4, 0.4, .1])
+                min_players_same_team= np.random.choice([-1, 2, 3, 4], p=[0.1, 0.55, 0.3, 0.05])
         else:
             min_players_same_team = min_players_same_team_input
 
@@ -478,6 +456,7 @@ class FootballSimulation:
                                              FROM Mean_Ownership
                                               WHERE week={self.week}
                                                     AND year={self.set_year}
+                                                    AND ownership_vers='{self.ownership_vers}'
                                         ''', 'Simulation').values[0]
 
         mean_own = self.pos_or_neg * np.random.normal(mean_own, std_own, size=1).reshape(1, 1)
@@ -675,7 +654,7 @@ class FootballSimulation:
 
         for i in range(self.num_iters):
 
-            min_players_same_team = self.get_min_players(min_players_same_team_input, adjust_select)
+            min_players_same_team = self.get_min_players(min_players_same_team_input)
             min_player_opp_team = self.get_min_players_opp_team(min_players_opp_team_input)
             
             if i ==0:
@@ -810,16 +789,16 @@ class FootballSimulation:
 # matchup_drop = 0
 # full_model_weight = 5
 # use_covar = False
-# min_players_same_team = 2.5
+# min_players_same_team = 3
 # min_players_opp_team = 1
-# use_ownership = 1
-# own_neg_frac = 0.8
+# use_ownership = 0.9
+# own_neg_frac = 1
 
 # qb_solo_start = False
 # qb_set_max_team = True
 # qb_min_iter = 0
 
-# week = 12
+# week = 13
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -830,13 +809,13 @@ class FootballSimulation:
 #                          full_model_rel_weight=full_model_weight, covar_type='no_covar', use_covar=use_covar, 
 #                          use_ownership=use_ownership, salary_remain_max=500)
 # set_max_team = None
-# to_add = []
+# to_add = ['Jalen Hurts', 'Devonta Smith', 'Aj Brown', 'Samaje Perine', 'Zonovan Knight', 'Evan Engram', 'Christian Kirk', 'Garrett Wilson', 'PIT']
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
 #                                     min_players_opp_team, adjust_select=adjust_select, 
 #                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
-#                                     n_top_players=5, static_top_players=False,
+#                                     n_top_players=3, static_top_players=False,
 #                                     qb_solo_start=qb_solo_start, qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter)
 
 # print(max_team_cnt)
