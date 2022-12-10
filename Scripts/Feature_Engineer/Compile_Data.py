@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2022
-WEEK = 13
+WEEK = 14
 
 #%%
 import pandas as pd 
@@ -1607,12 +1607,15 @@ dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 
 #%%
 
+output.loc[(output.week==13) & (output.year==2022), ['player', 'y_act']]
+#%%
+
 backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={WEEK} AND year={YEAR}", 'Model_Features').player.values
 sal = dm.read(f"SELECT player, salary FROM Salaries WHERE league={WEEK} AND year={YEAR}", 'Simulation')
 sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
 
 #%%
-count_chk = dm.read(f"SELECT player, count(*) cnts FROM Backfill WHERE week={WEEK} AND year={YEAR} GROUP BY player", 'Model_Features')
+count_chk = dm.read(f"SELECT player, week, year, count(*) cnts FROM Backfill GROUP BY player, week, year", 'Model_Features')
 count_chk[count_chk.cnts > 1]
 # %%
 # TO DO LIST

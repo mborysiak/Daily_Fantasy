@@ -772,7 +772,7 @@ dm = DataManage(db_path)
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2022,
+    'set_year': 2021,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -806,12 +806,13 @@ set_weeks = [
          # 1, 2, 3, 4, 5, 
          # 6, 7, 8, 9, 10,
         #  13, 14, 15, 16
-        12, 13
+        # 12, 13
+        17
                  ]
 
 pred_versions = [
                 'sera1_rsq0_brier1_matt1_lowsample_perc',
-                 'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #  'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #   'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #    'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #     'sera1_rsq0_brier1_matt1_lowsample_perc',
@@ -823,8 +824,8 @@ pred_versions = [
                 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',

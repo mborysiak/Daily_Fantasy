@@ -23,7 +23,6 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 
-
 #%%
 
 #=============

@@ -8,6 +8,8 @@ from joblib import Parallel, delayed
 import pickle
 import gzip
 import os
+from hyperopt import fmin, tpe, hp, space_eval, Trials
+import pprint
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -18,48 +20,16 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+   13, 14, 15, 16, 17,
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
 ]
 
 set_years = [
+      2021, 2021, 2021, 2021, 2021,
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
 save_path = "c:/Users/mborysia/Documents/Github/Daily_Fantasy/Model_Outputs/2022/Bayes_Sim_Opt/"
-
-pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc']
-
-ensemble_versions =[
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    ]
-
-std_dev_types = [
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                ]
-
-sim_types = len(set_weeks) * ['ownership_ln_pos_fix_flip']
     
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -139,26 +109,13 @@ def pull_points(week, year):
     return points
 
 
-def create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type):
-    params = []
-    for i in range(int(30/lineups_per_param)):
-        cur_params = []
-        for param, param_options in d.items():
-            param_vars = list(param_options.keys())
-            param_prob = list(param_options.values())
-            cur_params.append(np.random.choice(param_vars, p=param_prob))
-
-        cur_params.extend([lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type])
-        params.append(cur_params)
-    return params
-
-# %%
 
 def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
                 full_model_rel_weight, covar_type, min_players_same_team, 
                 min_players_opp_team, num_top_players, qb_min_iter, qb_set_max_team, qb_solo_start,
                 static_top_players, use_ownership, own_neg_frac, max_salary_remain, 
-                num_iters, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type
+                num_iters, lineups_per_param, 
+                week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers
                 ):
     
     prizes = get_prizes(week, year)
@@ -175,7 +132,8 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choi
 
     sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
                                 pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
-                                covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
+                                covar_type=covar_type, ownership_vers=ownership_vers,
+                                full_model_rel_weight=full_model_rel_weight, 
                                 use_covar=use_covar, use_ownership=use_ownership, 
                                 salary_remain_max=max_salary_remain)
 
@@ -216,131 +174,160 @@ def adjust_high_winnings(tw, max_adjust=10000):
     tw[tw>max_adjust] = max_adjust
     return tw
 
+def show_params(bayes_params):
+    print_params = {}
+    for k, v in bayes_params.items():
+        try: print_params[k] = np.round(v,3)
+        except: print_params[k] = v
+    print(print_params)
 
-def objective(bayes_params):
-    
-    print({k: np.round(v,3) for k,v in bayes_params.items()})
-    print('\n')
 
-    lineups_per_param = bayes_params['lineups_per_param']
-
+def convert_param_options(bp):
     d = {
+        
         'adjust_pos_counts': {
-            True: bayes_params['adjust_pos_counts_True'],
-            False: 1 - bayes_params['adjust_pos_counts_True']
+            True: bp['adjust_pos_counts_True'],
+            False: 1 - bp['adjust_pos_counts_True']
         },
 
         'player_drop_multiple': {
-            4: bayes_params['player_drop_multiple_4'],
-            2: bayes_params['player_drop_multiple_2'],
-            0: 1 - bayes_params['player_drop_multiple_4'] - bayes_params['player_drop_multiple_2']
+            4: bp['player_drop_multiple_4'],
+            2: bp['player_drop_multiple_2'],
+            0: 1 - bp['player_drop_multiple_4'] - bp['player_drop_multiple_2']
         },
 
         'matchup_drop': {
-            1: bayes_params['matchup_drop_1'],
-            2: bayes_params['matchup_drop_2'],
-            0: 1 - bayes_params['matchup_drop_1'] - bayes_params['matchup_drop_2']
+            1: bp['matchup_drop_1'],
+            2: bp['matchup_drop_2'],
+            0: 1 - bp['matchup_drop_1'] - bp['matchup_drop_2']
         }, 
 
         'top_n_choices': {
-            1: bayes_params['top_n_choices_1'],
-            2: bayes_params['top_n_choices_2'],
-            0: 1 - bayes_params['top_n_choices_1'] - bayes_params['top_n_choices_2']
+            1: bp['top_n_choices_1'],
+            2: bp['top_n_choices_2'],
+            0: 1 - bp['top_n_choices_1'] - bp['top_n_choices_2']
         },
 
         'full_model_weight': {
-            5: bayes_params['full_model_weight_5'],
-            0.2: 1 -  bayes_params['full_model_weight_5']
+            5: bp['full_model_weight_5'],
+            0.2: 1 -  bp['full_model_weight_5']
         }, 
 
         'covar_type': {
-            'no_covar': bayes_params['covar_type_no_covar'],
-            'team_points_trunc': 1 -  bayes_params['covar_type_no_covar']
+            'no_covar': bp['covar_type_no_covar'],
+            'team_points_trunc': 1 -  bp['covar_type_no_covar']
         }, 
 
         'min_player_same_team': {
-            2: bayes_params['min_player_same_team_2'],
-            3: bayes_params['min_player_same_team_3'],
-            'Auto': 1 - bayes_params['min_player_same_team_2'] - bayes_params['min_player_same_team_3']
+            2: bp['min_player_same_team_2'],
+            3: bp['min_player_same_team_3'],
+            'Auto': 1 - bp['min_player_same_team_2'] - bp['min_player_same_team_3']
         }, 
 
         'min_player_opp_team': {
-            1: bayes_params['min_player_opp_team_1'],
-            2: bayes_params['min_player_opp_team_2'],
-            'Auto': 1 - bayes_params['min_player_opp_team_1'] - bayes_params['min_player_opp_team_2']
+            1: bp['min_player_opp_team_1'],
+            2: bp['min_player_opp_team_2'],
+            'Auto': 1 - bp['min_player_opp_team_1'] - bp['min_player_opp_team_2']
         }, 
 
         'num_top_players': {
-            2: bayes_params['num_top_players_2'],
-            3: bayes_params['num_top_players_3'],
-            5: 1 - bayes_params['num_top_players_2'] - bayes_params['num_top_players_3']
+            2: bp['num_top_players_2'],
+            3: bp['num_top_players_3'],
+            5: 1 - bp['num_top_players_2'] - bp['num_top_players_3']
         },
 
         'qb_min_iter': {
-            0: bayes_params['qb_min_iter_0'],
-            9: 1 - bayes_params['qb_min_iter_0']
+            0: bp['qb_min_iter_0'],
+            9: 1 - bp['qb_min_iter_0']
         },
 
         'qb_set_max_team': {
-            True: bayes_params['qb_set_max_team_True'],
-            False: 1 - bayes_params['qb_set_max_team_True']
+            True: bp['qb_set_max_team_True'],
+            False: 1 - bp['qb_set_max_team_True']
         },
 
         'qb_solo_start': {
-            True: bayes_params['qb_solo_start_True'],
-            False: 1 - bayes_params['qb_solo_start_True']
+            True: bp['qb_solo_start_True'],
+            False: 1 - bp['qb_solo_start_True']
         },
 
         'static_top_players': {
-            True: bayes_params['static_top_players_True'],
-            False: 1 - bayes_params['static_top_players_True']
+            True: bp['static_top_players_True'],
+            False: 1 - bp['static_top_players_True']
         },
 
         'use_ownership': {
-            0.9: bayes_params['use_ownership_0.9'],
-            0.8: bayes_params['use_ownership_0.8'],
-            1: 1 - bayes_params['use_ownership_0.9'] - bayes_params['use_ownership_0.8']
+            0.9: bp['use_ownership_0.9'],
+            0.8: bp['use_ownership_0.8'],
+            1: 1 - bp['use_ownership_0.9'] - bp['use_ownership_0.8']
         },
 
         'own_neg_frac': {
-            0.8: bayes_params['own_neg_frac_0.8'],
-            1: 1 - bayes_params['own_neg_frac_0.8'],
+            0.8: bp['own_neg_frac_0.8'],
+            1: 1 - bp['own_neg_frac_0.8'],
         },
 
         'max_salary_remain': {
-            200: bayes_params['max_salary_remain_200'],
-            500: bayes_params['max_salary_remain_500'],
-            1000: bayes_params['max_salary_remain_1000'],
-            1500: 1 - bayes_params['max_salary_remain_200'] - bayes_params['max_salary_remain_500'] - bayes_params['max_salary_remain_1000'],
+            200: bp['max_salary_remain_200'],
+            500: bp['max_salary_remain_500'],
+            1000: bp['max_salary_remain_1000'],
+            1500: 1 - bp['max_salary_remain_200'] - bp['max_salary_remain_500'] - bp['max_salary_remain_1000'],
         },
 
         'num_iters': {
-            100: bayes_params['num_iters_100'],
-            50: 1 - bayes_params['num_iters_100'],
+            100: bp['num_iters_100'],
+            50: 1 - bp['num_iters_100'],
         },
     }
+    return d
 
+
+def create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers):
+    params = []
+    for i in range(int(30/lineups_per_param)):
+        cur_params = []
+        for param, param_options in d.items():
+            param_vars = list(param_options.keys())
+            param_prob = list(param_options.values())
+            cur_params.append(np.random.choice(param_vars, p=param_prob))
+
+        cur_params.extend([lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers])
+        params.append(cur_params)
+    return params
+
+
+def objective(bayes_params):
+
+    show_params(bayes_params)
+    print('\n')
+
+    lineups_per_param = bayes_params['lineups_per_param']
+    pred_vers = bayes_params['pred_vers']
+    ensemble_vers = bayes_params['ensemble_vers']
+    std_dev_type = bayes_params['std_dev_type']
+    ownership_vers = bayes_params['ownership_vers']
+
+    d = convert_param_options(bayes_params)
     
     total_winnings = []
-    iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
-    for week, year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
-        params = create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type)
+    iter_cats = zip(set_weeks, set_years)
+    for week, year in iter_cats:
+        params = create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers)
 
         # for adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type in params:
         #     winnings = sim_winnings(adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type)
                 
         winnings = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, 
                                                                         qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
-                                                                        week, year, pred_vers, ensemble_vers, std_dev_type) for 
+                                                                        week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers) for 
                                                                         adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, 
                                                                         qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
-                                                                        week, year, pred_vers, ensemble_vers, std_dev_type in params)
+                                                                        week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers in params)
         
         winnings = [item for sublist in winnings for item in sublist]
         winnings = avg_winnings_contest(winnings)
         winnings = int(np.sum(winnings))
         total_winnings.append(winnings)
-
         
         print(f'Week {week} Winnings: {winnings}') 
         print(f'Total Cumulative Winnings: {int(np.sum(total_winnings))}\n')
@@ -349,17 +336,27 @@ def objective(bayes_params):
     
     mean_loss = -np.mean(total_winnings)
     median_loss = -np.percentile(total_winnings, 50)
-    loss = mean_loss #+ median_loss    
+    loss = mean_loss + median_loss    
     print('Mean Loss:', mean_loss, 'Median Loss:', median_loss, ' Current Loss:', loss)
     return loss
 
 
 #%%
 
-from hyperopt import fmin, tpe, hp, space_eval, Trials
+
 
 
 init_space = {
+
+        'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt1_lowsample_perc']),
+         
+        'ensemble_vers':  hp.choice('ensemble_vers', ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']),
+
+        'std_dev_type':  hp.choice('std_dev_type', ['pred_spline_class80_q80_matt1_brier1_kfold3']),
+
+        'ownership_vers': hp.choice('ownership_vers', ['standard_ln', 'standard_ln_rank']),
+
         'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0.7, 1),
 
         'player_drop_multiple_4': hp.uniform('player_drop_multiple_4', 0, 0.2),
@@ -408,6 +405,16 @@ init_space = {
 
 
 full_space = {
+
+        'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt1_lowsample_perc']),
+         
+        'ensemble_vers':  hp.choice('ensemble_vers', ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']),
+
+        'std_dev_type':  hp.choice('std_dev_type', ['pred_spline_class80_q80_matt1_brier1_kfold3']),
+
+        'ownership_vers': hp.choice('ownership_vers', ['standard_ln', 'standard_ln_rank']),
+
         'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0, 1),
 
         'player_drop_multiple_4': hp.uniform('player_drop_multiple_4', 0, 0.5),
@@ -455,9 +462,10 @@ full_space = {
 }
 
 
-trial_name = 'adjust10000_nomedian_week12'
+trial_name = 'full_space_adjust10000_week12'
 
 #%%
+
 if os.path.exists(save_path+f'warm_start_{trial_name}.p'):
     trials  = load_pickle(save_path, f'warm_start_{trial_name}')
     print('Loading Warm Start')
@@ -466,36 +474,66 @@ else:
     print('Running Warm Start')
     best = fmin(objective, space=init_space, algo=tpe.suggest, trials=trials, max_evals=10)
     save_pickle(trials, save_path, f'warm_start_{trial_name}')
-    
 
 print('Running Full Space')
 best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=35)
 print(space_eval(full_space, best))
 
 save_pickle(trials, save_path, f'full_space_{trial_name}')
-# %%
-print('Running Full Space')
-best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=75)
-print(space_eval(full_space, best))
-
-save_pickle(trials, save_path, f'full_space_{trial_name}')
-
 
 
 # %%
 
-trials = load_pickle(save_path, 'full_space_adjust10000_week12')
+def results_to_df(save_path, fname):
 
-results_tmp = pd.DataFrame(trials.vals)
+    trials = load_pickle(save_path, fname)
+    results_tmp = pd.DataFrame(trials.vals)
+    eval_options = {k: v for k,v in init_space.items() if k in results_tmp.columns}
 
-results = pd.DataFrame()
-for idx, row in results_tmp.iterrows():
-    if idx < 10:
-        results = pd.concat([results, pd.DataFrame(space_eval(init_space, row), index=[idx])], axis=0)
-    else:
-        results = pd.concat([results, pd.DataFrame(space_eval(full_space, row), index=[idx])], axis=0)
+    results = pd.DataFrame()
+    for idx, row in results_tmp.iterrows():
+        if idx < 10:
+            results = pd.concat([results, pd.DataFrame(space_eval(eval_options, row), index=[idx])], axis=0)
+        else:
+            results = pd.concat([results, pd.DataFrame(space_eval(eval_options, row), index=[idx])], axis=0)
 
-results['loss'] = [l['loss'] for l in trials.results]
-results = results.sort_values(by='loss').reset_index(drop=True)
-results.iloc[:50]
+    results['loss'] = [l['loss'] for l in trials.results]
+    results = results.sort_values(by='loss').reset_index(drop=True)
+
+    # append trial name to front of results df
+    trial_name_df = pd.DataFrame({'trial_name': len(results)*[fname]})
+    results = pd.concat([trial_name_df, results], axis=1)
+    return results
+
+def add_extras(results):
+    extras = pd.DataFrame({
+                'trial_name': 35*['full_space_no_max_adjust_week12'],
+                'pred_vers': 35*['sera1_rsq0_brier1_matt1_lowsample_perc'],
+                'ensemble_vers': 35*['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'],
+                'std_dev_type': 35*['pred_spline_class80_q80_matt1_brier1_kfold3'],
+                'ownership_vers': 35*['standard_ln']
+            })
+
+    return pd.concat([extras, results.drop('trial_name', axis=1)], axis=1)
+
+
+results = results_to_df(save_path, 'full_space_no_max_adjust_week12')
+dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
+dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'append')
+# %%
+
+results = dm.read(f"SELECT * FROM Entry_Optimize_Bayes WHERE trial_name='{trial_name}'", 'Results')
+results = results.drop(['trial_name', 'loss'], axis=1)
+best_params = results.iloc[0].to_dict()
+best_params_output = convert_param_options(best_params)
+
+vers_names = ('pred_vers', 'ensemble_vers', 'std_dev_type', 'ownership_vers', 'lineups_per_param')
+vers_params = {k: v for k,v in best_params.items() if k in vers_names}
+# best_params_output = {**vers_params, **best_params_output}
+
+pprint.pprint(vers_params, sort_dicts=False)
+print('\n')
+pprint.pprint(best_params_output, sort_dicts=False)
+
+
 # %%

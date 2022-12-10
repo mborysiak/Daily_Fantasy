@@ -15,47 +15,20 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+   13, 14, 15, 16, 17,
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
+      2021, 2021, 2021, 2021, 2021,
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
 
-pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc']
-
-ensemble_versions =[
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    ]
-
-std_dev_types = [
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                'pred_spline_class80_q80_matt1_brier1_kfold3',
-                ]
-
-sim_types = len(set_weeks) * ['ownership_ln_pos_fix_flip']
+pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+ensemble_vers ='no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'   
+std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
+ownership_vers = 'ownership_ln_pos_fix_flip'
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
 trial_num = max_trial_num + 1
@@ -66,8 +39,7 @@ for repeat_num in range(10):
 
     all_winnings = []
     output_results = []
-    iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types, sim_types)
-    for week, year, pred_vers, ensemble_vers, std_dev_type, sim_type in iter_cats:
+    for week, year in zip(set_weeks, set_years):
 
         salary_cap = 50000
         pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -365,7 +337,8 @@ for repeat_num in range(10):
 
             sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
                                         pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
-                                        covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
+                                        covar_type=covar_type, ownership_vers=ownership_vers,
+                                        full_model_rel_weight=full_model_rel_weight, 
                                         use_covar=use_covar, use_ownership=use_ownership, 
                                         salary_remain_max=max_salary_remain)
 
@@ -438,7 +411,7 @@ for repeat_num in range(10):
 
     # save out the high level results of the overall week
     output_results = pd.DataFrame(output_results, columns=['week', 'year', 'pred_vers', 'ensemble_vers', 'std_dev_type', 'avg_winnings'])
-    output_results['sim_type'] = sim_type
+    output_results['ownership_vers'] = ownership_vers
     output_results['trial_num'] = trial_num
     output_results['repeat_num'] = repeat_num
     dm.write_to_db(output_results, 'Results', 'Entry_Optimize_Results', 'append')
@@ -466,16 +439,16 @@ dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 
 # %%
 
-df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
-add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
-add_on = add_on.assign(param='qb_solo_start', param_option=False, option_value=1)
-add_on = add_on[df.columns]
+# df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
+# add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
+# add_on = add_on.assign(param='qb_solo_start', param_option=False, option_value=1)
+# add_on = add_on[df.columns]
 
-df = pd.concat([df, add_on], axis=0)
-df = df.sort_values(by='trial_num')
+# df = pd.concat([df, add_on], axis=0)
+# df = df.sort_values(by='trial_num')
 
-# df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
-dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
+# # df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
 
 #%%
 

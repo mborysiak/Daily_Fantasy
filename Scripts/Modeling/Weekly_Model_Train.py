@@ -38,12 +38,12 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [13, 14, 15, 16, 17]
+run_weeks = [14]
 
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2021,
+    'set_year': 2022,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -61,11 +61,11 @@ run_params = {
 
     # set number of weeks back to begin validation
     'back_weeks': {
-        'QB': 28,
-        'RB': 24,
-        'WR': 24,
-        'TE': 28,
-        'Defense': 28
+        'QB': 30,
+        'RB': 25,
+        'WR': 25,
+        'TE': 30,
+        'Defense': 30
     },
 
     'rush_pass': ''
@@ -477,9 +477,9 @@ def save_output_dict(out_dict, model_output_path, label, rush_pass):
 
 #%%
 run_list = [
-            ['QB', '', 'full_model'],
-            ['RB', '', 'full_model'],
-            ['WR', '', 'full_model'],
+            # ['QB', '', 'full_model'],
+            # ['RB', '', 'full_model'],
+            # ['WR', '', 'full_model'],
             ['TE', '', 'full_model'],
             ['Defense', '', 'full_model'],
             ['QB', '', 'backfill'],
@@ -510,10 +510,6 @@ for w in run_weeks:
         pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
         df, run_params = load_data(model_type, set_pos, run_params)
         df, run_params = create_game_date(df, run_params)
-
-
-        run_params['cv_time_input'] = 20200114
-
 
         df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
