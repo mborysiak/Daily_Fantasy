@@ -14,11 +14,12 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=13
+week=14
 
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 ensemble_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
+ownership_vers = 'stanard_ln_rank'
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -262,6 +263,7 @@ run_params_dict = {
     'pred_vers': [pred_vers],
     'ensemble_vers': [ensemble_vers],
     'std_dev_type': [std_dev_type],
+    'ownership_vers': [ownership_vers]
 }
 for param, param_options in d.items():
     param_vars = list(param_options.keys())

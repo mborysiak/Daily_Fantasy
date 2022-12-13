@@ -772,7 +772,7 @@ dm = DataManage(db_path)
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2021,
+    'set_year': 2022,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -793,8 +793,8 @@ show_plot= True
 print_coef = False
 num_k_folds = 3
 
-r2_wt = 1
-sera_wt = 10
+r2_wt = 0
+sera_wt = 1
 mse_wt = 0
 brier_wt = 1
 matt_wt = 1
@@ -807,7 +807,7 @@ set_weeks = [
          # 6, 7, 8, 9, 10,
         #  13, 14, 15, 16
         # 12, 13
-        17
+        14
                  ]
 
 pred_versions = [

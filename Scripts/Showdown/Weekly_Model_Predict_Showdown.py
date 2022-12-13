@@ -34,8 +34,8 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2022
-set_week = 6
-showdown_teams = ['DAL', 'PHI']
+set_week = 14
+showdown_teams = ['MIA', 'LAC']
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -44,7 +44,7 @@ val_week_min = 14
 met = 'y_act'
 
 # full_model or backfill
-vers = 'sera1_rsq0_brier2_matt1_lowsample_perc_calibrate'
+vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 
 # %%
 

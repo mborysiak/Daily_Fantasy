@@ -211,13 +211,14 @@ def get_experts(df, pos, add_rolling=True):
                             rushAtt, rushYds, rushTd, recvTargets,
                             recvReceptions, recvYds, recvTd,
                             fumbles, fumblesLost, twoPt, returnYds, returnTd,
-                            expertConsensus, expertNathanJahnke,
-                            expertKevinCole, expertAndrewErickson,
-                            expertIanHartitz,expertDwainMcFarland, 
-                            expertBenBrown, expertJaradEvans,
+                            
+                            expertConsensus, expertNathanJahnke, expertIanHartitz,
+                       --   expertKevinCole, expertAndrewErickson,
+                       --   expertDwainMcFarland, expertBenBrown, expertJaradEvans,
+                       --   rankadj_expertKevinCole, playeradj_expertKevinCole
                             rankadj_expertConsensus, rankadj_expertNathanJahnke,
-                            rankadj_expertKevinCole,playeradj_expertConsensus, 
-                            playeradj_expertNathanJahnke, playeradj_expertKevinCole
+                            playeradj_expertNathanJahnke,playeradj_expertConsensus 
+                       
                     FROM PFF_Proj_Ranks a
                     JOIN (SELECT *
                             FROM PFF_Expert_Ranks 
@@ -229,13 +230,13 @@ def get_experts(df, pos, add_rolling=True):
     expert_cols = ['ProjPts','passYds', 'passTd', 'rushAtt', 
                     'rushYds', 'rushTd', 'recvTargets',
                     'recvReceptions', 'recvYds', 'recvTd',
-                    'expertConsensus', 'expertNathanJahnke',
-                    'expertKevinCole', 'expertAndrewErickson',
-                    'expertIanHartitz', 'expertDwainMcFarland', 
-                    'expertBenBrown', 'expertJaradEvans',
+                    'expertConsensus', 'expertNathanJahnke','expertIanHartitz',
+                   # 'expertKevinCole', 'expertAndrewErickson',
+                   # 'expertDwainMcFarland', 'expertBenBrown', 'expertJaradEvans',
                     'rankadj_expertConsensus', 'rankadj_expertNathanJahnke',
-                    'rankadj_expertKevinCole','playeradj_expertConsensus', 
-                    'playeradj_expertNathanJahnke', 'playeradj_expertKevinCole']
+                    'playeradj_expertNathanJahnke','playeradj_expertConsensus', 
+                   # 'rankadj_expertKevinCole', 'playeradj_expertKevinCole'
+                     ]
 
     # convert all the expert rankings to log values
     for c in expert_cols:
@@ -1711,4 +1712,117 @@ data
 
 # df = dm.read('''SELECT * FROM WR_Stats WHERE season>=2020 AND rec_yards_gained_sum > 10 ''', 'FastR')
 # df.fantasy_pts.plot.hist()
-# # %%
+
+#%%
+
+def ffa_compile(table_name, pos):
+    if table_name == 'FFA_Projections':
+        cols = ['player','week', 'year', 'points', 'sd_pts',
+                    'dropoff', 'floor', 'ceiling', 'points_vor', 'floor_vor', 'ceiling_vor',
+                    'rank', 'floor_rank', 'ceiling_rank', 'position_rank', 'tier', 'uncertainty']
+        
+    elif table_name == 'FFA_RawStats':
+        if pos == 'QB':
+            cols = ['player', 'week', 'year',
+                    'pass_yds', 'pass_yds_sd', 'pass_tds', 'pass_tds_sd', 'pass_int',
+                    'pass_int_sd', 'rush_yds', 'rush_yds_sd', 'rush_tds', 'rush_tds_sd',
+                    ]
+        elif pos in ('RB', 'WR', 'TE'):
+            cols =  ['player', 'week', 'year', 'rush_yds', 'rush_yds_sd', 'rush_tds', 'rush_tds_sd',
+                     'rec', 'rec_sd', 'rec_yds',]
+
+    ffa = dm.read(f"SELECT * FROM {table_name} WHERE position='{pos}'", 'Pre_PlayerData')
+    ffa = ffa[cols]
+    new_cols = ['player', 'week', 'year']
+    new_cols.extend(['ffa_' + c for c in ffa.columns if c not in ('player', 'week', 'year')])
+    ffa.columns = new_cols
+
+    return ffa
+
+def fill_ffa_proj(df, pos):
+
+    to_fill = {
+    'ffa_pass_yds': ['passYds'],
+    'ffa_pass_tds': ['passTd'],
+    'ffa_pass_int': ['passInt'],
+    'ffa_rush_yds': ['rushYds'],
+    'ffa_rush_tds': ['rushTd'],
+    'ffa_rec': ['recvReceptions'],
+    'ffa_rec_yds': ['recvYds'],
+    'ffa_points': ['projected_points', 'fantasyPoints', 'ProjPts'],
+    'ffa_rank': ['fp_rank', 'expertConsensus']
+    }
+
+    for k, v in to_fill.items():
+        try: df[k] = df[v].mean(axis=1)
+        except: pass
+
+    # cleanup bad data
+    cols = ['ffa_points', 'ffa_sd_pts', 'ffa_dropoff', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor', 'ffa_floor_vor',
+            'ffa_ceiling_vor', 'ffa_rush_yds','ffa_rush_yds_sd','ffa_rush_tds','ffa_rush_tds_sd']
+    if pos == 'QB':
+        cols.extend(['ffa_pass_yds','ffa_pass_yds_sd','ffa_pass_tds','ffa_pass_tds_sd','ffa_pass_int', 'ffa_pass_int_sd'])
+    
+    elif pos in ('RB', 'WR', 'TE'):
+        cols.extend(['rec', 'rec_sd', 'rec_yds'])
+
+    df.loc[df.ffa_points > 50, cols] = df.loc[df.ffa_points > 50, cols] / 16
+    df.loc[df.ffa_ceiling > 50, cols] = df.loc[df.ffa_ceiling > 50, cols] / 16
+
+    df = df.sort_values(by=['year', 'week', 'ffa_points'], ascending=[True, True, False]).reset_index(drop=True)
+
+    # fill the columns down since players close to each other will have similar metrics
+    for c in ['ffa_sd_pts', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor', 'ffa_floor_vor',
+              'ffa_ceiling_vor', 'ffa_rank', 'ffa_floor_rank', 'ffa_ceiling_rank',
+              'ffa_position_rank', 'ffa_tier']:
+        df[c] = df[c].fillna(method='ffill')
+
+    # calculate the next player dropoff
+    df['next_player'] = df.groupby(['year', 'week'])['ffa_points'].shift(-1).values
+    df.loc[df.ffa_dropoff.isnull(), 'ffa_dropoff'] = \
+        df.loc[df.ffa_dropoff.isnull(), 'ffa_points'] - df.loc[df.ffa_dropoff.isnull(), 'next_player'] 
+    df = df.drop('next_player', axis=1)
+
+    return df
+
+#%%
+
+data = df.copy()
+
+#%%
+
+ffa_proj = ffa_compile('FFA_Projections', 'RB')
+df = pd.merge(data, ffa_proj, on=['player', 'week', 'year'], how='left')
+
+ffa_stats = ffa_compile('FFA_RawStats', 'RB')
+df = pd.merge(df, ffa_stats, on=['player', 'week', 'year'], how='left')
+
+df = fill_ffa_proj(df, 'pos')
+
+# %%
+
+df.isnull().sum()[df.isnull().sum()>0][-25:]
+# %%
+
+ffa_cols = ['ffa_points', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor', 'ffa_rank',
+            'ffa_ceiling_rank', 'ffa_position_rank', 'ffa_rush_yds', 'ffa_rush_tds', 
+            'ffa_rec', 'ffa_rec_yds', 'ffa_pass_yds', 'ffa_pass_tds']
+
+# convert all the expert rankings to log values
+for c in ffa_cols:
+    if 'rank' in c: 
+        df[f'log_{c}'] = np.log(df[c]+1)
+        ffa_cols.append(f'log_{c}')
+
+# fill in null expert rankings
+df[[c for c in df.columns if 'ffa' in c]] = forward_fill(df[[c for c in df.columns if 'ffa' in c]])
+
+if add_rolling: experts = add_rolling_stats(df, ['player'], ffa_cols)
+
+for c in ['ffa_points', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor',
+          'ffa_rush_yds', 'ffa_rush_tds', 'ffa_rec', 'ffa_rec_yds', 'ffa_pass_yds', 'ffa_pass_tds']:
+    df[c] = df[c].fillna(df[c].min())
+
+# df = experts.fillna(experts.max())
+# %%
+d

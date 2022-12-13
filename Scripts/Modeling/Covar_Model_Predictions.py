@@ -342,19 +342,17 @@ set_years = [
 ]
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc']
-ensemble_versions = len(set_weeks)*['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',]
+ensemble_versions = len(set_weeks)*['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',]
 std_dev_types = len(set_weeks)*['pred_spline_class80_q80_matt1_brier1_kfold3']
-sim_types = len(set_weeks) * ['ownership_ln_pos_2020_flip']
 
 # # set the model version
-# set_weeks = [13]
+# set_weeks = [14]
 
 # set_years = [2022]
 
 # pred_versions = ['sera1_rsq0_brier1_matt1_lowsample_perc']
 # ensemble_versions = ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']
 # std_dev_types = ['pred_spline_class80_q80_matt1_brier1_kfold3']
-# sim_types = ['ownership_ln_pos']
 
 full_model_weights = [0.2, 5]
 

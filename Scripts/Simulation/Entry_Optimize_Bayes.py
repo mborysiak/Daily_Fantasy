@@ -26,7 +26,7 @@ set_weeks = [
 
 set_years = [
       2021, 2021, 2021, 2021, 2021,
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
 save_path = "c:/Users/mborysia/Documents/Github/Daily_Fantasy/Model_Outputs/2022/Bayes_Sim_Opt/"
@@ -36,6 +36,9 @@ pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 adjust_winnings = False
 set_max_team = None
 
+#================
+# Loading Data
+#================
 
 def save_pickle(obj, path, fname, protocol=-1):
     with gzip.open(f"{path}/{fname}.p", 'wb') as f:
@@ -55,6 +58,10 @@ def get_stats(pos, week, year):
                         FROM {pos}_Stats
                         WHERE week={week}
                             AND season={year}''', 'FastR')
+
+#================
+# Sim Helper functions
+#================
 
 def calc_winnings(to_add, points, prizes):
     results = pd.DataFrame(to_add, columns=['player'])
@@ -108,7 +115,62 @@ def pull_points(week, year):
 
     return points
 
+#================
+# Saving output
+#================
 
+def results_to_df(save_path, fname):
+
+    trials = load_pickle(save_path, fname)
+    results_tmp = pd.DataFrame(trials.vals)
+    eval_options = {k: v for k,v in init_space.items() if k in results_tmp.columns}
+
+    results = pd.DataFrame()
+    for idx, row in results_tmp.iterrows():
+        if idx < 10:
+            results = pd.concat([results, pd.DataFrame(space_eval(eval_options, row), index=[idx])], axis=0)
+        else:
+            results = pd.concat([results, pd.DataFrame(space_eval(eval_options, row), index=[idx])], axis=0)
+
+    results['loss'] = [l['loss'] for l in trials.results]
+    results = results.sort_values(by='loss').reset_index(drop=True)
+
+    # append trial name to front of results df
+    trial_name_df = pd.DataFrame({'trial_name': len(results)*[fname]})
+    results = pd.concat([trial_name_df, results], axis=1)
+    return results
+
+
+def add_extras(results, trial_name, rpts):
+    extras = pd.DataFrame({
+                'trial_name': rpts*[trial_name],
+                'pred_vers': rpts*['sera1_rsq0_brier1_matt1_lowsample_perc'],
+                'ensemble_vers': rpts*['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'],
+                'std_dev_type': rpts*['pred_spline_class80_q80_matt1_brier1_kfold3'],
+                'ownership_vers': rpts*['standard_ln']
+            })
+
+    return pd.concat([extras, results.drop('trial_name', axis=1)], axis=1)
+
+
+def show_trial_best_params(trial_name, best_result=0):
+    results = dm.read(f"SELECT * FROM Entry_Optimize_Bayes WHERE trial_name='{trial_name}'", 'Results')
+    results = results.drop(['trial_name', 'loss'], axis=1)
+    best_params = results.iloc[best_result].to_dict()
+    best_params_output = convert_param_options(best_params)
+
+    vers_names = ('pred_vers', 'ensemble_vers', 'std_dev_type', 'ownership_vers', 'lineups_per_param')
+    vers_params = {k: v for k,v in best_params.items() if k in vers_names}
+    # best_params_output = {**vers_params, **best_params_output}
+
+    pprint.pprint(vers_params, sort_dicts=False)
+    print('\n')
+    pprint.pprint(best_params_output, sort_dicts=False)
+
+    
+#================
+# Run Sim code
+#================
 
 def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
                 full_model_rel_weight, covar_type, min_players_same_team, 
@@ -168,6 +230,10 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choi
         to_drop_selected = rand_drop_selected(total_add, player_drop_multiplier, lineups_per_param)
 
     return winnings
+
+#================
+# Bayes opt functions
+#================
 
 def adjust_high_winnings(tw, max_adjust=10000):
     tw = np.array(tw)
@@ -314,9 +380,11 @@ def objective(bayes_params):
     for week, year in iter_cats:
         params = create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers)
 
-        # for adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type in params:
-        #     winnings = sim_winnings(adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type)
-                
+        # winnings = []
+        # for adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers in params:
+        #     cur_winnings = sim_winnings(adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers)
+        #     winnings.append(cur_winnings)
+            
         winnings = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, 
                                                                         qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
                                                                         week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers) for 
@@ -343,8 +411,9 @@ def objective(bayes_params):
 
 #%%
 
-
-
+#================
+# Set Param spaces
+#================
 
 init_space = {
 
@@ -355,7 +424,7 @@ init_space = {
 
         'std_dev_type':  hp.choice('std_dev_type', ['pred_spline_class80_q80_matt1_brier1_kfold3']),
 
-        'ownership_vers': hp.choice('ownership_vers', ['standard_ln', 'standard_ln_rank']),
+        'ownership_vers': hp.choice('ownership_vers', ['standard_ln', 'standard_ln_rank', 'standard_ln_rank_extra_features']),
 
         'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0.7, 1),
 
@@ -389,10 +458,10 @@ init_space = {
 
         'static_top_players_True': hp.uniform('static_top_players_True', 0.4, 0.6),
 
-        'use_ownership_0.9': hp.uniform('use_ownership_0.9', 0.3, 0.6),
-        'use_ownership_0.8': hp.uniform('use_ownership_0.8', 0, 0.1),
+        'use_ownership_0.9': hp.uniform('use_ownership_0.9', 0.3, 0.8),
+        'use_ownership_0.8': hp.uniform('use_ownership_0.8', 0, 0.2),
 
-        'own_neg_frac_0.8': hp.uniform('own_neg_frac_0.8', 0, 0.2),
+        'own_neg_frac_0.8': hp.uniform('own_neg_frac_0.8', 0, 0.5),
 
         'max_salary_remain_200': hp.uniform('max_salary_remain_200', 0.2, 0.3),
         'max_salary_remain_500': hp.uniform('max_salary_remain_500', 0.2, 0.3),
@@ -462,9 +531,28 @@ full_space = {
 }
 
 
-trial_name = 'full_space_adjust10000_week12'
+trial_name = 'adjust10000_week132021_week132022'
 
 #%%
+
+# class BayesTrain:
+#     def __init__(self, trial_name, save_path, warm_start_evals=10, full_evals=50):
+
+#         self.trial_name = trial_name
+#         self.warm_start_evals = warm_start_evals
+#         self.full_evals = full_evals
+#         self.save_path = save_path
+
+#     def check_warm_start_exists(self):
+#         if os.path.exists(self.save_path+f'warm_start_{self.trial_name}.p'):
+#             self.warm_start_exists = True
+
+#     def check_full_trial_exists(self):
+#         if os.path.exists(self.save_path+f'full_space_{self.trial_name}.p'):
+#             self.full_trial_exists = True
+
+    
+
 
 if os.path.exists(save_path+f'warm_start_{trial_name}.p'):
     trials  = load_pickle(save_path, f'warm_start_{trial_name}')
@@ -476,64 +564,25 @@ else:
     save_pickle(trials, save_path, f'warm_start_{trial_name}')
 
 print('Running Full Space')
-best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=35)
+best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=25)
 print(space_eval(full_space, best))
 
 save_pickle(trials, save_path, f'full_space_{trial_name}')
 
-
-# %%
-
-def results_to_df(save_path, fname):
-
-    trials = load_pickle(save_path, fname)
-    results_tmp = pd.DataFrame(trials.vals)
-    eval_options = {k: v for k,v in init_space.items() if k in results_tmp.columns}
-
-    results = pd.DataFrame()
-    for idx, row in results_tmp.iterrows():
-        if idx < 10:
-            results = pd.concat([results, pd.DataFrame(space_eval(eval_options, row), index=[idx])], axis=0)
-        else:
-            results = pd.concat([results, pd.DataFrame(space_eval(eval_options, row), index=[idx])], axis=0)
-
-    results['loss'] = [l['loss'] for l in trials.results]
-    results = results.sort_values(by='loss').reset_index(drop=True)
-
-    # append trial name to front of results df
-    trial_name_df = pd.DataFrame({'trial_name': len(results)*[fname]})
-    results = pd.concat([trial_name_df, results], axis=1)
-    return results
-
-def add_extras(results):
-    extras = pd.DataFrame({
-                'trial_name': 35*['full_space_no_max_adjust_week12'],
-                'pred_vers': 35*['sera1_rsq0_brier1_matt1_lowsample_perc'],
-                'ensemble_vers': 35*['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'],
-                'std_dev_type': 35*['pred_spline_class80_q80_matt1_brier1_kfold3'],
-                'ownership_vers': 35*['standard_ln']
-            })
-
-    return pd.concat([extras, results.drop('trial_name', axis=1)], axis=1)
-
-
-results = results_to_df(save_path, 'full_space_no_max_adjust_week12')
+results = results_to_df(save_path, f'full_space_{trial_name}')
 dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
 dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'append')
-# %%
 
-results = dm.read(f"SELECT * FROM Entry_Optimize_Bayes WHERE trial_name='{trial_name}'", 'Results')
-results = results.drop(['trial_name', 'loss'], axis=1)
-best_params = results.iloc[0].to_dict()
-best_params_output = convert_param_options(best_params)
+#%%
 
-vers_names = ('pred_vers', 'ensemble_vers', 'std_dev_type', 'ownership_vers', 'lineups_per_param')
-vers_params = {k: v for k,v in best_params.items() if k in vers_names}
-# best_params_output = {**vers_params, **best_params_output}
 
-pprint.pprint(vers_params, sort_dicts=False)
-print('\n')
-pprint.pprint(best_params_output, sort_dicts=False)
+print('Running Full Space')
+best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=75)
+print(space_eval(full_space, best))
 
+save_pickle(trials, save_path, f'full_space_{trial_name}')
+
+#%%
+show_trial_best_params('full_space_'+trial_name, 2)
 
 # %%

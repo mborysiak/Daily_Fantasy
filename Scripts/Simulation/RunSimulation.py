@@ -25,7 +25,7 @@ dm = DataManage(db_path)
 #===============
 
 year = 2022
-week = 13
+week = 14
 num_iters = 100
 
 total_lineups = 10
@@ -104,6 +104,7 @@ def initiate_class(op_params):
     pred_vers = op_params['pred_vers']
     ensemble_vers = op_params['ensemble_vers']
     std_dev_type = op_params['std_dev_type']
+    ownership_vers = op_params['ownership_vers']
     full_model_rel_weight = eval(op_params['full_model_weight'])
     covar_type = eval(op_params['covar_type'])
     use_ownership = eval(op_params['use_ownership'])
@@ -115,7 +116,7 @@ def initiate_class(op_params):
     else: use_covar=True
     # instantiate simulation class and add salary information to data
     sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters,
-                            pred_vers, ensemble_vers, std_dev_type, covar_type,
+                            pred_vers, ensemble_vers, std_dev_type, covar_type, ownership_vers,
                             full_model_rel_weight, use_covar, use_ownership=1,
                             salary_remain_max=salary_remain_max)
 

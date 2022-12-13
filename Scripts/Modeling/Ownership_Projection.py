@@ -19,12 +19,12 @@ pred_version = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 ens_version = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
 std_dev_type = 'pred_spline_class80_q80_matt0_brier1_kfold3'
 
-use_rank = False
+use_rank = True
 use_positions = False
-ownership_vers = 'standard_ln'
+ownership_vers = 'standard_ln_rank_extra_features'
 
 set_year = 2022
-set_week = 13
+set_week = 14
 contest = 'Million'
 
 #%%
@@ -153,6 +153,7 @@ def add_proj(df, use_rank=False):
     proj = pd.concat([proj, def_proj], axis=0)
 
     proj['avg_proj_pts'] = proj[['projected_points', 'fantasyPoints', 'ProjPts']].mean(axis=1)
+    proj['max_proj_pts'] = proj[['projected_points', 'fantasyPoints', 'ProjPts']].max(axis=1)
     
     def fill_null_rank(df, null_col, fill_col):
         df.loc[df[null_col].isnull(), null_col] = df.loc[df[null_col].isnull(), fill_col]
@@ -166,6 +167,7 @@ def add_proj(df, use_rank=False):
             proj = fill_null_rank(proj, tf, fw)
         
         proj['avg_rank'] = proj[['fp_rank', 'rankadj_fp_rank', 'playeradj_fp_rank']].mean(axis=1)
+        proj['min_rank'] = proj[['fp_rank', 'rankadj_fp_rank', 'playeradj_fp_rank']].min(axis=1)
         proj['avg_expert'] = proj[['expertConsensus', 'expertIanHartitz','rankadj_expertConsensus', 'playeradj_expertConsensus']].mean(axis=1)
         proj['avg_expert_rank'] = proj[['avg_rank', 'avg_expert']].mean(axis=1)
 
@@ -233,7 +235,7 @@ def add_team_points(df, c):
 
 def feature_engineering(df):
 
-    for c in ['projected_points', 'fantasyPoints', 'ProjPts', 'pred_fp_per_game', 'pred_prob']:
+    for c in ['projected_points', 'fantasyPoints', 'ProjPts', 'avg_proj_pts', 'max_proj_pts', 'pred_fp_per_game', 'pred_prob']:
         try: df[c+'_over_sal'] = df[c] / (df.dk_salary + 1000)
         except: pass
 
@@ -241,7 +243,7 @@ def feature_engineering(df):
         try: df = add_team_points(df, c)
         except: pass
 
-    for c in ['avg_rank', 'avg_expert', 'avg_expert_rank', 'log_avg_rank', 'log_avg_expert', 'log_avg_expert_rank']:
+    for c in ['avg_rank', 'min_rank', 'avg_expert', 'avg_expert_rank', 'log_avg_rank', 'log_avg_expert', 'log_avg_expert_rank']:
         try: df[c+'_times_sal'] = df[c] * df.dk_salary
         except: pass
 
@@ -251,9 +253,16 @@ def feature_engineering(df):
     df = df.sort_values(by=['pos', 'year', 'week', 'avg_proj_pts']).reset_index(drop=True)
     df['pos_week_order'] = df.groupby(['pos', 'year', 'week']).cumcount().values
 
-    avg_per_sal = df.groupby(['pos', 'year', 'week']).agg(avg_pts_per_sal_pos=('ProjPts_over_sal', 'mean'))
+    df = df.sort_values(by=['pos', 'year', 'week', 'avg_proj_pts']).reset_index(drop=True)
+    df['pos_week_order_over_sal'] = df.groupby(['pos', 'year', 'week']).cumcount().values
+
+    avg_per_sal = df.groupby(['pos', 'year', 'week']).agg(avg_pts_per_sal_pos=('avg_proj_pts', 'mean'))
     df = pd.merge(df, avg_per_sal, on=['pos', 'year', 'week'])
-    df['avg_pts_per_sal_diff'] = df.ProjPts_over_sal - df.avg_pts_per_sal_pos
+    df['avg_pts_per_sal_diff'] = df.avg_proj_pts_over_sal - df.avg_pts_per_sal_pos
+
+    avg_per_sal = df.groupby(['pos', 'year', 'week']).agg(proj_pts_per_sal_pos=('ProjPts_over_sal', 'mean'))
+    df = pd.merge(df, avg_per_sal, on=['pos', 'year', 'week'])
+    df['avg_pts_per_sal_diff'] = df.ProjPts_over_sal - df.proj_pts_per_sal_pos
 
     df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
 
@@ -709,7 +718,7 @@ for set_week, set_year in zip([13, 14, 15, 16, 17,
                                2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]):
 
     print(f'Running week {set_week} year {set_year}')
-    back_weeks=24
+    back_weeks=22
 
     player_ownership = pull_player_ownership(contest, set_week, set_year)
     current_players = pull_this_week_players(set_week, set_year)
@@ -760,6 +769,7 @@ for set_week, set_year in zip([13, 14, 15, 16, 17,
     display(val_predict.sort_values(by='error').iloc[-25:])
     display(val_predict.sort_values(by='error').iloc[:25])
 
+    test_predict['ownership_vers'] = ownership_vers
     dm.delete_from_db('Simulation', 'Predicted_Ownership_Only', f"week={set_week} AND year={set_year} AND ownership_vers='{ownership_vers}'", create_backup=False)
     dm.write_to_db(test_predict, 'Simulation', 'Predicted_Ownership_Only', 'append')
 
@@ -797,7 +807,7 @@ for set_week, set_year in zip([13, 14, 15, 16, 17,
 
         if base_place==1:
             
-            dm.delete_from_db('Simulation', 'Mean_Ownership', f"year={set_year} AND week={set_week} AND ownership_vers='{ownership_vers}'")
+            dm.delete_from_db('Simulation', 'Mean_Ownership', f"year={set_year} AND week={set_week} AND ownership_vers='{ownership_vers}'", create_backup=False)
             dm.write_to_db(mean_output, 'Simulation', 'Mean_Ownership', 'append')
 
     run_ttest(full_dist, greater_or_less='greater')

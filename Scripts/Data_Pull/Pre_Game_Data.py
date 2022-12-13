@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2022
-set_week = 13
+set_week = 14
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -143,7 +143,7 @@ all_df = pd.DataFrame()
 for p in ['QB', 'RB', 'WR', 'TE', 'K']:
     base_df = rank1_pl[rank1_pl.Position==p].copy()
 
-    for c in ['expertKevinCole', 'expertConsensus', 'expertNathanJahnke']:
+    for c in ['expertConsensus', 'expertNathanJahnke']:
         cur_df = create_adj_ranks(base_df, c, f"WHERE Position='{p}'", 'PFF_Expert_Ranks', dm)
         base_df = pd.merge(base_df, cur_df[['player', 'offTeam', f'rankadj_{c}', f'playeradj_{c}']], on=['player', 'offTeam'], how='left')
     all_df = pd.concat([all_df, base_df], axis=0)
@@ -769,4 +769,80 @@ to_upload.week= to_upload.week.astype('str')
 to_upload.year = to_upload.year.astype('str')
 to_upload['pkey'] = to_upload.player + to_upload.week + to_upload.year
 all_data[(~all_data.pkey.isin(to_upload.pkey)) ]#.groupby('player').agg({'Id': 'count'}).sort_values(by='Id', ascending=False)
+# %%
+
+def move_download_to_folder(root_path, folder, fname):
+    try:
+        os.replace(f"/Users/mborysia/Downloads/{fname}", 
+                    f'{root_path}/Data/OtherData/{folder}/{set_year}/{fname}')
+    except:
+        pass
+
+    df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{fname}')
+    
+    return df
+
+
+#%%
+
+def format_ffa(df, set_week, set_year):
+    df = df.dropna(subset=['player'])
+    df.player = df.player.apply(dc.name_clean)
+    df.team = df.team.map(team_map)
+    df.loc[df.position=='DST', 'player'] = df.loc[df.position=='DST', 'team']
+    df['week'] = set_week
+    df['year'] = set_year
+    return df
+
+def format_fantasy_cruncher(df, set_week, set_year):
+    new_cols = []
+    col_prefix = ''
+    for i in range(df.shape[1]):
+        if 'Unnamed' not in df.columns[i]:
+            col_prefix = df.columns[i].replace('.', '').replace(' ', '_').lower() + '_'
+        col_suffix = str(df.iloc[0, i]).replace('.', '').replace('+', ' ').replace('%', 'pct').replace(' ', '_').lower()
+        new_cols.append(col_prefix + col_suffix)
+
+    df.columns = new_cols
+    df = df.rename(columns={f'game_and_vegas_{set_year}_avg': 'game_and_vegas_this_year_avg',
+                            f'game_and_vegas_{set_year-1}_avg': 'game_and_vegas_last_year_avg'})
+    for c in ['position_rankings_rdm_pct', 'position_rankings_exp',	'position_rankings_used', 
+              'projected_values_rdm_pct', 'projected_values_exp', 'projected_values_used', 'projected_values_con',
+              'projected_values_value', 'position_rankings_salary', 'position_rankings_fc_proj', 'position_rankings_my_proj',
+              'overall_rankings_salary', 'overall_rankings_fc_proj', 'overall_rankings_my_proj']:
+        try: df = df.drop(c, axis=1)
+        except: pass
+
+    df = df.iloc[1:]
+    df['week'] = set_week
+    df['year'] = set_year
+
+    df.player = df.player.apply(dc.name_clean)
+    df.loc[df.pos=='DST', 'player'] = df.loc[df.pos=='DST', 'player'].map(name_map)
+
+    return df
+
+df = move_download_to_folder(root_path, 'FFA', f'projections_{set_year}_wk{set_week}.csv')
+df = format_ffa(df, set_week, set_year)
+
+dm.delete_from_db('Pre_PlayerData', 'FFA_Projections', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'FFA_Projections', 'append')
+
+#%%
+
+df = move_download_to_folder(root_path, 'FFA', f'raw_stats_{set_year}_wk{set_week}.csv')
+df = format_ffa(df, set_week, set_year)
+
+dm.delete_from_db('Pre_PlayerData', 'FFA_RawStats', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'FFA_RawStats', 'append')
+
+#%%
+
+df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
+df = format_fantasy_cruncher(df, set_week, set_year)
+
+dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'replace')
+
+
 # %%

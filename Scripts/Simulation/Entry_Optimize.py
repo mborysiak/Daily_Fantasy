@@ -26,9 +26,9 @@ set_years = [
 
 
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-ensemble_vers ='no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'   
+ensemble_vers ='no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'   
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
-ownership_vers = 'ownership_ln_pos_fix_flip'
+ownership_vers = 'standard_ln'
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
 trial_num = max_trial_num + 1
@@ -186,126 +186,43 @@ for repeat_num in range(10):
                                 AND Contest='Million' ''', 'DK_Results')
 
         
-        d = {
-            'adjust_pos_counts': {
-                True: 0.83, 
-                False: 0.17
-            },
+        df = {'adjust_pos_counts': {True: 0.9247692143291852, False: 0.07523078567081476},
+ 'player_drop_multiple': {4: 0.07685060381363672,
+                          2: 0.1761947745354158,
+                          0: 0.7469546216509475},
+ 'matchup_drop': {1: 0.08659477817778663,
+                  2: 0.1393149751111936,
+                  0: 0.7740902467110198},
+ 'top_n_choices': {1: 0.10729046070226839,
+                   2: 0.17301308541127403,
+                   0: 0.7196964538864575},
+ 'full_model_weight': {5: 0.7235268165032033, 0.2: 0.2764731834967967},
+ 'covar_type': {'no_covar': 0.6532169501554576,
+                'team_points_trunc': 0.34678304984454245},
+ 'min_player_same_team': {2: 0.21564282336684062,
+                          3: 0.29307049174103617,
+                          'Auto': 0.49128668489212324},
+ 'min_player_opp_team': {1: 0.36425235280369783,
+                         2: 0.009364194795113879,
+                         'Auto': 0.6263834524011883},
+ 'num_top_players': {2: 0.49870597792263427,
+                     3: 0.40026520543998023,
+                     5: 0.1010288166373855},
+ 'qb_min_iter': {0: 0.9095323371501323, 9: 0.09046766284986774},
+ 'qb_set_max_team': {True: 0.9710211636022553, False: 0.02897883639774468},
+ 'qb_solo_start': {True: 0.03428250401779307, False: 0.9657174959822069},
+ 'static_top_players': {True: 0.548546827881527, False: 0.451453172118473},
+ 'use_ownership': {0.9: 0.4191277213791865,
+                   0.8: 0.08165446113894263,
+                   1: 0.49921781748187083},
+ 'own_neg_frac': {0.8: 0.035364631495481795, 1: 0.9646353685045183},
+ 'max_salary_remain': {200: 0.27918129837745975,
+                       500: 0.26596376960706375,
+                       1000: 0.2151258840391884,
+                       1500: 0.2397290479762881},
+ 'num_iters': {100: 0.9106653212440792, 50: 0.08933467875592083}}
 
-            'player_drop_multiple': {
-                0: 0.5,
-                1: 0,
-                2: 0.3,
-                4: 0.2,
-                6: 0
-            },
-                        
-            'matchup_drop': {
-                0: 0.25,
-                1: 0.42,
-                2: 0.33,
-                3: 0
-            },
-
-            'top_n_choices': {
-                0: 0.75,
-                1: 0.2,
-                2: 0.05,
-                4: 0,
-            },
-
-            'full_model_weight': {
-                0.2: 0.28,
-                0.5: 0,
-                1: 0,
-                3: 0,
-                5: 0.72
-            },
-
-            'covar_type': {
-                'no_covar': 0.19,
-                'team_points_trunc': 0.81,
-                'kmeans_trunc': 0
-            },
-
-            'min_player_same_team': {
-                'Auto': 0.64,
-                2: 0.28,
-                2.5: 0,
-                3: 0.08,
-                -1: 0
-            },
-
-            'min_players_opp_team': {
-                0: 0,
-                1: 0,
-                2: 0.44,
-                'Auto': 0.56
-            },
-
-            'num_top_players': {
-                2: 0.42, 
-                3: 0.14,
-                4: 0,
-                5: 0.44
-            },
-            
-            'qb_min_iter': {
-                0: 0.46,
-                1: 0,
-                9: 0.54
-            },
-
-            'qb_set_max_team': {
-                True: .82,
-                False: 0.18
-            },
-
-            'qb_solo_start': {
-                True: 0.08,
-                False: 0.92
-            },
-            
-            'static_top_players': {
-                True: 0.6,
-                False: 0.4
-            },
-
-            'use_ownership': {
-                True: 0,
-                False: 0,
-                1: 0.47,
-                0.9: 0.26,
-                0.95: 0,
-                0.8: 0.27,
-                0.5: 0
-            },
-
-            'own_neg_frac': {
-                0.5: 0,
-                0.75: 0,
-                0.8: 0.54,
-                1: 0.46,
-                0.65: 0
-            },
-
-            'max_salary_remain': {
-                None: 0,
-                200: 0.13,
-                300: 0,
-                400: 0,
-                500: 0.2,
-                1000: 0.1,
-                1500: 0.57
-            },
-
-            'num_iters': {
-                100: 0.34,
-                50: 0.66
-            }
-        }
-
-        lineups_per_param = 3
+        lineups_per_param = 2
 
         params = []
         for i in range(int(30/lineups_per_param)):
