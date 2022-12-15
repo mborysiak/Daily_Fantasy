@@ -783,13 +783,18 @@ def move_download_to_folder(root_path, folder, fname):
     return df
 
 
-#%%
-
-def format_ffa(df, set_week, set_year):
-    df = df.dropna(subset=['player'])
+def format_ffa(df, table_name, set_week, set_year):
+    df = df.dropna(subset=['player']).drop('Unnamed: 0', axis=1)
     df.player = df.player.apply(dc.name_clean)
     df.team = df.team.map(team_map)
     df.loc[df.position=='DST', 'player'] = df.loc[df.position=='DST', 'team']
+
+    if table_name=='Projections': new_cols = ['player', 'position', 'team']
+    elif table_name=='RawStats': new_cols = ['player', 'team', 'position']
+
+    new_cols.extend(['ffa_' + c for c in df.columns if c not in ('player', 'position', 'team')])
+    df.columns = new_cols
+
     df['week'] = set_week
     df['year'] = set_year
     return df
@@ -814,6 +819,11 @@ def format_fantasy_cruncher(df, set_week, set_year):
         except: pass
 
     df = df.iloc[1:]
+    df = df.drop(['likes', 'inj'], axis=1)
+    new_cols = ['player', 'pos']
+    new_cols.extend(['ffa_' + c for c in df.columns if c not in ('player', 'pos')])
+    df.columns = new_cols
+
     df['week'] = set_week
     df['year'] = set_year
 
@@ -822,8 +832,9 @@ def format_fantasy_cruncher(df, set_week, set_year):
 
     return df
 
+
 df = move_download_to_folder(root_path, 'FFA', f'projections_{set_year}_wk{set_week}.csv')
-df = format_ffa(df, set_week, set_year)
+df = format_ffa(df, 'Projections', set_week, set_year)
 
 dm.delete_from_db('Pre_PlayerData', 'FFA_Projections', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FFA_Projections', 'append')
@@ -831,7 +842,7 @@ dm.write_to_db(df, 'Pre_PlayerData', 'FFA_Projections', 'append')
 #%%
 
 df = move_download_to_folder(root_path, 'FFA', f'raw_stats_{set_year}_wk{set_week}.csv')
-df = format_ffa(df, set_week, set_year)
+df = format_ffa(df, 'RawStats', set_week, set_year)
 
 dm.delete_from_db('Pre_PlayerData', 'FFA_RawStats', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FFA_RawStats', 'append')
@@ -846,3 +857,21 @@ dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'replace')
 
 
 # %%
+
+# # fill_cols = ['ffa_points','ffa_sd_pts','ffa_dropoff','ffa_floor','ffa_ceiling','ffa_points_vor','ffa_floor_vor','ffa_ceiling_vor']
+# # df.loc[(df.ffa_points > 40) & (df.position=='QB'), fill_cols] = df.loc[(df.ffa_points > 40) & (df.position=='QB'), fill_cols] / 16
+
+# #%%
+# # cleanup bad data
+# cols = ['ffa_points', 'ffa_sd_pts', 'ffa_dropoff', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor', 'ffa_floor_vor',
+#         'ffa_ceiling_vor', 'ffa_rush_yds','ffa_rush_yds_sd','ffa_rush_tds','ffa_rush_tds_sd']
+# if pos == 'QB':
+#     cols.extend(['ffa_pass_yds','ffa_pass_yds_sd','ffa_pass_tds','ffa_pass_tds_sd','ffa_pass_int', 'ffa_pass_int_sd'])
+
+# elif pos in ('RB', 'WR', 'TE'):
+#     cols.extend(['rec', 'rec_sd', 'rec_yds'])
+
+# df.loc[df.ffa_points > 50, cols] = df.loc[df.ffa_points > 50, cols] / 16
+# df.loc[df.ffa_ceiling > 50, cols] = df.loc[df.ffa_ceiling > 50, cols] / 16
+
+# df = df.sort_values(by=['year', 'week', 'ffa_points'], ascending=[True, True, False]).reset_index(drop=True)

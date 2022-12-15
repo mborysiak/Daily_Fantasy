@@ -107,7 +107,7 @@ def train_predict_split(df, run_params):
     df_train = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 
-    df_predict = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
+    df_predict = df[df.game_date >= run_params['train_time_split']].reset_index(drop=True)
     output_start = df_predict[['player', 'team', 'week', 'year', 'dk_salary']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
@@ -121,7 +121,7 @@ def get_class_data(df, cut, run_params):
 
     # set up the training and prediction datasets for the classification 
     df_train_class = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
-    df_predict_class = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
+    df_predict_class = df[df.game_date >= run_params['train_time_split']].reset_index(drop=True)
 
     # set up the target variable to be categorical based on Xth percentile
     cut_perc = df_train_class.groupby('game_date')['y_act'].apply(lambda x: np.percentile(x, cut))
@@ -316,6 +316,7 @@ def run_stack_models(final_m, i, X_stack, y_stack, best_models, scores,
 
     if show_plots:
         mf.show_scatter_plot(stack_pred['stack_pred'], stack_pred['y'], r2=True)
+
 
     return best_models, scores, stack_val_pred
 
@@ -807,7 +808,7 @@ set_weeks = [
          # 6, 7, 8, 9, 10,
         #  13, 14, 15, 16
         # 12, 13
-        14
+        8
                  ]
 
 pred_versions = [
@@ -843,14 +844,14 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     run_params['set_week'] = w
     runs = [
         ['QB', 'full_model', ''],
-        ['RB', 'full_model', ''],
-        ['WR', 'full_model', ''],
-        ['TE', 'full_model', ''],
-        ['Defense', 'full_model', ''],
-        ['QB', 'backfill', ''],
-        ['RB', 'backfill', ''],
-        ['WR', 'backfill', ''],
-        ['TE', 'backfill', '']
+        # ['RB', 'full_model', ''],
+        # ['WR', 'full_model', ''],
+        # ['TE', 'full_model', ''],
+        # ['Defense', 'full_model', ''],
+        # ['QB', 'backfill', ''],
+        # ['RB', 'backfill', ''],
+        # ['WR', 'backfill', ''],
+        # ['TE', 'backfill', '']
     ]
     for set_pos, model_type, rush_pass in runs:
 
@@ -905,7 +906,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
                                                                             min_include=min_include)
 
         if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
-        save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
+        # save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
 
         # quantile regression metrics
         final_models = ['qr_q', 'gbm_q', 'lgbm_q', 'rf_q', 'knn_q']
@@ -935,11 +936,11 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         best_val, best_predictions, best_score = average_stack_models(scores, final_models, y_stack, stack_val_pred, 
                                                                       predictions, model_obj='reg',
                                                                       show_plot=show_plot, min_include=min_include)
-        save_val_to_db(model_output_path, best_val, run_params, 'reg', table_name='Model_Validations')
+        # save_val_to_db(model_output_path, best_val, run_params, 'reg', table_name='Model_Validations')
         
         # create the output and add standard devations / max scores
         output = create_output(output_start, best_predictions, best_predictions_class, best_predictions_quant)
-        save_prob_to_db(output, run_params, 'Predicted_Probability')
+        # save_prob_to_db(output, run_params, 'Predicted_Probability')
 
         metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1, 'pred_fp_per_game_quantile': 1}
         output = val_std_dev(model_output_path, output, best_val, best_val_class, best_val_quant, metrics=metrics, 
@@ -949,15 +950,20 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
             output = add_actual(output)
             print(output.loc[:50, ['player', 'week', 'year', 'dk_salary', 'dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class',
                                    'pred_fp_per_game_quantile', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
-            save_test_to_db(output, run_params)
             
-            if show_plot: mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
+            # save_test_to_db(output, run_params)
+            
+            if show_plot: 
+                mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
+                skm_score, _, _ = get_skm(df_train, model_obj='reg', to_drop=[])
+                print('Score:', np.round(skm_score.custom_score(output.pred_fp_per_game, output.actual_pts),2))
+            
             output = output.drop('actual_pts', axis=1)
         except:
             print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class', 
                                    'pred_fp_per_game_quantile', 'std_dev', 'min_score', 'max_score']])
 
-        save_output_to_db(output, run_params)
+        # save_output_to_db(output, run_params)
 
 # print('All Runs Finished')
 #%%

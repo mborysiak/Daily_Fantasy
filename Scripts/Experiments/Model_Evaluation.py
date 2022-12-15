@@ -142,14 +142,14 @@ def get_class_data(df, cut, run_params):
 
 
 # set the model version
-model_type ='full_model'
+model_type ='backfill'
 set_pos = 'QB'
 
 run_params = {
     
     # set year and week to analyze
     'set_year': 2022,
-    'set_week': 10,
+    'set_week': 13,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -168,7 +168,7 @@ run_params = {
     # set number of weeks back to begin validation
     'back_weeks': {
         'QB': 28,
-        'RB': 24,
+        'RB': 32,
         'WR': 24,
         'TE': 28,
         'Defense': 28
@@ -184,14 +184,14 @@ run_params = {
 
 df, run_params = load_data(model_type, set_pos, run_params)
 df, run_params = create_game_date(df, run_params)
-df['y_act'] = 1000*df.y_act / df.dk_salary
+df['y_act'] = df.y_act# 1000*df.y_act / df.dk_salary
 
 df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
 cut = 95
 df_train_class, df_predict_class = get_class_data(df, cut, run_params)
 
-skm = SciKitModel(df_train, model_obj='reg')
+skm = SciKitModel(df_train, model_obj='reg', sera_wt=1, r2_wt=0)
 X_all, y = skm.Xy_split('y_act', run_params['drop_cols'])
 
 X = X_all.sample(frac=1, axis=1)
@@ -209,16 +209,16 @@ from sklearn_quantile import RandomForestQuantileRegressor, KNeighborsQuantileRe
 from category_encoders.cat_boost import CatBoostEncoder
 
 pipe = skm.model_pipe([ #('cbe', CatBoostEncoder()),
-                         skm.piece('random_sample'),
+                       #  skm.piece('random_sample'),
                         skm.piece('std_scale'), 
-                         skm.piece('select_perc'),
-                        skm.feature_union([
-                                        skm.piece('agglomeration'), 
-                                        skm.piece('k_best'),
-                                        skm.piece('pca')
-                                        ]),
+                        #  skm.piece('select_perc'),
+                        # skm.feature_union([
+                        #                 skm.piece('agglomeration'), 
+                        #                 skm.piece('k_best'),
+                        #                 skm.piece('pca')
+                        #                 ]),
                         skm.piece('k_best'),
-                        skm.piece('rf')
+                        skm.piece('enet')
                         
                      ])
 
@@ -254,8 +254,9 @@ best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_i
 mf.show_scatter_plot(oof_data['full_hold']['pred'], oof_data['full_hold']['y_act'])
 
 #%%
-best_models[3].fit(X,y)
-skm.print_coef(best_models[3])
+i=2
+best_models[i].fit(X,y)
+skm.print_coef(best_models[i])
 
 #%%
 

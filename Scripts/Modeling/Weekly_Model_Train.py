@@ -38,7 +38,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [14]
+run_weeks = [15]
 
 run_params = {
     
@@ -61,11 +61,11 @@ run_params = {
 
     # set number of weeks back to begin validation
     'back_weeks': {
-        'QB': 30,
-        'RB': 25,
-        'WR': 25,
-        'TE': 30,
-        'Defense': 30
+        'QB': 32,
+        'RB': 28,
+        'WR': 28,
+        'TE': 32,
+        'Defense': 32
     },
 
     'rush_pass': ''
@@ -84,7 +84,7 @@ matt_wt = 1
 brier_wt = 1
 
 # set version and iterations
-vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
 
 #----------------
 # Data Loading
@@ -338,7 +338,7 @@ def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min
                                                              random_seed=(i+7)*19+(i*12)+6, alpha=alpha)
 
     print('Time Elapsed:', np.round((time.time()-start)/60,1), 'Minutes')
-    best_models = Parallel(n_jobs=-1, verbose=0)(delayed(post_model_fit)(bm, X, y) for bm in best_models)
+    # best_models = Parallel(n_jobs=-1, verbose=0)(delayed(post_model_fit)(bm, X, y) for bm in best_models)
     
     col_label = str(alpha)+run_params['rush_pass']
     out_dict = update_output_dict(model_obj, model_name, col_label, out_dict, oof_data, best_models)
@@ -477,9 +477,9 @@ def save_output_dict(out_dict, model_output_path, label, rush_pass):
 
 #%%
 run_list = [
-            # ['QB', '', 'full_model'],
-            # ['RB', '', 'full_model'],
-            # ['WR', '', 'full_model'],
+            ['QB', '', 'full_model'],
+            ['RB', '', 'full_model'],
+            ['WR', '', 'full_model'],
             ['TE', '', 'full_model'],
             ['Defense', '', 'full_model'],
             ['QB', '', 'backfill'],

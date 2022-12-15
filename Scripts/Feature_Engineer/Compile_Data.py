@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2022
-WEEK = 14
+WEEK = 15
 
 #%%
 import pandas as pd 
@@ -211,11 +211,7 @@ def get_experts(df, pos, add_rolling=True):
                             rushAtt, rushYds, rushTd, recvTargets,
                             recvReceptions, recvYds, recvTd,
                             fumbles, fumblesLost, twoPt, returnYds, returnTd,
-                            
                             expertConsensus, expertNathanJahnke, expertIanHartitz,
-                       --   expertKevinCole, expertAndrewErickson,
-                       --   expertDwainMcFarland, expertBenBrown, expertJaradEvans,
-                       --   rankadj_expertKevinCole, playeradj_expertKevinCole
                             rankadj_expertConsensus, rankadj_expertNathanJahnke,
                             playeradj_expertNathanJahnke,playeradj_expertConsensus 
                        
@@ -231,11 +227,8 @@ def get_experts(df, pos, add_rolling=True):
                     'rushYds', 'rushTd', 'recvTargets',
                     'recvReceptions', 'recvYds', 'recvTd',
                     'expertConsensus', 'expertNathanJahnke','expertIanHartitz',
-                   # 'expertKevinCole', 'expertAndrewErickson',
-                   # 'expertDwainMcFarland', 'expertBenBrown', 'expertJaradEvans',
                     'rankadj_expertConsensus', 'rankadj_expertNathanJahnke',
                     'playeradj_expertNathanJahnke','playeradj_expertConsensus', 
-                   # 'rankadj_expertKevinCole', 'playeradj_expertKevinCole'
                      ]
 
     # convert all the expert rankings to log values
@@ -1618,6 +1611,10 @@ sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).il
 #%%
 count_chk = dm.read(f"SELECT player, week, year, count(*) cnts FROM Backfill GROUP BY player, week, year", 'Model_Features')
 count_chk[count_chk.cnts > 1]
+#%%
+bf = dm.read("SELECT * FROM Backfill", 'Model_Features')
+bf = bf[~((bf.player=='Josh Johnson') & (bf.week==16) & (bf.year==2021))].reset_index(drop=True)
+dm.write_to_db(bf, 'Model_Features', 'Backfill', 'Model_Features')
 # %%
 # TO DO LIST
 # - add in PFF scores
@@ -1715,114 +1712,493 @@ data
 
 #%%
 
-def ffa_compile(table_name, pos):
+def fantasy_pros_new(pos):
+
+    fp = dm.read(f'''SELECT * 
+                    FROM FantasyPros 
+                    WHERE pos='{pos}' 
+                          AND team is NOT NULL''', 'Pre_PlayerData')
+    fp = name_cleanup(fp)
+    if pos == 'DST': fp = fp.drop('player', axis=1).rename(columns={'team': 'player'})
+
+    return fp
+
+
+def ffa_compile(df, table_name, pos):
+    
     if table_name == 'FFA_Projections':
-        cols = ['player','week', 'year', 'points', 'sd_pts',
-                    'dropoff', 'floor', 'ceiling', 'points_vor', 'floor_vor', 'ceiling_vor',
-                    'rank', 'floor_rank', 'ceiling_rank', 'position_rank', 'tier', 'uncertainty']
+        cols = ['player','week', 'year', 'ffa_points', 'ffa_sd_pts',
+                'ffa_dropoff', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor', 'ffa_floor_vor', 'ffa_ceiling_vor',
+                'ffa_rank', 'ffa_floor_rank', 'ffa_ceiling_rank', 'ffa_position_rank', 'ffa_tier', 'ffa_uncertainty']
         
     elif table_name == 'FFA_RawStats':
         if pos == 'QB':
             cols = ['player', 'week', 'year',
-                    'pass_yds', 'pass_yds_sd', 'pass_tds', 'pass_tds_sd', 'pass_int',
-                    'pass_int_sd', 'rush_yds', 'rush_yds_sd', 'rush_tds', 'rush_tds_sd',
+                    'ffa_pass_yds', 'ffa_pass_yds_sd', 'ffa_pass_tds', 'ffa_pass_tds_sd', 'ffa_pass_int',
+                    'ffa_pass_int_sd', 'ffa_rush_yds', 'ffa_rush_yds_sd', 'ffa_rush_tds', 'ffa_rush_tds_sd',
                     ]
         elif pos in ('RB', 'WR', 'TE'):
-            cols =  ['player', 'week', 'year', 'rush_yds', 'rush_yds_sd', 'rush_tds', 'rush_tds_sd',
-                     'rec', 'rec_sd', 'rec_yds',]
+            cols =  ['player', 'week', 'year', 'ffa_rush_yds', 'ffa_rush_yds_sd', 'ffa_rush_tds', 'ffa_rush_tds_sd',
+                     'ffa_rec', 'ffa_rec_sd', 'ffa_rec_yds', 'ffa_rec_tds']
 
     ffa = dm.read(f"SELECT * FROM {table_name} WHERE position='{pos}'", 'Pre_PlayerData')
+    ffa = ffa[~((ffa.week==6) & (ffa.year==2020))].reset_index(drop=True)
     ffa = ffa[cols]
-    new_cols = ['player', 'week', 'year']
-    new_cols.extend(['ffa_' + c for c in ffa.columns if c not in ('player', 'week', 'year')])
-    ffa.columns = new_cols
 
-    return ffa
-
-def fill_ffa_proj(df, pos):
-
-    to_fill = {
-    'ffa_pass_yds': ['passYds'],
-    'ffa_pass_tds': ['passTd'],
-    'ffa_pass_int': ['passInt'],
-    'ffa_rush_yds': ['rushYds'],
-    'ffa_rush_tds': ['rushTd'],
-    'ffa_rec': ['recvReceptions'],
-    'ffa_rec_yds': ['recvYds'],
-    'ffa_points': ['projected_points', 'fantasyPoints', 'ProjPts'],
-    'ffa_rank': ['fp_rank', 'expertConsensus']
-    }
-
-    for k, v in to_fill.items():
-        try: df[k] = df[v].mean(axis=1)
-        except: pass
-
-    # cleanup bad data
-    cols = ['ffa_points', 'ffa_sd_pts', 'ffa_dropoff', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor', 'ffa_floor_vor',
-            'ffa_ceiling_vor', 'ffa_rush_yds','ffa_rush_yds_sd','ffa_rush_tds','ffa_rush_tds_sd']
-    if pos == 'QB':
-        cols.extend(['ffa_pass_yds','ffa_pass_yds_sd','ffa_pass_tds','ffa_pass_tds_sd','ffa_pass_int', 'ffa_pass_int_sd'])
-    
-    elif pos in ('RB', 'WR', 'TE'):
-        cols.extend(['rec', 'rec_sd', 'rec_yds'])
-
-    df.loc[df.ffa_points > 50, cols] = df.loc[df.ffa_points > 50, cols] / 16
-    df.loc[df.ffa_ceiling > 50, cols] = df.loc[df.ffa_ceiling > 50, cols] / 16
-
-    df = df.sort_values(by=['year', 'week', 'ffa_points'], ascending=[True, True, False]).reset_index(drop=True)
-
-    # fill the columns down since players close to each other will have similar metrics
-    for c in ['ffa_sd_pts', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor', 'ffa_floor_vor',
-              'ffa_ceiling_vor', 'ffa_rank', 'ffa_floor_rank', 'ffa_ceiling_rank',
-              'ffa_position_rank', 'ffa_tier']:
-        df[c] = df[c].fillna(method='ffill')
-
-    # calculate the next player dropoff
-    df['next_player'] = df.groupby(['year', 'week'])['ffa_points'].shift(-1).values
-    df.loc[df.ffa_dropoff.isnull(), 'ffa_dropoff'] = \
-        df.loc[df.ffa_dropoff.isnull(), 'ffa_points'] - df.loc[df.ffa_dropoff.isnull(), 'next_player'] 
-    df = df.drop('next_player', axis=1)
+    df = pd.merge(df, ffa, on=['player', 'week', 'year'], how='left')
 
     return df
 
+
+def pff_experts_new(df, pos):
+
+    experts = dm.read(f'''SELECT player, week, year, a.defTeam,
+                            fantasyPoints,  fantasyPointsRank,
+                            `Proj Pts` ProjPts,
+                            passComp, passAtt, passYds, passTd, passInt, passSacked,
+                            rushAtt, rushYds, rushTd, recvTargets,
+                            recvReceptions, recvYds, recvTd,
+                            fumbles, fumblesLost, twoPt, returnYds, returnTd,
+                            expertConsensus, expertNathanJahnke, expertIanHartitz,
+                            rankadj_expertConsensus, rankadj_expertNathanJahnke,
+                            playeradj_expertNathanJahnke,playeradj_expertConsensus 
+                       
+                    FROM PFF_Proj_Ranks a
+                    JOIN (SELECT *
+                            FROM PFF_Expert_Ranks 
+                            WHERE Position='{pos}' )
+                            USING (player, week, year)
+                    ''', 'Pre_PlayerData')
+    
+    df = pd.merge(df, experts, on=['player', 'week', 'year'], how='left')
+
+    return df
+
+def fantasy_cruncher(df, pos):
+    fc = dm.read(f"SELECT * FROM FantasyCruncher WHERE pos='{pos}'", 'Pre_PlayerData')
+
+    if pos!='DST':
+        cols = ['player', 'week', 'year',
+                'fc_proj_passing_stats_att', 'fc_proj_passing_stats_yrds', 'fc_proj_passing_stats_tds',
+                'fc_proj_passing_stats_int', 'fc_proj_rushing_stats_pct', 'fc_proj_rushing_stats_att', 
+                'fc_proj_rushing_stats_yrds', 'fc_proj_rushing_stats_tds', 'fc_proj_rushing_stats_att_tar',
+                'fc_proj_receiving_stats_pct', 'fc_proj_receiving_stats_tar', 'fc_proj_receiving_stats_rec',
+                'fc_proj_receiving_stats_yrds', 'fc_proj_receiving_stats_tds', 'fc_proj_fantasy_pts_fc', 
+                'fc_projected_values_floor', 'fc_projected_values_ceiling']
+    else:
+        cols = ['player', 'week', 'year',
+                'fc_proj_defensive_stats_int', 'fc_proj_defensive_stats_fum',
+                'fc_proj_defensive_stats_sfty', 'fc_proj_defensive_stats_tds',
+                'fc_proj_defensive_stats_pts',  'fc_proj_defensive_stats_sacks',
+                'fc_proj_fantasy_pts_fc', 'fc_projected_values_floor', 'fc_projected_values_ceiling']
+
+    fc = fc[cols]
+    fc = fc.sort_values(by=['year', 'week', 'fc_proj_fantasy_pts_fc'], ascending=[True, True, False]).reset_index(drop=True)
+    fc['fc_rank'] = fc.groupby(['year', 'week']).cumcount().values
+    df = pd.merge(df, fc, on=['player', 'week', 'year'], how='left')
+    df = dc.convert_to_float(df)
+    df[['week', 'year']] = df[['week', 'year']].astype('int')
+
+    return df
+
+def consensus_fill(df):
+    to_fill = {
+
+        # stat fills
+        'avg_proj_pass_yds': ['passYds', 'ffa_pass_yds', 'fc_proj_passing_stats_yrds'],
+        'avg_proj_pass_td': ['passTd', 'ffa_pass_tds', 'fc_proj_passing_stats_tds'],
+        'avg_proj_pass_int': ['passInt', 'ffa_pass_int', 'fc_proj_passing_stats_int'],
+        'avg_proj_pass_att': ['passAtt', 'fc_proj_passing_stats_att'],
+        'avg_proj_rush_yds': ['rushYds', 'ffa_rush_yds', 'fc_proj_rushing_stats_yrds'],
+        'avg_proj_rush_att': ['rushAtt', 'fc_proj_rushing_stats_att'],
+        'avg_proj_rush_td': ['rushTd', 'ffa_rush_tds', 'fc_proj_rushing_stats_tds'],
+        'avg_proj_rec': ['recvReceptions', 'ffa_rec', 'fc_proj_receiving_stats_rec'],
+        'avg_proj_rec_yds': ['recvYds', 'ffa_rec_yds', 'fc_proj_receiving_stats_yrds'],
+        'avg_proj_rec_td': ['recvTd', 'ffa_rec_tds', 'fc_proj_receiving_stats_tds'],
+        'avg_proj_rec_tgts': ['recvTargets', 'fc_proj_receiving_stats_tar'],
+
+        # point and rank fills
+        'avg_proj_points': ['projected_points', 'fantasyPoints', 'ProjPts', 'ffa_points', 'fc_proj_fantasy_pts_fc'],
+        'avg_proj_rank': ['fp_rank', 'rankadj_fp_rank', 'playeradj_fp_rank', 'expertConsensus', 'expertNathanJahnke', 
+                          'expertIanHartitz', 'rankadj_expertConsensus', 'rankadj_expertNathanJahnke', 'fantasyPointsRank',
+                          'playeradj_expertNathanJahnke', 'playeradj_expertConsensus', 'ffa_position_rank', 'fc_rank']
+    }
+
+    for k, tf in to_fill.items():
+
+        # find columns that exist in dataset
+        tf = [c for c in tf if c in df.columns]
+        
+        # fill in nulls based on available data
+        for c in tf:
+            df.loc[df[c].isnull(), c] = df.loc[df[c].isnull(), tf].mean(axis=1)
+        
+        # fill in the average for all cols
+        df[k] = df[tf].mean(axis=1)
+    
+    return df
+
+
+def fill_ratio_nulls(df):
+    ratio_fill_cols = ['ffa_sd_pts', 'ffa_dropoff', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor', 'ffa_floor_vor',
+                        'ffa_ceiling_vor', 'ffa_rank', 'ffa_floor_rank', 'ffa_ceiling_rank', 'ffa_rec_sd',
+                        'ffa_tier', 'ffa_uncertainty','ffa_pass_yds_sd', 'ffa_pass_tds_sd', 'ffa_pass_int_sd',
+                        'ffa_rush_yds_sd',  'ffa_rush_tds_sd', 'fc_proj_rushing_stats_pct', 'fc_proj_rushing_stats_att_tar', 
+                        'fc_proj_receiving_stats_pct', 'fc_projected_values_floor', 'fc_projected_values_ceiling']
+    for c in ratio_fill_cols:
+        if c in df.columns:
+            fill_ratio = (df[c] / (df['ffa_points']+1)).mean()
+            df.loc[df[c].isnull(), c] = df.loc[df[c].isnull(), 'ffa_points'] * fill_ratio + fill_ratio
+    return df
+
+def log_rank_cols(df):
+    rank_cols = [c for c in df.columns if 'rank' in c or 'expert' in c]
+    for c in rank_cols:
+        df['log_' + c] = np.log(df[c]+1)
+    return df
+
+def rolling_proj_stats(df):
+    df = forward_fill(df)
+    proj_cols = [c for c in df.columns if 'ffa' in c or 'rank' in c or 'fc' in c or 'proj' in c \
+                or 'expert' in c or 'Pts' in c or 'Points' in c or 'points' in c]
+    df = add_rolling_stats(df, ['player'], proj_cols)
+    return df
+
+def add_ffa_defense(df):
+
+    ffa = dm.read('''SELECT * 
+                    FROM FFA_Projections
+                    WHERE position=='DST' 
+                    ''', 'Pre_PlayerData').drop(['ffa_adp','ffa_aav'], axis=1)
+    ffa = ffa[~((ffa.week==6) & (ffa.year==2020))].reset_index(drop=True)
+    ffa = ffa.rename(columns={'player': 'defTeam'})
+
+
+    ffa_stats = dm.read('''SELECT * 
+                    FROM FFA_RawStats
+                    WHERE position=='DST' 
+                    ''', 'Pre_PlayerData')
+    ffa_stats = ffa_stats[['player', 'week', 'year', 'ffa_dst_int', 'ffa_dst_int_sd',
+                           'ffa_dst_sacks', 'ffa_dst_sacks_sd', 'ffa_dst_safety',
+                           'ffa_dst_safety_sd', 'ffa_dst_td', 'ffa_dst_td_sd']]
+    ffa_stats = ffa_stats[~((ffa_stats.week==6) & (ffa_stats.year==2020))].reset_index(drop=True)
+    ffa_stats = ffa_stats.rename(columns={'player': 'defTeam'})
+
+    df = pd.merge(df, ffa, on=['defTeam', 'week', 'year'], how='left')
+    df = pd.merge(df, ffa_stats, on=['defTeam', 'week', 'year'], how='left')
+
+    return df
+
+def show_corrs(df):
+    corrs = df.corr()['y_act'].dropna().sort_values()
+    display(corrs.iloc[:25])
+    display(corrs.iloc[-25:])
+
 #%%
 
-data = df.copy()
+# defense stats that can be added to the offensive player data
+defense = fantasy_pros('DST').rename(columns={'player': 'team'})
+d_stats = get_defense_stats(prev_years=1)
+defense = pd.merge(defense, d_stats, on=['team', 'week', 'year'], how='inner')
+defense = defense.dropna()
+defense.columns = [f'def_{c}' if 'def' not in c else c for c in defense.columns]
+defense = defense.rename(columns={'def_team': 'defTeam', 'def_week': 'week', 'def_year': 'year'})
+defense = add_ffa_defense(defense).drop('team', axis=1)
+pff_def = add_team_matchups()
+defense = pd.merge(defense, pff_def, on=['defTeam', 'year', 'week'])
+
+defense = forward_fill(defense.rename(columns={'defTeam': 'player'}))
+defense = defense.rename(columns={'player': 'defTeam'})
+defense.isnull().sum()[defense.isnull().sum()>0]
+
+#%%
+for pos in ['RB', 'WR', 'TE']:
+    df = fantasy_pros_new(pos); print(df.shape[0])
+    df = pff_experts_new(df, pos); print(df.shape[0])
+    df = ffa_compile(df, 'FFA_Projections', pos); print(df.shape[0])
+    df = ffa_compile(df, 'FFA_RawStats', pos); print(df.shape[0])
+    df = fantasy_cruncher(df, pos); print(df.shape[0])
+
+    df = consensus_fill(df); print(df.shape[0])
+    df = fill_ratio_nulls(df); print(df.shape[0])
+    df = log_rank_cols(df); print(df.shape[0])
+    df = rolling_proj_stats(df); print(df.shape[0])
+    df, _ = add_injuries(df, pos); print(df.shape[0])
+
+    df = add_fp_rolling(df, pos); print(df.shape[0])
+    df = get_salaries(df, pos); print(df.shape[0])
+    df = add_pfr_matchup(df); print(df.shape[0])
+    df = add_gambling_lines(df); print(df.shape[0])
+    df = add_weather(df); print(df.shape[0])
+    if pos == 'WR': df = cb_matchups(df); print(df.shape[0])
+    if pos == 'TE': df = te_matchups(df); print(df.shape[0])
+
+    pos_values = positional_values()
+    df = pd.merge(df, pos_values, on=['team', 'week', 'year']); print(df.shape[0])
+
+    dst = add_team_matchups().drop('offTeam', axis=1)
+    df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
+
+    #-----------------------
+    # Post-Game Data
+    #----------------------
+
+    df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
+
+    team_stats = get_team_stats(YEAR, prev_years=1)
+    df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print('team_stats', df.shape[0])
+
+    df = calc_market_share(df); print(df.shape[0])
+    df = add_rz_stats(df); print(df.shape[0])
+    df = advanced_rec_stats(df)
+    if pos in ('WR', 'TE'):
+        df = add_next_gen(df, pos, 'Receiving'); print('next_gen', df.shape[0])
+    if pos == 'RB': 
+        df = advanced_rb_stats(df)
+        df = add_next_gen(df, pos, 'Rushing'); print(df.shape[0])
+
+    team_qb = get_max_qb()
+    df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
+
+    # pre game data reliant on team information
+    compare_cols = ['fp_rank', 'dk_salary', 'expertConsensus', 'projected_points', 'fantasyPoints', 'ProjPts',
+                    'ffa_points', 'fc_proj_fantasy_pts_fc', 'ffa_position_rank', 'fc_rank', 'avg_proj_rank', 'avg_proj_points']
+    df = add_player_comparison(df, compare_cols); print(df.shape[0])
+
+    df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
+    df = def_pts_allowed(df); print(df.shape[0])
+
+    pff_def = pff_defense_rollup().rename(columns={'team': 'defTeam'})
+    df = pd.merge(df, pff_def, on=['defTeam', 'week', 'year']); print(df.shape[0])
+
+    pff_oline = pff_oline_rollup()
+    df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
+
+    df = attach_y_act(df, pos)
+    df = drop_y_act_except_current(df, WEEK, YEAR); print(df.shape[0])
+    df = projected_pts_vs_predicted(df, pos); print(df.shape[0])
+
+    # fill in missing data and drop any remaining rows
+    df = forward_fill(df)
+    df = df.dropna().reset_index(drop=True); print(df.shape[0])
+    df = remove_non_uniques(df)
+
+    print('Total Rows:', df.shape[0])
+    print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
+    print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
+
+    dm.write_to_db(df.iloc[:, :2000], 'Model_Features', f'{pos}_Data', if_exist='replace')
+    if df.shape[1] > 2000:
+        dm.write_to_db(df.iloc[:, 2000:], 'Model_Features', f'{pos}_Data2', if_exist='replace')
 
 #%%
 
-ffa_proj = ffa_compile('FFA_Projections', 'RB')
-df = pd.merge(data, ffa_proj, on=['player', 'week', 'year'], how='left')
+pos = 'QB'
+rush_or_pass = ''
 
-ffa_stats = ffa_compile('FFA_RawStats', 'RB')
-df = pd.merge(df, ffa_stats, on=['player', 'week', 'year'], how='left')
+# pre-game data
+df = fantasy_pros_new(pos); print(df.shape[0])
+df = pff_experts_new(df, pos); print(df.shape[0])
+df = ffa_compile(df, 'FFA_Projections', pos); print(df.shape[0])
+df = ffa_compile(df, 'FFA_RawStats', pos); print(df.shape[0])
+df = fantasy_cruncher(df, pos); print(df.shape[0])
 
-df = fill_ffa_proj(df, 'pos')
+df = consensus_fill(df); print(df.shape[0])
+df = fill_ratio_nulls(df); print(df.shape[0])
+df = log_rank_cols(df); print(df.shape[0])
+df = rolling_proj_stats(df); print(df.shape[0])
+df, _ = add_injuries(df, pos); print(df.shape[0])
+
+df = add_fp_rolling(df, pos); print(df.shape[0])
+df = get_salaries(df, pos); print(df.shape[0])
+df = add_pfr_matchup(df); print(df.shape[0])
+df = add_gambling_lines(df); print(df.shape[0])
+df = add_weather(df); print(df.shape[0])
+dst = add_team_matchups().drop('offTeam', axis=1)
+df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
+
+
+# post-game data
+df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
+
+team_stats = get_team_stats(YEAR)
+df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print( df.shape[0])
+
+df = add_rz_stats_qb(df); print(df.shape[0])
+df = add_qbr(df); print(df.shape[0])
+df = add_qb_adv(df); print(df.shape[0])
+df = add_next_gen(df, pos, 'Passing'); print(df.shape[0])
+
+# get the positional values for the team
+pos_values = positional_values()
+df = pd.merge(df, pos_values, on=['team', 'week', 'year']); print(df.shape[0])
+
+df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print('dstats', df.shape[0])
+df = def_pts_allowed(df); print(df.shape[0])
+
+pff_def = pff_defense_rollup().rename(columns={'team': 'defTeam'})
+df = pd.merge(df, pff_def, on=['defTeam', 'week', 'year']); print(df.shape[0])
+
+pff_oline = pff_oline_rollup()
+df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
+
+df = attach_y_act(df, pos, rush_or_pass=rush_or_pass)
+df = drop_y_act_except_current(df, WEEK, YEAR); print(df.shape[0])
+df = projected_pts_vs_predicted(df, pos); print(df.shape[0])
+
+# fill in missing data and drop any remaining rows
+df = forward_fill(df)
+df = df.dropna().reset_index(drop=True); print(df.shape[0])
+
+df = one_qb_per_week(df); print(df.shape[0])
+
+df = remove_non_uniques(df)
+df = df[(df.ProjPts > 10) & (df.projected_points > 10)].reset_index(drop=True)
+
+print('Total Rows:', df.shape[0])
+print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
+print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
+
+dm.write_to_db(df.iloc[:,:2000], 'Model_Features', f"QB_Data{rush_or_pass.replace('_', '')}", if_exist='replace')
+if df.shape[1] > 2000:
+    dm.write_to_db(df.iloc[:,2000:], 'Model_Features', f"QB_Data{rush_or_pass.replace('_', '')}2", if_exist='replace')
+
+#%%
+
+# pre-game data
+output = pd.DataFrame()
+for pos in ['QB', 'RB', 'WR', 'TE']:
+
+    df = fantasy_pros_new(pos); print(df.shape[0])
+    df = pff_experts_new(df, pos); print(df.shape[0])
+    df = ffa_compile(df, 'FFA_Projections', pos); print(df.shape[0])
+    df = ffa_compile(df, 'FFA_RawStats', pos); print(df.shape[0])
+    df = fantasy_cruncher(df, pos); print(df.shape[0])
+
+    df = consensus_fill(df); print(df.shape[0])
+    df = fill_ratio_nulls(df); print(df.shape[0])
+    df = log_rank_cols(df); print(df.shape[0])
+    df, _ = add_injuries(df, pos); print(df.shape[0])
+
+    df = get_salaries(df, pos); print(df.shape[0])
+    dst = add_team_matchups().drop('offTeam', axis=1)
+    df = pd.merge(df, dst, on=['defTeam', 'year', 'week']); print(df.shape[0])
+
+    df = add_weather(df); print(df.shape[0])
+    df = add_gambling_lines(df); print(df.shape[0])
+    team_stats = get_team_stats(YEAR, prev_years=2)
+    df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print(df.shape[0])
+    # df = get_coach_stats(df, YEAR); print(df.shape[0])
+    
+    pos_values = positional_values()
+    df = pd.merge(df, pos_values, on=['team', 'week', 'year']); print(df.shape[0])
+
+    team_qb = get_max_qb()
+    df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
+
+    df.loc[df.fd_salary < 100, 'fd_salary'] = np.nan
+
+    compare_cols = ['fp_rank', 'projected_points',
+                    'dk_salary', 'fd_salary', 'yahoo_salary', 'fantasyPoints',
+                    'fantasyPointsRank', 'ProjPts', 'expertConsensus']
+    df = add_player_comparison(df, compare_cols)
+
+    df = pd.merge(df, defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
+
+    pff_def = pff_defense_rollup().rename(columns={'team': 'defTeam'})
+    df = pd.merge(df, pff_def, on=['defTeam', 'week', 'year']); print(df.shape[0])
+
+    pff_oline = pff_oline_rollup()
+    df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
+
+
+    df = attach_y_act(df, pos)
+    df = drop_y_act_except_current(df, WEEK, YEAR); print(df.shape[0])
+    df = projected_pts_vs_predicted(df, pos); print(df.shape[0])
+
+    # fill in missing data and drop any remaining rows
+    df = forward_fill(df)
+    df = df.dropna().reset_index(drop=True); print(df.shape[0])
+
+    df['pos'] = pos
+    if pos=='QB': df = one_qb_per_week(df); print(df.shape[0])
+
+    print('Data Size:', df.shape[0])
+    print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
+    print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
+    
+    output = pd.concat([output, df], axis=0)
+
+output = def_pts_allowed(output); print(output.shape[0])
+output = remove_non_uniques(output)
+
+dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
+
+#%%
+
+backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={WEEK} AND year={YEAR}", 'Model_Features').player.values
+sal = dm.read(f"SELECT player, salary FROM Salaries WHERE league={WEEK} AND year={YEAR}", 'Simulation')
+sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
+
+#%%
+count_chk = dm.read(f"SELECT player, week, year, count(*) cnts FROM Backfill GROUP BY player, week, year", 'Model_Features')
+count_chk[count_chk.cnts > 1]
+
+#%%
+bf = dm.read("SELECT * FROM Backfill", 'Model_Features')
+bf = bf[~((bf.player=='Josh Johnson') & (bf.week==16) & (bf.year==2021))].reset_index(drop=True)
+dm.write_to_db(bf, 'Model_Features', 'Backfill', 'Model_Features')
+
+
+#%%
+
+to_agg = {c: [np.mean, np.max, np.min, 'count'] for c in compare_cols}
+team_stats = df.groupby(['team', 'week', 'year']).agg(to_agg)
+
+diff_df = df[['player', 'team', 'week', 'year']].drop_duplicates()
+for c in compare_cols:
+    tmp_df = team_stats[c].reset_index()
+    tmp_df = pd.merge(tmp_df, df[['player', 'team', 'week', 'year', c]], on=['team', 'week', 'year'])
+
+    for a in ['mean', 'amin', 'amax']:
+        tmp_df[f'{c}_{a}_diff'] = tmp_df[c] - tmp_df[a]
+
+    tmp_df = tmp_df[['player', 'team', 'week', 'year', f'{c}_mean_diff', f'{c}_amax_diff', f'{c}_amin_diff']]
+    diff_df = pd.merge(diff_df, tmp_df, on=['player', 'team', 'week', 'year'])
+#%%
+
+to_agg = {c: [np.mean, np.max, np.min, 'count'] for c in compare_cols}
+team_stats = df.groupby(['team', 'week', 'year']).agg(to_agg)
+
+diff_df = df[['player', 'team', 'week', 'year']].drop_duplicates()
+for c in compare_cols:
+    tmp_df = team_stats[c].reset_index()
+    tmp_df = pd.merge(tmp_df, df[['player', 'team', 'week', 'year', c]], on=['team', 'week', 'year'])
 
 # %%
 
-df.isnull().sum()[df.isnull().sum()>0][-25:]
+
+# defense stats that can be added to the offensive player data
+defense = fantasy_pros('DST').rename(columns={'player': 'team'})
+d_stats = get_defense_stats(prev_years=1)
+defense = pd.merge(defense, d_stats, on=['team', 'week', 'year'], how='inner')
+defense = defense.dropna()
+defense.columns = [f'def_{c}' if 'def' not in c else c for c in defense.columns]
+defense = defense.rename(columns={'def_team': 'defTeam', 'def_week': 'week', 'def_year': 'year'})
+defense = add_ffa_defense(defense)
+pff_def = add_team_matchups()
+defense = pd.merge(defense, pff_def, on=['defTeam', 'year', 'week'])
+
+#%%
+
+defense = fantasy_cruncher(defense, 'DST')
 # %%
-
-ffa_cols = ['ffa_points', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor', 'ffa_rank',
-            'ffa_ceiling_rank', 'ffa_position_rank', 'ffa_rush_yds', 'ffa_rush_tds', 
-            'ffa_rec', 'ffa_rec_yds', 'ffa_pass_yds', 'ffa_pass_tds']
-
-# convert all the expert rankings to log values
-for c in ffa_cols:
-    if 'rank' in c: 
-        df[f'log_{c}'] = np.log(df[c]+1)
-        ffa_cols.append(f'log_{c}')
-
-# fill in null expert rankings
-df[[c for c in df.columns if 'ffa' in c]] = forward_fill(df[[c for c in df.columns if 'ffa' in c]])
-
-if add_rolling: experts = add_rolling_stats(df, ['player'], ffa_cols)
-
-for c in ['ffa_points', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor',
-          'ffa_rush_yds', 'ffa_rush_tds', 'ffa_rec', 'ffa_rec_yds', 'ffa_pass_yds', 'ffa_pass_tds']:
-    df[c] = df[c].fillna(df[c].min())
-
-# df = experts.fillna(experts.max())
+[c for c in defense if 'sack' in c or 'Sack' in c]
 # %%
-d
+{
+'proj_int': ['def_interception', 'ffa_dst_int', 'fc_proj_defensive_stats_int'],
+'proj_fumble': ['rmean3_def_fumble_sum', 'fc_proj_defensive_stats_fum'],
+'proj_sack': ['def_rmean3_sack', 'ffa_dst_sacks', 'fc_proj_defensive_stats_sacks'],
+
+
+}
