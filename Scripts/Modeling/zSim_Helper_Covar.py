@@ -773,52 +773,52 @@ class FootballSimulation:
 
 #%%
 
-# # set the root path and database management object
-# from ff.db_operations import DataManage
-# from ff import general as ffgeneral
+# set the root path and database management object
+from ff.db_operations import DataManage
+from ff import general as ffgeneral
 
-# root_path = ffgeneral.get_main_path('Daily_Fantasy')
-# db_path = f'{root_path}/Data/Databases/'
-# dm = DataManage(db_path)
+root_path = ffgeneral.get_main_path('Daily_Fantasy')
+db_path = f'{root_path}/Data/Databases/'
+dm = DataManage(db_path)
 
-# pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-# ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
-# std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
+pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
+std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 
-# adjust_select = True
-# matchup_drop = 0
-# full_model_weight = 5
-# use_covar = False
-# min_players_same_team = 3
-# min_players_opp_team = 1
-# use_ownership = 0.9
-# own_neg_frac = 1
+adjust_select = True
+matchup_drop = 0
+full_model_weight = 5
+use_covar = False
+min_players_same_team = 3
+min_players_opp_team = 1
+use_ownership = 0.9
+own_neg_frac = 1
 
-# qb_solo_start = False
-# qb_set_max_team = True
-# qb_min_iter = 0
+qb_solo_start = False
+qb_set_max_team = True
+qb_min_iter = 0
 
-# week = 13
-# year = 2022
-# salary_cap = 50000
-# pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-# num_iters = 100
+week = 13
+year = 2022
+salary_cap = 50000
+pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
+num_iters = 100
 
-# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-#                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
-#                          full_model_rel_weight=full_model_weight, covar_type='no_covar', use_covar=use_covar, 
-#                          use_ownership=use_ownership, salary_remain_max=500)
-# set_max_team = None
-# to_add = ['Jalen Hurts', 'Devonta Smith', 'Aj Brown', 'Samaje Perine', 'Zonovan Knight', 'Evan Engram', 'Christian Kirk', 'Garrett Wilson', 'PIT']
-# to_drop = []
+sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
+                         ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
+                         full_model_rel_weight=full_model_weight, covar_type='no_covar', use_covar=use_covar, 
+                         use_ownership=use_ownership, salary_remain_max=500)
+set_max_team = None
+to_add = []
+to_drop = []
 
-# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                     min_players_opp_team, adjust_select=adjust_select, 
-#                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
-#                                     n_top_players=3, static_top_players=False,
-#                                     qb_solo_start=qb_solo_start, qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter)
+results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
+                                    min_players_opp_team, adjust_select=adjust_select, 
+                                    num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
+                                    n_top_players=3, static_top_players=False,
+                                    qb_solo_start=qb_solo_start, qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter)
 
-# print(max_team_cnt)
-# results
+print(max_team_cnt)
+results
 
 # %%

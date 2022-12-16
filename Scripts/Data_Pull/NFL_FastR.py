@@ -150,6 +150,14 @@ data['pos_is_home'] = np.where(data.posteam==data.home_team, 1, 0)
 # temperature data doesn't exists for 2020
 data = data.drop('temp', axis=1)
 
+# create table of final scores
+final_scores = data.groupby(['home_team', 'away_team', 'week', 'season']).agg({ 'home_score': 'max', 'away_score': 'max'}).reset_index()
+final_scores = final_scores.sort_values(by=['season', 'week', 'home_team'])
+final_scores = final_scores.rename(columns={'season': 'year'})
+dm.delete_from_db('FastR', 'Final_Scores', f"year={cur_season}")
+dm.write_to_db(final_scores, 'FastR', 'Final_Scores', if_exist='append')
+
+
 #%%
 
 #--------------
