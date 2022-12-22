@@ -330,33 +330,33 @@ def get_mean_points(preds):
 #%%
 covar_type = 'team_points_trunc'
 
-# set the model version
-set_weeks = [
-     13, 14, 15, 16, 17,
-     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
-        ]
-
-set_years = [
-      2021, 2021, 2021, 2021, 2021,
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
-]
-
-pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc']
-ensemble_versions = len(set_weeks)*['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',]
-std_dev_types = len(set_weeks)*['pred_spline_class80_q80_matt1_brier1_kfold3']
-
 # # set the model version
-# set_weeks = [14]
+# set_weeks = [
+#      13, 14, 15, 16, 17,
+#      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+#         ]
 
-# set_years = [2022]
+# set_years = [
+#       2021, 2021, 2021, 2021, 2021,
+#       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
+# ]
 
-# pred_versions = ['sera1_rsq0_brier1_matt1_lowsample_perc']
-# ensemble_versions = ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']
-# std_dev_types = ['pred_spline_class80_q80_matt1_brier1_kfold3']
+# pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc']
+# ensemble_versions = len(set_weeks)*['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',]
+# std_dev_types = len(set_weeks)*['pred_spline_class80_q80_matt1_brier1_kfold3']
+
+# set the model version
+set_weeks = [15]
+
+set_years = [2022]
+
+pred_versions = ['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']
+ensemble_versions = ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']
+std_dev_types = ['pred_spline_class80_q80_matt1_brier1_kfold3']
 
 full_model_weights = [0.2, 5]
 
-# i = 0
+i = 0
 iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
 for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 

@@ -34,8 +34,8 @@ np.random.seed(1234)
 
 # set year to analyze
 set_year = 2022
-set_week = 14
-showdown_teams = ['MIA', 'LAC']
+set_week = 15
+showdown_teams = ['GB', 'LAR']
 
 # set the earliest date to begin the validation set
 val_year_min = 2020
@@ -44,7 +44,7 @@ val_week_min = 14
 met = 'y_act'
 
 # full_model or backfill
-vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
 
 # %%
 
@@ -122,12 +122,15 @@ def create_distribution(player_data, num_samples=1000):
 def create_sim_output(output, num_samples=1000):
     sim_out = pd.DataFrame()
     for _, row in output.iterrows():
-        print(row.player)
-        cur_out = pd.DataFrame([row.player, row.pos]).T
-        cur_out.columns=['player', 'pos']
-        dists = pd.DataFrame(create_distribution(row, num_samples)).T
-        cur_out = pd.concat([cur_out, dists], axis=1)
-        sim_out = pd.concat([sim_out, cur_out], axis=0)
+        try:
+            print(row.player)
+            cur_out = pd.DataFrame([row.player, row.pos]).T
+            cur_out.columns=['player', 'pos']
+            dists = pd.DataFrame(create_distribution(row, num_samples)).T
+            cur_out = pd.concat([cur_out, dists], axis=1)
+            sim_out = pd.concat([sim_out, cur_out], axis=0)
+        except:
+            pass
     
     return sim_out
 

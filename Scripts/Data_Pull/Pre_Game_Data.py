@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2022
-set_week = 14
+set_week = 15
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -21,6 +21,70 @@ import ff.data_clean as dc
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
+
+
+
+def move_download_to_folder(root_path, folder, fname):
+    try:
+        os.replace(f"/Users/mborysia/Downloads/{fname}", 
+                    f'{root_path}/Data/OtherData/{folder}/{set_year}/{fname}')
+    except:
+        pass
+
+    df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{fname}')
+    
+    return df
+
+
+def format_ffa(df, table_name, set_week, set_year):
+    df = df.dropna(subset=['player']).drop(['Unnamed: 0'], axis=1)
+    df.player = df.player.apply(dc.name_clean)
+    df.team = df.team.map(team_map)
+    df.loc[df.position=='DST', 'player'] = df.loc[df.position=='DST', 'team']
+
+    if table_name=='Projections': new_cols = ['player', 'position', 'team']
+    elif table_name=='RawStats': new_cols = ['player', 'team', 'position', 'week']
+
+    new_cols.extend(['ffa_' + c for c in df.columns if c not in ('player', 'position', 'team', 'week')])
+    df.columns = new_cols
+
+    df['week'] = set_week
+    df['year'] = set_year
+    return df
+
+def format_fantasy_cruncher(df, set_week, set_year):
+    new_cols = []
+    col_prefix = ''
+    for i in range(df.shape[1]):
+        if 'Unnamed' not in df.columns[i]:
+            col_prefix = df.columns[i].replace('.', '').replace(' ', '_').lower() + '_'
+        col_suffix = str(df.iloc[0, i]).replace('.', '').replace('+', ' ').replace('%', 'pct').replace(' ', '_').lower()
+        new_cols.append(col_prefix + col_suffix)
+
+    df.columns = new_cols
+    df = df.rename(columns={f'game_and_vegas_{set_year}_avg': 'game_and_vegas_this_year_avg',
+                            f'game_and_vegas_{set_year-1}_avg': 'game_and_vegas_last_year_avg'})
+    for c in ['position_rankings_rdm_pct', 'position_rankings_exp',	'position_rankings_used', 
+              'projected_values_rdm_pct', 'projected_values_exp', 'projected_values_used', 'projected_values_con',
+              'projected_values_value', 'position_rankings_salary', 'position_rankings_fc_proj', 'position_rankings_my_proj',
+              'overall_rankings_salary', 'overall_rankings_fc_proj', 'overall_rankings_my_proj']:
+        try: df = df.drop(c, axis=1)
+        except: pass
+
+    df = df.iloc[1:]
+    df = df.drop(['likes', 'inj'], axis=1)
+    new_cols = ['player', 'pos']
+    new_cols.extend(['fc_' + c for c in df.columns if c not in ('player', 'pos')])
+    df.columns = new_cols
+    try: df = df.rename(columns={'ffc_game_and_vegas_stdv': 'ffc_game_and_vegas_stddev'})
+    except: pass
+    df['week'] = set_week
+    df['year'] = set_year
+
+    df.player = df.player.apply(dc.name_clean)
+    df.loc[df.pos=='DST', 'player'] = df.loc[df.pos=='DST', 'player'].map(name_map)
+
+    return df
 
 
 #%%
@@ -174,6 +238,32 @@ dbs = ['Pre_PlayerData', 'Pre_TeamData', 'Pre_PlayerData', 'Pre_TeamData']
 for t, d, db in zip(tables, dfs, dbs):
     dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}")
     dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
+
+#%%
+
+
+
+df = move_download_to_folder(root_path, 'FFA', f'projections_{set_year}_wk{set_week}.csv')
+df = format_ffa(df, 'Projections', set_week, set_year)
+
+dm.delete_from_db('Pre_PlayerData', 'FFA_Projections', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'FFA_Projections', 'append')
+
+
+df = move_download_to_folder(root_path, 'FFA', f'raw_stats_{set_year}_wk{set_week}.csv')
+df = format_ffa(df, 'RawStats', set_week, set_year)
+
+dm.delete_from_db('Pre_PlayerData', 'FFA_RawStats', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'FFA_RawStats', 'append')
+
+
+#%%
+
+df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
+df = format_fantasy_cruncher(df, set_week, set_year)
+
+dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
 
 
 #%%
@@ -770,90 +860,6 @@ to_upload.year = to_upload.year.astype('str')
 to_upload['pkey'] = to_upload.player + to_upload.week + to_upload.year
 all_data[(~all_data.pkey.isin(to_upload.pkey)) ]#.groupby('player').agg({'Id': 'count'}).sort_values(by='Id', ascending=False)
 # %%
-
-def move_download_to_folder(root_path, folder, fname):
-    try:
-        os.replace(f"/Users/mborysia/Downloads/{fname}", 
-                    f'{root_path}/Data/OtherData/{folder}/{set_year}/{fname}')
-    except:
-        pass
-
-    df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{fname}')
-    
-    return df
-
-
-def format_ffa(df, table_name, set_week, set_year):
-    df = df.dropna(subset=['player']).drop('Unnamed: 0', axis=1)
-    df.player = df.player.apply(dc.name_clean)
-    df.team = df.team.map(team_map)
-    df.loc[df.position=='DST', 'player'] = df.loc[df.position=='DST', 'team']
-
-    if table_name=='Projections': new_cols = ['player', 'position', 'team']
-    elif table_name=='RawStats': new_cols = ['player', 'team', 'position']
-
-    new_cols.extend(['ffa_' + c for c in df.columns if c not in ('player', 'position', 'team')])
-    df.columns = new_cols
-
-    df['week'] = set_week
-    df['year'] = set_year
-    return df
-
-def format_fantasy_cruncher(df, set_week, set_year):
-    new_cols = []
-    col_prefix = ''
-    for i in range(df.shape[1]):
-        if 'Unnamed' not in df.columns[i]:
-            col_prefix = df.columns[i].replace('.', '').replace(' ', '_').lower() + '_'
-        col_suffix = str(df.iloc[0, i]).replace('.', '').replace('+', ' ').replace('%', 'pct').replace(' ', '_').lower()
-        new_cols.append(col_prefix + col_suffix)
-
-    df.columns = new_cols
-    df = df.rename(columns={f'game_and_vegas_{set_year}_avg': 'game_and_vegas_this_year_avg',
-                            f'game_and_vegas_{set_year-1}_avg': 'game_and_vegas_last_year_avg'})
-    for c in ['position_rankings_rdm_pct', 'position_rankings_exp',	'position_rankings_used', 
-              'projected_values_rdm_pct', 'projected_values_exp', 'projected_values_used', 'projected_values_con',
-              'projected_values_value', 'position_rankings_salary', 'position_rankings_fc_proj', 'position_rankings_my_proj',
-              'overall_rankings_salary', 'overall_rankings_fc_proj', 'overall_rankings_my_proj']:
-        try: df = df.drop(c, axis=1)
-        except: pass
-
-    df = df.iloc[1:]
-    df = df.drop(['likes', 'inj'], axis=1)
-    new_cols = ['player', 'pos']
-    new_cols.extend(['ffa_' + c for c in df.columns if c not in ('player', 'pos')])
-    df.columns = new_cols
-
-    df['week'] = set_week
-    df['year'] = set_year
-
-    df.player = df.player.apply(dc.name_clean)
-    df.loc[df.pos=='DST', 'player'] = df.loc[df.pos=='DST', 'player'].map(name_map)
-
-    return df
-
-
-df = move_download_to_folder(root_path, 'FFA', f'projections_{set_year}_wk{set_week}.csv')
-df = format_ffa(df, 'Projections', set_week, set_year)
-
-dm.delete_from_db('Pre_PlayerData', 'FFA_Projections', f"week={set_week} AND year={set_year}", create_backup=False)
-dm.write_to_db(df, 'Pre_PlayerData', 'FFA_Projections', 'append')
-
-#%%
-
-df = move_download_to_folder(root_path, 'FFA', f'raw_stats_{set_year}_wk{set_week}.csv')
-df = format_ffa(df, 'RawStats', set_week, set_year)
-
-dm.delete_from_db('Pre_PlayerData', 'FFA_RawStats', f"week={set_week} AND year={set_year}", create_backup=False)
-dm.write_to_db(df, 'Pre_PlayerData', 'FFA_RawStats', 'append')
-
-#%%
-
-df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
-df = format_fantasy_cruncher(df, set_week, set_year)
-
-dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
-dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'replace')
 
 
 # %%

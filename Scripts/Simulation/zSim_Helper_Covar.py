@@ -49,6 +49,8 @@ class FootballSimulation:
             self.ownership_data = self.join_ownership_pred(self.player_data)
             self.use_own_frac = use_ownership
 
+        self.vegas_points = self.pull_vegas_points()
+
 
     def get_covar_means(self):
         # pull in the player data (means, team, position) and covariance matrix
@@ -172,12 +174,26 @@ class FootballSimulation:
 
         return df
 
+    def pull_vegas_points(self):
+
+        # add salaries to the dataframe and set index to player
+        df = self.dm.read(f'''SELECT team, implied_points_for vegas_points, std_dev, min_score, max_score
+                              FROM Vegas_Points
+                              WHERE year={self.set_year}
+                                    AND week={self.week}
+                                    ''', 'Simulation')
+        df = df[df.team.isin(self.player_data.team.unique())].reset_index(drop=True)
+        return df
+
     def get_matchups(self):
         df = self.dm.read(f'''SELECT away_team, home_team
                               FROM Gambling_Lines 
                               WHERE week={self.week} 
                                     and year={self.set_year} 
                     ''', 'Simulation')
+
+        df = df[(df.away_team.isin(self.player_data.team.unique())) & \
+                (df.home_team.isin(self.player_data.team.unique()))]
 
         matchups = {}
         for away, home in df.values:
@@ -264,9 +280,10 @@ class FootballSimulation:
     def trunc_normal_dist(self, col, num_options=500):
         if col=='pred_ownership': df = self.ownership_data
         elif col=='pred_fp_per_game': df = self.player_data
+        elif col=='vegas_points': df = self.vegas_points
 
         pred_list = []
-        for mean_val, sdev, min_sc, max_sc, player in df[[col, 'std_dev', 'min_score', 'max_score', 'player']].values:
+        for mean_val, sdev, min_sc, max_sc in df[[col, 'std_dev', 'min_score', 'max_score']].values:
             pred_list.append(self.trunc_normal(mean_val, sdev, min_sc, max_sc, num_options))
 
         return pd.DataFrame(pred_list)
@@ -485,9 +502,7 @@ class FootballSimulation:
 
         return G_teams
 
-
-    def get_max_team(self, labels, c_points, added_teams):
-
+    def max_team_player_points(self, labels, c_points):
         team_pts = pd.concat([labels, -c_points], axis=1)
         team_pts.columns = ['player', 'pos', 'team', 'salary', 'pred_fp_per_game']
         
@@ -499,6 +514,29 @@ class FootballSimulation:
         team_pts = team_pts.groupby('team').agg({'pred_fp_per_game': 'sum'})
         best_teams = team_pts.apply(lambda x: pd.Series(x.nlargest(3).index))
         best_teams = [b[0] for b in best_teams.values]
+        
+        return best_teams
+
+    def max_team_vegas_points(self):
+        col_idx = np.random.choice(range(1,self.cur_vegas_pts.shape[1]), size=1)[0]
+        best_teams = self.cur_vegas_pts.iloc[:, [0,col_idx]]
+        best_teams = best_teams.sort_values(by=col_idx-1, ascending=False)
+        best_teams = list(best_teams.team[:3].values)
+        return best_teams
+
+    def get_max_team(self, labels, c_points, added_teams):
+
+        if self.max_team_type=='player_points':
+            best_teams = self.max_team_player_points(labels, c_points)
+        
+        elif self.max_team_type=='vegas_points':
+            best_teams = self.max_team_vegas_points()
+        
+        elif self.max_team_type=='all':
+            best_teams = self.max_team_player_points(labels, c_points)
+            best_teams_vp = self.max_team_vegas_points()
+            best_teams.extend(best_teams_vp)
+
         best_teams.extend(added_teams)
 
         best_team = np.random.choice(best_teams)
@@ -623,13 +661,14 @@ class FootballSimulation:
         
         to_drop.extend(self.player_data.loc[self.player_data.team.isin(matchup_to_drop), 'player'].values)
 
-        return to_drop
+        return to_drop, matchup_to_drop
 
 
     def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team, 
-                min_players_opp_team_input=0, adjust_select=False, num_matchup_drop=0,
-                own_neg_frac=1, n_top_players=5, static_top_players=True,
-                qb_min_iter=9, qb_set_max_team=False, qb_solo_start=True):
+                min_players_opp_team_input=0, adjust_select=False, max_team_type='player_points',
+                num_matchup_drop=0, own_neg_frac=1, n_top_players=5, static_top_players=True,
+                qb_min_iter=9, qb_set_max_team=False, qb_solo_start=True,
+                ):
         
         # can set as argument, but static set for now
         num_options=250
@@ -639,13 +678,18 @@ class FootballSimulation:
        
         self.matchups = self.get_matchups()
         if num_matchup_drop > 0:
-            to_drop = self.player_matchup_drop(to_drop, to_add, num_matchup_drop)
-
+            to_drop, drop_matchup_teams = self.player_matchup_drop(to_drop, to_add, num_matchup_drop)
+        else:
+            drop_matchup_teams = []
+            
         # decide whether to use above or below ownership threshold
         self.pos_or_neg = np.random.choice([-1, 1], p=[own_neg_frac, 1-own_neg_frac])
 
         # randomly decide to use threshold or not
         self.use_ownership = np.random.choice([True, False], p=[self.use_own_frac, 1-self.use_own_frac])
+
+        # randomly decide max_team_type
+        self.max_team_type = max_team_type
 
         # extract the top players for each team
         self.n_top_players = n_top_players
@@ -690,6 +734,12 @@ class FootballSimulation:
                         self.use_ownership = False
                         print('Ownership failed')
 
+                # create vegas points if needed
+                if self.max_team_type in ['all', 'vegas_points']:
+                    self.cur_vegas_pts = pd.concat([self.vegas_points.team, self.trunc_normal_dist('vegas_points')], axis=1)
+                    if len(drop_matchup_teams) > 0:
+                        self.cur_vegas_pts = self.cur_vegas_pts[~self.cur_vegas_pts.team.isin(drop_matchup_teams)].reset_index(drop=True)
+
             if i == 0:
 
                 position_map = self.position_matrix_mapping(cur_pos_require)
@@ -718,6 +768,7 @@ class FootballSimulation:
                 if open_pos_require['QB'] == 1 and qb_solo_start:
                     min_players_same_team = -1
                     min_player_opp_team = -1
+               
                
                 h_teams, max_team = self.create_h_teams(team_map, added_teams, set_max_team, min_players_same_team, min_player_opp_team)
                 max_team_cnt.append(max_team)
@@ -781,25 +832,27 @@ class FootballSimulation:
 # db_path = f'{root_path}/Data/Databases/'
 # dm = DataManage(db_path)
 
-# pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+# pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
 # ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
 # std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
-# ownership_vers = 'standard_ln'
+# ownership_vers = 'standard_ln_rank_extra_features'
 
 # adjust_select = True
 # matchup_drop = 0
+# top_n_players = 3
 # full_model_weight = 5
 # use_covar = False
-# min_players_same_team = 3
+# min_players_same_team = 'Auto'
 # min_players_opp_team = 1
 # use_ownership = 0.9
-# own_neg_frac = 1
-
-# qb_solo_start = False
+# own_neg_frac = 0.9
+# static_top_players = False
+# salary_remain_max = 500
+# qb_solo_start = True
 # qb_set_max_team = True
 # qb_min_iter = 0
 
-# week = 14
+# week = 15
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -807,19 +860,22 @@ class FootballSimulation:
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
 #                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,ownership_vers=ownership_vers,
-#                          full_model_rel_weight=full_model_weight, covar_type='no_covar', use_covar=use_covar, 
-#                          use_ownership=use_ownership, salary_remain_max=500)
+#                          full_model_rel_weight=full_model_weight, covar_type='team_points_trunc', use_covar=use_covar, 
+#                          use_ownership=use_ownership, salary_remain_max=salary_remain_max)
 # set_max_team = None
-# to_add = []
+# to_add = [] 
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                     min_players_opp_team, adjust_select=adjust_select, 
+#                                     min_players_opp_team, adjust_select=adjust_select, max_team_type='player_points',
 #                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
-#                                     n_top_players=3, static_top_players=False,
-#                                     qb_solo_start=qb_solo_start, qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter)
+#                                     n_top_players=top_n_players, static_top_players=static_top_players,
+#                                      qb_solo_start=qb_solo_start, 
+#                                     qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter)
 
 # print(max_team_cnt)
 # results
+
+# # # # %%
 
 # %%

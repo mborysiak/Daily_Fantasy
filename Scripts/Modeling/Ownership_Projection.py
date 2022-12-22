@@ -15,7 +15,7 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
-pred_version = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+pred_version = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
 ens_version = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
 std_dev_type = 'pred_spline_class80_q80_matt0_brier1_kfold3'
 
@@ -24,7 +24,7 @@ use_positions = False
 ownership_vers = 'standard_ln_rank_extra_features'
 
 set_year = 2022
-set_week = 14
+set_week = 15
 contest = 'Million'
 
 #%%
@@ -105,80 +105,33 @@ def pull_this_week_players(set_week, set_year):
     return current_players
 
 
+
 # calculate ownership projections
 def add_proj(df, use_rank=False):
 
-    # pull in the salary and actual results data
-    def_proj1 = dm.read('''SELECT team player, team, week, year, projected_points, 
-                                  fp_rank, rankadj_fp_rank, playeradj_fp_rank
-                           FROM FantasyPros
-                           WHERE pos='DST'
-                                ''', 'Pre_PlayerData')
-
-    def_proj2 = dm.read('''SELECT offteam player, position pos, offTeam team, week, year, 
-                                  dk_salary, fantasyPoints, `Proj Pts` ProjPts, 
-                                  expertConsensus, expertIanHartitz
-                           FROM PFF_Expert_Ranks
-                           JOIN (SELECT team offteam, week, year, dk_salary
-                                 FROM Daily_Salaries) USING (offteam, week, year)
-                           JOIN (SELECT offteam, week, year, fantasyPoints
-                                 FROM PFF_Proj_Ranks)
-                                 USING (offTeam, week, year)''', 'Pre_TeamData')
-    def_proj = pd.merge(def_proj1, def_proj2, on=['player', 'team', 'week', 'year']).dropna()
-
-    if use_rank:
-        def_proj['rankadj_expertConsensus'] = def_proj.expertConsensus
-        def_proj['playeradj_expertConsensus'] = def_proj.expertConsensus
-
-    # pull in the salary and actual results data
-    proj = dm.read('''SELECT player, position pos, offTeam team, week, year, 
+    def_proj = dm.read('''SELECT player, 'DST' as pos, player as team, week, year, 
                              dk_salary, projected_points, fantasyPoints, ProjPts,
+                             ffa_points, fc_proj_fantasy_pts_fc, ffa_position_rank, 
+                             avg_proj_rank, avg_proj_points avg_proj_pts, max_proj_points,
+                             fp_rank, rankadj_fp_rank, playeradj_fp_rank,  
+                             expertConsensus, expertIanHartitz,
+                             expertConsensus as rankadj_expertConsensus, 
+                             expertConsensus as playeradj_expertConsensus
+                     FROM Defense_Data
+        ''', 'Model_Features')
+
+    proj = dm.read('''SELECT player, pos, team, week, year, 
+                             dk_salary, projected_points, fantasyPoints, ProjPts,
+                             ffa_points, fc_proj_fantasy_pts_fc, ffa_position_rank, 
+                             avg_proj_rank, avg_proj_points avg_proj_pts, max_proj_points,
                              fp_rank, rankadj_fp_rank, playeradj_fp_rank,  
                              expertConsensus, expertIanHartitz,
                              rankadj_expertConsensus, playeradj_expertConsensus
-                      FROM PFF_Proj_Ranks
-                      JOIN (SELECT player, team offTeam, week, year, projected_points,
-                            fp_rank, rankadj_fp_rank, playeradj_fp_rank
-                            FROM FantasyPros)
-                            USING (player, offTeam, week, year)
-                      JOIN (SELECT player, offTeam, week, year, `Proj Pts` ProjPts,  
-                                   expertConsensus, expertIanHartitz,
-                                   rankadj_expertConsensus, playeradj_expertConsensus
-                            FROM PFF_Expert_Ranks)
-                            USING (player, offTeam, week, year)
-                      JOIN (SELECT player, team offTeam, week, year, dk_salary 
-                            FROM Daily_Salaries) USING (player, offTeam, week, year)
-                ''', 'Pre_PlayerData')
+                     FROM Backfill
+        ''', 'Model_Features')
 
     proj = pd.concat([proj, def_proj], axis=0)
 
-    proj['avg_proj_pts'] = proj[['projected_points', 'fantasyPoints', 'ProjPts']].mean(axis=1)
-    proj['max_proj_pts'] = proj[['projected_points', 'fantasyPoints', 'ProjPts']].max(axis=1)
-    
-    def fill_null_rank(df, null_col, fill_col):
-        df.loc[df[null_col].isnull(), null_col] = df.loc[df[null_col].isnull(), fill_col]
-        return df
-
-    if use_rank:
-
-        to_fill = ['expertConsensus', 'rankadj_expertConsensus', 'playeradj_expertConsensus', 'expertIanHartitz']
-        fill_with = ['fp_rank', 'rankadj_fp_rank', 'playeradj_fp_rank', 'expertConsensus'] 
-        for tf, fw in zip(to_fill, fill_with):
-            proj = fill_null_rank(proj, tf, fw)
-        
-        proj['avg_rank'] = proj[['fp_rank', 'rankadj_fp_rank', 'playeradj_fp_rank']].mean(axis=1)
-        proj['min_rank'] = proj[['fp_rank', 'rankadj_fp_rank', 'playeradj_fp_rank']].min(axis=1)
-        proj['avg_expert'] = proj[['expertConsensus', 'expertIanHartitz','rankadj_expertConsensus', 'playeradj_expertConsensus']].mean(axis=1)
-        proj['avg_expert_rank'] = proj[['avg_rank', 'avg_expert']].mean(axis=1)
-
-        for c in ['avg_rank', 'avg_expert', 'avg_expert_rank']:
-            proj['log_' + c] = np.log(proj[c]+1)
-    else:
-        rank_cols = [c for c in proj.columns if 'expert' in c or 'rank' in c]
-        proj = proj.drop(rank_cols, axis=1)
-        print(f'Dropped {rank_cols} from dataset')
-
-    proj.pos = proj.pos.apply(lambda x: x.upper())
     df = pd.merge(df, proj, on=['player', 'week', 'year'])
 
     return df
@@ -235,7 +188,8 @@ def add_team_points(df, c):
 
 def feature_engineering(df):
 
-    for c in ['projected_points', 'fantasyPoints', 'ProjPts', 'avg_proj_pts', 'max_proj_pts', 'pred_fp_per_game', 'pred_prob']:
+    for c in ['projected_points', 'fantasyPoints', 'ProjPts', 'avg_proj_pts', 
+              'max_proj_pts', 'pred_fp_per_game', 'pred_prob', 'ffa_points', 'fc_proj_fantasy_pts_fc']:
         try: df[c+'_over_sal'] = df[c] / (df.dk_salary + 1000)
         except: pass
 
@@ -243,7 +197,7 @@ def feature_engineering(df):
         try: df = add_team_points(df, c)
         except: pass
 
-    for c in ['avg_rank', 'min_rank', 'avg_expert', 'avg_expert_rank', 'log_avg_rank', 'log_avg_expert', 'log_avg_expert_rank']:
+    for c in ['avg_proj_rank', 'min_rank', 'avg_expert', 'avg_expert_rank']:
         try: df[c+'_times_sal'] = df[c] * df.dk_salary
         except: pass
 
@@ -349,9 +303,17 @@ def add_gambling_lines(df):
 
     lines = pd.concat([home, away], axis=0)
     lines = dc.convert_to_float(lines)
-    lines['implied_points_for'] = (lines.over_under / 2) + (lines.line / 2) 
-    lines['implied_points_against'] = (lines.over_under / 2) - (lines.line / 2) 
+    lines['implied_points_for'] = (lines.over_under / 2) - (lines.line / 2) 
+    lines['implied_points_against'] = (lines.over_under / 2) + (lines.line / 2) 
 
+    lines = pd.merge(lines, df[['team', 'week', 'year']].drop_duplicates(), on=['team', 'week', 'year'])
+
+    lines = lines.sort_values(by=['year', 'week', 'over_under', 'implied_points_for'], ascending=[True, True, False, False])
+    lines['over_under_rank'] = lines.groupby(['year', 'week'])['over_under'].cumcount().values
+
+    lines = lines.sort_values(by=['year', 'week', 'implied_points_for'], ascending=[True, True, False])
+    lines['implied_points_for_rank'] = lines.groupby(['year', 'week'])['implied_points_for'].cumcount().values
+    
     df = pd.merge(df, lines, on=['team', 'week', 'year'])
 
     return df

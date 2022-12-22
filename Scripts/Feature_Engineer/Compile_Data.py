@@ -2145,9 +2145,13 @@ count_chk = dm.read(f"SELECT player, week, year, count(*) cnts FROM Backfill GRO
 count_chk[count_chk.cnts > 1]
 
 #%%
+count_chk = dm.read(f"SELECT player, week, year, count(*) cnts FROM RB_Data GROUP BY player, week, year", 'Model_Features')
+count_chk[count_chk.cnts > 1]
+
+#%%
 bf = dm.read("SELECT * FROM Backfill", 'Model_Features')
 bf = bf[~((bf.player=='Josh Johnson') & (bf.week==16) & (bf.year==2021))].reset_index(drop=True)
-dm.write_to_db(bf, 'Model_Features', 'Backfill', 'Model_Features')
+dm.write_to_db(bf, 'Model_Features', 'Backfill', 'replace')
 
 
 #%%

@@ -564,7 +564,7 @@ else:
     save_pickle(trials, save_path, f'warm_start_{trial_name}')
 
 print('Running Full Space')
-best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=25)
+best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=100)
 print(space_eval(full_space, best))
 
 save_pickle(trials, save_path, f'full_space_{trial_name}')

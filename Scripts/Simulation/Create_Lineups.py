@@ -1,6 +1,6 @@
 #%%
 from zSim_Helper_Covar import *
-
+import pprint
 # set the root path and database management object
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -14,12 +14,12 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=14
+week=15
 
-pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
 ensemble_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
-ownership_vers = 'stanard_ln_rank'
+ownership_vers = 'standard_ln_rank_extra_features'
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -100,7 +100,7 @@ def pull_best_params(best_trials):
 best_trials = (140, 140)
 
 opt_params = pull_best_params(best_trials)
-opt_params
+pprint.pprint(opt_params)
 
 #%%
         
@@ -114,13 +114,13 @@ d = {'adjust_pos_counts': {False: 0.3, True: 0.7},
  'min_player_same_team': {-1: 0.0, 2: 0.0, 2.5: 0.0, 3: 0.4, 'Auto': 0.6},
  'min_players_opp_team': {0: 0.0, 1: 0.3, 2: 0.0, 'Auto': 0.7},
  'num_iters': {100: 1.0},
- 'num_top_players': {2: 0.5, 3: 0.0, 4: 0.0, 5: 0.5},
- 'own_neg_frac': {0.5: 0.0, 0.65: 0.0, 0.75: 0.0, 0.85: 0.0, 1: 1.0},
+ 'num_top_players': {2: 0.6, 3: 0.3, 4: 0.0, 5: 0.1},
+ 'own_neg_frac': {0.5: 0.0, 0.65: 0.0, 0.75: 0.0, 0.85: 0.1, 1: 0.9},
  'player_drop_multiple': {0: 0.4, 1: 0.3, 2: 0.0, 4: 0.3, 6: 0.0},
- 'qb_min_iter': {0: 1.0, 1: 0.0, 9: 0.0},
+ 'qb_min_iter': {0: 0.8, 1: 0.0, 9: 0.2},
  'qb_set_max_team': {0: 0.0, 1: 1.0},
  'qb_solo_start': {False: 0.7, True: 0.3},
- 'static_top_players': {False: 0.3, True: 0.7},
+ 'static_top_players': {False: 0.5, True: 0.5},
  'top_n_choices': {0: 0.8, 1: 0.2, 2: 0.0, 4: 0.0},
  'use_ownership': {0: 0.0, 0.5: 0.0, 0.9: 1.0, 1: 0.0}}
 

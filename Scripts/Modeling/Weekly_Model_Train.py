@@ -38,7 +38,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [15]
+run_weeks = [16]
 
 run_params = {
     
@@ -128,7 +128,8 @@ def load_data(model_type, set_pos, run_params):
     df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
     if set_pos == 'Defense':
         df['team'] = df.player
-        
+    
+    df = df.dropna(axis=1)
     drop_cols = list(df.dtypes[df.dtypes=='object'].index)
     run_params['drop_cols'] = drop_cols
     print(drop_cols)
@@ -140,6 +141,11 @@ def year_week_to_date(x):
 
 
 def get_cv_time_input(df, back_weeks):
+    df = df[(df.year < run_params['set_year']) | \
+            (
+              (df.year==run_params['set_year']) & \
+              (df.week<=run_params['set_week'])
+            )]
     max_date = str(df.game_date.max())
     year = int(max_date[:4])
     week = int(max_date[-2:])
@@ -151,7 +157,8 @@ def get_cv_time_input(df, back_weeks):
             year -= 1
             week = 17
     cv_time_input = int(dt.datetime(year, 1, week).strftime('%Y%m%d'))
-    print(f'Begin Validation on Week {week}, {year}')
+    cv_time_input = np.max([cv_time_input, 20200114])
+    print(f'Begin Validation Using {cv_time_input}')
     return cv_time_input
 
 
@@ -280,8 +287,6 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
                                skm.piece('k_best_c'),
                                skm.piece(m)])
     
-    
-
     elif skm.model_obj == 'quantile':
         pipe = skm.model_pipe([
                                 skm.piece('random_sample'),
@@ -300,13 +305,14 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
     params = skm.default_params(pipe, 'rand')
     if m=='adp': 
         params['feature_select__cols'] = [
-                                            ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints'],
-                                            ['year', 'week',  'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints'],
-                                            [ 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints']
+                                            ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
+                                            ['year', 'week',  'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
+                                            [ 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank']
                                         ]
-        params['k_best__k'] = range(1, 9)
+        params['k_best__k'] = range(1, 14)
     if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
     if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
+    if m=='knn_q': params['knn_q__n_neighbors'] = range(1, min_samples-1)
     if stack_model: params['k_best__k'] = range(2, 40)
 
     return pipe, params
@@ -521,7 +527,7 @@ for w in run_weeks:
         #=========
 
         # run all other models
-        model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
+        model_list = ['adp', 'bridge', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
         for i, m in enumerate(model_list):
             out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
         save_output_dict(out_reg, model_output_path, 'reg', rush_pass)

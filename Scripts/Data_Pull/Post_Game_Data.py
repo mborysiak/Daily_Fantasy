@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2022
-set_week = 14
+set_week = 15
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -61,7 +61,8 @@ trade_fix = [['James Robinson', 'NYJ'],
              ['Jeff Wilson', 'MIA'],
              ['Christian McCaffrey', 'SF'],
              ['Latavius Murray', 'DEN'],
-             ['TJ Hockenson', 'MIN']]
+             ['TJ Hockenson', 'MIN'],
+             ['Nyheim Hines', 'BUF']]
 for p, t in trade_fix:
     rush_rz_df.loc[rush_rz_df.player==p, 'team'] = t
     rec_rz_df.loc[rec_rz_df.player==p, 'team'] = t

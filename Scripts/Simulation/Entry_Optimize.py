@@ -26,7 +26,7 @@ set_years = [
 
 
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-ensemble_vers ='no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'   
+ensemble_vers ='no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'   
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 ownership_vers = 'standard_ln'
 
@@ -185,45 +185,36 @@ for repeat_num in range(10):
                                 AND year={year}
                                 AND Contest='Million' ''', 'DK_Results')
 
+        d_ordering = ['adjust_pos_counts', 'player_drop_multiple', 'matchup_drop', 
+                      'top_n_choices', 'full_model_weight', 'covar_type', 'max_team_type',
+                      'min_player_same_team', 'min_players_opp_team', 'num_top_players', 
+                      'qb_min_iter', 'qb_set_max_team', 'qb_solo_start', 
+                      'static_top_players', 'use_ownership', 'own_neg_frac', 
+                      'max_salary_remain', 'num_iters']
+
+        d = {
+            'adjust_pos_counts': {False: 0.3, True: 0.7},
+            'covar_type': {'kmeans_trunc': 0.0, 'no_covar': 0.7, 'team_points_trunc': 0.3},
+            'full_model_weight': {0.2: 0.3, 0.5: 0.0, 1: 0.0, 3: 0.0, 5: 0.7},
+            'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
+            'max_salary_remain': {200: 0.3, 300: 0.0, 400: 0.0, 500: 0.4, 1000: 0.3},
+            'max_team_type': {'player_points': 0.3, 'vegas_points': 0.3, 'all': 0.4},
+            'min_player_same_team': {-1: 0.0, 2: 0.0, 2.5: 0.0, 3: 0.4, 'Auto': 0.6},
+            'min_players_opp_team': {0: 0.0, 1: 0.3, 2: 0.0, 'Auto': 0.7},
+            'num_iters': {100: 1.0},
+            'num_top_players': {2: 0.5, 3: 0.0, 4: 0.0, 5: 0.5},
+            'own_neg_frac': {0.5: 0.0, 0.65: 0.0, 0.75: 0.0, 0.85: 0.0, 1: 1.0},
+            'player_drop_multiple': {0: 0.4, 1: 0.3, 2: 0.0, 4: 0.3, 6: 0.0},
+            'qb_min_iter': {0: 1.0, 1: 0.0, 9: 0.0},
+            'qb_set_max_team': {0: 0.0, 1: 1.0},
+            'qb_solo_start': {False: 0.7, True: 0.3},
+            'static_top_players': {False: 0.3, True: 0.7},
+            'top_n_choices': {0: 0.8, 1: 0.2, 2: 0.0, 4: 0.0},
+            'use_ownership': {0: 0.0, 0.5: 0.0, 0.9: 1.0, 1: 0.0}
+            }
         
-        df = {'adjust_pos_counts': {True: 0.9247692143291852, False: 0.07523078567081476},
- 'player_drop_multiple': {4: 0.07685060381363672,
-                          2: 0.1761947745354158,
-                          0: 0.7469546216509475},
- 'matchup_drop': {1: 0.08659477817778663,
-                  2: 0.1393149751111936,
-                  0: 0.7740902467110198},
- 'top_n_choices': {1: 0.10729046070226839,
-                   2: 0.17301308541127403,
-                   0: 0.7196964538864575},
- 'full_model_weight': {5: 0.7235268165032033, 0.2: 0.2764731834967967},
- 'covar_type': {'no_covar': 0.6532169501554576,
-                'team_points_trunc': 0.34678304984454245},
- 'min_player_same_team': {2: 0.21564282336684062,
-                          3: 0.29307049174103617,
-                          'Auto': 0.49128668489212324},
- 'min_player_opp_team': {1: 0.36425235280369783,
-                         2: 0.009364194795113879,
-                         'Auto': 0.6263834524011883},
- 'num_top_players': {2: 0.49870597792263427,
-                     3: 0.40026520543998023,
-                     5: 0.1010288166373855},
- 'qb_min_iter': {0: 0.9095323371501323, 9: 0.09046766284986774},
- 'qb_set_max_team': {True: 0.9710211636022553, False: 0.02897883639774468},
- 'qb_solo_start': {True: 0.03428250401779307, False: 0.9657174959822069},
- 'static_top_players': {True: 0.548546827881527, False: 0.451453172118473},
- 'use_ownership': {0.9: 0.4191277213791865,
-                   0.8: 0.08165446113894263,
-                   1: 0.49921781748187083},
- 'own_neg_frac': {0.8: 0.035364631495481795, 1: 0.9646353685045183},
- 'max_salary_remain': {200: 0.27918129837745975,
-                       500: 0.26596376960706375,
-                       1000: 0.2151258840391884,
-                       1500: 0.2397290479762881},
- 'num_iters': {100: 0.9106653212440792, 50: 0.08933467875592083}}
-
+        d = {k: d[k] for k in d_ordering}
         lineups_per_param = 2
-
         params = []
         for i in range(int(30/lineups_per_param)):
             cur_params = []
@@ -237,7 +228,7 @@ for repeat_num in range(10):
 
         
         def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
-                        full_model_rel_weight, covar_type, min_players_same_team, 
+                        full_model_rel_weight, covar_type, max_team_type, min_players_same_team, 
                         min_players_opp_team, num_top_players, qb_min_iter, qb_set_max_team, qb_solo_start,
                         static_top_players, use_ownership, own_neg_frac, max_salary_remain, 
                         num_iters, param_iter
@@ -277,7 +268,7 @@ for repeat_num in range(10):
 
                 for i in range(9):
                     results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-                                            min_players_opp_team_input=min_players_opp_team, 
+                                            min_players_opp_team_input=min_players_opp_team, max_team_type=max_team_type,
                                             adjust_select=adjust_select, num_matchup_drop=matchup_drop,
                                             own_neg_frac=own_neg_frac, n_top_players=num_top_players,
                                             static_top_players=static_top_players, qb_min_iter=qb_min_iter,
@@ -306,10 +297,14 @@ for repeat_num in range(10):
             sim_results = list(sim_results.values[0])
             
             return sim_results, lineup_pts
-
-  
-        par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i) for \
-                                                                       adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i in params)
+        
+        # for adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i in params:
+        #     print([adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i])
+        #     sim_winnings(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i)
+            
+    
+        par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i) for \
+                                                                       adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i in params)
 
         weighted_winnings = avg_winnings_contest(par_out)
         cur_week_avg_winnings = np.sum(weighted_winnings)
@@ -358,7 +353,7 @@ dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 
 # df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
 # add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
-# add_on = add_on.assign(param='qb_solo_start', param_option=False, option_value=1)
+# add_on = add_on.assign(param='max_team_type', param_option='player_points', option_value=1)
 # add_on = add_on[df.columns]
 
 # df = pd.concat([df, add_on], axis=0)
@@ -369,14 +364,13 @@ dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 
 #%%
 
-"134-138 include rb in stack"
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'Results')
-# df['qb_min_iter'] = 9
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'Results')
+df['max_team_type'] = 'player_points'
 # df['qb_set_max_team'] = False
 # df['qb_solo_start'] = False
-# # df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
+# df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
 
 #%%
 

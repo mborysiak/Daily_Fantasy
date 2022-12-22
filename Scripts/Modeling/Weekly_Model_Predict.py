@@ -79,9 +79,10 @@ def load_data(model_type, set_pos, run_params):
     if set_pos == 'Defense':
         df['team'] = df.player
         
+    df = df.dropna(axis=1)
     drop_cols = list(df.dtypes[df.dtypes=='object'].index)
     run_params['drop_cols'] = drop_cols
-    print(drop_cols)
+    print('Drop cols:', drop_cols)
 
     return df, run_params
 
@@ -107,7 +108,7 @@ def train_predict_split(df, run_params):
     df_train = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 
-    df_predict = df[df.game_date >= run_params['train_time_split']].reset_index(drop=True)
+    df_predict = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
     output_start = df_predict[['player', 'team', 'week', 'year', 'dk_salary']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
@@ -121,7 +122,7 @@ def get_class_data(df, cut, run_params):
 
     # set up the training and prediction datasets for the classification 
     df_train_class = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
-    df_predict_class = df[df.game_date >= run_params['train_time_split']].reset_index(drop=True)
+    df_predict_class = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
 
     # set up the target variable to be categorical based on Xth percentile
     cut_perc = df_train_class.groupby('game_date')['y_act'].apply(lambda x: np.percentile(x, cut))
@@ -219,12 +220,11 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
     params = skm.default_params(pipe, 'rand')
     if m=='adp': 
         params['feature_select__cols'] = [
-                                            ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints'],
-                                            ['year', 'week',  'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints'],
-                                            [ 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints']
+                                            ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
+                                            ['year', 'week',  'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
+                                            [ 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank']
                                         ]
-        params['k_best__k'] = range(1, 9)
-    
+        params['k_best__k'] = range(1, 14)
     
     if skm.model_obj == 'quantile':
         if m == 'qr_q': pipe.steps[-1][-1].quantile = alpha
@@ -233,6 +233,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
 
     if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
     if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
+    if m=='knn_q': params['knn_q__n_neighbors'] = range(1, min_samples-1)
     
     if stack_model: 
         params['random_sample__frac'] = np.arange(0.3, 1, 0.05)
@@ -611,6 +612,35 @@ def val_std_dev(model_output_path, output, best_val, best_val_class=None, best_v
  
     return output
 
+def vegas_points(run_params, metrics={'implied_points_for': 1}):
+
+    scores = dm.read("SELECT * FROM Scores_Lines", 'Model_Features')
+    scores = scores.rename(columns={'team': 'player', 'final_score': 'y_act'})
+
+    output_cols = ['player', 'week', 'year']
+    output_cols.extend(list(metrics.keys()))
+    output = scores.loc[(scores.week==run_params['set_week']) & \
+                        (scores.year==run_params['set_year']),
+                        output_cols]
+
+    scores = scores[(scores.year < run_params['set_year']) | \
+                    ((scores.year==run_params['set_year']) & \
+                    (scores.week < run_params['set_week']))].reset_index(drop=True)
+
+    sd_max_met = StandardScaler().fit(scores[list(metrics.keys())]).transform(output[list(metrics.keys())])
+    sd_max_met = np.mean(sd_max_met, axis=1)
+
+    sd_m, max_m, min_m = get_std_splines(scores, metrics, show_plot=True, k=2, 
+                                        min_grps_den=int(scores.shape[0]*0.08), 
+                                        max_grps_den=int(scores.shape[0]*0.04),
+                                        iso_spline='spline')
+
+    output['std_dev'] = sd_m(sd_max_met)
+    output['max_score'] = max_m(sd_max_met)
+    output['min_score'] = min_m(sd_max_met)
+    output = output.rename(columns={'player': 'team'})
+    return output
+
 
 def add_actual(df):
     if set_pos=='Defense': pl = 'defTeam'
@@ -756,8 +786,6 @@ def save_output_to_db(output, run_params):
     dm.delete_from_db('Simulation', 'Model_Predictions', del_str, create_backup=False)
     dm.write_to_db(output, 'Simulation', f'Model_Predictions', 'append')
 
-#%%
-
 
 #%%
 #==========
@@ -780,7 +808,7 @@ run_params = {
 
     # set beginning of validation period
     'val_year_min': 2020,
-    'val_week_min': 14,
+    'val_week_min': 1,
 
     # opt params
     'n_iters': 50,
@@ -811,11 +839,11 @@ set_weeks = [
          # 6, 7, 8, 9, 10,
         #  13, 14, 15, 16
         # 12, 13
-        8
+        15
                  ]
 
 pred_versions = [
-                'sera1_rsq0_brier1_matt1_lowsample_perc',
+                'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc',
                 #  'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #   'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #    'sera1_rsq0_brier1_matt1_lowsample_perc',
@@ -847,14 +875,14 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     run_params['set_week'] = w
     runs = [
         ['QB', 'full_model', ''],
-        # ['RB', 'full_model', ''],
-        # ['WR', 'full_model', ''],
-        # ['TE', 'full_model', ''],
-        # ['Defense', 'full_model', ''],
-        # ['QB', 'backfill', ''],
-        # ['RB', 'backfill', ''],
-        # ['WR', 'backfill', ''],
-        # ['TE', 'backfill', '']
+        ['RB', 'full_model', ''],
+        ['WR', 'full_model', ''],
+        ['TE', 'full_model', ''],
+        ['Defense', 'full_model', ''],
+        ['QB', 'backfill', ''],
+        ['RB', 'backfill', ''],
+        ['WR', 'backfill', ''],
+        ['TE', 'backfill', '']
     ]
     for set_pos, model_type, rush_pass in runs:
 
@@ -909,7 +937,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
                                                                             min_include=min_include)
 
         if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
-        # save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
+        save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
 
         # quantile regression metrics
         final_models = ['qr_q', 'gbm_q', 'lgbm_q', 'rf_q', 'knn_q']
@@ -939,11 +967,11 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         best_val, best_predictions, best_score = average_stack_models(scores, final_models, y_stack, stack_val_pred, 
                                                                       predictions, model_obj='reg',
                                                                       show_plot=show_plot, min_include=min_include)
-        # save_val_to_db(model_output_path, best_val, run_params, 'reg', table_name='Model_Validations')
+        save_val_to_db(model_output_path, best_val, run_params, 'reg', table_name='Model_Validations')
         
         # create the output and add standard devations / max scores
         output = create_output(output_start, best_predictions, best_predictions_class, best_predictions_quant)
-        # save_prob_to_db(output, run_params, 'Predicted_Probability')
+        save_prob_to_db(output, run_params, 'Predicted_Probability')
 
         metrics = {'pred_fp_per_game': 1, 'pred_fp_per_game_class': 1, 'pred_fp_per_game_quantile': 1}
         output = val_std_dev(model_output_path, output, best_val, best_val_class, best_val_quant, metrics=metrics, 
@@ -954,7 +982,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
             print(output.loc[:50, ['player', 'week', 'year', 'dk_salary', 'dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class',
                                    'pred_fp_per_game_quantile', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
             
-            # save_test_to_db(output, run_params)
+            save_test_to_db(output, run_params)
             
             if show_plot: 
                 mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
@@ -966,9 +994,13 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
             print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class', 
                                    'pred_fp_per_game_quantile', 'std_dev', 'min_score', 'max_score']])
 
-        # save_output_to_db(output, run_params)
+        save_output_to_db(output, run_params)
 
-# print('All Runs Finished')
+vp = vegas_points(run_params, metrics={'implied_points_for': 1})
+dm.delete_from_db('Simulation', 'Vegas_Points', f"week={run_params['set_week']} AND year={run_params['set_year']}", create_backup=False)
+dm.write_to_db(vp, 'Simulation', 'Vegas_Points', 'append')
+print('All Runs Finished')
+
 #%%
 
 results = []

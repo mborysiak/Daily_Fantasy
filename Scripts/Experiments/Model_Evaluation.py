@@ -142,14 +142,14 @@ def get_class_data(df, cut, run_params):
 
 
 # set the model version
-model_type ='backfill'
-set_pos = 'QB'
+model_type ='full_model'
+set_pos = 'Defense'
 
 run_params = {
     
     # set year and week to analyze
     'set_year': 2022,
-    'set_week': 13,
+    'set_week': 16,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -191,7 +191,7 @@ df_train, df_predict, output_start, min_samples = train_predict_split(df, run_pa
 cut = 95
 df_train_class, df_predict_class = get_class_data(df, cut, run_params)
 
-skm = SciKitModel(df_train, model_obj='reg', sera_wt=1, r2_wt=0)
+skm = SciKitModel(df_train, model_obj='reg', sera_wt=1, r2_wt=1)
 X_all, y = skm.Xy_split('y_act', run_params['drop_cols'])
 
 X = X_all.sample(frac=1, axis=1)
@@ -209,14 +209,14 @@ from sklearn_quantile import RandomForestQuantileRegressor, KNeighborsQuantileRe
 from category_encoders.cat_boost import CatBoostEncoder
 
 pipe = skm.model_pipe([ #('cbe', CatBoostEncoder()),
-                       #  skm.piece('random_sample'),
+                        skm.piece('random_sample'),
                         skm.piece('std_scale'), 
-                        #  skm.piece('select_perc'),
-                        # skm.feature_union([
-                        #                 skm.piece('agglomeration'), 
-                        #                 skm.piece('k_best'),
-                        #                 skm.piece('pca')
-                        #                 ]),
+                         skm.piece('select_perc'),
+                        skm.feature_union([
+                                        skm.piece('agglomeration'), 
+                                        skm.piece('k_best'),
+                                        skm.piece('pca')
+                                        ]),
                         skm.piece('k_best'),
                         skm.piece('enet')
                         
@@ -482,10 +482,10 @@ def entry_optimize_params(df, max_adjust, model_name):
 df = dm.read('''SELECT *  
                 FROM Entry_Optimize_Params_Detail 
                 JOIN (
-                     SELECT week, year, pred_vers, ensemble_vers, std_dev_type, sim_type, trial_num, repeat_num
+                     SELECT week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num > 90
+                WHERE trial_num > 152
                      -- AND week NOT IN (1,3)
                 ''', 'Results')
 
@@ -506,8 +506,10 @@ show_coef(coef_vals, X)
 
 #%%
 
-weeks = [ 2, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
+weeks = [13, 14, 15, 16, 17, 
+          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+years = [2021, 2021, 2021, 2021, 2021,
+        2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
 
 i=0
 all_coef = None; X_all = None
@@ -515,10 +517,10 @@ for w, yr in zip(weeks, years):
     df = dm.read(f'''SELECT *  
                      FROM Entry_Optimize_Params_Detail 
                      JOIN (
-                            SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
+                            SELECT week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num > 90
+                     WHERE trial_num > 152
                            AND week = {w}
                            AND year = {yr}
                      ''', 'Results')
