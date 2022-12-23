@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2022
-set_week = 15
+set_week = 16
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -76,8 +76,7 @@ def format_fantasy_cruncher(df, set_week, set_year):
     new_cols = ['player', 'pos']
     new_cols.extend(['fc_' + c for c in df.columns if c not in ('player', 'pos')])
     df.columns = new_cols
-    try: df = df.rename(columns={'ffc_game_and_vegas_stdv': 'ffc_game_and_vegas_stddev'})
-    except: pass
+    df = df.rename(columns={'fc_game_and_vegas_stdv': 'fc_game_and_vegas_stddev'})
     df['week'] = set_week
     df['year'] = set_year
 
@@ -241,8 +240,6 @@ for t, d, db in zip(tables, dfs, dbs):
 
 #%%
 
-
-
 df = move_download_to_folder(root_path, 'FFA', f'projections_{set_year}_wk{set_week}.csv')
 df = format_ffa(df, 'Projections', set_week, set_year)
 
@@ -265,6 +262,18 @@ df = format_fantasy_cruncher(df, set_week, set_year)
 dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
 
+#%%
+
+# pull fftoday rankings
+output = pd.DataFrame()
+for pos in ['QB', 'RB', 'WR', 'TE']:
+    df = pull_fftoday(pos, set_week, set_year)
+    output = pd.concat([output, df], axis=0, sort=False)
+output = output.fillna(0)
+output = dc.convert_to_float(output)
+
+dm.delete_from_db('Pre_PlayerData', 'FFToday_Projections', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(output, 'Pre_PlayerData', 'FFToday_Projections', 'append')
 
 #%%
 # ## PFF Matchups
@@ -776,108 +785,3 @@ dm.write_to_db(k_points, 'Simulation', 'Model_Predictions', 'append')
 # dm.write_to_db(df_team, 'Pre_TeamData', 'Daily_Salaries', 'append')
 
 
-# %%
-to_upload = pd.DataFrame()
-rank_c = 'expertKevinCole'
-for pos in ['QB', 'RB', 'WR', 'TE', 'K']:
-    fp = dm.read(f'''SELECT * 
-                    FROM PFF_Expert_Ranks 
-                    WHERE Position='{pos}' 
-                            ''', 'Pre_PlayerData')
-    fp.player = fp.player.apply(dc.name_clean)
-    # if pos == 'DST': fp = fp.drop('player', axis=1).rename(columns={'team': 'player'})
-
-    import datetime as dt
-    def year_week_to_date(x):
-        return int(dt.datetime(x[0], 1, x[1]).strftime('%Y%m%d'))
-
-    fp = fp.sort_values(by=['year', 'week', rank_c]).reset_index(drop=True)
-    fp['game_date'] = fp[['year', 'week']].apply(year_week_to_date, axis=1)
-
-
-    def create_adj_ranks(df, rank_col):
-        
-        # get the mean rankings for past 6 weeks
-        past_6_weeks = df.game_date.unique()[-6]
-        mean_rank = df[df.game_date >= past_6_weeks].reset_index(drop=True)
-        mean_rank = mean_rank.groupby('player').agg({rank_col: 'mean'}).reset_index().sort_values(by=rank_col)
-        mean_rank[rank_col] = range(1, len(mean_rank)+1)
-
-        # join in the current rankings and find missing players
-        cur_rank = df[df.game_date == df.game_date.unique()[-1]].reset_index(drop=True)
-        mean_rank = pd.merge(mean_rank, cur_rank[['player', 'game_date']], on=['player'], how='outer')
-        mean_rank['to_add'] = np.where(mean_rank.game_date.isnull(), 1, 0)
-        mean_rank['to_add'] = mean_rank.to_add.cumsum()
-        
-        # join current back to the mean and adjust the rankings for missing players
-        cur_rank = pd.merge(cur_rank, mean_rank[[rank_col, 'to_add']], on=rank_col)
-        cur_rank['rankadj_' + rank_col] = cur_rank[rank_col] + cur_rank.to_add
-        cur_rank = cur_rank.drop(['game_date', 'to_add'], axis=1)
-
-        # join current back to the mean and adjust the rankings for missing players
-        cur_rank = pd.merge(cur_rank, mean_rank[['player', 'to_add']], on='player', how='left')
-        cur_rank['playeradj_' + rank_col] = cur_rank[rank_col] + cur_rank.to_add
-        cur_rank = cur_rank.drop(['to_add'], axis=1)
-
-        return cur_rank
-
-    with_adj = fp[fp.game_date <= fp.game_date.unique()[5]].copy().drop('game_date', axis=1)
-    for i in fp.game_date.unique()[6:]:
-        cur_df = create_adj_ranks(fp[fp.game_date <= i], rank_c)
-        with_adj = pd.concat([with_adj, cur_df], axis=0)
-
-    with_adj.loc[with_adj['rankadj_' + rank_c].isnull(), 'rankadj_' + rank_c] = with_adj.loc[with_adj['rankadj_' + rank_c].isnull(), rank_c]
-    with_adj.loc[with_adj['playeradj_' + rank_c].isnull(), 'playeradj_' + rank_c] = with_adj.loc[with_adj['playeradj_'+ rank_c].isnull(), rank_c]
-
-    with_adj = pd.merge(fp, with_adj[['player', 'offTeam', 'week', 'year', 
-                             'rankadj_' + rank_c, 'playeradj_' + rank_c]],
-                             on=['player', 'offTeam', 'week', 'year'], how='left')
-    to_upload = pd.concat([to_upload, with_adj], axis=0)
-
-#%%
-xx = to_upload[['player', 'offTeam', 'week', 'year', 'rankadj_expertConsensus', 'playeradj_expertConsensus']].copy()
-
-#%%
-yy = to_upload[['player', 'offTeam', 'week', 'year', 'rankadj_expertNathanJahnke', 'playeradj_expertNathanJahnke']].copy()
-
-#%%
-
-to_upload = pd.merge(to_upload, xx,on=['player', 'offTeam', 'week', 'year'], how='left')
-to_upload = pd.merge(to_upload, yy,on=['player', 'offTeam', 'week', 'year'], how='left')
-
-# %%
-
-dm.write_to_db(to_upload.drop_duplicates(), 'Pre_PlayerData', 'PFF_Expert_Ranks', 'replace', True)
-
-# %%
-all_data = dm.read("SELECT * FROM PFF_Expert_Ranks", 'Pre_PlayerData')
-all_data.week= all_data.week.astype('str')
-all_data.year = all_data.year.astype('str')
-all_data['pkey'] = all_data.player + all_data.week + all_data.year
-
-to_upload.week= to_upload.week.astype('str')
-to_upload.year = to_upload.year.astype('str')
-to_upload['pkey'] = to_upload.player + to_upload.week + to_upload.year
-all_data[(~all_data.pkey.isin(to_upload.pkey)) ]#.groupby('player').agg({'Id': 'count'}).sort_values(by='Id', ascending=False)
-# %%
-
-
-# %%
-
-# # fill_cols = ['ffa_points','ffa_sd_pts','ffa_dropoff','ffa_floor','ffa_ceiling','ffa_points_vor','ffa_floor_vor','ffa_ceiling_vor']
-# # df.loc[(df.ffa_points > 40) & (df.position=='QB'), fill_cols] = df.loc[(df.ffa_points > 40) & (df.position=='QB'), fill_cols] / 16
-
-# #%%
-# # cleanup bad data
-# cols = ['ffa_points', 'ffa_sd_pts', 'ffa_dropoff', 'ffa_floor', 'ffa_ceiling', 'ffa_points_vor', 'ffa_floor_vor',
-#         'ffa_ceiling_vor', 'ffa_rush_yds','ffa_rush_yds_sd','ffa_rush_tds','ffa_rush_tds_sd']
-# if pos == 'QB':
-#     cols.extend(['ffa_pass_yds','ffa_pass_yds_sd','ffa_pass_tds','ffa_pass_tds_sd','ffa_pass_int', 'ffa_pass_int_sd'])
-
-# elif pos in ('RB', 'WR', 'TE'):
-#     cols.extend(['rec', 'rec_sd', 'rec_yds'])
-
-# df.loc[df.ffa_points > 50, cols] = df.loc[df.ffa_points > 50, cols] / 16
-# df.loc[df.ffa_ceiling > 50, cols] = df.loc[df.ffa_ceiling > 50, cols] / 16
-
-# df = df.sort_values(by=['year', 'week', 'ffa_points'], ascending=[True, True, False]).reset_index(drop=True)

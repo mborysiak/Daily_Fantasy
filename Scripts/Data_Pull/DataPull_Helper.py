@@ -137,6 +137,60 @@ def create_adj_ranks(df, rank_col, where_pos, table_name, dm):
     return cur_rank
 
 
+
+def pull_fftoday(pos, set_week, set_year):
+
+    pos_ids = {
+        'QB': 10,
+        'RB': 20,
+        'WR': 30,
+        'TE': 40
+    }
+
+    num_pages = {
+        'QB': [0],
+        'RB': [0, 1],
+        'WR': [0, 1, 2],
+        'TE': [0]
+        }
+
+    cols = {
+            'QB': ['player', 'team', 'opp', 'fft_pass_comp', 'fft_pass_att', 'fft_pass_yds', 'fft_pass_td',
+                'fft_pass_int', 'fft_rush_att', 'fft_rush_yds', 'fft_rush_td', 'fft_proj_pts'],
+            'WR': ['player', 'team', 'opp', 'fft_rec', 'fft_rec_yds', 'fft_rec_td', 'fft_proj_pts'],
+            'RB': ['player', 'team', 'opp', 'fft_rush_att', 'fft_rush_yds', 'fft_rush_td', 
+                'fft_rec', 'fft_rec_yds', 'fft_rec_td', 'fft_proj_pts'],
+            'TE': ['player', 'team', 'opp', 'fft_rec', 'fft_rec_yds', 'fft_rec_td', 'fft_proj_pts']
+        }
+
+    df = pd.DataFrame()
+    for page_num in num_pages[pos]:
+        try:
+            fft_url = f"https://www.fftoday.com/rankings/playerwkproj.php?Season={set_year}&GameWeek={set_week}&PosID={pos_ids[pos]}&LeagueID=107644&order_by=FFPts&sort_order=DESC&cur_page={page_num}"
+
+            df_cur = pd.read_html(fft_url)[7]
+            df_cur = df_cur.iloc[2:, 1:]
+            df_cur.columns = cols[pos]
+
+            df_cur = df_cur.assign(pos=pos, week=set_week, year=set_year)
+
+            col_arr = ['player', 'pos', 'team', 'week', 'year']
+            col_arr.extend([c for c in df_cur.columns if 'fft' in c])
+            df_cur = df_cur[col_arr]
+            
+            df = pd.concat([df, df_cur], axis=0)
+            
+        except:
+            (pos, set_week, set_year, 'failed')
+    try:
+        df.player = df.player.apply(dc.name_clean)
+        df.team = df.team.map(team_map)
+    except:
+        pass
+
+    return df
+
+
 team_map = {
     'ARI': 'ARI',
     'ARZ': 'ARI',

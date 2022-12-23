@@ -189,6 +189,12 @@ def ffa_compile(df, table_name, pos):
     return df
 
 
+def fftoday_proj(df, pos):
+    fft = dm.read(f"SELECT * FROM FFToday_Projections WHERE pos='{pos}'", 'Pre_PlayerData').drop(['team','pos'], axis=1)
+    df = pd.merge(df, fft, on=['player', 'week','year'], how='left')
+    return df
+
+
 def pff_experts_new(df, pos):
 
     experts = dm.read(f'''SELECT player, week, year, a.defTeam,
@@ -257,20 +263,20 @@ def consensus_fill(df, is_dst=False):
         to_fill = {
 
             # stat fills
-            'proj_pass_yds': ['passYds', 'ffa_pass_yds', 'fc_proj_passing_stats_yrds'],
-            'proj_pass_td': ['passTd', 'ffa_pass_tds', 'fc_proj_passing_stats_tds'],
-            'proj_pass_int': ['passInt', 'ffa_pass_int', 'fc_proj_passing_stats_int'],
-            'proj_pass_att': ['passAtt', 'fc_proj_passing_stats_att'],
-            'proj_rush_yds': ['rushYds', 'ffa_rush_yds', 'fc_proj_rushing_stats_yrds'],
-            'proj_rush_att': ['rushAtt', 'fc_proj_rushing_stats_att'],
-            'proj_rush_td': ['rushTd', 'ffa_rush_tds', 'fc_proj_rushing_stats_tds'],
-            'proj_rec': ['recvReceptions', 'ffa_rec', 'fc_proj_receiving_stats_rec'],
-            'proj_rec_yds': ['recvYds', 'ffa_rec_yds', 'fc_proj_receiving_stats_yrds'],
-            'proj_rec_td': ['recvTd', 'ffa_rec_tds', 'fc_proj_receiving_stats_tds'],
+            'proj_pass_yds': ['passYds', 'ffa_pass_yds', 'fft_pass_yds', 'fc_proj_passing_stats_yrds'],
+            'proj_pass_td': ['passTd', 'ffa_pass_tds', 'fft_pass_td', 'fc_proj_passing_stats_tds'],
+            'proj_pass_int': ['passInt', 'ffa_pass_int', 'fft_pass_int', 'fc_proj_passing_stats_int'],
+            'proj_pass_att': ['passAtt', 'fft_pass_att', 'fc_proj_passing_stats_att'],
+            'proj_rush_yds': ['rushYds', 'ffa_rush_yds', 'fft_rush_yds', 'fc_proj_rushing_stats_yrds'],
+            'proj_rush_att': ['rushAtt', 'fft_rush_att', 'fc_proj_rushing_stats_att'],
+            'proj_rush_td': ['rushTd', 'ffa_rush_tds', 'fft_rush_td', 'fc_proj_rushing_stats_tds'],
+            'proj_rec': ['recvReceptions', 'ffa_rec', 'fft_rec', 'fc_proj_receiving_stats_rec'],
+            'proj_rec_yds': ['recvYds', 'ffa_rec_yds', 'fft_rec_yds', 'fc_proj_receiving_stats_yrds'],
+            'proj_rec_td': ['recvTd', 'ffa_rec_tds', 'fft_rec_td', 'fc_proj_receiving_stats_tds'],
             'proj_rec_tgts': ['recvTargets', 'fc_proj_receiving_stats_tar'],
 
             # point and rank fills
-            'proj_points': ['projected_points', 'fantasyPoints', 'ProjPts', 'ffa_points', 'fc_proj_fantasy_pts_fc'],
+            'proj_points': ['projected_points', 'fantasyPoints', 'ProjPts', 'ffa_points', 'fft_proj_pts', 'fc_proj_fantasy_pts_fc'],
             'proj_rank': ['fp_rank', 'rankadj_fp_rank', 'playeradj_fp_rank', 'expertConsensus', 'expertNathanJahnke', 
                             'expertIanHartitz', 'rankadj_expertConsensus', 'rankadj_expertNathanJahnke', 'fantasyPointsRank',
                             'playeradj_expertNathanJahnke', 'playeradj_expertConsensus', 'ffa_position_rank', 'fc_rank']
@@ -318,7 +324,7 @@ def log_rank_cols(df):
 def rolling_proj_stats(df):
     df = forward_fill(df)
     proj_cols = [c for c in df.columns if 'ffa' in c or 'rank' in c or 'fc' in c or 'proj' in c \
-                 or 'expert' in c or 'Pts' in c or 'Points' in c or 'points' in c]
+                 or 'fft' in c or 'expert' in c or 'Pts' in c or 'Points' in c or 'points' in c]
     df = add_rolling_stats(df, ['player'], proj_cols)
 
     for c in proj_cols:
@@ -536,7 +542,7 @@ def te_matchups(df):
 # Post Game Data
 #---------------
 
-def get_player_data(df, pos, YEAR, prev_years=1):
+def get_player_data(df, pos):
 
     player_data = dm.read(f'''SELECT * 
                               FROM {pos}_Stats 
@@ -717,7 +723,7 @@ def add_fp_rolling(df, pos):
     return df
 
 
-def get_team_stats(YEAR, prev_years=1):
+def get_team_stats():
     
     team_stats = dm.read(f'''SELECT * 
                              FROM Team_Stats 
@@ -981,7 +987,7 @@ def advanced_rec_stats(df):
     return df
 
 
-def add_next_gen(df, pos, stat_type):
+def add_next_gen(df, stat_type):
 
     next_gen = dm.read(f"SELECT * FROM NextGen_{stat_type}", 'Post_PlayerData')
     try: next_gen = next_gen.drop('pos', axis=1)
@@ -1012,7 +1018,7 @@ def add_next_gen(df, pos, stat_type):
     return df
 
 
-def get_defense_stats(prev_years=1):
+def get_defense_stats():
     d_stats = dm.read(f'''SELECT * 
                         FROM Defense_Stats 
                         WHERE (season = 2020 AND week != 17)
@@ -1293,7 +1299,7 @@ def projected_pts_vs_predicted(df):
 
     proj_pts_miss = df[['player', 'team', 'week', 'year']].copy()
     for c in ['ffa_points', 'projected_points', 'fantasyPoints', 'ProjPts', 
-            'fc_proj_fantasy_pts_fc', 'avg_proj_points']:
+              'fc_proj_fantasy_pts_fc', 'fft_proj_pts', 'avg_proj_points']:
         if c in df.columns:
             cur_miss = results_vs_predicted(df[['player', 'team', 'week', 'year', 'y_act', c]].copy(), c)
             proj_pts_miss = pd.merge(proj_pts_miss, cur_miss, on=['player', 'team', 'week', 'year']) 
@@ -1600,7 +1606,7 @@ def defense_for_pos():
     defense = fantasy_cruncher(defense.rename(columns={'defTeam': 'player'}), 'DST')
     defense = defense.rename(columns={'player': 'defTeam'})
 
-    d_stats = get_defense_stats(prev_years=1).rename(columns={'team': 'defTeam'})
+    d_stats = get_defense_stats().rename(columns={'team': 'defTeam'})
     defense = pd.merge(defense, d_stats, on=['defTeam', 'week', 'year'], how='inner')
 
     defense = consensus_fill(defense, is_dst=True)
@@ -1624,6 +1630,7 @@ def get_max_qb():
     df = pff_experts_new(df, 'QB')
     df = ffa_compile(df, 'FFA_Projections', 'QB')
     df = ffa_compile(df, 'FFA_RawStats', 'QB')
+    df = fftoday_proj(df, 'QB')
     df = fantasy_cruncher(df, 'QB')
     df = get_salaries(df, 'QB')
 
@@ -1637,6 +1644,8 @@ def get_max_qb():
                'passComp', 'passAtt', 'passYds', 'passTd', 'passInt', 'passSacked', 'rushAtt', 'rushYds', 'rushTd',
                'fc_proj_passing_stats_att', 'fc_proj_passing_stats_yrds','fc_proj_passing_stats_tds', 'fc_proj_passing_stats_int',
                'fc_proj_rushing_stats_att',  'fc_proj_rushing_stats_yrds', 'fc_proj_rushing_stats_tds',
+               'fft_proj_pts', 'fft_pass_att', 'fft_pass_int', 'fft_rush_yds', 'fft_rush_att', 'fft_pass_yds', 'fft_pass_td',
+               'fft_rush_td', 'fft_pass_comp', 
                'avg_proj_pass_yds', 'avg_proj_pass_td',  'avg_proj_pass_int', 'avg_proj_pass_att',
                'avg_proj_rush_yds',  'avg_proj_rush_att', 'avg_proj_rush_td', 
                'ffa_points', 'projected_points', 'avg_proj_points', 'ProjPts', 
@@ -1673,6 +1682,7 @@ def get_team_projections():
         tp = pff_experts_new(tp, pos)
         tp = ffa_compile(tp, 'FFA_Projections', pos)
         tp = ffa_compile(tp, 'FFA_RawStats', pos)
+        tp = fftoday_proj(tp, pos)
         tp = fantasy_cruncher(tp, pos)
         tp = get_salaries(tp, pos)
 
@@ -1694,6 +1704,7 @@ def get_team_projections():
             'log_ffa_rank', 'log_avg_proj_rank', 'log_expertConsensus', 'log_rankadj_fp_rank', 'log_playeradj_fp_rank', 'log_fp_rank',
             'rushAtt', 'rushYds', 'rushTd', 'recvTargets', 'recvReceptions', 'recvYds', 'recvTd',
             'ffa_rush_yds', 'ffa_rush_tds','ffa_rec', 'ffa_rec_yds','ffa_rec_tds',
+            'fft_rush_att', 'fft_rush_yds', 'fft_rush_td', 'fft_rec', 'fft_rec_yds', 'fft_rec_td', 'fft_proj_pts',
             'fc_proj_rushing_stats_att', 'fc_proj_rushing_stats_yrds', 'fc_proj_rushing_stats_tds',
             'fc_proj_receiving_stats_tar', 'fc_proj_receiving_stats_rec',
             'fc_proj_receiving_stats_yrds', 'fc_proj_receiving_stats_tds', 
@@ -1726,7 +1737,7 @@ def proj_market_share(df, proj_col_name):
     for proj_col in proj_cols:
         orig_col = proj_col.replace(proj_col_name, '')
         if orig_col in df.columns:
-            df[f'{proj_col_name}share_{orig_col}'] = df[orig_col] / df[proj_col]
+            df[f'{proj_col_name}share_{orig_col}'] = df[orig_col] / (df[proj_col]+3)
             df[f'{proj_col_name}share_diff_{orig_col}'] = df[orig_col] - df[proj_col]
             df[[f'{proj_col_name}share_{orig_col}', f'{proj_col_name}share_diff_{orig_col}']] = \
                 df[[f'{proj_col_name}share_{orig_col}', f'{proj_col_name}share_diff_{orig_col}']].fillna(0)
@@ -1740,6 +1751,7 @@ def non_qb_team_pos_rank():
         tp = pff_experts_new(tp, pos)
         tp = ffa_compile(tp, 'FFA_Projections', pos)
         tp = ffa_compile(tp, 'FFA_RawStats', pos)
+        tp = fftoday_proj(tp, pos)
         tp = fantasy_cruncher(tp, pos)
         tp = consensus_fill(tp)
         tp = fill_ratio_nulls(tp)
@@ -1756,7 +1768,7 @@ create_scores_lines_table(WEEK, YEAR)
 # get datasets that will be used across positions
 opp_defense = defense_for_pos()
 team_proj, team_proj_pos = get_team_projections()
-team_stats = get_team_stats(YEAR)
+team_stats = get_team_stats()
 team_qb = get_max_qb()
 team_pos_rank = non_qb_team_pos_rank()
 pff_oline = pff_oline_rollup()
@@ -1776,6 +1788,7 @@ def qb_pull(rush_or_pass):
     df = pff_experts_new(df, pos); print(df.shape[0])
     df = ffa_compile(df, 'FFA_Projections', pos); print(df.shape[0])
     df = ffa_compile(df, 'FFA_RawStats', pos); print(df.shape[0])
+    df = fftoday_proj(df, pos); print(df.shape[0])
     df = fantasy_cruncher(df, pos); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
 
@@ -1796,12 +1809,12 @@ def qb_pull(rush_or_pass):
     #--------------------
 
     # add player stats data
-    df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
+    df = get_player_data(df, pos); print(df.shape[0])
 
     df = add_rz_stats_qb(df); print(df.shape[0])
     df = add_qbr(df); print(df.shape[0])
     df = add_qb_adv(df); print(df.shape[0])
-    df = add_next_gen(df, pos, 'Passing'); print(df.shape[0])
+    df = add_next_gen(df, 'Passing'); print(df.shape[0])
 
     # merge self team and opposing team stats
     df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print( df.shape[0])
@@ -1851,6 +1864,7 @@ for pos in ['RB', 'WR', 'TE']:
     df = pff_experts_new(df, pos); print(df.shape[0])
     df = ffa_compile(df, 'FFA_Projections', pos); print(df.shape[0])
     df = ffa_compile(df, 'FFA_RawStats', pos); print(df.shape[0])
+    df = fftoday_proj(df, pos); print(df.shape[0])
     df = fantasy_cruncher(df, pos); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
 
@@ -1874,16 +1888,16 @@ for pos in ['RB', 'WR', 'TE']:
     #----------------------
 
     # add player stats
-    df = get_player_data(df, pos, YEAR, prev_years=1); print(df.shape[0])
+    df = get_player_data(df, pos); print(df.shape[0])
 
     # add advanced stats
     df = add_rz_stats(df); print(df.shape[0])
     df = advanced_rec_stats(df)
     if pos in ('WR', 'TE'):
-        df = add_next_gen(df, pos, 'Receiving'); print('next_gen', df.shape[0])
+        df = add_next_gen(df, 'Receiving'); print('next_gen', df.shape[0])
     if pos == 'RB': 
         df = advanced_rb_stats(df)
-        df = add_next_gen(df, pos, 'Rushing'); print(df.shape[0])
+        df = add_next_gen(df, 'Rushing'); print(df.shape[0])
 
     df = def_pts_allowed(df); print(df.shape[0])
 
@@ -1931,6 +1945,7 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     df = pff_experts_new(df, pos); print(df.shape[0])
     df = ffa_compile(df, 'FFA_Projections', pos); print(df.shape[0])
     df = ffa_compile(df, 'FFA_RawStats', pos); print(df.shape[0])
+    df = fftoday_proj(df, pos); print(df.shape[0])
     df = fantasy_cruncher(df, pos); print(df.shape[0])
 
     df = consensus_fill(df); print(df.shape[0])
@@ -1982,7 +1997,7 @@ output = remove_non_uniques(output)
 dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 
 #%%
-chk_week = 15
+chk_week = 16
 backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={chk_week} AND year={YEAR}", 'Model_Features').player.values
 sal = dm.read(f"SELECT player, salary FROM Salaries WHERE league={chk_week} AND year={YEAR}", 'Simulation')
 sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
@@ -2053,11 +2068,11 @@ defense = pd.merge(defense, team_proj_self, on=['team', 'week', 'year'])
 defense = pd.merge(defense, team_proj.rename(columns={'team': 'offTeam'}), 
                    on=['offTeam', 'week', 'year']); print( df.shape[0])
 
-team_stats = get_team_stats(YEAR)
+team_stats = get_team_stats()
 defense = pd.merge(defense, team_stats.rename(columns={'team': 'offTeam'}), 
                    on=['offTeam', 'week', 'year']); print(defense.shape[0])
 
-d_stats = get_defense_stats(prev_years=1)
+d_stats = get_defense_stats()
 defense = pd.merge(defense, d_stats, on=['team', 'week', 'year'], how='inner')
 
 pff_oline = pff_oline_rollup()
@@ -2084,14 +2099,9 @@ defense = remove_low_corrs(defense)
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 
 # %%
-
-
-
-# %%
 # TO DO LIST
 # - add in PFF scores
 # - add in snaps and snap share
-# - Market share in terms of projected FP, dk salary, etc
 
 #%%
 
@@ -2163,30 +2173,3 @@ data
 
 # missing_game[missing_game.team=='SEA'].iloc[:50]
 # %%
-
-# to_agg = {c: [np.mean, np.max, np.min] for c in cols}
-# team_stats = df.groupby(['team', 'week', 'year']).agg(to_agg)
-
-# diff_df = df[['player', 'team', 'week', 'year']].drop_duplicates()
-# for c in cols:
-#     tmp_df = team_stats[c].reset_index()
-#     tmp_df = pd.merge(tmp_df, df[['player', 'team', 'week', 'year', c]], on=['team', 'week', 'year'])
-
-#     for a in ['mean', 'amin', 'amax']:
-#         tmp_df[f'{c}_{a}_diff'] = tmp_df[c] - tmp_df[a]
-
-#     tmp_df = tmp_df[['player', 'team', 'week', 'year', f'{c}_mean_diff', f'{c}_amax_diff', f'{c}_amin_diff']]
-#     diff_df = pd.merge(diff_df, tmp_df, on=['player', 'team', 'week', 'year'])
-    
-# diff_df = diff_df.drop_duplicates()
-# team_stats.columns = [f'{c[0]}_{c[1]}' for c in team_stats.columns]
-# team_stats = team_stats.reset_index().drop_duplicates()
-
-# df = pd.merge(df, team_stats, on=['team', 'week', 'year'])
-# df = pd.merge(df, diff_df, on=['player', 'team', 'week', 'year'])
-
-# #%%
-
-# df = dm.read('''SELECT * FROM WR_Stats WHERE season>=2020 AND rec_yards_gained_sum > 10 ''', 'FastR')
-# df.fantasy_pts.plot.hist()
-

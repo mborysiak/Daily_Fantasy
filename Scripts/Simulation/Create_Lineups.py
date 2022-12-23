@@ -14,7 +14,7 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=15
+week=16
 
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
 ensemble_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'

@@ -822,7 +822,7 @@ run_params = {
 
 min_include = 2
 show_plot= True
-print_coef = False
+print_coef = True
 num_k_folds = 3
 
 r2_wt = 0
@@ -839,7 +839,7 @@ set_weeks = [
          # 6, 7, 8, 9, 10,
         #  13, 14, 15, 16
         # 12, 13
-        15
+        16
                  ]
 
 pred_versions = [
@@ -874,11 +874,11 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
     run_params['set_week'] = w
     runs = [
-        ['QB', 'full_model', ''],
-        ['RB', 'full_model', ''],
-        ['WR', 'full_model', ''],
-        ['TE', 'full_model', ''],
-        ['Defense', 'full_model', ''],
+        # ['QB', 'full_model', ''],
+        # ['RB', 'full_model', ''],
+        # ['WR', 'full_model', ''],
+        # ['TE', 'full_model', ''],
+        # ['Defense', 'full_model', ''],
         ['QB', 'backfill', ''],
         ['RB', 'backfill', ''],
         ['WR', 'backfill', ''],

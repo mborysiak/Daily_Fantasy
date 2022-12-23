@@ -535,6 +535,39 @@ show_coef(all_coef, X_all)
 
 # %%
 
+set_week = 15
+set_year = 2022
+pos = 'WR'
+# pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
+pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
+
+# ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
+ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
+
+std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
+model_type = 'full_model'
+
+skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
+df = dm.read(f'''SELECT * 
+                 FROM Model_Validations 
+                 WHERE model_type='{model_type}'
+                       AND pred_version='{pred_vers}'
+                       AND ensemble_vers='{ens_vers}'
+                       AND std_dev_type='{std_dev_type}'
+                       AND pos='{pos}' 
+                       AND set_year={set_year}
+                       AND set_week={set_week}''', 'Simulation')
+
+print(pred_vers, '\n', ens_vers)
+metrics = skm.test_scores(df.y_act, df.pred_fp_per_game)
+
+df['error'] = df.y_act - df.pred_fp_per_game
+# df.sort_values(by='error').iloc[:50]
+
+
+#%%
+
+
 skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
 df = dm.read("SELECT * FROM Model_Validations WHERE model_type='full_model' AND set_year=2022", 'Simulation')
 gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', ]

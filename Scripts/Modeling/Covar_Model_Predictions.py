@@ -346,7 +346,7 @@ covar_type = 'team_points_trunc'
 # std_dev_types = len(set_weeks)*['pred_spline_class80_q80_matt1_brier1_kfold3']
 
 # set the model version
-set_weeks = [15]
+set_weeks = [16]
 
 set_years = [2022]
 

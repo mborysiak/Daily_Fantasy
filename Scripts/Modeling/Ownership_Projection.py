@@ -24,7 +24,7 @@ use_positions = False
 ownership_vers = 'standard_ln_rank_extra_features'
 
 set_year = 2022
-set_week = 15
+set_week = 16
 contest = 'Million'
 
 #%%
@@ -107,7 +107,7 @@ def pull_this_week_players(set_week, set_year):
 
 
 # calculate ownership projections
-def add_proj(df, use_rank=False):
+def add_proj(df):
 
     def_proj = dm.read('''SELECT player, 'DST' as pos, player as team, week, year, 
                              dk_salary, projected_points, fantasyPoints, ProjPts,
@@ -116,7 +116,9 @@ def add_proj(df, use_rank=False):
                              fp_rank, rankadj_fp_rank, playeradj_fp_rank,  
                              expertConsensus, expertIanHartitz,
                              expertConsensus as rankadj_expertConsensus, 
-                             expertConsensus as playeradj_expertConsensus
+                             expertConsensus as playeradj_expertConsensus,
+                             1 as team_proj_avg_proj_points, 1 as team_proj_share_avg_proj_points,
+                             1 as team_proj_share_log_avg_proj_rank
                      FROM Defense_Data
         ''', 'Model_Features')
 
@@ -126,7 +128,9 @@ def add_proj(df, use_rank=False):
                              avg_proj_rank, avg_proj_points avg_proj_pts, max_proj_points,
                              fp_rank, rankadj_fp_rank, playeradj_fp_rank,  
                              expertConsensus, expertIanHartitz,
-                             rankadj_expertConsensus, playeradj_expertConsensus
+                             rankadj_expertConsensus, playeradj_expertConsensus,
+                             team_proj_avg_proj_points, team_proj_share_avg_proj_points,
+                             team_proj_share_log_avg_proj_rank
                      FROM Backfill
         ''', 'Model_Features')
 
@@ -193,7 +197,7 @@ def feature_engineering(df):
         try: df[c+'_over_sal'] = df[c] / (df.dk_salary + 1000)
         except: pass
 
-    for c in ['projected_points', 'pred_fp_per_game', 'pred_prob']:
+    for c in ['projected_points', 'avg_proj_pts', 'max_proj_pts', 'ffa_points', 'pred_fp_per_game', 'pred_prob']:
         try: df = add_team_points(df, c)
         except: pass
 
