@@ -535,17 +535,17 @@ show_coef(all_coef, X_all)
 
 # %%
 
-set_week = 15
+set_week = 16
 set_year = 2022
-pos = 'WR'
+pos = 'QB'
 # pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
 
 # ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
-ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
+ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack'
 
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
-model_type = 'full_model'
+model_type = 'backfill'
 
 skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
 df = dm.read(f'''SELECT * 

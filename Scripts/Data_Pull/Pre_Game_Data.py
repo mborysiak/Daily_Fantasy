@@ -251,16 +251,9 @@ df = move_download_to_folder(root_path, 'FFA', f'raw_stats_{set_year}_wk{set_wee
 df = format_ffa(df, 'RawStats', set_week, set_year)
 
 dm.delete_from_db('Pre_PlayerData', 'FFA_RawStats', f"week={set_week} AND year={set_year}", create_backup=False)
+cols = dm.read("SELECT * FROM FFA_RawStats", 'Pre_PlayerData').columns
+df = df[cols]
 dm.write_to_db(df, 'Pre_PlayerData', 'FFA_RawStats', 'append')
-
-
-#%%
-
-df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
-df = format_fantasy_cruncher(df, set_week, set_year)
-
-dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
-dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
 
 #%%
 
@@ -274,6 +267,16 @@ output = dc.convert_to_float(output)
 
 dm.delete_from_db('Pre_PlayerData', 'FFToday_Projections', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(output, 'Pre_PlayerData', 'FFToday_Projections', 'append')
+
+#%%
+
+df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
+df = format_fantasy_cruncher(df, set_week, set_year)
+
+dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
+
+
 
 #%%
 # ## PFF Matchups

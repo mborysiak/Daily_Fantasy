@@ -351,7 +351,7 @@ set_weeks = [16]
 set_years = [2022]
 
 pred_versions = ['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']
-ensemble_versions = ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']
+ensemble_versions = ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack']
 std_dev_types = ['pred_spline_class80_q80_matt1_brier1_kfold3']
 
 full_model_weights = [0.2, 5]

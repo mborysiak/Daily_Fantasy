@@ -684,13 +684,13 @@ for set_week, set_year in zip([13, 14, 15, 16, 17,
                                2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]):
 
     print(f'Running week {set_week} year {set_year}')
-    back_weeks=22
+    back_weeks=24
 
     player_ownership = pull_player_ownership(contest, set_week, set_year)
     current_players = pull_this_week_players(set_week, set_year)
     player_ownership = pd.concat([player_ownership, current_players])
 
-    df = add_proj(player_ownership, use_rank=use_rank)
+    df = add_proj(player_ownership)
 
     df = drop_player_weeks(df)
     df = add_injuries(df)

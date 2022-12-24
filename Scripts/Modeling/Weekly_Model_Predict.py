@@ -167,6 +167,21 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
                                skm.piece('k_best'),
                                skm.piece('lr')])
 
+    elif stack_model and full_stack_features:
+        if skm.model_obj=='class': kb = 'k_best_c'
+        else: kb = 'k_best'
+
+        pipe = skm.model_pipe([skm.piece('random_sample'),
+                                skm.piece('std_scale'), 
+                                skm.piece('select_perc'),
+                                skm.feature_union([
+                                                skm.piece('agglomeration'), 
+                                                skm.piece(kb),
+                                                skm.piece('pca')
+                                                ]),
+                                skm.piece(kb),
+                                skm.piece(m)])
+
     elif stack_model:
         if skm.model_obj=='class': kb = 'k_best_c'
         else: kb = 'k_best'
@@ -188,10 +203,11 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
     elif skm.model_obj == 'reg':
         pipe = skm.model_pipe([skm.piece('random_sample'),
                                 skm.piece('std_scale'), 
+                                skm.piece('select_perc'),
                                 skm.feature_union([
                                                 skm.piece('agglomeration'), 
                                                 skm.piece('k_best'),
-                                              #  skm.piece('pca')
+                                                skm.piece('pca')
                                                 ]),
                                 skm.piece('k_best'),
                                 skm.piece(m)])
@@ -235,7 +251,15 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
     if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
     if m=='knn_q': params['knn_q__n_neighbors'] = range(1, min_samples-1)
     
-    if stack_model: 
+    if stack_model and full_stack_features: 
+        params['random_sample__frac'] = np.arange(0.6, 1.05, 0.05)
+        params['select_perc__percentile'] = range(60, 105, 5)
+        params['feature_union__agglomeration__n_clusters'] = range(2, 10, 1)
+        params[f'feature_union__{kb}__k'] = range(5, 20, 2)
+        params['feature_union__pca__n_components'] = range(2, 10, 1)
+        params[f'{kb}__k'] = range(1, 30)
+    
+    elif stack_model:
         params['random_sample__frac'] = np.arange(0.3, 1, 0.05)
         params[f'{kb}__k'] = range(1, 30)
 
@@ -820,9 +844,11 @@ run_params = {
     'met': 'y_act',
 }
 
+full_stack_features = True
+
 min_include = 2
 show_plot= True
-print_coef = True
+print_coef = False
 num_k_folds = 3
 
 r2_wt = 0
@@ -835,19 +861,18 @@ calibrate = False
 
 # set the model version
 set_weeks = [
-         # 1, 2, 3, 4, 5, 
-         # 6, 7, 8, 9, 10,
-        #  13, 14, 15, 16
-        # 12, 13
+        #  1, 2, 3,
+        # 4, 5,  6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        # 15, 
         16
                  ]
 
 pred_versions = [
                 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc',
-                #  'sera1_rsq0_brier1_matt1_lowsample_perc',
-                #   'sera1_rsq0_brier1_matt1_lowsample_perc',
-                #    'sera1_rsq0_brier1_matt1_lowsample_perc',
-                #     'sera1_rsq0_brier1_matt1_lowsample_perc',
+                #  'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc',
+                #   'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc',
+                #    'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc',
+                #     'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc',
                 #      'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #       'sera1_rsq0_brier1_matt1_lowsample_perc',
                 #        'sera1_rsq0_brier1_matt1_lowsample_perc',
@@ -856,11 +881,11 @@ pred_versions = [
                 ]
 
 ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                    # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
+                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack',
+                    # 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
                     # 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
@@ -874,11 +899,11 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
 
     run_params['set_week'] = w
     runs = [
-        # ['QB', 'full_model', ''],
-        # ['RB', 'full_model', ''],
-        # ['WR', 'full_model', ''],
-        # ['TE', 'full_model', ''],
-        # ['Defense', 'full_model', ''],
+        ['QB', 'full_model', ''],
+        ['RB', 'full_model', ''],
+        ['WR', 'full_model', ''],
+        ['TE', 'full_model', ''],
+        ['Defense', 'full_model', ''],
         ['QB', 'backfill', ''],
         ['RB', 'backfill', ''],
         ['WR', 'backfill', ''],
