@@ -833,7 +833,7 @@ class FootballSimulation:
 # dm = DataManage(db_path)
 
 # pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
-# ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
+# ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack'
 # std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 # ownership_vers = 'standard_ln_rank_extra_features'
 
@@ -852,7 +852,7 @@ class FootballSimulation:
 # qb_set_max_team = True
 # qb_min_iter = 0
 
-# week = 15
+# week = 16
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -863,7 +863,7 @@ class FootballSimulation:
 #                          full_model_rel_weight=full_model_weight, covar_type='team_points_trunc', use_covar=use_covar, 
 #                          use_ownership=use_ownership, salary_remain_max=salary_remain_max)
 # set_max_team = None
-# to_add = [] 
+# to_add = ['Tom Brady', 'James Conner', 'Tyreek Hill', 'Raheem Mostert', 'DEN', 'Trey Mcbride', 'Mike Evans'] 
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 

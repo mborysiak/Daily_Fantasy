@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2022
-set_week = 15
+set_week = 16
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -421,6 +421,34 @@ df.team = df.team.map(team_map)
 
 dm.delete_from_db('Post_PlayerData', 'Offensive_Line_Players', f"week={set_week} AND year={set_year}")
 dm.write_to_db(df, 'Post_PlayerData', 'Offensive_Line_Players', 'append')
+
+#%%
+
+def save_pff_stats(stat_type, set_week, set_year):
+    if stat_type=='QB': fname = 'passing'
+    elif stat_type=='Rec': fname='receiving'
+    elif stat_type=='Rush': fname='rushing'
+
+    try:
+        os.replace(f"/Users/mborysia/Downloads/{fname}_summary.csv", 
+                   f'{root_path}/Data/OtherData/PFF_{stat_type}_Stats/{set_year}/{fname}_summary_week{set_week}.csv')
+    except: 
+        pass
+    
+    df = pd.read_csv(f'{root_path}/Data/OtherData/PFF_{stat_type}_Stats/{set_year}/{fname}_summary_week{set_week}.csv')
+    df.player = df.player.apply(dc.name_clean)
+    df.team_name = df.team_name.map(team_map)
+    df['week'] = set_week
+    df['year'] = set_year
+
+    dm.delete_from_db('Post_PlayerData', f'PFF_{stat_type}_Stats', f"year={set_year} AND week={set_week}", create_backup=False)
+    dm.write_to_db(df, 'Post_PlayerData', f'PFF_{stat_type}_Stats', 'append')
+
+    return df
+
+for stat_type in ['QB', 'Rec', 'Rush']:
+    df = save_pff_stats(stat_type, set_week, set_year)
+
 # %%
 
 import requests

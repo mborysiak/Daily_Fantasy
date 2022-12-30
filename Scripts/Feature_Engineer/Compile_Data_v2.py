@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2022
-WEEK = 16
+WEEK = 17
 
 #%%
 import pandas as pd 
@@ -1997,32 +1997,6 @@ output = remove_non_uniques(output)
 dm.write_to_db(output, 'Model_Features', 'Backfill', 'replace')
 
 #%%
-chk_week = 16
-backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={chk_week} AND year={YEAR}", 'Model_Features').player.values
-sal = dm.read(f"SELECT player, salary FROM Salaries WHERE league={chk_week} AND year={YEAR}", 'Simulation')
-sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
-
-#%%
-chk_pos='WR'
-backfill_chk = dm.read(f"SELECT player FROM {chk_pos}_Data WHERE week={WEEK-1} AND year={YEAR}", 'Model_Features').player.values
-sal = dm.read(f'''SELECT player, salary 
-                  FROM Salaries 
-                  LEFT JOIN (SELECT DISTINCT player, pos FROM Model_Predictions WHERE year={YEAR}) USING (player)
-                  WHERE league={WEEK-1} 
-                        AND year={YEAR}
-                        AND pos='{chk_pos}'
-                  ''', 'Simulation')
-sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
-
-#%%
-count_chk = dm.read(f"SELECT player, week, year, count(*) cnts FROM Backfill GROUP BY player, week, year", 'Model_Features')
-count_chk[count_chk.cnts > 1]
-
-#%%
-
-output.loc[(output.week==15) & (output.year==2022), ['player', 'y_act']]
-
-#%%
 
 def create_self_cols(df):
     self_df = df.copy()
@@ -2097,6 +2071,34 @@ defense = remove_non_uniques(defense)
 defense = remove_low_corrs(defense)
 
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
+#%%
+
+#%%
+chk_week = 16
+backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={chk_week} AND year={YEAR}", 'Model_Features').player.values
+sal = dm.read(f"SELECT player, salary FROM Salaries WHERE league={chk_week} AND year={YEAR}", 'Simulation')
+sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
+
+#%%
+chk_pos='WR'
+backfill_chk = dm.read(f"SELECT player FROM {chk_pos}_Data WHERE week={WEEK-1} AND year={YEAR}", 'Model_Features').player.values
+sal = dm.read(f'''SELECT player, salary 
+                  FROM Salaries 
+                  LEFT JOIN (SELECT DISTINCT player, pos FROM Model_Predictions WHERE year={YEAR}) USING (player)
+                  WHERE league={WEEK-1} 
+                        AND year={YEAR}
+                        AND pos='{chk_pos}'
+                  ''', 'Simulation')
+sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
+
+#%%
+count_chk = dm.read(f"SELECT player, week, year, count(*) cnts FROM Backfill GROUP BY player, week, year", 'Model_Features')
+count_chk[count_chk.cnts > 1]
+
+#%%
+
+output.loc[(output.week==16) & (output.year==2022), ['player', 'y_act']]
+
 
 # %%
 # TO DO LIST

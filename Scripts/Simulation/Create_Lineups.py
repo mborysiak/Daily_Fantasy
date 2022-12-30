@@ -23,7 +23,7 @@ ownership_vers = 'standard_ln_rank_extra_features'
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 30
+num_lineups = 25
 set_max_team = None
 
 

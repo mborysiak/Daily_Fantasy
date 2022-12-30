@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 13
+set_week = 16
 
 download_path = '//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/Mborysiak/DK/'
 extract_path = download_path + f'Results/{set_year}/'
@@ -302,7 +302,7 @@ dm.write_to_db(player_ownership, 'DK_Results', 'Contest_Ownership', 'append')
 
 
 #%%
-
+set_week=14
 contest = 'Million'
 base_place = 1
 places = 50

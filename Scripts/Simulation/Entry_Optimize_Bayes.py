@@ -475,14 +475,16 @@ init_space = {
 
 full_space = {
 
-        'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt1_lowsample_perc']),
+        'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt1_lowsample_perc',
+                                             'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']),
          
         'ensemble_vers':  hp.choice('ensemble_vers', ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']),
+                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
+                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack']),
 
         'std_dev_type':  hp.choice('std_dev_type', ['pred_spline_class80_q80_matt1_brier1_kfold3']),
 
-        'ownership_vers': hp.choice('ownership_vers', ['standard_ln', 'standard_ln_rank']),
+        'ownership_vers': hp.choice('ownership_vers', ['standard_ln_rank_extra_features']),
 
         'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0, 1),
 

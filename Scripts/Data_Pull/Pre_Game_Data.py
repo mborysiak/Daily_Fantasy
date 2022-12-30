@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2022
-set_week = 16
+set_week = 17
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -606,7 +606,7 @@ ids = salary_id[['player', 'player_id']]
 ids = ids.assign(year=set_year).assign(league=set_week)
 
 
-dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}")
+dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
 
 dm.delete_from_db('Simulation', 'Player_Ids', f"league={set_week} AND year={set_year}")

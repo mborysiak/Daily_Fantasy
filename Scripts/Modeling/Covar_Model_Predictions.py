@@ -330,20 +330,20 @@ def get_mean_points(preds):
 #%%
 covar_type = 'team_points_trunc'
 
-# # set the model version
-# set_weeks = [
-#      13, 14, 15, 16, 17,
-#      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
-#         ]
+# set the model version
+set_weeks = [
+     13, 14, 15, 16, 17,
+     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+        ]
 
-# set_years = [
-#       2021, 2021, 2021, 2021, 2021,
-#       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
-# ]
+set_years = [
+      2021, 2021, 2021, 2021, 2021,
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
+]
 
-# pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc']
-# ensemble_versions = len(set_weeks)*['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',]
-# std_dev_types = len(set_weeks)*['pred_spline_class80_q80_matt1_brier1_kfold3']
+pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc']
+ensemble_versions = len(set_weeks)*['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',]
+std_dev_types = len(set_weeks)*['pred_spline_class80_q80_matt1_brier1_kfold3']
 
 # set the model version
 set_weeks = [16]
