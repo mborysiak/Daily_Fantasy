@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2022
-WEEK = 17
+WEEK = 18
 
 #%%
 import pandas as pd 
@@ -293,6 +293,8 @@ def consensus_fill(df, is_dst=False):
         
         # fill in the average for all cols
         df['avg_' + k] = df[tf].mean(axis=1)
+        df['std_' + k] = df[tf].std(axis=1)
+
         if 'rank' in k:
             df['min' + k] = df[tf].min(axis=1)
         else:
@@ -2073,8 +2075,7 @@ defense = remove_low_corrs(defense)
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 #%%
 
-#%%
-chk_week = 16
+chk_week = 17
 backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={chk_week} AND year={YEAR}", 'Model_Features').player.values
 sal = dm.read(f"SELECT player, salary FROM Salaries WHERE league={chk_week} AND year={YEAR}", 'Simulation')
 sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]

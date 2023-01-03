@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2022
-set_week = 16
+set_week = 17
 
 download_path = '//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/Mborysiak/DK/'
 extract_path = download_path + f'Results/{set_year}/'
@@ -302,7 +302,7 @@ dm.write_to_db(player_ownership, 'DK_Results', 'Contest_Ownership', 'append')
 
 
 #%%
-set_week=14
+
 contest = 'Million'
 base_place = 1
 places = 50
@@ -338,7 +338,7 @@ dm.write_to_db(df_lineups_top, 'DK_Results', 'Top_Players', 'append')
 
 full_entries = dm.read(f'''SELECT * 
                            FROM Contest_Results 
-                           WHERE Contest='{contest}'
+                           WHERE Contest = '{contest}'
                                  AND week = {set_week}
                                  AND year = {set_year}
                         ''', 'DK_Results')
@@ -358,4 +358,5 @@ df_lineups_roi['prize_return_pct'] = (df_lineups_roi.total_prize - (df_lineups_r
 
 dm.delete_from_db('DK_Results', 'Top_Players_ROI', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df_lineups_roi, 'DK_Results', 'Top_Players_ROI', 'append')
+# %%
 # %%

@@ -15,18 +15,20 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
-   13, 14, 15, 16, 17,
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+  # 13, 14, 15, 16, 17,
+   1, 2, 3, 4, 5, 6,#7, 8, 9, 10, 11, 12, 13,
+   15, 16
 ]
 
 set_years = [
-      2021, 2021, 2021, 2021, 2021,
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
+    #  2021, 2021, 2021, 2021, 2021,
+      2022, 2022, 2022, 2022, 2022, 2022, #2022, 2022, 2022, 2022, 2022, 2022, 2022
+      2022, 2022
 ]
 
 
-pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-ensemble_vers ='no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'   
+pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
+ensemble_vers ='no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack'   
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 ownership_vers = 'standard_ln'
 
@@ -192,29 +194,45 @@ for repeat_num in range(10):
                       'static_top_players', 'use_ownership', 'own_neg_frac', 
                       'max_salary_remain', 'num_iters']
 
-        d = {
-            'adjust_pos_counts': {False: 0.3, True: 0.7},
-            'covar_type': {'kmeans_trunc': 0.0, 'no_covar': 0.7, 'team_points_trunc': 0.3},
-            'full_model_weight': {0.2: 0.3, 0.5: 0.0, 1: 0.0, 3: 0.0, 5: 0.7},
-            'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
-            'max_salary_remain': {200: 0.3, 300: 0.0, 400: 0.0, 500: 0.4, 1000: 0.3},
-            'max_team_type': {'player_points': 0.3, 'vegas_points': 0.3, 'all': 0.4},
-            'min_player_same_team': {-1: 0.0, 2: 0.0, 2.5: 0.0, 3: 0.4, 'Auto': 0.6},
-            'min_players_opp_team': {0: 0.0, 1: 0.3, 2: 0.0, 'Auto': 0.7},
-            'num_iters': {100: 1.0},
-            'num_top_players': {2: 0.5, 3: 0.0, 4: 0.0, 5: 0.5},
-            'own_neg_frac': {0.5: 0.0, 0.65: 0.0, 0.75: 0.0, 0.85: 0.0, 1: 1.0},
-            'player_drop_multiple': {0: 0.4, 1: 0.3, 2: 0.0, 4: 0.3, 6: 0.0},
-            'qb_min_iter': {0: 1.0, 1: 0.0, 9: 0.0},
-            'qb_set_max_team': {0: 0.0, 1: 1.0},
-            'qb_solo_start': {False: 0.7, True: 0.3},
-            'static_top_players': {False: 0.3, True: 0.7},
-            'top_n_choices': {0: 0.8, 1: 0.2, 2: 0.0, 4: 0.0},
-            'use_ownership': {0: 0.0, 0.5: 0.0, 0.9: 1.0, 1: 0.0}
-            }
+        d = {'adjust_pos_counts': {True: 0.9552216066203039, False: 0.044778393379696135},
+ 'player_drop_multiple': {4: 0.3034185794204973,
+                          2: 0.3127530113077569,
+                          0: 0.3838284092717458},
+ 'matchup_drop': {1: 0.339499400515529,
+                  2: 0.09160956594794034,
+                  0: 0.5688910335365307},
+ 'top_n_choices': {1: 0.23824918294640055,
+                   2: 0.11567804477434247,
+                   0: 0.646072772279257},
+ 'full_model_weight': {5: 0.6969851772667797, 0.2: 0.30301482273322033},
+ 'covar_type': {'no_covar': 0.742707491259824,
+                'team_points_trunc': 0.25729250874017595},
+                'max_team_type': {'player_points': 1},
+ 'min_player_same_team': {2: 0.4387686589640436,
+                          3: 0.25716311073946735,
+                          'Auto': 0.30406823029648905},
+ 'min_players_opp_team': {1: 0.3973535691796506,
+                         2: 0.1841102946623824,
+                         'Auto': 0.41853613615796703},
+ 'num_top_players': {2: 0.4108738640017161,
+                     3: 0.4618051682056118,
+                     5: 0.1273209677926721},
+ 'qb_min_iter': {0: 0.959001152916604, 9: 0.04099884708339596},
+ 'qb_set_max_team': {True: 0.5067779866475088, False: 0.49322201335249116},
+ 'qb_solo_start': {True: 0.6069897061805674, False: 0.39301029381943264},
+ 'static_top_players': {True: 0.7654425963061461, False: 0.23455740369385392},
+ 'use_ownership': {0.9: 0.24782542328528012,
+                   0.8: 0.14010327191238073,
+                   1: 0.6120713048023392},
+ 'own_neg_frac': {0.8: 0.9852939468491708, 1: 0.01470605315082918},
+ 'max_salary_remain': {200: 0.05063923696860667,
+                       500: 0.2731977365683341,
+                       1000: 0.2631224673711191,
+                       1500: 0.41304055909194015},
+ 'num_iters': {100: 0.7409496716980304, 50: 0.2590503283019696}}
         
         d = {k: d[k] for k in d_ordering}
-        lineups_per_param = 2
+        lineups_per_param = 3
         params = []
         for i in range(int(30/lineups_per_param)):
             cur_params = []

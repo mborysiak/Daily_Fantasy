@@ -38,8 +38,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [17]
-
+run_weeks = [8]
 run_params = {
     
     # set year and week to analyze
@@ -396,7 +395,9 @@ def add_sal_columns(df):
     
     for c in df.columns:
         if 'expert' in c: df[c+'_salary'] = df[c] * df.dk_salary
+        if 'rank' in c: df[c+'_salary'] = df[c] * df.dk_salary
         if 'proj' in c: df[c+'_salary'] = df[c] / df.dk_salary
+        if 'ffa' in c: df[c+'_salary'] = df[c] / df.dk_salary
     
     return df
 
@@ -548,15 +549,15 @@ for w in run_weeks:
                 out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
         save_output_dict(out_quant, model_output_path, 'quant', rush_pass)
 
-        # # run the million predict
-        # print(f"\n--------------\nRunning Million Predict\n--------------\n")
-        # n_splits = run_params['n_splits']; cut='million'
-        # df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
+        # run the million predict
+        print(f"\n--------------\nRunning Million Predict\n--------------\n")
+        n_splits = run_params['n_splits']; cut='million'
+        df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
 
-        # model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
-        # for i, m in enumerate(model_list):
-        #     out_million, _, _= get_model_output(m, df_train_mil, 'class', out_million, run_params, i, min_samples)
-        # save_output_dict(out_million, model_output_path, 'million', rush_pass)
+        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
+        for i, m in enumerate(model_list):
+            out_million, _, _= get_model_output(m, df_train_mil, 'class', out_million, run_params, i, min_samples)
+        save_output_dict(out_million, model_output_path, 'million', rush_pass)
 
 
         # # run the million predict

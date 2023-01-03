@@ -715,8 +715,8 @@ def save_val_to_db(model_output_path, best_val, run_params, model_obj, table_nam
                 '''
     
  
-    dm.delete_from_db('Simulation', table_name, del_str, create_backup=False)
-    dm.write_to_db(df, 'Simulation', table_name, 'append')
+    dm.delete_from_db('Validations', table_name, del_str, create_backup=False)
+    dm.write_to_db(df, 'Validations', table_name, 'append')
 
   
 
@@ -739,8 +739,8 @@ def save_test_to_db(df, run_params):
                   AND set_year={run_params['set_year']}
                   AND model_type='{model_type}'
                 '''
-    dm.delete_from_db('Simulation', f'Model_Test_Validations', del_str, create_backup=False)
-    dm.write_to_db(df, 'Simulation', 'Model_Test_Validations', 'append')
+    dm.delete_from_db('Validations', f'Model_Test_Validations', del_str, create_backup=False)
+    dm.write_to_db(df, 'Validations', 'Model_Test_Validations', 'append')
 
 
 def save_prob_to_db(output, run_params, table_name):
@@ -837,15 +837,15 @@ run_params = {
     'met': 'y_act',
 }
 
-full_stack_features = False
+full_stack_features = True
 
 min_include = 2
-show_plot= False
+show_plot= True
 print_coef = False
 num_k_folds = 3
 
-r2_wt = 0
-sera_wt = 1
+r2_wt = 1
+sera_wt = 10
 mse_wt = 0
 brier_wt = 1
 matt_wt = 1
@@ -858,8 +858,8 @@ set_weeks = [17]
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']
 
 # ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack']
-ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']
-# ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack']
+# ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']
+ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack']
 # ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3']
 
 std_dev_types = [
@@ -880,9 +880,9 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         # ['TE', 'full_model', ''],
         # ['Defense', 'full_model', ''],
         # ['QB', 'backfill', ''],
-        ['RB', 'backfill', ''],
-        ['WR', 'backfill', ''],
-        # ['TE', 'backfill', '']
+        # ['RB', 'backfill', ''],
+        # ['WR', 'backfill', ''],
+        ['TE', 'backfill', '']
     ]
     for set_pos, model_type, rush_pass in runs:
 

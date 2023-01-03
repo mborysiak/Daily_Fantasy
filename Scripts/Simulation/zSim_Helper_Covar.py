@@ -77,7 +77,7 @@ class FootballSimulation:
                                        AND covar_type='{self.covar_type}'
                                        AND full_model_rel_weight={self.full_model_rel_weight} ''', 
                                        'Simulation')
-        covar = pd.pivot_table(covar, index='player', columns='player_two').reset_index()
+        covar = pd.pivot_table(covar, index='player', columns='player_two').reset_index().fillna(0)
         covar.columns = [c[1] if i!=0 else 'player' for i, c in enumerate(covar.columns)]
         return covar
 
@@ -835,7 +835,7 @@ class FootballSimulation:
 # pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
 # ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack'
 # std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
-# ownership_vers = 'standard_ln_rank_extra_features'
+# ownership_vers = 'standard_ln'
 
 # adjust_select = True
 # matchup_drop = 0

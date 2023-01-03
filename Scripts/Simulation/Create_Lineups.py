@@ -14,16 +14,16 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=16
+week=17
 
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
-ensemble_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack'
+ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack'
 std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
 ownership_vers = 'standard_ln_rank_extra_features'
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 25
+num_lineups = 30
 set_max_team = None
 
 
@@ -97,34 +97,33 @@ def pull_best_params(best_trials):
 
     return params
 
-best_trials = (140, 140)
+best_trials = (161, 161)
 
 opt_params = pull_best_params(best_trials)
 pprint.pprint(opt_params)
 
 #%%
         
-d = {'adjust_pos_counts': {False: 0.3, True: 0.7},
- 'covar_type': {'kmeans_trunc': 0.0,
-  'no_covar': 0.7,
-  'team_points_trunc': 0.3},
- 'full_model_weight': {0.2: 0.3, 0.5: 0.0, 1: 0.0, 3: 0.0, 5: 0.7},
- 'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
- 'max_salary_remain': {1000: 0.3, 200: 0.3, 300: 0.0, 400: 0.0, 500: 0.4},
- 'min_player_same_team': {-1: 0.0, 2: 0.0, 2.5: 0.0, 3: 0.4, 'Auto': 0.6},
- 'min_players_opp_team': {0: 0.0, 1: 0.3, 2: 0.0, 'Auto': 0.7},
- 'num_iters': {100: 1.0},
- 'num_top_players': {2: 0.6, 3: 0.3, 4: 0.0, 5: 0.1},
- 'own_neg_frac': {0.5: 0.0, 0.65: 0.0, 0.75: 0.0, 0.85: 0.1, 1: 0.9},
- 'player_drop_multiple': {0: 0.4, 1: 0.3, 2: 0.0, 4: 0.3, 6: 0.0},
- 'qb_min_iter': {0: 0.8, 1: 0.0, 9: 0.2},
- 'qb_set_max_team': {0: 0.0, 1: 1.0},
- 'qb_solo_start': {False: 0.7, True: 0.3},
- 'static_top_players': {False: 0.5, True: 0.5},
- 'top_n_choices': {0: 0.8, 1: 0.2, 2: 0.0, 4: 0.0},
- 'use_ownership': {0: 0.0, 0.5: 0.0, 0.9: 1.0, 1: 0.0}}
+d = {'adjust_pos_counts': {False: 0.04, True: 0.96},
+ 'covar_type': {'no_covar': 0.74, 'team_points_trunc': 0.26},
+ 'full_model_weight': {0.2: 0.3, 5: 0.7},
+ 'matchup_drop': {0: 0.6, 1: 0.3, 2: 0.1},
+ 'max_salary_remain': {200: 0.05, 500: 0.3, 1000: 0.25, 1500: 0.4},
+ 'max_team_type': {'player_points': 1.0},
+ 'min_player_same_team': {2: 0.44, 3: 0.26, 'Auto': 0.3},
+ 'min_players_opp_team': {1: 0.4, 2: 0.18, 'Auto': 0.42},
+ 'num_iters': {50: 0.26, 100: 0.74},
+ 'num_top_players': {2: 0.41, 3: 0.46, 5: 0.13},
+ 'own_neg_frac': {0.8: 0.99, 1: 0.01},
+ 'player_drop_multiple': {0: 0.38, 2: 0.32, 4: 0.3},
+ 'qb_min_iter': {0: 0.96, 9: 0.04},
+ 'qb_set_max_team': {0: 0.2, 1: 0.8},
+ 'qb_solo_start': {False: 0.39, True: 0.61},
+ 'static_top_players': {False: 0.23, True: 0.77},
+ 'top_n_choices': {0: 0.65, 1: 0.24, 2: 0.11},
+ 'use_ownership': {0.8: 0.14, 0.9: 0.25, 1: 0.61}}
 
-lineups_per_param = 2
+lineups_per_param = 3
 
 params = []
 for i in range(int(num_lineups/lineups_per_param)):
@@ -137,7 +136,7 @@ for i in range(int(num_lineups/lineups_per_param)):
     params.append(cur_params)
 
 #%%
-def sim_winnings(adjust_select,covar_type, full_model_rel_weight,matchup_drop,salary_remain_max,
+def sim_winnings(adjust_select,covar_type, full_model_rel_weight,matchup_drop,salary_remain_max,max_team_type,
                  min_players_same_team, min_players_opp_team, num_iters, num_top_players,
                  own_neg_frac, player_drop_multiplier, 
                  qb_min_iter, qb_set_max_team, qb_solo_start,
@@ -169,7 +168,7 @@ def sim_winnings(adjust_select,covar_type, full_model_rel_weight,matchup_drop,sa
 
         for i in range(9):
             results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, None, min_players_opp_team, adjust_select,
-                                      num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
+                                      num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac, max_team_type=max_team_type,
                                       n_top_players=num_top_players, static_top_players=static_top_players,
                                       qb_min_iter=qb_min_iter, qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
             
@@ -240,8 +239,8 @@ dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={wee
 
 from joblib import Parallel, delayed
 
-par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, ct, fmw, md, msr, mpst, mpot, ni, ntp, onf, pdm, qmi, qstm, qss, stp, tn, uo) for \
-                                                               adj, ct, fmw, md, msr, mpst, mpot, ni, ntp, onf, pdm, qmi, qstm, qss, stp, tn, uo in params)
+par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, ct, fmw, md, msr, mtt, mpst, mpot, ni, ntp, onf, pdm, qmi, qstm, qss, stp, tn, uo) for \
+                                                               adj, ct, fmw, md, msr, mtt, mpst, mpot, ni, ntp, onf, pdm, qmi, qstm, qss, stp, tn, uo in params)
 
 lineups_list = []
 for p in par_out:
