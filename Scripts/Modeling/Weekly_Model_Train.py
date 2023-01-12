@@ -484,13 +484,13 @@ def save_output_dict(out_dict, model_output_path, label, rush_pass):
 
 #%%
 run_list = [
-            ['QB', '', 'full_model'],
-            ['RB', '', 'full_model'],
-            ['WR', '', 'full_model'],
-            ['TE', '', 'full_model'],
-            ['Defense', '', 'full_model'],
-            ['QB', '', 'backfill'],
-            ['RB', '', 'backfill'],
+            # ['QB', '', 'full_model'],
+            # ['RB', '', 'full_model'],
+            # ['WR', '', 'full_model'],
+            # ['TE', '', 'full_model'],
+            # ['Defense', '', 'full_model'],
+            # ['QB', '', 'backfill'],
+            # ['RB', '', 'backfill'],
             ['WR', '', 'backfill'],
             ['TE', '', 'backfill'],
 
@@ -560,7 +560,7 @@ for w in run_weeks:
         save_output_dict(out_million, model_output_path, 'million', rush_pass)
 
 
-        # # run the million predict
+        # # run the million predict ROI
         # print(f"\n--------------\nRunning Million Predict ROI\n--------------\n")
         # df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df_roi(df, run_params)
 

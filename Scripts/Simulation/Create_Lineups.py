@@ -14,16 +14,16 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=17
+week=18
 
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
-ensemble_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack'
-std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
-ownership_vers = 'standard_ln_rank_extra_features'
+ensemble_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack'
+std_dev_type = 'pred_spline_class80_q80_matt0_brier1_kfold3'
+ownership_vers = 'standard_ln'
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 30
+num_lineups = 15
 set_max_team = None
 
 

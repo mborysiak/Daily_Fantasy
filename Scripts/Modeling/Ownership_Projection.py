@@ -16,15 +16,11 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 pred_version = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
-ens_version = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
+ens_version = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack'
 std_dev_type = 'pred_spline_class80_q80_matt0_brier1_kfold3'
 
-use_rank = True
-use_positions = True
-ownership_vers = 'standard_ln'
-
 set_year = 2022
-set_week = 17
+set_week = 18
 contest = 'Million'
 
 #%%
@@ -323,7 +319,7 @@ def add_gambling_lines(df):
 
     return df
 
-def adjust_owernship(df, col, adjust_type):
+def adjust_ownership(df, col, adjust_type):
     if adjust_type == 'inverse': df[col] = -(1 / (df[col] + 1))
     elif adjust_type =='ln': df[col] = np.log(df[col]/100)
     elif adjust_type == 'ln_prob': df[col] = np.log(df[col]+0.01)
@@ -641,36 +637,69 @@ def pull_ownership(ownership_table, ownership_vers, db_name):
     return pred_player_ownership
 
 
-def add_pred_values(ownership_df, prob_table, pred_version, ensemble_vers, std_dev_type, week, year):
+def add_pred_values(ownership_df, prob_table, pred_version, ens_version, std_dev_type, week, year, ownership_vers):
+    
+    if 'Validation' in prob_table: db_name = 'Validations'
+    else: db_name = 'Simulation'
+
     df = dm.read(f'''SELECT player, 
                             week, 
                             year, 
                             AVG(pred_fp_per_game) pred_prob
                      FROM {prob_table}
                      WHERE pred_version='{pred_version}'
-                              AND ensemble_vers='{ensemble_vers}' 
+                              AND ensemble_vers='{ens_version}' 
                               AND std_dev_type='{std_dev_type}'
                               AND set_week={week}
                               AND set_year={year}
                      GROUP BY player, week, year
-                    ''', 'Simulation')
+                    ''', db_name)
+
+    df['min_score_mil'] = df.pred_prob / 10
+    df['max_score_mil'] = np.where(df.pred_prob*2 > 1, 1, df.pred_prob*2)
+    df['std_dev_mil'] = df.pred_prob / 3
 
     ownership_df = pd.merge(ownership_df, df, on=['player', 'week', 'year'])
+    ownership_df = ownership_df.rename(columns={'min_score': 'min_score_own', 'max_score': 'max_score_own'})
+    
+    if ownership_vers == 'mil_times_standard_ln':
+        ownership_df['pred_ownership'] = ownership_df.pred_prob * -ownership_df.pred_ownership
+        ownership_df['min_score'] = ownership_df.min_score_mil * -ownership_df.max_score_own
+        ownership_df['max_score'] = ownership_df.max_score_mil * -ownership_df.min_score_own
+        ownership_df['std_dev'] = ownership_df.std_dev_mil * ownership_df.std_dev
 
-    for c in ['pred_ownership', 'std_dev', 'min_score', 'max_score']:
-        ownership_df[c] = ownership_df.pred_prob / ownership_df[c]
+
+    elif ownership_vers == 'mil_div_standard_ln':
+        ownership_df['pred_ownership'] = ownership_df.pred_prob / -ownership_df.pred_ownership
+        ownership_df['min_score'] = ownership_df.min_score_mil / -ownership_df.min_score_own
+        ownership_df['max_score'] = ownership_df.max_score_mil / -ownership_df.max_score_own
+        ownership_df['std_dev'] = ownership_df.std_dev_mil / ownership_df.std_dev
+
+    elif ownership_vers == 'mil_only':
+        ownership_df['pred_ownership'] = ownership_df.pred_prob
+        ownership_df['min_score'] = ownership_df.min_score_mil
+        ownership_df['max_score'] = ownership_df.max_score_mil
+        ownership_df['std_dev'] = ownership_df.std_dev_mil
+
+    else:
+        ownership_df = ownership_df.rename(columns={'min_score_own': 'min_score', 'max_score_own': 'max_score'})
 
     return ownership_df
 
 
 def save_current_week_pred(ownership_vers, set_week, set_year):
 
-    sim_values = pull_ownership('Predicted_Ownership_Only', ownership_vers, 'Simulation')
+    sim_values = pull_ownership('Predicted_Ownership_Only', 'standard_ln', 'Simulation')
+    
+    sim_values = add_pred_values(sim_values, 'Predicted_Million', pred_version, 
+                                 ens_version, std_dev_type, set_week, set_year, ownership_vers)
+
     sim_values = sim_values.loc[(sim_values.week==set_week) & (sim_values.year==set_year),
                                 ['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
-    sim_values.sort_values(by='pred_ownership', ascending=False).iloc[:50]
-    sim_values['ownership_vers'] = ownership_vers
 
+    sim_values['ownership_vers'] = ownership_vers
+    
+    display(sim_values.sort_values(by='pred_ownership', ascending=False).iloc[:50])
     dm.delete_from_db('Simulation', 'Predicted_Ownership', f"week={set_week} AND year={set_year} AND ownership_vers='{ownership_vers}'")
     dm.write_to_db(sim_values, 'Simulation', 'Predicted_Ownership', 'append')
 
@@ -680,14 +709,19 @@ def save_current_week_pred(ownership_vers, set_week, set_year):
 #================
 
 for set_week, set_year in zip([#13, 14, 15, 16, 17, 
-                               1, 2, 3, 4, 5, 6,# 7, 8, 9, 10, 11, 12, 13
-                               15, 16], 
+                               1, 2, 3, 4, 5, 6, 7,# 8, 9, 10, 11, 12, 13
+                               15, 16, 17], 
                               [#2021, 2021, 2021, 2021, 2021,
-                               2022, 2022, 2022, 2022, 2022, 2022, #2022, 2022, 2022, 2022, 2022, 2022, 2022
-                               2022, 2022]):
+                               2022, 2022, 2022, 2022, 2022, 2022, 2022, #2022, 2022, 2022, 2022, 2022, 2022
+                               2022, 2022, 2022]):
 
     print(f'Running week {set_week} year {set_year}')
-    back_weeks=28
+    ownership_vers = 'standard_ln'
+
+    if (set_year == 2022 and set_week <= 6) or (set_year<=2021):
+        back_weeks=24
+    else:
+        back_weeks=32
 
     player_ownership = pull_player_ownership(contest, set_week, set_year)
     current_players = pull_this_week_players(set_week, set_year)
@@ -710,8 +744,8 @@ for set_week, set_year in zip([#13, 14, 15, 16, 17,
     df, cv_time_input, train_time_split = create_game_date(df, back_weeks, set_week, set_year)
     df_train, df_test = train_test_split(df, train_time_split)
 
-    df_train = adjust_owernship(df_train, 'y_act', 'ln')
-    df_test = adjust_owernship(df_test, 'y_act', 'ln')
+    df_train = adjust_ownership(df_train, 'y_act', 'ln')
+    df_test = adjust_ownership(df_test, 'y_act', 'ln')
 
     val_predict_pos, test_predict_pos, best_models = run_model_mean('lgbm', df_train[df_train['DST']==0].reset_index(drop=True), 
                                                                     df_test[df_test['DST']==0].reset_index(drop=True), cv_time_input)
@@ -749,31 +783,38 @@ for set_week, set_year in zip([#13, 14, 15, 16, 17,
                                      AND ((week <= 17 AND year < {set_year})
                                            OR (week < {set_week} AND year = {set_year})) 
                                      ''', 'DK_Results')
+
     player_ownership = dm.read(f"SELECT * FROM Contest_Ownership WHERE Contest='{contest}'", 'DK_Results')
-    pred_player_ownership = pull_ownership('Predicted_Ownership_Validation', ownership_vers, 'Validations')
 
-    mean_var = []
-    full_dist = {}
-    base_places = [1, 10000, 25000, 50000, 75000, 100000, 150000]
-    for base_place, places in zip(base_places, [50, 1000, 1000, 1000, 1000, 1000, 1000]):
-        print(f'\nPlaces {base_place}-{places+base_place}\n==================')
 
-        df_lineups = create_millions_lineups(full_entries, base_place, places)
-        df_lineups = add_pos_to_million(df_lineups)
-        df_lineups = add_team_to_million(df_lineups)
-        
-        df_lineups = pd.merge(df_lineups, player_ownership, on=['player', 'week', 'year'], how='left')
-        df_lineups = pd.merge(df_lineups, pred_player_ownership, on=['player', 'week', 'year'])
-        full_dist, mean_output = agg_ownership_group(df_lineups, full_dist)
+    for ownership_vers in ['standard_ln', 'mil_times_standard_ln', 'mil_div_standard_ln', 'mil_only']:
 
-        if base_place==1:
+        pred_player_ownership = pull_ownership('Predicted_Ownership_Validation', 'standard_ln', 'Validations')
+        pred_player_ownership = add_pred_values(pred_player_ownership, 'Model_Validations_Million', pred_version, 
+                                                ens_version, std_dev_type, set_week, set_year, ownership_vers)
+
+        mean_var = []
+        full_dist = {}
+        base_places = [1, 10000, 25000, 50000, 75000, 100000, 150000]
+        for base_place, places in zip(base_places, [50, 1000, 1000, 1000, 1000, 1000, 1000]):
+            print(f'\nPlaces {base_place}-{places+base_place}\n==================')
+
+            df_lineups = create_millions_lineups(full_entries, base_place, places)
+            df_lineups = add_pos_to_million(df_lineups)
+            df_lineups = add_team_to_million(df_lineups)
             
-            dm.delete_from_db('Simulation', 'Mean_Ownership', f"year={set_year} AND week={set_week} AND ownership_vers='{ownership_vers}'", create_backup=False)
-            dm.write_to_db(mean_output, 'Simulation', 'Mean_Ownership', 'append')
+            df_lineups = pd.merge(df_lineups, player_ownership, on=['player', 'week', 'year'], how='left')
+            df_lineups = pd.merge(df_lineups, pred_player_ownership, on=['player', 'week', 'year'])
+            full_dist, mean_output = agg_ownership_group(df_lineups, full_dist)
 
-    run_ttest(full_dist, greater_or_less='greater')
-    save_current_week_pred(ownership_vers, set_week, set_year)
+            if base_place==1:
+                
+                dm.delete_from_db('Simulation', 'Mean_Ownership', f"year={set_year} AND week={set_week} AND ownership_vers='{ownership_vers}'", create_backup=False)
+                dm.write_to_db(mean_output, 'Simulation', 'Mean_Ownership', 'append')
 
+        run_ttest(full_dist, greater_or_less='greater')
+        save_current_week_pred(ownership_vers, set_week, set_year)
+    
 
 # %%
 df_lineups[df_lineups.place==1].groupby(['week', 'year']).agg({'player': 'count'})

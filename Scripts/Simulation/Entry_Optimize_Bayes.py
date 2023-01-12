@@ -21,14 +21,14 @@ dm = DataManage(db_path)
 # set the model version
 set_weeks = [
  #  13, 14, 15, 16, 17,
-   1, 2, 3, 4, 5, 6, #7, 8, 9, 10, 11, 12, 13, 14
-   15, 16
+   1, 2, 3, 4, 5, 6, 7,# 8, 9, 10, 11, 12, 13, 14
+   15, 16, 17
 ]
 
 set_years = [
      # 2021, 2021, 2021, 2021, 2021,
-      2022, 2022, 2022, 2022, 2022, 2022, #2022, 2022, 2022, 2022, 2022, 2022, 2022,
-      2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 2022, 2022, 2022, 2022, 2022,
+      2022, 2022, 2022
 ]
 
 save_path = "c:/Users/mborysia/Documents/Github/Daily_Fantasy/Model_Outputs/2022/Bayes_Sim_Opt/"
@@ -194,23 +194,24 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choi
     if covar_type=='no_covar': use_covar=False
     else: use_covar=True
 
-    sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-                                pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
-                                covar_type=covar_type, ownership_vers=ownership_vers,
-                                full_model_rel_weight=full_model_rel_weight, 
-                                use_covar=use_covar, use_ownership=use_ownership, 
-                                salary_remain_max=max_salary_remain)
-
     winnings = []        
     total_add = []
     to_drop_selected = []
     for t in range(lineups_per_param):
 
         to_add = []
-        to_drop = []
-        to_drop.extend(to_drop_selected)
-
         for i in range(9):
+
+            to_drop = []
+            to_drop.extend(to_drop_selected)
+
+            sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
+                                pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
+                                covar_type=covar_type, ownership_vers=ownership_vers,
+                                full_model_rel_weight=full_model_rel_weight, 
+                                use_covar=use_covar, use_ownership=use_ownership, 
+                                salary_remain_max=max_salary_remain)
+
             results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
                                     min_players_opp_team_input=min_players_opp_team, 
                                     adjust_select=adjust_select,max_team_type=max_team_type,
@@ -225,13 +226,14 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choi
                 to_add.append(selected_player)
             except: 
                 pass
-            
+
+            print(to_add)
         prize_money = calc_winnings(to_add, points, prizes)
         winnings.append(prize_money)
 
         total_add.extend(to_add)
         to_drop_selected = rand_drop_selected(total_add, player_drop_multiplier, lineups_per_param)
-
+        print(to_drop_selected)
     return winnings
 
 #================
@@ -389,13 +391,15 @@ def objective(bayes_params):
     iter_cats = zip(set_weeks, set_years)
     for week, year in iter_cats:
 
+        winnings = 150
         try:
             params = create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers)
-
+            
+            # print(params)
             # winnings = []
-            # for adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers in params:
+            # for adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers in params:
             #     print(pred_vers, ensemble_vers, std_dev_type, own_vers)
-            #     cur_winnings = sim_winnings(adj, pdm, md, tn, fmw, ct, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers)
+            #     cur_winnings = sim_winnings(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers)
             #     winnings.append(cur_winnings)
                 
             winnings = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
@@ -417,7 +421,7 @@ def objective(bayes_params):
         print(f'Week {week} Winnings: {winnings}') 
         print(f'Total Cumulative Winnings: {int(np.sum(total_winnings))}\n')
     
-    total_winnings = adjust_high_winnings(total_winnings, max_adjust=10000)
+    total_winnings = adjust_high_winnings(total_winnings, max_adjust=5000)
     
     mean_loss = -np.mean(total_winnings)
     median_loss = -np.percentile(total_winnings, 50)
@@ -434,20 +438,21 @@ def objective(bayes_params):
 
 init_space = {
 
-        'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc',
+       'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc',
                                              'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']),
          
-        'ensemble_vers':  hp.choice('ensemble_vers', ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                                                      'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack',
-                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack']),
+        'ensemble_vers':  hp.choice('ensemble_vers', ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack',
+                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack']),
 
-        'std_dev_type':  hp.choice('std_dev_type', ['pred_spline_class80_q80_matt1_brier1_kfold3',
-                                                    'pred_spline_class80_matt1_brier1_kfold3',
-                                                    'pred_spline_q80_matt1_brier1_kfold3',
-                                                    'spline_class80_q80_matt1_brier1_kfold3']),
+        'std_dev_type':  hp.choice('std_dev_type', ['pred_spline_class80_q80_matt0_brier1_kfold3',
+                                                    'pred_spline_class80_matt0_brier1_kfold3',
+                                                    'pred_spline_q80_matt0_brier1_kfold3',
+                                                    'spline_class80_q80_matt0_brier1_kfold3']),
 
-        'ownership_vers': hp.choice('ownership_vers', ['standard_ln', 'standard_ln']),
+        'ownership_vers': hp.choice('ownership_vers', ['standard_ln', 
+                                                       'mil_times_standard_ln', 
+                                                       'mil_div_standard_ln', 
+                                                       'mil_only']),
 
         'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0.7, 1),
 
@@ -504,17 +509,15 @@ full_space = {
         'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc',
                                              'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']),
          
-        'ensemble_vers':  hp.choice('ensemble_vers', ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3',
-                                                      'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack',
-                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3_fullstack']),
+        'ensemble_vers':  hp.choice('ensemble_vers', ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack',
+                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack']),
 
-        'std_dev_type':  hp.choice('std_dev_type', ['pred_spline_class80_q80_matt1_brier1_kfold3',
-                                                    'pred_spline_class80_matt1_brier1_kfold3',
-                                                    'pred_spline_q80_matt1_brier1_kfold3',
-                                                    'spline_class80_q80_matt1_brier1_kfold3']),
+        'std_dev_type':  hp.choice('std_dev_type', ['pred_spline_class80_q80_matt0_brier1_kfold3',
+                                                    'pred_spline_class80_matt0_brier1_kfold3',
+                                                    'pred_spline_q80_matt0_brier1_kfold3',
+                                                    'spline_class80_q80_matt0_brier1_kfold3']),
 
-        'ownership_vers': hp.choice('ownership_vers', ['standard_ln', 'standard_ln']),
+        'ownership_vers': hp.choice('ownership_vers', ['standard_ln', 'mil_times_standard_ln', 'mil_div_standard_ln', 'mil_only']),
 
         'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0, 1),
 
@@ -566,7 +569,7 @@ full_space = {
 }
 
 
-trial_name = 'adjust10000_week1to6and15to162022_ffa_fc_newparams'
+trial_name = 'adjust5000_week1to7and15to172022_ffa_fc_newparams_million_own'
 
 #%%
 
@@ -586,7 +589,6 @@ trial_name = 'adjust10000_week1to6and15to162022_ffa_fc_newparams'
 #         if os.path.exists(self.save_path+f'full_space_{self.trial_name}.p'):
 #             self.full_trial_exists = True
 
-    
 
 
 if os.path.exists(save_path+f'warm_start_{trial_name}.p'):
@@ -610,7 +612,6 @@ dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'append')
 
 #%%
 
-
 print('Running Full Space')
 best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=200)
 print(space_eval(full_space, best))
@@ -622,76 +623,37 @@ show_trial_best_params('full_space_'+trial_name, 2)
 
 # %%
 
-# week=16
-# year=2022
-# min_players_opp_team= 1
-# min_players_same_team = 'Auto'
-# num_iters = 100
-# ensemble_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
-# std_dev_type = 'pred_spline_class80_q80_matt1_brier1_kfold3'
-# pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
-# covar_type = 'no_covar'
-# ownership_vers = 'standard_ln'
-# full_model_rel_weight = 5
-# use_ownership = 0.9
-# max_salary_remain = 200
-# adjust_select = True
-# matchup_drop = 1
-# num_top_players = 3
-# own_neg_frac = 0.9
-# static_top_players = False
-# qb_min_iter = 0
-# qb_set_max_team = True
-# qb_solo_start = False
-# top_n_choices = 1
-# player_drop_multiplier = 4
-# lineups_per_param = 2
+# bayes_params = {'adjust_pos_counts_True': 0.727, 'covar_type_no_covar': 0.584, 
+# 'ensemble_vers': 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack', 
+#  'full_model_weight_5': 0.803, 'lineups_per_param': 3, 'matchup_drop_1': 0, 'matchup_drop_2': 1, 
+#  'max_salary_remain_1000': 0.26, 'max_salary_remain_200': 0.27, 'max_salary_remain_500': 0.248, 
+#  'max_team_type_player_points': 0.292, 'min_player_opp_team_1': 0.324, 'min_player_opp_team_2': 0.271, 
+#  'min_player_same_team_2': 0.242, 'min_player_same_team_3': 0.216, 'num_iters_100': 0.785, 'num_top_players_2': 0.436, 
+#  'num_top_players_3': 0.154, 'own_neg_frac_0.8': 0.087, 'ownership_vers': 'mil_div_standard_ln', 
+#  'player_drop_multiple_2': 0.104, 'player_drop_multiple_4': 0.073, 'pred_vers': 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc', 
+#  'qb_min_iter_0': 0.224, 'qb_min_iter_2': 0.139, 'qb_set_max_team_True': 0.457, 'qb_solo_start_True': 0.151, 
+#  'static_top_players_True': 0.575, 'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3', 'top_n_choices_1': 0.499, 
+#  'top_n_choices_2': 0.265, 'use_ownership_0.8': 0.138, 'use_ownership_0.9': 0.336}
 
-# prizes = get_prizes(week, year)
-# points = pull_points(week, year)
+# lineups_per_param = bayes_params['lineups_per_param']
+# pred_vers = bayes_params['pred_vers']
+# ensemble_vers = bayes_params['ensemble_vers']
+# std_dev_type = bayes_params['std_dev_type']
+# ownership_vers = bayes_params['ownership_vers']
 
-# try: min_players_opp_team = int(min_players_opp_team)
-# except: pass
+# np.random.seed(1234)
 
-# try: min_players_same_team = float(min_players_same_team)
-# except: pass
+# d = convert_param_options(bayes_params)
+    
+# total_winnings = []
+# iter_cats = zip(set_weeks, set_years)
+# for week, year in iter_cats:
+#     print(week)
+#     params = create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers)
 
-# if covar_type=='no_covar': use_covar=False
-# else: use_covar=True
-
-# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-#                             pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
-#                             covar_type=covar_type, ownership_vers=ownership_vers,
-#                             full_model_rel_weight=full_model_rel_weight, 
-#                             use_covar=use_covar, use_ownership=use_ownership, 
-#                             salary_remain_max=max_salary_remain)
-
-# winnings = []        
-# total_add = []
-# to_drop_selected = []
-# for t in range(lineups_per_param):
-
-#     to_add = ['Tj Hockenson']
-#     to_drop = []
-#     to_drop.extend(to_drop_selected)
-
-#     for i in range(9):
-#         results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                 min_players_opp_team_input=min_players_opp_team, 
-#                                 adjust_select=adjust_select, num_matchup_drop=matchup_drop,
-#                                 own_neg_frac=own_neg_frac, n_top_players=num_top_players,
-#                                 static_top_players=static_top_players, qb_min_iter=qb_min_iter,
-#                                 qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
-        
-#         prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
-#         try: 
-#             selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
-#             to_add.append(selected_player)
-#         except: 
-#             pass
-        
-#     prize_money = calc_winnings(to_add, points, prizes)
-#     winnings.append(prize_money)
-
-#     total_add.extend(to_add)
-#     to_drop_selected = rand_drop_selected(total_add, player_drop_multiplier, lineups_per_param)
+#     i=0
+#     for adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers in params:
+#         print(i)
+#         cur_winnings = sim_winnings(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers)
+#         i+=1
+    

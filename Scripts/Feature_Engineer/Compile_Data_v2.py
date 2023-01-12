@@ -108,7 +108,7 @@ def forward_fill(df, cols=None):
 
 def find_bye_weeks():
 
-    return dm.read(f'''SELECT team, week, year, week+1 next_week
+    df = dm.read(f'''SELECT team, week, year, week+1 next_week
                        FROM (
                             SELECT team, year, week, 
                                     rank() OVER(PARTITION BY team, year 
@@ -120,6 +120,14 @@ def find_bye_weeks():
                                     )
                        ) WHERE ranks=1
                        ''', 'Pre_PlayerData')
+    
+    # fix the cancelled game due to injury
+    cin_buf_fix = pd.DataFrame({'team': ['CIN','BUF'],
+                            'week': [17, 17],
+                            'year': [2022, 2022],
+                            'next_week': [18, 18]})
+
+    return pd.concat([df, cin_buf_fix], axis=0).reset_index(drop=True)
 
 
 def fix_bye_week(df):
@@ -156,7 +164,9 @@ def fantasy_pros_new(pos):
     fp = dm.read(f'''SELECT * 
                     FROM FantasyPros 
                     WHERE pos='{pos}' 
-                          AND team is NOT NULL''', 'Pre_PlayerData')
+                          AND team is NOT NULL
+                           AND ((week <= 18 AND year < {set_year})
+                                 OR year = {set_year}) ''', 'Pre_PlayerData')
     fp = name_cleanup(fp)
     if pos == 'DST': fp = fp.drop('player', axis=1).rename(columns={'team': 'player'})
 
@@ -2075,7 +2085,7 @@ defense = remove_low_corrs(defense)
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 #%%
 
-chk_week = 17
+chk_week = 18
 backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={chk_week} AND year={YEAR}", 'Model_Features').player.values
 sal = dm.read(f"SELECT player, salary FROM Salaries WHERE league={chk_week} AND year={YEAR}", 'Simulation')
 sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
@@ -2098,7 +2108,7 @@ count_chk[count_chk.cnts > 1]
 
 #%%
 
-output.loc[(output.week==16) & (output.year==2022), ['player', 'y_act']]
+output.loc[(output.week==18) & (output.year==2022), ['player', 'y_act']]
 
 
 # %%

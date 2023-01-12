@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2022
-set_week = 17
+set_week = 19
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -275,7 +275,6 @@ df = format_fantasy_cruncher(df, set_week, set_year)
 
 dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
-
 
 
 #%%
