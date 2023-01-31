@@ -535,6 +535,39 @@ show_coef(all_coef, X_all)
 
 # %%
 
+def entry_optimize_bayes(df):
+
+    for c in df.columns:
+        if df.dtypes[c] == 'object': 
+            df = pd.concat([df, pd.get_dummies(df[c], prefix=c)], axis=1).drop(c, axis=1)
+
+    X = df.drop('loss', axis=1)
+    y = -df.loss
+
+    return X, y
+
+df = dm.read('''SELECT *  
+                FROM Entry_Optimize_Bayes
+                ''', 'Results')
+
+model_type = {
+ 'enet': ElasticNet(alpha=1, l1_ratio=0.1),
+ 'lasso': Lasso(alpha=0.1),
+ 'ridge': Ridge(alpha=100),
+ 'rf': RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1),
+ 'lgbm': LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
+
+}
+
+model_name='rf'
+m = model_type[model_name] 
+X, y = entry_optimize_bayes(df)
+coef_vals, X = get_model_coef(X, y, m)
+show_coef(coef_vals, X)
+
+
+#%%
+
 set_week = 16
 set_year = 2022
 pos = 'QB'

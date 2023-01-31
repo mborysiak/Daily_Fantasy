@@ -123,7 +123,7 @@ def results_to_df(save_path, fname):
 
     trials = load_pickle(save_path, fname)
     results_tmp = pd.DataFrame(trials.vals)
-    results_tmp = results_tmp.rename(columns={'mathchup_seed_True': 'matchup_seed_True', 'player_points': 'max_team_type_player_point'})
+    results_tmp = results_tmp.rename(columns={'mathchup_seed_True': 'matchup_seed_True', 'player_points': 'max_team_type_player_points'})
     eval_options = {k: v for k,v in init_space.items() if k in results_tmp.columns}
 
     results = pd.DataFrame()
@@ -361,8 +361,9 @@ def convert_param_options(bp):
         },
 
         'num_iters': {
+            150: bp['num_iters_150'],
             100: bp['num_iters_100'],
-            50: 1 - bp['num_iters_100'],
+            50: 1 - bp['num_iters_100'] - bp['num_iters_150']
         },
     }
     return d
@@ -373,6 +374,7 @@ def create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_ver
     for i in range(int(30/lineups_per_param)):
         cur_params = []
         for param, param_options in d.items():
+            print(param)
             param_vars = list(param_options.keys())
             param_prob = list(param_options.values())
             cur_params.append(np.random.choice(param_vars, p=param_prob))
@@ -403,12 +405,12 @@ def objective(bayes_params):
         try:
             params = create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type)
             
-        # print(params)
-        # winnings = []
-        # for adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers in params:
-        #     print(pred_vers, ensemble_vers, std_dev_type, own_vers)
-        #     cur_winnings = sim_winnings(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers)
-        #     winnings.append(cur_winnings)
+            # print(params)
+            # winnings = []
+            # for adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers in params:
+            #     print(pred_vers, ensemble_vers, std_dev_type, own_vers)
+            #     cur_winnings = sim_winnings(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers)
+            #     winnings.append(cur_winnings)
             
             winnings = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
                                                                             ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
@@ -457,27 +459,27 @@ init_space = {
                                                     'pred_spline_q80_matt0_brier1_kfold3',
                                                     'spline_class80_q80_matt0_brier1_kfold3']),
 
-        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.3),
+        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.1),
         'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.1),
-        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.1),
+        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.3),
 
-        'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0.7, 1),
+        'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0.5, 1),
 
-        'player_drop_multiple_4': hp.uniform('player_drop_multiple_4', 0, 0.2),
+        'player_drop_multiple_4': hp.uniform('player_drop_multiple_4', 0, 0.3),
         'player_drop_multiple_2': hp.uniform('player_drop_multiple_2', 0, 0.2),
 
-        'matchup_seed_True': hp.uniform('matchup_seed_True', 0, 1),
+        'matchup_seed_True': hp.uniform('matchup_seed_True', 0.5, 1),
 
-        'matchup_drop_1': hp.uniform('matchup_drop_1', 0, 0.2),
-        'matchup_drop_2': hp.uniform('matchup_drop_2', 0, 0.2),
-        'matchup_drop_3': hp.uniform('matchup_drop_3', 0, 0.2),
+        'matchup_drop_1': hp.uniform('matchup_drop_1', 0, 0.3),
+        'matchup_drop_2': hp.uniform('matchup_drop_2', 0, 0.3),
+        'matchup_drop_3': hp.uniform('matchup_drop_3', 0, 0.3),
 
-        'top_n_choices_1': hp.uniform('top_n_choices_1', 0, 0.2),
-        'top_n_choices_2': hp.uniform('top_n_choices_2', 0, 0.2),
+        'top_n_choices_1': hp.uniform('top_n_choices_1', 0, 0.4),
+        'top_n_choices_2': hp.uniform('top_n_choices_2', 0, 0.1),
 
-        'full_model_weight_5': hp.uniform('full_model_weight_5', 0.5, 0.9),
+        'full_model_weight_5': hp.uniform('full_model_weight_5', 0.3, 0.8),
 
-        'covar_type_no_covar': hp.uniform('covar_type_no_covar', 0.5, 0.9),
+        'covar_type_no_covar': hp.uniform('covar_type_no_covar', 0.3, 0.8),
 
         'max_team_type_player_points': hp.uniform('max_team_type_player_points', 0, 1),
 
@@ -493,11 +495,11 @@ init_space = {
         'qb_min_iter_0': hp.uniform('qb_min_iter_0', 0.3, 0.7),
         'qb_min_iter_2': hp.uniform('qb_min_iter_2', 0, 0.3),
 
-        'qb_set_max_team_True': hp.uniform('qb_set_max_team_True', 0.8, 1),
+        'qb_set_max_team_True': hp.uniform('qb_set_max_team_True', 0.7, 1),
 
         'qb_solo_start_True': hp.uniform('qb_solo_start_True', 0, 0.2),
 
-        'static_top_players_True': hp.uniform('static_top_players_True', 0.4, 0.6),
+        'static_top_players_True': hp.uniform('static_top_players_True', 0.3, 0.7),
 
         'use_ownership_0.9': hp.uniform('use_ownership_0.9', 0.3, 0.8),
         'use_ownership_0.8': hp.uniform('use_ownership_0.8', 0, 0.2),
@@ -508,7 +510,9 @@ init_space = {
         'max_salary_remain_500': hp.uniform('max_salary_remain_500', 0.2, 0.3),
         'max_salary_remain_1000': hp.uniform('max_salary_remain_1000', 0.2, 0.3),
 
-        'num_iters_100': hp.uniform('num_iters_100', 0.8, 1),
+        'num_iters_100': hp.uniform('num_iters_100', 0.6, 0.8),
+        'num_iters_150': hp.uniform('num_iters_150', 0, 0.2),
+
 
         'lineups_per_param': hp.choice('lineups_per_param', [2, 3])
 }
@@ -527,29 +531,29 @@ full_space = {
                                                     'pred_spline_q80_matt0_brier1_kfold3',
                                                     'spline_class80_q80_matt0_brier1_kfold3']),
 
-        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.25),
-        'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.125),
-        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.125),
+        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.2),
+        'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.2),
+        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.2),
         
-        'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0, 1),
+        'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0.2, 1),
 
-        'player_drop_multiple_4': hp.uniform('player_drop_multiple_4', 0, 0.5),
-        'player_drop_multiple_2': hp.uniform('player_drop_multiple_2', 0, 0.5),
+        'player_drop_multiple_4': hp.uniform('player_drop_multiple_4', 0, 0.4),
+        'player_drop_multiple_2': hp.uniform('player_drop_multiple_2', 0, 0.3),
 
-        'matchup_seed_True': hp.uniform('matchup_seed_True', 0, 1),
+        'matchup_seed_True': hp.uniform('matchup_seed_True', 0.3, 1),
 
-        'matchup_drop_1': hp.uniform('matchup_drop_1', 0, 0.4),
+        'matchup_drop_1': hp.uniform('matchup_drop_1', 0, 0.35),
         'matchup_drop_2': hp.uniform('matchup_drop_2', 0, 0.3),
-        'matchup_drop_3': hp.uniform('matchup_drop_3', 0, 0.3),
+        'matchup_drop_3': hp.uniform('matchup_drop_3', 0, 0.35),
 
-        'top_n_choices_1': hp.uniform('top_n_choices_1', 0, 0.5),
-        'top_n_choices_2': hp.uniform('top_n_choices_2', 0, 0.5),
+        'top_n_choices_1': hp.uniform('top_n_choices_1', 0, 0.8),
+        'top_n_choices_2': hp.uniform('top_n_choices_2', 0, 0.2),
 
         'full_model_weight_5': hp.uniform('full_model_weight_5', 0, 1),
 
         'covar_type_no_covar': hp.uniform('covar_type_no_covar', 0, 1),
 
-        'max_team_type_player_points': hp.uniform('player_points', 0, 1),
+        'max_team_type_player_points': hp.uniform('max_team_type_player_points', 0, 1),
 
         'min_player_same_team_2': hp.uniform('min_player_same_team_2', 0, 0.5),
         'min_player_same_team_3': hp.uniform('min_player_same_team_3', 0, 0.5),
@@ -560,8 +564,8 @@ full_space = {
         'num_top_players_2': hp.uniform('num_top_players_2', 0, 0.5),
         'num_top_players_3': hp.uniform('num_top_players_3', 0, 0.5),
 
-        'qb_min_iter_0': hp.uniform('qb_min_iter_0', 0, 0.5),
-        'qb_min_iter_2': hp.uniform('qb_min_iter_2', 0, 0.5),
+        'qb_min_iter_0': hp.uniform('qb_min_iter_0', 0.2, 0.5),
+        'qb_min_iter_2': hp.uniform('qb_min_iter_2', 0.2, 0.5),
 
         'qb_set_max_team_True': hp.uniform('qb_set_max_team_True', 0, 1),
 
@@ -569,8 +573,8 @@ full_space = {
 
         'static_top_players_True': hp.uniform('static_top_players_True', 0, 1),
 
-        'use_ownership_0.9': hp.uniform('use_ownership_0.9', 0, 0.4),
-        'use_ownership_0.8': hp.uniform('use_ownership_0.8', 0, 0.4),
+        'use_ownership_0.9': hp.uniform('use_ownership_0.9', 0, 0.5),
+        'use_ownership_0.8': hp.uniform('use_ownership_0.8', 0, 0.3),
 
         'own_neg_frac_0.8': hp.uniform('own_neg_frac_0.8', 0, 1),
 
@@ -578,14 +582,15 @@ full_space = {
         'max_salary_remain_500': hp.uniform('max_salary_remain_500', 0, 0.3),
         'max_salary_remain_1000': hp.uniform('max_salary_remain_1000', 0, 0.3),
 
-        'num_iters_100': hp.uniform('num_iters_100', 0, 1),
+        'num_iters_100': hp.uniform('num_iters_100', 0.3, 0.6),
+        'num_iters_150': hp.uniform('num_iters_150', 0, 0.4),
 
-        'lineups_per_param': hp.choice('lineups_per_param', [2, 3])
+        'lineups_per_param': hp.choice('lineups_per_param', [1, 2, 3])
 }
 
 
-trial_name = 'adjust5000_meanonly_week1to17_2022_million_own_pct_matchupdropnew'
-# trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
+# trial_name = 'adjust5000_meanonly_week1to17_2022_million_own_pct_matchupdropnew'
+trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
 
 #%%
 
@@ -637,13 +642,13 @@ for i in range(1, 16):
 
 #%%
 
-results = results_to_df(save_path, f'full_space_{trial_name}')
-# dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
-dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'replace')
+# results = results_to_df(save_path, f'full_space_{trial_name}')
+# # dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
+# dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'replace')
 
 
-#%%
-show_trial_best_params('full_space_'+trial_name, 1)
+# #%%
+# show_trial_best_params('full_space_'+trial_name, 2)
 
 # %%
 
