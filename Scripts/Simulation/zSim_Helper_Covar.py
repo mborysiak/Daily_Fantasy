@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import copy
 from collections import Counter
+import contextlib
 
 # linear optimization
 from cvxopt import matrix
@@ -17,7 +18,7 @@ class FootballSimulation:
 
     def __init__(self, dm, week, set_year, salary_cap, pos_require_start, num_iters, 
                  pred_vers='standard', ensemble_vers='no_weight', std_dev_type='spline',
-                 covar_type='team_points', ownership_vers='standard_ln', full_model_rel_weight=1,
+                 covar_type='team_points', full_model_rel_weight=1, matchup_seed=False,
                  use_covar=True, use_ownership=0, salary_remain_max=None):
 
         self.week = week
@@ -30,7 +31,6 @@ class FootballSimulation:
         self.ensemble_vers = ensemble_vers
         self.std_dev_type = std_dev_type
         self.covar_type = covar_type
-        self.ownership_vers = ownership_vers
         self.full_model_rel_weight = full_model_rel_weight
         self.use_covar = use_covar
         self.use_ownership = use_ownership
@@ -45,11 +45,12 @@ class FootballSimulation:
         # join in salary data to player data
         self.player_data = self.join_salary(player_data)
 
-        if use_ownership > 0:
-            self.ownership_data = self.join_ownership_pred(self.player_data)
-            self.use_own_frac = use_ownership
-
+        # pull in the vegas points
         self.vegas_points = self.pull_vegas_points()
+
+        if matchup_seed: self.matchup_seed = np.random.randint(20000)
+        else: self.matchup_seed = None
+
 
 
     def get_covar_means(self):
@@ -554,7 +555,6 @@ class FootballSimulation:
         h_teams = np.full(shape=(len(team_map), 1), fill_value=0.0)
         h_teams[team_map[max_team]] = -min_players
 
-
         # use a bring back player
         if opp_players > 0:
             max_team_opponent = self.matchups[max_team]
@@ -648,10 +648,21 @@ class FootballSimulation:
         df = df.drop(['pos', 'num_required'], axis=1)
         return df
 
+    @staticmethod
+    @contextlib.contextmanager
+    def temp_seed(seed):
+        state = np.random.get_state()
+        np.random.seed(seed)
+        try:
+            yield
+        finally:
+            np.random.set_state(state)
 
     def player_matchup_drop(self, to_drop, to_add, num_matchup_drop):
 
-        drop_teams = np.random.choice(list(self.matchups.keys()), num_matchup_drop, replace=False)
+        with self.temp_seed(self.matchup_seed):
+            drop_teams = np.random.choice(list(self.matchups.keys()), num_matchup_drop, replace=False)
+
         lineup_teams = self.player_data.loc[self.player_data.player.isin(to_add), 'team'].unique()
         
         matchup_to_drop = []
@@ -666,15 +677,19 @@ class FootballSimulation:
 
     def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team, 
                 min_players_opp_team_input=0, adjust_select=False, max_team_type='player_points',
-                num_matchup_drop=0, own_neg_frac=1, n_top_players=5, static_top_players=True,
-                qb_min_iter=9, qb_set_max_team=False, qb_solo_start=True,
-                ):
+                num_matchup_drop=0, own_neg_frac=1, n_top_players=5, ownership_vers='standard_ln',
+                static_top_players=True, qb_min_iter=9, qb_set_max_team=False, qb_solo_start=True):
         
         # can set as argument, but static set for now
         num_options=250
         player_selections = self.init_select_cnts()
         max_team_cnt = []
         success_trials = 0
+
+        self.ownership_vers = ownership_vers
+        if self.use_ownership > 0:
+            self.ownership_data = self.join_ownership_pred(self.player_data)
+            self.use_own_frac = self.use_ownership
        
         self.matchups = self.get_matchups()
         if num_matchup_drop > 0:
@@ -821,7 +836,7 @@ class FootballSimulation:
 
 
 
-# #%%
+#%%
 
 # # set the root path and database management object
 # from ff.db_operations import DataManage
@@ -859,28 +874,28 @@ class FootballSimulation:
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-
-# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-#                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,ownership_vers=ownership_vers,
-#                          full_model_rel_weight=full_model_weight, covar_type=covar_type, use_covar=use_covar, 
-#                          use_ownership=use_ownership, salary_remain_max=salary_remain_max)
 # set_max_team = None
 
-# to_add = ['Michael Pittman']
+# sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
+#                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
+#                          full_model_rel_weight=full_model_weight, covar_type=covar_type, use_covar=use_covar, 
+#                          use_ownership=use_ownership, salary_remain_max=salary_remain_max, matchup_seed=False)
+
+
+# to_add = []
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
 #                                     min_players_opp_team, adjust_select=adjust_select, max_team_type=max_team_type,
 #                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
 #                                     n_top_players=top_n_players, static_top_players=static_top_players,
-#                                      qb_solo_start=qb_solo_start, 
+#                                      qb_solo_start=qb_solo_start, ownership_vers=ownership_vers,
 #                                     qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter)
 
 # print(max_team_cnt)
 # results
 
-
-# # %%
+ # %%
 
 # def calc_winnings(to_add, points, prizes):
 #     results = pd.DataFrame(to_add, columns=['player'])
@@ -910,22 +925,21 @@ class FootballSimulation:
 # for t in range(lineups_per_param):
 
 #     to_add = []
+#     print('drop_players:', to_drop)
+#     sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
+#                         pred_vers, ensemble_vers=ens_vers, std_dev_type=std_dev_type,
+#                         covar_type=covar_type,  full_model_rel_weight=full_model_weight, 
+#                         use_covar=use_covar, use_ownership=use_ownership, 
+#                         salary_remain_max=salary_remain_max, matchup_seed=True)
     
 #     for i in range(9):
+      
 #         to_drop = []
 #         to_drop.extend(to_drop_selected)
-#         print('drop_players:', to_drop)
-#         sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-#                             pred_vers, ensemble_vers=ens_vers, std_dev_type=std_dev_type,
-#                             covar_type=covar_type, ownership_vers=ownership_vers,
-#                             full_model_rel_weight=full_model_weight, 
-#                             use_covar=use_covar, use_ownership=use_ownership, 
-#                             salary_remain_max=salary_remain_max)
-
 #         results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
 #                                 min_players_opp_team_input=min_players_opp_team, 
 #                                 adjust_select=adjust_select,max_team_type=max_team_type,
-#                                     num_matchup_drop=matchup_drop,
+#                                 num_matchup_drop=matchup_drop,ownership_vers=ownership_vers,
 #                                 own_neg_frac=own_neg_frac, n_top_players=top_n_players,
 #                                 static_top_players=static_top_players, qb_min_iter=qb_min_iter,
 #                                 qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
@@ -940,3 +954,4 @@ class FootballSimulation:
 #     total_add.extend(to_add)
 #     to_drop_selected = rand_drop_selected(total_add, 4, 2)
 #     print('player_drop_multiple:', to_drop_selected)
+# %%

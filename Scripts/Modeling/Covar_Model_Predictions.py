@@ -334,8 +334,9 @@ covar_type = 'team_points_trunc'
 # set the model version
 set_weeks = [
   #   13, 14, 15, 16, 17,
-     1, 2, 3, 4, 5, 6, 7,# 8, 9, 10, 11, 12, 13, 14, 
-     15, 16, 17
+     #1, 2, 3, 4, 5, 6, 7,
+      8, 9, 10, 11, 12, 13, 14, 
+     #15, 16, 17
 
         ]
 
@@ -369,7 +370,7 @@ set_years = 16*set_years
 
 full_model_weights = [0.2, 5]
 
-i = 0
+i = 1000000000
 iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
 for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 

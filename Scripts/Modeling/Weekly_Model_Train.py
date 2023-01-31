@@ -38,7 +38,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [8]
+run_weeks = [9, 10, 11, 12, 13, 14]
 run_params = {
     
     # set year and week to analyze
@@ -484,13 +484,13 @@ def save_output_dict(out_dict, model_output_path, label, rush_pass):
 
 #%%
 run_list = [
-            # ['QB', '', 'full_model'],
-            # ['RB', '', 'full_model'],
-            # ['WR', '', 'full_model'],
-            # ['TE', '', 'full_model'],
-            # ['Defense', '', 'full_model'],
-            # ['QB', '', 'backfill'],
-            # ['RB', '', 'backfill'],
+            ['QB', '', 'full_model'],
+            ['RB', '', 'full_model'],
+            ['WR', '', 'full_model'],
+            ['TE', '', 'full_model'],
+            ['Defense', '', 'full_model'],
+            ['QB', '', 'backfill'],
+            ['RB', '', 'backfill'],
             ['WR', '', 'backfill'],
             ['TE', '', 'backfill'],
 

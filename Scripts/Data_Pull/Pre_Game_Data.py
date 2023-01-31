@@ -189,8 +189,11 @@ proj_pl, proj_tm = pff_proj('projections', 'projections', 'pff_proj')
 rank1_pl, rank1_tm = pff_rank('week-rankings-export', 'expert_ranks', 'pff_rank')
 # rank2_pl, rank2_tm = pff_rank('week-rankings-export-2', 'vor_ranks', 'pff_rank', True)
 
-rank1_pl = rank1_pl.drop(f'w{set_week}', axis=1)
-rank1_tm = rank1_tm.drop(f'w{set_week}', axis=1)
+# rank1_pl = rank1_pl.drop(f'w{set_week}', axis=1)
+# rank1_tm = rank1_tm.drop(f'w{set_week}', axis=1)
+
+rank1_pl = rank1_pl.drop(f'w28', axis=1)
+rank1_tm = rank1_tm.drop(f'w28', axis=1)
 
 # rank2_pl = rank2_pl.drop(f'w{set_week}', axis=1)
 # rank2_tm = rank2_tm.drop(f'w{set_week}', axis=1)

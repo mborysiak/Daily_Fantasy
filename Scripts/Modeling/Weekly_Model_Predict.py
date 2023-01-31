@@ -757,7 +757,7 @@ def save_mil_data(df_predict_mil, best_predictions_mil, best_val_mil, run_params
     test_output = pd.concat([df_predict_mil[['player', 'team', 'week', 'year']], 
                             pd.Series(best_predictions_mil.mean(axis=1), name='pred_fp_per_game_class')], 
                             axis=1).sort_values(by='pred_fp_per_game_class', ascending=False)
-    display(test_output)
+    print(test_output)
 
     save_val_to_db(model_output_path, best_val_mil, run_params, 'million', table_name='Model_Validations_Million')
     save_prob_to_db(test_output, run_params, 'Predicted_Million')
@@ -988,14 +988,13 @@ matt_wt = 0
 calibrate = False
 
 # set the model version
-set_weeks = [#1, 2, 3, 4, 5, 6, 7, 15, 16,
- 17]
+set_weeks = [8, 9, 10, 11, 12, 13, 14]
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']
 
-ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack']
+# ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack']
 # ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']
-# ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack']
+ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack']
 # ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3']
 
 std_dev_types = [

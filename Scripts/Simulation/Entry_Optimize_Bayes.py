@@ -21,14 +21,12 @@ dm = DataManage(db_path)
 # set the model version
 set_weeks = [
  #  13, 14, 15, 16, 17,
-   1, 2, 3, 4, 5, 6, 7,# 8, 9, 10, 11, 12, 13, 14
-   15, 16, 17
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17
 ]
 
 set_years = [
      # 2021, 2021, 2021, 2021, 2021,
-      2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 2022, 2022, 2022, 2022, 2022,
-      2022, 2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
 save_path = "c:/Users/mborysia/Documents/Github/Daily_Fantasy/Model_Outputs/2022/Bayes_Sim_Opt/"
@@ -125,6 +123,7 @@ def results_to_df(save_path, fname):
 
     trials = load_pickle(save_path, fname)
     results_tmp = pd.DataFrame(trials.vals)
+    results_tmp = results_tmp.rename(columns={'mathchup_seed_True': 'matchup_seed_True', 'player_points': 'max_team_type_player_point'})
     eval_options = {k: v for k,v in init_space.items() if k in results_tmp.columns}
 
     results = pd.DataFrame()
@@ -174,12 +173,12 @@ def show_trial_best_params(trial_name, best_result=0):
 # Run Sim code
 #================
 
-def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choices, 
+def sim_winnings(adjust_select, player_drop_multiplier, matchup_seed, matchup_drop, top_n_choices, 
                 full_model_rel_weight, covar_type, max_team_type, min_players_same_team, 
-                min_players_opp_team, num_top_players, qb_min_iter, qb_set_max_team, qb_solo_start,
+                min_players_opp_team, num_top_players, ownership_vers, qb_min_iter, qb_set_max_team, qb_solo_start,
                 static_top_players, use_ownership, own_neg_frac, max_salary_remain, 
                 num_iters, lineups_per_param, 
-                week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers
+                week, year, pred_vers, ensemble_vers, std_dev_type
                 ):
     
     prizes = get_prizes(week, year)
@@ -200,25 +199,24 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choi
     for t in range(lineups_per_param):
 
         to_add = []
+        sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
+                                     pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
+                                     covar_type=covar_type,full_model_rel_weight=full_model_rel_weight, 
+                                     matchup_seed=matchup_seed, use_covar=use_covar, use_ownership=use_ownership, 
+                                     salary_remain_max=max_salary_remain)
+
         for i in range(9):
 
             to_drop = []
             to_drop.extend(to_drop_selected)
 
-            sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-                                pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
-                                covar_type=covar_type, ownership_vers=ownership_vers,
-                                full_model_rel_weight=full_model_rel_weight, 
-                                use_covar=use_covar, use_ownership=use_ownership, 
-                                salary_remain_max=max_salary_remain)
-
             results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-                                    min_players_opp_team_input=min_players_opp_team, 
-                                    adjust_select=adjust_select,max_team_type=max_team_type,
-                                     num_matchup_drop=matchup_drop,
-                                    own_neg_frac=own_neg_frac, n_top_players=num_top_players,
-                                    static_top_players=static_top_players, qb_min_iter=qb_min_iter,
-                                    qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
+                                     min_players_opp_team_input=min_players_opp_team, 
+                                     adjust_select=adjust_select,max_team_type=max_team_type,
+                                     num_matchup_drop=matchup_drop, ownership_vers=ownership_vers,
+                                     own_neg_frac=own_neg_frac, n_top_players=num_top_players,
+                                     static_top_players=static_top_players, qb_min_iter=qb_min_iter,
+                                     qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
             
             prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
             try: 
@@ -227,13 +225,11 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_drop, top_n_choi
             except: 
                 pass
 
-            print(to_add)
         prize_money = calc_winnings(to_add, points, prizes)
         winnings.append(prize_money)
 
         total_add.extend(to_add)
         to_drop_selected = rand_drop_selected(total_add, player_drop_multiplier, lineups_per_param)
-        print(to_drop_selected)
     return winnings
 
 #================
@@ -267,10 +263,16 @@ def convert_param_options(bp):
             0: 1 - bp['player_drop_multiple_4'] - bp['player_drop_multiple_2']
         },
 
+        'matchup_seed': {
+            True: bp['matchup_seed_True'],
+            False: 1 - bp['matchup_seed_True']
+        },
+
         'matchup_drop': {
             1: bp['matchup_drop_1'],
             2: bp['matchup_drop_2'],
-            0: 1 - bp['matchup_drop_1'] - bp['matchup_drop_2']
+            3: bp['matchup_drop_3'],
+            0: 1 - bp['matchup_drop_1'] - bp['matchup_drop_2'] - bp['matchup_drop_3']
         }, 
 
         'top_n_choices': {
@@ -310,6 +312,13 @@ def convert_param_options(bp):
             2: bp['num_top_players_2'],
             3: bp['num_top_players_3'],
             5: 1 - bp['num_top_players_2'] - bp['num_top_players_3']
+        },
+
+        'ownership_vers': {
+            'mil_only': bp['ownership_vers_mil_only'],
+            'mil_times_standard_ln': bp['ownership_vers_mil_times_standard_ln'],
+            'mil_div_standard_ln': bp['ownership_vers_mil_div_standard_ln'],
+            'standard_ln': 1 -  bp['ownership_vers_mil_only'] -  bp['ownership_vers_mil_times_standard_ln'] - bp['ownership_vers_mil_div_standard_ln']
         },
 
         'qb_min_iter': {
@@ -359,7 +368,7 @@ def convert_param_options(bp):
     return d
 
 
-def create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers):
+def create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type):
     params = []
     for i in range(int(30/lineups_per_param)):
         cur_params = []
@@ -368,7 +377,7 @@ def create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_ver
             param_prob = list(param_options.values())
             cur_params.append(np.random.choice(param_vars, p=param_prob))
 
-        cur_params.extend([lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers])
+        cur_params.extend([lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type])
         params.append(cur_params)
     return params
 
@@ -383,7 +392,6 @@ def objective(bayes_params):
     pred_vers = bayes_params['pred_vers']
     ensemble_vers = bayes_params['ensemble_vers']
     std_dev_type = bayes_params['std_dev_type']
-    ownership_vers = bayes_params['ownership_vers']
 
     d = convert_param_options(bayes_params)
     
@@ -393,21 +401,21 @@ def objective(bayes_params):
 
         winnings = 150
         try:
-            params = create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers)
+            params = create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type)
             
-            # print(params)
-            # winnings = []
-            # for adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers in params:
-            #     print(pred_vers, ensemble_vers, std_dev_type, own_vers)
-            #     cur_winnings = sim_winnings(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers)
-            #     winnings.append(cur_winnings)
-                
-            winnings = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
-                                                                            qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
-                                                                            week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers) for 
-                                                                            adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
-                                                                            qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
-                                                                            week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers in params)
+        # print(params)
+        # winnings = []
+        # for adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers in params:
+        #     print(pred_vers, ensemble_vers, std_dev_type, own_vers)
+        #     cur_winnings = sim_winnings(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers)
+        #     winnings.append(cur_winnings)
+            
+            winnings = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
+                                                                            ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
+                                                                            week, year, pred_vers, ensemble_vers, std_dev_type) for 
+                                                                            adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
+                                                                            ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
+                                                                            week, year, pred_vers, ensemble_vers, std_dev_type  in params)
         
             winnings = [item for sublist in winnings for item in sublist]
             winnings = avg_winnings_contest(winnings)
@@ -449,18 +457,20 @@ init_space = {
                                                     'pred_spline_q80_matt0_brier1_kfold3',
                                                     'spline_class80_q80_matt0_brier1_kfold3']),
 
-        'ownership_vers': hp.choice('ownership_vers', ['standard_ln', 
-                                                       'mil_times_standard_ln', 
-                                                       'mil_div_standard_ln', 
-                                                       'mil_only']),
+        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.3),
+        'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.1),
+        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.1),
 
         'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0.7, 1),
 
         'player_drop_multiple_4': hp.uniform('player_drop_multiple_4', 0, 0.2),
         'player_drop_multiple_2': hp.uniform('player_drop_multiple_2', 0, 0.2),
 
+        'matchup_seed_True': hp.uniform('matchup_seed_True', 0, 1),
+
         'matchup_drop_1': hp.uniform('matchup_drop_1', 0, 0.2),
         'matchup_drop_2': hp.uniform('matchup_drop_2', 0, 0.2),
+        'matchup_drop_3': hp.uniform('matchup_drop_3', 0, 0.2),
 
         'top_n_choices_1': hp.uniform('top_n_choices_1', 0, 0.2),
         'top_n_choices_2': hp.uniform('top_n_choices_2', 0, 0.2),
@@ -469,7 +479,7 @@ init_space = {
 
         'covar_type_no_covar': hp.uniform('covar_type_no_covar', 0.5, 0.9),
 
-        'max_team_type_player_points': hp.uniform('player_points', 0, 1),
+        'max_team_type_player_points': hp.uniform('max_team_type_player_points', 0, 1),
 
         'min_player_same_team_2': hp.uniform('min_player_same_team_2', 0, 0.3),
         'min_player_same_team_3': hp.uniform('min_player_same_team_3', 0.2, 0.5),
@@ -517,15 +527,20 @@ full_space = {
                                                     'pred_spline_q80_matt0_brier1_kfold3',
                                                     'spline_class80_q80_matt0_brier1_kfold3']),
 
-        'ownership_vers': hp.choice('ownership_vers', ['standard_ln', 'mil_times_standard_ln', 'mil_div_standard_ln', 'mil_only']),
-
+        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.25),
+        'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.125),
+        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.125),
+        
         'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0, 1),
 
         'player_drop_multiple_4': hp.uniform('player_drop_multiple_4', 0, 0.5),
         'player_drop_multiple_2': hp.uniform('player_drop_multiple_2', 0, 0.5),
 
-        'matchup_drop_1': hp.uniform('matchup_drop_1', 0, 0.5),
-        'matchup_drop_2': hp.uniform('matchup_drop_2', 0, 0.5),
+        'matchup_seed_True': hp.uniform('matchup_seed_True', 0, 1),
+
+        'matchup_drop_1': hp.uniform('matchup_drop_1', 0, 0.4),
+        'matchup_drop_2': hp.uniform('matchup_drop_2', 0, 0.3),
+        'matchup_drop_3': hp.uniform('matchup_drop_3', 0, 0.3),
 
         'top_n_choices_1': hp.uniform('top_n_choices_1', 0, 0.5),
         'top_n_choices_2': hp.uniform('top_n_choices_2', 0, 0.5),
@@ -569,57 +584,66 @@ full_space = {
 }
 
 
-trial_name = 'adjust5000_week1to7and15to172022_ffa_fc_newparams_million_own'
+trial_name = 'adjust5000_meanonly_week1to17_2022_million_own_pct_matchupdropnew'
+# trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
 
 #%%
 
-# class BayesTrain:
-#     def __init__(self, trial_name, save_path, warm_start_evals=10, full_evals=50):
+class BayesTrain:
+    def __init__(self, trial_name, save_path, warm_start_evals=10, full_evals=50):
 
-#         self.trial_name = trial_name
-#         self.warm_start_evals = warm_start_evals
-#         self.full_evals = full_evals
-#         self.save_path = save_path
+        self.trial_name = trial_name
+        self.warm_start_evals = warm_start_evals
+        self.full_evals = full_evals
+        self.save_path = save_path
 
-#     def check_warm_start_exists(self):
-#         if os.path.exists(self.save_path+f'warm_start_{self.trial_name}.p'):
-#             self.warm_start_exists = True
+    def check_warm_start_exists(self):
+        if os.path.exists(self.save_path+f'warm_start_{self.trial_name}.p'):
+            self.warm_start_exists = True
 
-#     def check_full_trial_exists(self):
-#         if os.path.exists(self.save_path+f'full_space_{self.trial_name}.p'):
-#             self.full_trial_exists = True
+    def check_full_trial_exists(self):
+        if os.path.exists(self.save_path+f'full_space_{self.trial_name}.p'):
+            self.full_trial_exists = True
 
 
+for i in range(1, 16):
 
-if os.path.exists(save_path+f'warm_start_{trial_name}.p'):
-    trials  = load_pickle(save_path, f'warm_start_{trial_name}')
-    print('Loading Warm Start')
-else:
-    trials = Trials()
-    print('Running Warm Start')
-    best = fmin(objective, space=init_space, algo=tpe.suggest, trials=trials, max_evals=20)
-    save_pickle(trials, save_path, f'warm_start_{trial_name}')
+    if os.path.exists(save_path+f'full_space_{trial_name}.p'):
 
-print('Running Full Space')
-best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=150)
-print(space_eval(full_space, best))
+        trials  = load_pickle(save_path, f'full_space_{trial_name}')
+        print('Loading Full Space')
 
-save_pickle(trials, save_path, f'full_space_{trial_name}')
+        print('Running Full Space')
+        best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=i*20)
+        print(space_eval(full_space, best))
+        save_pickle(trials, save_path, f'full_space_{trial_name}')
+    
+    elif os.path.exists(save_path+f'warm_start_{trial_name}.p'):
+        trials  = load_pickle(save_path, f'warm_start_{trial_name}')
+        print('Loading Warm Start')
+
+        print('Running Full Space')
+        best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=i*20)
+        print(space_eval(full_space, best))
+        save_pickle(trials, save_path, f'full_space_{trial_name}')
+    
+    else:
+        trials = Trials()
+        print('Running Warm Start')
+        best = fmin(objective, space=init_space, algo=tpe.suggest, trials=trials, max_evals=i*20)
+        save_pickle(trials, save_path, f'warm_start_{trial_name}')
+
+    
+
+#%%
 
 results = results_to_df(save_path, f'full_space_{trial_name}')
-dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
-dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'append')
+# dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
+dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'replace')
+
 
 #%%
-
-print('Running Full Space')
-best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=200)
-print(space_eval(full_space, best))
-
-save_pickle(trials, save_path, f'full_space_{trial_name}')
-
-#%%
-show_trial_best_params('full_space_'+trial_name, 2)
+show_trial_best_params('full_space_'+trial_name, 1)
 
 # %%
 

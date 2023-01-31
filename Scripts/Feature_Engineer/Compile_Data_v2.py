@@ -165,8 +165,7 @@ def fantasy_pros_new(pos):
                     FROM FantasyPros 
                     WHERE pos='{pos}' 
                           AND team is NOT NULL
-                           AND ((week <= 18 AND year < {set_year})
-                                 OR year = {set_year}) ''', 'Pre_PlayerData')
+                         ''', 'Pre_PlayerData')
     fp = name_cleanup(fp)
     if pos == 'DST': fp = fp.drop('player', axis=1).rename(columns={'team': 'player'})
 
@@ -1372,7 +1371,7 @@ def attach_y_act(df, pos, defense=False, rush_or_pass=''):
                             
         snaps = get_snap_data()
         proj = dm.read('''SELECT player, week, year, fantasyPoints
-                        FROM PFF_Proj_Ranks''', 'Pre_PlayerData')
+                          FROM PFF_Proj_Ranks''', 'Pre_PlayerData')
 
         y_act = pd.merge(y_act, snaps, on=['player', 'week', 'year'], how='left')
         y_act = pd.merge(y_act, proj, on=['player', 'week', 'year'], how='left')
