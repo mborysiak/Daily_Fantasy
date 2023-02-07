@@ -462,7 +462,7 @@ def entry_optimize_params(df, max_adjust, model_name):
     if model_name in ('enet', 'lasso',' ridge'):
         str_cols.extend( ['player_drop_multiple','top_n_choices', 'matchup_drop', 'adjust_pos_counts', 
                          'full_model_weight', 'max_lineup_num', 'use_ownership', 'own_neg_frac',
-                         'num_top_players', 'static_top_players',
+                         'num_top_players', 'static_top_players', 'num_iters',
                          'qb_min_iter', 'qb_solo_start', 'qb_set_max_team'])
     df[str_cols] = df[str_cols].astype('str')
 
@@ -482,11 +482,10 @@ def entry_optimize_params(df, max_adjust, model_name):
 df = dm.read('''SELECT *  
                 FROM Entry_Optimize_Params_Detail 
                 JOIN (
-                     SELECT week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers, trial_num, repeat_num
+                     SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num > 152
-                     -- AND week NOT IN (1,3)
+                WHERE trial_num > 161
                 ''', 'Results')
 
 model_type = {
@@ -506,10 +505,8 @@ show_coef(coef_vals, X)
 
 #%%
 
-weeks = [13, 14, 15, 16, 17, 
-          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
-years = [2021, 2021, 2021, 2021, 2021,
-        2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
+weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
 
 i=0
 all_coef = None; X_all = None
@@ -517,10 +514,10 @@ for w, yr in zip(weeks, years):
     df = dm.read(f'''SELECT *  
                      FROM Entry_Optimize_Params_Detail 
                      JOIN (
-                            SELECT week, year, pred_vers, ensemble_vers, std_dev_type, ownership_vers, trial_num, repeat_num
+                            SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num > 152
+                     WHERE trial_num > 161
                            AND week = {w}
                            AND year = {yr}
                      ''', 'Results')
@@ -559,11 +556,29 @@ model_type = {
 
 }
 
-model_name='rf'
+model_name='enet'
 m = model_type[model_name] 
 X, y = entry_optimize_bayes(df)
 coef_vals, X = get_model_coef(X, y, m)
 show_coef(coef_vals, X)
+
+
+#%%
+
+df_all = dm.read('''SELECT *  
+                     FROM Entry_Optimize_Bayes
+                    ''', 'Results')
+
+for tn in df_all.trial_name.unique():
+    df = df_all[df_all.trial_name == tn].copy().reset_index(drop=True)
+
+    model_name = 'enet'
+    m = model_type[model_name]
+    X, y = entry_optimize_bayes(df)
+    coef_vals, X = get_model_coef(X, y, m)
+    all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1
+
+show_coef(all_coef, X_all)
 
 
 #%%

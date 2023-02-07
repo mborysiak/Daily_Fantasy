@@ -18,6 +18,7 @@ import zModel_Functions as mf
 from joblib import Parallel, delayed
 from sklearn.utils.validation import check_is_fitted
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import cross_val_predict
 
 pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', None)
@@ -101,7 +102,7 @@ def train_predict_split(df, run_params):
     df_train = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 
-    df_predict = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
+    df_predict = df[df.game_date >= run_params['train_time_split']].reset_index(drop=True)
     output_start = df_predict[['player', 'team', 'week', 'year', 'dk_salary']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
@@ -115,7 +116,7 @@ def get_class_data(df, cut, run_params):
 
     # set up the training and prediction datasets for the classification 
     df_train_class = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
-    df_predict_class = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
+    df_predict_class = df[df.game_date >= run_params['train_time_split']].reset_index(drop=True)
 
     # set up the target variable to be categorical based on Xth percentile
     cut_perc = df_train_class.groupby('game_date')['y_act'].apply(lambda x: np.percentile(x, cut))
@@ -671,7 +672,7 @@ def add_actual(df):
                                 and season={run_params['set_year']}''', 'FastR')
     
     if len(actual_pts) > 0:
-        df = pd.merge(df, actual_pts, on=['player', 'week', 'year'])
+        df = pd.merge(df, actual_pts, on=['player', 'week', 'year'], how='left')
     return df
 
 
@@ -988,7 +989,7 @@ matt_wt = 0
 calibrate = False
 
 # set the model version
-set_weeks = [8, 9, 10, 11, 12, 13, 14]
+set_weeks = [12]
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']
 
@@ -999,9 +1000,9 @@ ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq
 
 std_dev_types = [
                 'pred_spline_class80_q80_matt0_brier1_kfold3',
-                'pred_spline_class80_matt0_brier1_kfold3',
-                'pred_spline_q80_matt0_brier1_kfold3',
-                'spline_class80_q80_matt0_brier1_kfold3'
+                # 'pred_spline_class80_matt0_brier1_kfold3',
+                # 'pred_spline_q80_matt0_brier1_kfold3',
+                # 'spline_class80_q80_matt0_brier1_kfold3'
             ]
 std_dev_type = std_dev_types[0]
 
@@ -1010,14 +1011,14 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     run_params['set_week'] = w
     runs = [
         ['QB', 'full_model', ''],
-        ['RB', 'full_model', ''],
-        ['WR', 'full_model', ''],
-        ['TE', 'full_model', ''],
-        ['Defense', 'full_model', ''],
-        ['QB', 'backfill', ''],
-        ['RB', 'backfill', ''],
-        ['WR', 'backfill', ''],
-        ['TE', 'backfill', '']
+        # ['RB', 'full_model', ''],
+        # ['WR', 'full_model', ''],
+        # ['TE', 'full_model', ''],
+        # ['Defense', 'full_model', ''],
+        # ['QB', 'backfill', ''],
+        # ['RB', 'backfill', ''],
+        # ['WR', 'backfill', ''],
+        # ['TE', 'backfill', '']
     ]
     for set_pos, model_type, rush_pass in runs:
 
@@ -1057,42 +1058,42 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
 
         if os.path.exists(f'{model_output_path}class_{std_dev_type}.p'):
-            best_models, scores, stack_val_pred = load_stack_runs(model_output_path, 'class_' + std_dev_type)
+            best_models_class, scores, stack_val_pred = load_stack_runs(model_output_path, 'class_' + std_dev_type)
         else:
-            stack_val_pred = pd.DataFrame(); scores = []; best_models = []
+            stack_val_pred = pd.DataFrame(); scores = []; best_models_class = []
             for i, fm in enumerate(final_models):
-                best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack_class, best_models, 
+                best_models_class, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack_class, best_models, 
                                                                         scores, stack_val_pred, model_obj='class',
                                                                         run_adp=False, show_plots=False, 
                                                                         calibrate=calibrate, num_k_folds=num_k_folds,
                                                                         print_coef=print_coef)
 
                 if show_plot: show_calibration_curve(y_stack_class, stack_val_pred[fm], n_bins=8)
-            save_stack_runs(model_output_path, 'class_' + std_dev_type, best_models, scores, stack_val_pred)
+            save_stack_runs(model_output_path, 'class_' + std_dev_type, best_models_class, scores, stack_val_pred)
 
-        predictions = stack_predictions(X_predict, best_models, final_models, model_obj='class')
+        predictions = stack_predictions(X_predict, best_models_class, final_models, model_obj='class')
         best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_class, stack_val_pred, 
                                                                             predictions, model_obj='class', show_plot=show_plot, 
                                                                             min_include=min_include)
 
         if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
-        save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
+        # save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
 
         # quantile regression metrics
         final_models = ['qr_q', 'gbm_q', 'lgbm_q', 'rf_q', 'knn_q']
         if os.path.exists(f'{model_output_path}quant_{ensemble_vers}.p'):
-            best_models, scores, stack_val_pred = load_stack_runs(model_output_path, 'quant_' + ensemble_vers)
+            best_models_quant, scores, stack_val_pred = load_stack_runs(model_output_path, 'quant_' + ensemble_vers)
         else:
-            stack_val_pred = pd.DataFrame(); scores = []; best_models = []
+            stack_val_pred = pd.DataFrame(); scores = []; best_models_quant = []
             for i, fm in enumerate(final_models):
-                best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, 
+                best_models_quant, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, 
                                                                         scores, stack_val_pred, model_obj='quantile',
                                                                         run_adp=False, show_plots=show_plot, 
                                                                         calibrate=calibrate, num_k_folds=num_k_folds,
                                                                         print_coef=print_coef)
-            save_stack_runs(model_output_path, 'quant_' + ensemble_vers, best_models, scores, stack_val_pred)
+            save_stack_runs(model_output_path, 'quant_' + ensemble_vers, best_models_quant, scores, stack_val_pred)
             
-        predictions = stack_predictions(X_predict, best_models, final_models, model_obj='quantile')
+        predictions = stack_predictions(X_predict, best_models_quant, final_models, model_obj='quantile')
         best_val_quant, best_predictions_quant, _ = average_stack_models(scores, final_models, y_stack, stack_val_pred, 
                                                                         predictions, model_obj='quantile', show_plot=show_plot, 
                                                                         min_include=min_include)
@@ -1101,29 +1102,29 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         # create the stacking models
         final_models = ['ridge', 'lasso', 'huber', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm', 'gbmh', 'knn']
         if os.path.exists(f'{model_output_path}reg_{ensemble_vers}.p'):
-            best_models, scores, stack_val_pred = load_stack_runs(model_output_path, 'reg_' + ensemble_vers)
+            best_models_reg, scores, stack_val_pred = load_stack_runs(model_output_path, 'reg_' + ensemble_vers)
         else:
-            stack_val_pred = pd.DataFrame(); scores = []; best_models = []
+            stack_val_pred = pd.DataFrame(); scores = []; best_models_reg = []
             for i, fm in enumerate(final_models):
-                best_models, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, 
+                best_models_reg, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack, best_models, 
                                                                     scores, stack_val_pred, show_plots=show_plot,
                                                                     num_k_folds=num_k_folds, print_coef=print_coef)
-            save_stack_runs(model_output_path, 'reg_' + ensemble_vers, best_models, scores, stack_val_pred)
+            save_stack_runs(model_output_path, 'reg_' + ensemble_vers, best_models_reg, scores, stack_val_pred)
 
-        predictions = stack_predictions(X_predict, best_models, final_models)
-        best_val, best_predictions, best_score = average_stack_models(scores, final_models, y_stack, stack_val_pred, 
+        predictions = stack_predictions(X_predict, best_models_reg, final_models)
+        best_val_reg, best_predictions, best_score = average_stack_models(scores, final_models, y_stack, stack_val_pred, 
                                                                       predictions, model_obj='reg',
                                                                       show_plot=show_plot, min_include=min_include)
-        save_val_to_db(model_output_path, best_val, run_params, 'reg', table_name='Model_Validations')
+        # save_val_to_db(model_output_path, best_val, run_params, 'reg', table_name='Model_Validations')
         
         # create the output and add standard devations / max scores
         output = create_output(output_start, best_predictions, best_predictions_class, best_predictions_quant)
-        save_prob_to_db(output, run_params, 'Predicted_Probability')
+        # save_prob_to_db(output, run_params, 'Predicted_Probability')
 
         for std_dev_type in std_dev_types:
             
             metrics = metrics_dict[std_dev_type]
-            output = val_std_dev(model_output_path, output, best_val, best_val_class, best_val_quant, metrics=metrics, 
+            output = val_std_dev(model_output_path, output, best_val_reg, best_val_class, best_val_quant, metrics=metrics, 
                                  iso_spline='spline', show_plot=show_plot)
             
             try:  
@@ -1131,7 +1132,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
                 print(output.loc[:50, ['player', 'week', 'year', 'dk_salary', 'dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class',
                                     'pred_fp_per_game_quantile', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
                 
-                save_test_to_db(output, run_params)
+                # save_test_to_db(output, run_params)
                 
                 if show_plot: 
                     mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
@@ -1143,67 +1144,249 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
                 print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class', 
                                     'pred_fp_per_game_quantile', 'std_dev', 'min_score', 'max_score']])
 
-            save_output_to_db(output, run_params)
+            # save_output_to_db(output, run_params)
 
-        #-------------
-        # Running the million dataset
-        #-------------
+        # #-------------
+        # # Running the million dataset
+        # #-------------
 
-        df_predict_mil, X_stack_mil, y_stack_mil, X_predict_mil = X_y_stack_mil(df, run_params)
+        # df_predict_mil, X_stack_mil, y_stack_mil, X_predict_mil = X_y_stack_mil(df, run_params)
 
-        X_stack_mil = pd.merge(X_stack_mil, X_stack_player, on=['player', 'week', 'year'], how='left')
+        # X_stack_mil = pd.merge(X_stack_mil, X_stack_player, on=['player', 'week', 'year'], how='left')
 
-        X_predict_player = pd.concat([df_predict.player, X_predict.copy()], axis=1)
-        X_predict_player = X_predict_player.loc[:,~X_predict_player.columns.duplicated()].copy()
-        X_predict_mil = pd.merge(X_predict_mil, X_predict_player, on=['player'])
+        # X_predict_player = pd.concat([df_predict.player, X_predict.copy()], axis=1)
+        # X_predict_player = X_predict_player.loc[:,~X_predict_player.columns.duplicated()].copy()
+        # X_predict_mil = pd.merge(X_predict_mil, X_predict_player, on=['player'])
         
 
-        X_stack_mil = pd.merge(X_stack_mil, df_train[['player', 'week', 'year', 'dk_salary']], 
-                               on=['player', 'week', 'year'], how='left')
-        X_predict_mil = pd.merge(X_predict_mil, df_predict[['player', 'dk_salary']], 
-                                 on=['player'], how='left')
-        X_stack_mil = add_sal_columns(X_stack_mil)
-        X_predict_mil = add_sal_columns(X_predict_mil)
+        # X_stack_mil = pd.merge(X_stack_mil, df_train[['player', 'week', 'year', 'dk_salary']], 
+        #                        on=['player', 'week', 'year'], how='left')
+        # X_predict_mil = pd.merge(X_predict_mil, df_predict[['player', 'dk_salary']], 
+        #                          on=['player'], how='left')
+        # X_stack_mil = add_sal_columns(X_stack_mil)
+        # X_predict_mil = add_sal_columns(X_predict_mil)
 
-        X_stack_mil = X_stack_mil.drop(['player', 'week', 'year'], axis=1).dropna(axis=0)
-        y_stack_mil = y_stack_mil[y_stack_mil.index.isin(X_stack_mil.index)]
-        X_stack_mil, y_stack_mil = X_stack_mil.reset_index(drop=True), y_stack_mil.reset_index(drop=True)
+        # X_stack_mil = X_stack_mil.drop(['player', 'week', 'year'], axis=1).dropna(axis=0)
+        # y_stack_mil = y_stack_mil[y_stack_mil.index.isin(X_stack_mil.index)]
+        # X_stack_mil, y_stack_mil = X_stack_mil.reset_index(drop=True), y_stack_mil.reset_index(drop=True)
 
-        X_predict_mil = X_predict_mil.drop(['player'], axis=1)
+        # X_predict_mil = X_predict_mil.drop(['player'], axis=1)
 
-        # class metrics
-        final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
+        # # class metrics
+        # final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
 
-        if os.path.exists(f'{model_output_path}mil_{std_dev_type}.p'):
-            best_models, scores, stack_val_pred_mil = load_stack_runs(model_output_path, 'mil_' + std_dev_type)
+        # if os.path.exists(f'{model_output_path}mil_{std_dev_type}.p'):
+        #     best_models, scores, stack_val_pred_mil = load_stack_runs(model_output_path, 'mil_' + std_dev_type)
+        # else:
+        #     stack_val_pred_mil = pd.DataFrame(); scores = []; best_models = []
+        #     for i, fm in enumerate(final_models):
+        #         best_models, scores, stack_val_pred_mil = run_stack_models(fm, i, X_stack_mil, y_stack_mil, best_models, 
+        #                                                                 scores, stack_val_pred_mil, model_obj='class',
+        #                                                                 run_adp=False, show_plots=False, 
+        #                                                                 calibrate=calibrate, num_k_folds=num_k_folds,
+        #                                                                 print_coef=print_coef)
+
+        #     if show_plot: show_calibration_curve(y_stack_mil, stack_val_pred_mil[fm], n_bins=8)
+        #     save_stack_runs(model_output_path, 'mil_' + std_dev_type, best_models, scores, stack_val_pred_mil)
+
+        # predictions = stack_predictions(X_predict_mil, best_models, final_models, model_obj='class')
+        # best_val_mil, best_predictions_mil, _ = average_stack_models(scores, final_models, y_stack_mil, stack_val_pred_mil, 
+        #                                                             predictions, model_obj='class', show_plot=show_plot, 
+        #                                                             min_include=min_include)
+
+        # if show_plot: show_calibration_curve(y_stack_mil, best_val_mil.mean(axis=1), n_bins=8)
+        # save_mil_data(df_predict_mil, best_predictions_mil, best_val_mil, run_params)
+
+    # #---------------
+    # # Save vegas points and std dev
+    # #---------------
+
+    # vp = vegas_points(run_params, metrics={'implied_points_for': 1}, show_plot=show_plot)
+    # dm.delete_from_db('Simulation', 'Vegas_Points', f"week={run_params['set_week']} AND year={run_params['set_year']}", create_backup=False)
+    # dm.write_to_db(vp, 'Simulation', 'Vegas_Points', 'append')
+    # print('All Runs Finished')
+
+#%%
+output = add_actual(output).rename(columns={'actual_pts': 'y_act'})
+pct_min = output[output.y_act < output.min_score].shape[0] / output.shape[0]
+pct_max = output[output.y_act > output.max_score].shape[0] / output.shape[0]
+
+one_std = output[(output.y_act < (output.pred_fp_per_game + 1*output.std_dev)) & \
+    (output.y_act > (output.pred_fp_per_game - 1*output.std_dev))].shape[0] / output.shape[0]
+one_std -= .68
+
+two_std = output[(output.y_act < (output.pred_fp_per_game + 2*output.std_dev)) & \
+    (output.y_act > (output.pred_fp_per_game - 2*output.std_dev))].shape[0] / output.shape[0]
+two_std -= .95
+
+three_std = output[(output.y_act < (output.pred_fp_per_game + 3*output.std_dev)) & \
+    (output.y_act > (output.pred_fp_per_game - 3*output.std_dev))].shape[0] / output.shape[0]
+three_std -= .997
+
+pct_min = np.round(pct_min*100, 1)
+one_std = np.round(one_std*100, 1)
+two_std = np.round(two_std*100, 1)
+three_std = np.round(three_std*100, 1)
+pct_max = np.round(pct_max*100, 1)
+
+print(f'Min Pct: {pct_min}%, Pct Missed 1 Std: {one_std}%, 2 std: {two_std}%, 3 std: {three_std}%, Max Pct: {pct_max}%')
+output = output.drop('y_act', axis=1)
+
+#%%
+
+class BootstrapPredictions:
+
+    def __init__(self, models, X, y, X_predict, labels, random_state=1234):
+        
+        self.models = models
+        self.n_models = len(models)
+        
+        self.X = X
+        self.y = y
+        self.tr_rows = len(X)
+
+        self.X_predict = X_predict
+        self.pr_rows = len(X_predict)
+
+        self.labels = labels
+        
+        self.random_state = random_state
+
+    def get_boot_samples(self, frac, replace):
+        
+        boot_idx = np.random.choice(range(self.tr_rows), int(self.tr_rows*frac), replace=replace)
+        X_boot = self.X.iloc[boot_idx, :].reset_index(drop=True)
+        y_boot = self.y[boot_idx].reset_index(drop=True)
+        n_boot = len(X_boot)
+
+        return X_boot, y_boot, n_boot
+
+    def fit_predict(self, model, X, y):
+
+        val_pred = cross_val_predict(model, X, y)
+        model.fit(X, y)
+        test_pred = fm.predict(self.X_predict)
+
+        return val_pred, test_pred
+
+    def bootstrap_predict(self, X_boot, y_boot, n_boot):
+
+        val_pred_boot = np.empty(shape=(n_boot, self.n_models))
+        test_pred_boot = np.empty(shape=(self.pr_rows, self.n_models))
+
+        for i, m in enumerate(self.models):
+            
+            val_pred_m, test_pred_m = self.fit_predict(m, X_boot, y_boot)
+            val_pred_boot[:, i] = val_pred_m
+            test_pred_boot[:, i] = test_pred_m
+
+        return val_pred_boot, test_pred_boot
+
+    @staticmethod
+    def array_match(known_array, test_array):
+        
+        index_sorted = np.argsort(known_array)
+        known_array_sorted = known_array[index_sorted]
+
+        idx1 = np.searchsorted(known_array_sorted, test_array)
+        idx1[idx1 == len(known_array)] = len(known_array)-1
+        idx2 = np.clip(idx1 - 1, 0, len(known_array_sorted)-1)
+
+        diff1 = known_array_sorted[idx1] - test_array
+        diff2 = test_array - known_array_sorted[idx2]
+
+        indices = index_sorted[np.where(diff1 <= diff2, idx1, idx2)]
+        residual_match = test_array - known_array[indices]
+
+        return indices, residual_match
+
+    @staticmethod
+    def residuals_pred(y, val_pred, test_pred, best_match_idx):
+        residuals = y.values - val_pred
+        test_pred_boot = test_pred + residuals[best_match_idx]
+        return test_pred_boot
+
+    def bootstrap_iter(self, n):
+
+        if self.random_state is not None: np.random.seed(self.random_state*(n*4))
+
+        X_boot, y_boot, n_boot = self.get_boot_samples(self.sample_frac, self.replace)
+        val_pred_boot, test_pred_boot = self.bootstrap_predict(X_boot, y_boot, n_boot)
+
+        val_pred_boot = np.mean(val_pred_boot, axis=1)
+        test_pred_boot = np.mean(test_pred_boot, axis=1)
+
+        best_match_idx, residuals_match = self.array_match(val_pred_boot, test_pred_boot)
+        self.residuals_match[:, n] = residuals_match
+
+        resid_test_pred = self.residuals_pred(y_boot, val_pred_boot, test_pred_boot, best_match_idx)
+        self.pred_dist[:, n] = resid_test_pred
+
+    def run_bootstrap(self, N, sample_frac, replace, label_append=True, n_jobs=-1):
+
+        self.sample_frac = sample_frac
+        self.replace = replace
+        self.pred_dist = np.empty(shape=(self.pr_rows, N))
+        self.residuals_match = np.empty(shape=(self.pr_rows, N))
+
+        if n_jobs == 1:
+            for n in range(N): self.bootstrap_iter(n)
         else:
-            stack_val_pred_mil = pd.DataFrame(); scores = []; best_models = []
-            for i, fm in enumerate(final_models):
-                best_models, scores, stack_val_pred_mil = run_stack_models(fm, i, X_stack_mil, y_stack_mil, best_models, 
-                                                                        scores, stack_val_pred_mil, model_obj='class',
-                                                                        run_adp=False, show_plots=False, 
-                                                                        calibrate=calibrate, num_k_folds=num_k_folds,
-                                                                        print_coef=print_coef)
+            Parallel(n_jobs=n_jobs, backend='threading')(delayed(self.bootstrap_iter)(n) for n in range(N))
 
-            if show_plot: show_calibration_curve(y_stack_mil, stack_val_pred_mil[fm], n_bins=8)
-            save_stack_runs(model_output_path, 'mil_' + std_dev_type, best_models, scores, stack_val_pred_mil)
+        if label_append:
+            self.pred_dist = pd.concat([self.labels, pd.DataFrame(self.pred_dist)], axis=1)
+        else:
+            self.pred_dist = pd.Dataframe(self.pred_dist)
+        return self.pred_dist
+        
 
-        predictions = stack_predictions(X_predict_mil, best_models, final_models, model_obj='class')
-        best_val_mil, best_predictions_mil, _ = average_stack_models(scores, final_models, y_stack_mil, stack_val_pred_mil, 
-                                                                    predictions, model_obj='class', show_plot=show_plot, 
-                                                                    min_include=min_include)
+# final_models = [bm for bm in best_models_reg if bm.steps[-1][0] in best_val_reg.columns]
+final_models = [bm for bm in best_models_quant if bm.steps[-1][0] in best_val_quant.columns]
 
-        if show_plot: show_calibration_curve(y_stack_mil, best_val_mil.mean(axis=1), n_bins=8)
-        save_mil_data(df_predict_mil, best_predictions_mil, best_val_mil, run_params)
+output = add_actual(output_start).rename(columns={'actual_pts': 'y_act'})
 
-    #---------------
-    # Save vegas points and std dev
-    #---------------
+bs_pred = BootstrapPredictions(final_models, X_stack, y_stack, X_predict, output, random_state=36)
+df_out = bs_pred.run_bootstrap(N=25, sample_frac=0.5, replace=True, label_append=True, n_jobs=-1)
+df_out
 
-    vp = vegas_points(run_params, metrics={'implied_points_for': 1}, show_plot=show_plot)
-    dm.delete_from_db('Simulation', 'Vegas_Points', f"week={run_params['set_week']} AND year={run_params['set_year']}", create_backup=False)
-    dm.write_to_db(vp, 'Simulation', 'Vegas_Points', 'append')
-    print('All Runs Finished')
+#%%
+cols = ['sd3_low', 'sd2_low', 'sd1_low', 'sd1_high', 'sd2_high', 'sd3_high']
+percs = [0.15, 2.5, 16, 82, 97.5, 99.85]
+for c,p in zip(cols, percs):
+    df_out[c] = np.percentile(df_out[range(N)], p, axis=1)
+
+
+one_std = df_out[(df_out.y_act < df_out['sd1_high']) & \
+                (df_out.y_act >  df_out['sd1_low'])].shape[0] / \
+                    df_out.shape[0]
+one_std -= .68
+
+two_std = df_out[(df_out.y_act < df_out['sd2_high']) & \
+                (df_out.y_act >  df_out['sd2_low'])].shape[0] / \
+                    df_out.shape[0]
+two_std -= .95
+
+three_std = df_out[(df_out.y_act < df_out['sd3_high']) & \
+                   (df_out.y_act >  df_out['sd3_low'])].shape[0] / \
+                    df_out.shape[0]
+three_std -= .997
+
+pct_min = df_out[df_out.y_act < df_out[range(N)].min(axis=1)].shape[0] / df_out.shape[0]
+pct_max = df_out[df_out.y_act > df_out[range(N)].max(axis=1)].shape[0] / df_out.shape[0]
+
+pct_min = np.round(pct_min*100, 1)
+one_std = np.round(one_std*100, 1)
+two_std = np.round(two_std*100, 1)
+three_std = np.round(three_std*100, 1)
+pct_max = np.round(pct_max*100, 1)
+
+print(f'Min Pct: {pct_min}%, Pct Missed 1 Std: {one_std}%, 2 std: {two_std}%, 3 std: {three_std}%, Max Pct: {pct_max}%')
+output = output.drop('y_act', axis=1)
+
+#%%
+
+df_out[(df_out.player=='Joe Burrow') & (df_out.week==18)].iloc[0,4:].plot.hist()
 
 #%%
 

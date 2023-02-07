@@ -124,14 +124,15 @@ def results_to_df(save_path, fname):
     trials = load_pickle(save_path, fname)
     results_tmp = pd.DataFrame(trials.vals)
     results_tmp = results_tmp.rename(columns={'mathchup_seed_True': 'matchup_seed_True', 'player_points': 'max_team_type_player_points'})
-    eval_options = {k: v for k,v in init_space.items() if k in results_tmp.columns}
+    eval_options_init = {k: v for k,v in init_space.items() if k in results_tmp.columns}
+    eval_options_full = {k: v for k,v in full_space.items() if k in results_tmp.columns}
 
     results = pd.DataFrame()
     for idx, row in results_tmp.iterrows():
-        if idx < 10:
-            results = pd.concat([results, pd.DataFrame(space_eval(eval_options, row), index=[idx])], axis=0)
+        if idx < 20:
+            results = pd.concat([results, pd.DataFrame(space_eval(eval_options_init, row), index=[idx])], axis=0)
         else:
-            results = pd.concat([results, pd.DataFrame(space_eval(eval_options, row), index=[idx])], axis=0)
+            results = pd.concat([results, pd.DataFrame(space_eval(eval_options_full, row), index=[idx])], axis=0)
 
     results['loss'] = [l['loss'] for l in trials.results]
     results = results.sort_values(by='loss').reset_index(drop=True)
@@ -155,10 +156,26 @@ def add_extras(results, trial_name, rpts):
 
 
 def show_trial_best_params(trial_name, best_result=0):
+    
     results = dm.read(f"SELECT * FROM Entry_Optimize_Bayes WHERE trial_name='{trial_name}'", 'Results')
     results = results.drop(['trial_name', 'loss'], axis=1)
     best_params = results.iloc[best_result].to_dict()
     best_params_output = convert_param_options(best_params)
+    
+
+    for k, _ in best_params_output.items():
+        for k_in, v_in in best_params_output[k].items():
+            best_params_output[k][k_in] = np.round(v_in, 2)
+
+    best_params_output['min_players_opp_team'] = best_params_output['min_player_opp_team']
+    del best_params_output['min_player_opp_team']
+
+    # adjust if not summed to 1
+    for k, v in best_params_output.items():
+        pct_off = 1 - np.sum(list(v.values()))
+        if pct_off != 0:
+            value_keys = list(v.keys())
+            best_params_output[k][value_keys[-1]] = np.round(best_params_output[k][value_keys[-1]] + pct_off, 2)
 
     vers_names = ('pred_vers', 'ensemble_vers', 'std_dev_type', 'ownership_vers', 'lineups_per_param')
     vers_params = {k: v for k,v in best_params.items() if k in vers_names}
@@ -201,7 +218,7 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_seed, matchup_dr
         to_add = []
         sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
                                      pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
-                                     covar_type=covar_type,full_model_rel_weight=full_model_rel_weight, 
+                                     covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
                                      matchup_seed=matchup_seed, use_covar=use_covar, use_ownership=use_ownership, 
                                      salary_remain_max=max_salary_remain)
 
@@ -374,7 +391,6 @@ def create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_ver
     for i in range(int(30/lineups_per_param)):
         cur_params = []
         for param, param_options in d.items():
-            print(param)
             param_vars = list(param_options.keys())
             param_prob = list(param_options.values())
             cur_params.append(np.random.choice(param_vars, p=param_prob))
@@ -641,15 +657,22 @@ for i in range(1, 16):
     
 
 #%%
+trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
+results = results_to_df(save_path, f'full_space_{trial_name}')
+dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
+dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'append')
 
-# results = results_to_df(save_path, f'full_space_{trial_name}')
-# # dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
-# dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'replace')
 
+#%%
+trial_name = 'adjust5000_meanonly_week1to17_2022_million_own_pct_matchupdropnew'
+# trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
+show_trial_best_params('full_space_'+trial_name, 2)
 
-# #%%
-# show_trial_best_params('full_space_'+trial_name, 2)
+#%%
 
+df = dm.read("SELECT * FROM Entry_Optimize_Bayes", 'Results')
+df['num_iters_150'] = 0
+dm.write_to_db(df, 'Results','Entry_Optimize_Bayes', 'replace')
 # %%
 
 # bayes_params = {'adjust_pos_counts_True': 0.727, 'covar_type_no_covar': 0.584, 
