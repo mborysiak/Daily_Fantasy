@@ -917,6 +917,127 @@ def save_output_to_db(output, run_params):
     dm.write_to_db(output, 'Simulation', f'Model_Predictions', 'append')
 
 
+class BootstrapPredictions:
+
+    def __init__(self, models, X, y, X_predict, labels, random_state=1234):
+        
+        # for m in models:
+        #     try: m.steps[-1][1].n_jobs=1
+        #     except: pass
+
+        self.models = models
+        self.n_models = len(models)
+        
+        self.X = X.astype(np.float64)
+        self.y = y.astype(np.float64)
+        self.tr_rows = len(X)
+
+        self.X_predict = X_predict.astype(np.float64)
+        self.pr_rows = len(X_predict)
+
+        self.labels = labels
+        
+        self.random_state = random_state
+
+    def get_boot_samples(self, frac, replace):
+        
+        boot_idx = np.random.choice(range(self.tr_rows), int(self.tr_rows*frac), replace=replace)
+        X_boot = self.X.iloc[boot_idx, :].reset_index(drop=True)
+        y_boot = self.y[boot_idx].reset_index(drop=True)
+        n_boot = len(X_boot)
+
+        return X_boot, y_boot, n_boot
+
+    def fit_predict(self, model, X, y):
+
+        X = X.astype(np.float64)
+        y = y.astype(np.float64)
+        val_pred = cross_val_predict(model, X, y)
+       
+        model.fit(X, y)
+        test_pred = model.predict(self.X_predict)
+
+        return val_pred, test_pred
+
+    def bootstrap_predict(self, X_boot, y_boot, n_boot):
+
+        val_pred_boot = np.empty(shape=(n_boot, self.n_models))
+        test_pred_boot = np.empty(shape=(self.pr_rows, self.n_models))
+
+        for i, m in enumerate(self.models):
+            try:
+                val_pred_m, test_pred_m = self.fit_predict(m, X_boot, y_boot)
+                val_pred_boot[:, i] = val_pred_m
+                test_pred_boot[:, i] = test_pred_m
+            except:
+                pass
+
+        return val_pred_boot, test_pred_boot
+
+    @staticmethod
+    def array_match(known_array, test_array):
+        
+        index_sorted = np.argsort(known_array)
+        known_array_sorted = known_array[index_sorted]
+
+        idx1 = np.searchsorted(known_array_sorted, test_array)
+        idx1[idx1 == len(known_array)] = len(known_array)-1
+        idx2 = np.clip(idx1 - 1, 0, len(known_array_sorted)-1)
+
+        diff1 = known_array_sorted[idx1] - test_array
+        diff2 = test_array - known_array_sorted[idx2]
+
+        indices = index_sorted[np.where(diff1 <= diff2, idx1, idx2)]
+        residual_match = test_array - known_array[indices]
+
+        return indices, residual_match
+
+    @staticmethod
+    def residuals_pred(y, val_pred, test_pred, best_match_idx):
+        residuals = y.values - val_pred
+        test_pred_boot = test_pred + residuals[best_match_idx]
+        return test_pred_boot
+
+    def bootstrap_iter(self, n):
+
+        if self.random_state is not None: np.random.seed(self.random_state*(n*4))
+
+        X_boot, y_boot, n_boot = self.get_boot_samples(self.sample_frac, self.replace)
+        val_pred_boot, test_pred_boot = self.bootstrap_predict(X_boot, y_boot, n_boot)
+
+        val_pred_boot = np.mean(val_pred_boot, axis=1)
+        test_pred_boot = np.mean(test_pred_boot, axis=1)
+
+        best_match_idx, _ = self.array_match(val_pred_boot, test_pred_boot)
+        # self.residuals_match[:, n] = residuals_match
+
+        resid_test_pred = self.residuals_pred(y_boot, val_pred_boot, test_pred_boot, best_match_idx)
+        
+        return resid_test_pred
+
+    def run_bootstrap(self, N, sample_frac, replace, label_append=True, n_jobs=-1):
+
+        self.sample_frac = sample_frac
+        self.replace = replace
+        # self.pred_dist = np.empty(shape=(self.pr_rows, N))
+        # self.residuals_match = np.empty(shape=(self.pr_rows, N))
+
+        from concurrent.futures import ThreadPoolExecutor as PoolExecutor
+
+
+        if n_jobs == 1:
+            pred_dist = [self.bootstrap_iter(n) for n in range(N)]
+        else:
+        # with PoolExecutor(max_workers = n_jobs) as executor:
+            # pred_dist = executor.map(self.bootstrap_iter, range(N))
+            pred_dist = Parallel(n_jobs=n_jobs)(delayed(self.bootstrap_iter)(n) for n in range(N))
+
+        pred_dist = pd.DataFrame(pred_dist).T
+        if label_append:
+            pred_dist = pd.concat([self.labels,pred_dist], axis=1)
+        
+        return pred_dist
+
 #%%
 #==========
 # General Setting
@@ -980,8 +1101,8 @@ show_plot= False
 print_coef = False
 num_k_folds = 3
 
-r2_wt = 1
-sera_wt = 10
+r2_wt = 0
+sera_wt = 1
 mse_wt = 0
 brier_wt = 1
 matt_wt = 0
@@ -993,13 +1114,14 @@ set_weeks = [12]
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']
 
-# ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack']
+ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack']
 # ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']
-ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack']
+# ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack']
 # ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3']
 
 std_dev_types = [
-                'pred_spline_class80_q80_matt0_brier1_kfold3',
+                 'boot_reg_quant_frac_random_replace_random'
+                # 'pred_spline_class80_q80_matt0_brier1_kfold3',
                 # 'pred_spline_class80_matt0_brier1_kfold3',
                 # 'pred_spline_q80_matt0_brier1_kfold3',
                 # 'spline_class80_q80_matt0_brier1_kfold3'
@@ -1054,30 +1176,30 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         y_stack_class = y_stack_class[y_stack_class.index.isin(X_stack.index)].y_act
         X_stack, y_stack, y_stack_class = X_stack.reset_index(drop=True), y_stack.reset_index(drop=True), y_stack_class.reset_index(drop=True)
 
-        # class metrics
-        final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
+        # # class metrics
+        # final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
 
-        if os.path.exists(f'{model_output_path}class_{std_dev_type}.p'):
-            best_models_class, scores, stack_val_pred = load_stack_runs(model_output_path, 'class_' + std_dev_type)
-        else:
-            stack_val_pred = pd.DataFrame(); scores = []; best_models_class = []
-            for i, fm in enumerate(final_models):
-                best_models_class, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack_class, best_models, 
-                                                                        scores, stack_val_pred, model_obj='class',
-                                                                        run_adp=False, show_plots=False, 
-                                                                        calibrate=calibrate, num_k_folds=num_k_folds,
-                                                                        print_coef=print_coef)
+        # if os.path.exists(f'{model_output_path}class_{std_dev_type}.p'):
+        #     best_models_class, scores, stack_val_pred = load_stack_runs(model_output_path, 'class_' + std_dev_type)
+        # else:
+        #     stack_val_pred = pd.DataFrame(); scores = []; best_models_class = []
+        #     for i, fm in enumerate(final_models):
+        #         best_models_class, scores, stack_val_pred = run_stack_models(fm, i, X_stack, y_stack_class, best_models_class, 
+        #                                                                 scores, stack_val_pred, model_obj='class',
+        #                                                                 run_adp=False, show_plots=False, 
+        #                                                                 calibrate=calibrate, num_k_folds=num_k_folds,
+        #                                                                 print_coef=print_coef)
 
-                if show_plot: show_calibration_curve(y_stack_class, stack_val_pred[fm], n_bins=8)
-            save_stack_runs(model_output_path, 'class_' + std_dev_type, best_models_class, scores, stack_val_pred)
+        #         if show_plot: show_calibration_curve(y_stack_class, stack_val_pred[fm], n_bins=8)
+        #     save_stack_runs(model_output_path, 'class_' + std_dev_type, best_models_class, scores, stack_val_pred)
 
-        predictions = stack_predictions(X_predict, best_models_class, final_models, model_obj='class')
-        best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_class, stack_val_pred, 
-                                                                            predictions, model_obj='class', show_plot=show_plot, 
-                                                                            min_include=min_include)
+        # predictions = stack_predictions(X_predict, best_models_class, final_models, model_obj='class')
+        # best_val_class, best_predictions_class, _ = average_stack_models(scores, final_models, y_stack_class, stack_val_pred, 
+        #                                                                     predictions, model_obj='class', show_plot=show_plot, 
+        #                                                                     min_include=min_include)
 
-        if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
-        # save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
+        # if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
+        # # save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
 
         # quantile regression metrics
         final_models = ['qr_q', 'gbm_q', 'lgbm_q', 'rf_q', 'knn_q']
@@ -1118,31 +1240,72 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         # save_val_to_db(model_output_path, best_val, run_params, 'reg', table_name='Model_Validations')
         
         # create the output and add standard devations / max scores
-        output = create_output(output_start, best_predictions, best_predictions_class, best_predictions_quant)
+        # output = create_output(output_start, best_predictions, best_predictions_class, best_predictions_quant)
         # save_prob_to_db(output, run_params, 'Predicted_Probability')
 
-        for std_dev_type in std_dev_types:
+        # output = output_start.copy()
+        # output['pos'] = set_pos
+        # output['version'] = vers
+        # output['ensemble_vers'] = ensemble_vers
+        # output['std_dev_type'] = std_dev_type
+        # output['model_type'] = model_type
+        # output['week'] = run_params['set_week']
+        # output['year'] = run_params['set_year']
+
+
+
+        # final_models = [bm for bm in best_models_reg if bm.steps[-1][0] in best_val_reg.columns]
+        # bs_pred = BootstrapPredictions(final_models, X_stack, y_stack, X_predict, output, random_state=12546)
+        # df_out = bs_pred.run_bootstrap(N=500, sample_frac=np.random.choice(np.arange(0.5, 1, 0.05)), 
+        #                             replace=np.random.choice([True, False]), 
+        #                             label_append=True, n_jobs=-1)
+
+        # final_models = [bm for bm in best_models_quant if bm.steps[-1][0] in best_val_quant.columns]
+        # bs_pred = BootstrapPredictions(final_models, X_stack, y_stack, X_predict, output, random_state=36)
+        # df_out_quant = bs_pred.run_bootstrap(N=500, sample_frac=np.random.choice(np.arange(0.5, 1, 0.05)), 
+        #                                     replace=np.random.choice([True, False]), 
+        #                                     label_append=False, n_jobs=-1)
+    
+
+        
+
+        # df_out_quant.columns = [int(c)+500 for c in df_out_quant.columns]
+        # df_out = pd.concat([df_out, df_out_quant], axis=1)
+        # df_out = np.round(df_out, 2)
+
+        # del_str = f'''pos='{set_pos}' 
+        #                AND version='{vers}'
+        #             AND ensemble_vers='{ensemble_vers}' 
+        #             AND std_dev_type='{std_dev_type}'
+        #             AND week={run_params['set_week']} 
+        #             AND year={run_params['set_year']}
+        #             AND model_type='{model_type}'
+        #             '''
+        # dm.delete_from_db('Simulation', 'Model_Predictions_Boot', del_str, create_backup=False)
+        # dm.write_to_db(df_out, 'Simulation', 'Model_Predictions_Boot', 'append')
+
+        # for std_dev_type in std_dev_types:
             
-            metrics = metrics_dict[std_dev_type]
-            output = val_std_dev(model_output_path, output, best_val_reg, best_val_class, best_val_quant, metrics=metrics, 
-                                 iso_spline='spline', show_plot=show_plot)
+        #     metrics = metrics_dict[std_dev_type]
+        #     output = val_std_dev(model_output_path, output, best_val_reg, best_val_class, best_val_quant, metrics=metrics, 
+        #                          iso_spline='spline', show_plot=show_plot)
             
-            try:  
-                output = add_actual(output)
-                print(output.loc[:50, ['player', 'week', 'year', 'dk_salary', 'dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class',
-                                    'pred_fp_per_game_quantile', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
+        #     try:  
+        #         output = add_actual(output)
+        #         print(output.loc[:50, ['player', 'week', 'year', 'dk_salary', 'dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class',
+        #                             'pred_fp_per_game_quantile', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
                 
-                # save_test_to_db(output, run_params)
+        #         # save_test_to_db(output, run_params)
                 
-                if show_plot: 
-                    mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
-                    skm_score, _, _ = get_skm(df_train, model_obj='reg', to_drop=[])
-                    print('Score:', np.round(skm_score.custom_score(output.pred_fp_per_game, output.actual_pts),2))
+        #         if show_plot: 
+        #             mf.show_scatter_plot(output.pred_fp_per_game, output.actual_pts)
+        #             skm_score, _, _ = get_skm(df_train, model_obj='reg', to_drop=[])
+        #             print('Score:', np.round(skm_score.custom_score(output.pred_fp_per_game, output.actual_pts),2))
                 
-                output = output.drop('actual_pts', axis=1)
-            except:
-                print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class', 
-                                    'pred_fp_per_game_quantile', 'std_dev', 'min_score', 'max_score']])
+        #         output = output.drop('actual_pts', axis=1)
+        #     except:
+        #         print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class', 
+        #                             'pred_fp_per_game_quantile', 'std_dev', 'min_score', 'max_score']])
 
             # save_output_to_db(output, run_params)
 
@@ -1207,186 +1370,158 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     # print('All Runs Finished')
 
 #%%
-output = add_actual(output).rename(columns={'actual_pts': 'y_act'})
-pct_min = output[output.y_act < output.min_score].shape[0] / output.shape[0]
-pct_max = output[output.y_act > output.max_score].shape[0] / output.shape[0]
 
-one_std = output[(output.y_act < (output.pred_fp_per_game + 1*output.std_dev)) & \
-    (output.y_act > (output.pred_fp_per_game - 1*output.std_dev))].shape[0] / output.shape[0]
-one_std -= .68
+# def trunc_normal(mean_val, sdev, min_sc, max_sc, num_samples=500):
 
-two_std = output[(output.y_act < (output.pred_fp_per_game + 2*output.std_dev)) & \
-    (output.y_act > (output.pred_fp_per_game - 2*output.std_dev))].shape[0] / output.shape[0]
-two_std -= .95
+#     import scipy.stats as stats
 
-three_std = output[(output.y_act < (output.pred_fp_per_game + 3*output.std_dev)) & \
-    (output.y_act > (output.pred_fp_per_game - 3*output.std_dev))].shape[0] / output.shape[0]
-three_std -= .997
+#     # create truncated distribution
+#     lower_bound = (min_sc - mean_val) / sdev, 
+#     upper_bound = (max_sc - mean_val) / sdev
+#     trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc=mean_val, scale=sdev)
+    
+#     estimates = trunc_dist.rvs(num_samples)
 
-pct_min = np.round(pct_min*100, 1)
-one_std = np.round(one_std*100, 1)
-two_std = np.round(two_std*100, 1)
-three_std = np.round(three_std*100, 1)
-pct_max = np.round(pct_max*100, 1)
+#     return estimates
 
-print(f'Min Pct: {pct_min}%, Pct Missed 1 Std: {one_std}%, 2 std: {two_std}%, 3 std: {three_std}%, Max Pct: {pct_max}%')
-output = output.drop('y_act', axis=1)
+
+# def trunc_normal_dist(df, num_options=500):
+#     pred_list = []
+#     for mean_val, sdev, min_sc, max_sc in df[['pred_fp_per_game', 'std_dev', 'min_score', 'max_score']].values:
+#         pred_list.append(trunc_normal(mean_val, sdev, min_sc, max_sc, num_options))
+
+#     return pd.DataFrame(pred_list)
+
+# def get_predictions(df, num_options):
+
+#     predictions = trunc_normal_dist(df, num_options)
+#     labels = df[['player', 'team', 'week','year', 'dk_salary', 'y_act']]
+#     predictions = pd.concat([labels, predictions], axis=1)
+
+#     return predictions
+
+# normal_trunc = add_actual(output).rename(columns={'actual_pts': 'y_act'})
+# normal_trunc = get_predictions(normal_trunc, 1000)
 
 #%%
+from crepes import ConformalRegressor, ConformalPredictiveSystem
+from crepes.fillings import sigma_knn, binning
+from sklearn.model_selection import train_test_split
 
-class BootstrapPredictions:
 
-    def __init__(self, models, X, y, X_predict, labels, random_state=1234):
-        
-        self.models = models
-        self.n_models = len(models)
-        
-        self.X = X
-        self.y = y
-        self.tr_rows = len(X)
+X_prop_train, X_cal, y_prop_train, y_cal = train_test_split(X_stack, y_stack, test_size=0.5)
 
-        self.X_predict = X_predict
-        self.pr_rows = len(X_predict)
+learner = best_models_reg[0] 
+learner.fit(X_prop_train, y_prop_train)
+y_hat_test = learner.predict(X_predict)
 
-        self.labels = labels
-        
-        self.random_state = random_state
+y_hat_cal = learner.predict(X_cal)
+residuals_cal = (y_cal - y_hat_cal).values
 
-    def get_boot_samples(self, frac, replace):
-        
-        boot_idx = np.random.choice(range(self.tr_rows), int(self.tr_rows*frac), replace=replace)
-        X_boot = self.X.iloc[boot_idx, :].reset_index(drop=True)
-        y_boot = self.y[boot_idx].reset_index(drop=True)
-        n_boot = len(X_boot)
+sigmas_cal = sigma_knn(X=X_cal, residuals=residuals_cal)
+bins_cal, bin_thresholds = binning(values=y_hat_cal, bins=5)
+cps_mond_norm = ConformalPredictiveSystem()
+cps_mond_norm.fit(residuals=residuals_cal, sigmas=sigmas_cal, bins=bins_cal)
 
-        return X_boot, y_boot, n_boot
+sigmas_test = sigma_knn(X=X_cal, residuals=residuals_cal, X_test=X_predict)
+bins_test = binning(values=y_hat_test, bins=bin_thresholds)
 
-    def fit_predict(self, model, X, y):
+intervals = cps_mond_norm.predict(y_hat=y_hat_test,
+                                  sigmas=sigmas_test,
+                                  bins=bins_test,
+                                  lower_percentiles=5,
+                                  higher_percentiles=95,
+                                  y_min=np.min(y_stack))
 
-        val_pred = cross_val_predict(model, X, y)
-        model.fit(X, y)
-        test_pred = fm.predict(self.X_predict)
+# dist = cps_mond_norm.predict(y_hat=y_hat_test,
+#                              sigmas=sigmas_test,
+#                              bins=bins_test,
+#                              return_cpds=True)
 
-        return val_pred, test_pred
-
-    def bootstrap_predict(self, X_boot, y_boot, n_boot):
-
-        val_pred_boot = np.empty(shape=(n_boot, self.n_models))
-        test_pred_boot = np.empty(shape=(self.pr_rows, self.n_models))
-
-        for i, m in enumerate(self.models):
-            
-            val_pred_m, test_pred_m = self.fit_predict(m, X_boot, y_boot)
-            val_pred_boot[:, i] = val_pred_m
-            test_pred_boot[:, i] = test_pred_m
-
-        return val_pred_boot, test_pred_boot
-
-    @staticmethod
-    def array_match(known_array, test_array):
-        
-        index_sorted = np.argsort(known_array)
-        known_array_sorted = known_array[index_sorted]
-
-        idx1 = np.searchsorted(known_array_sorted, test_array)
-        idx1[idx1 == len(known_array)] = len(known_array)-1
-        idx2 = np.clip(idx1 - 1, 0, len(known_array_sorted)-1)
-
-        diff1 = known_array_sorted[idx1] - test_array
-        diff2 = test_array - known_array_sorted[idx2]
-
-        indices = index_sorted[np.where(diff1 <= diff2, idx1, idx2)]
-        residual_match = test_array - known_array[indices]
-
-        return indices, residual_match
-
-    @staticmethod
-    def residuals_pred(y, val_pred, test_pred, best_match_idx):
-        residuals = y.values - val_pred
-        test_pred_boot = test_pred + residuals[best_match_idx]
-        return test_pred_boot
-
-    def bootstrap_iter(self, n):
-
-        if self.random_state is not None: np.random.seed(self.random_state*(n*4))
-
-        X_boot, y_boot, n_boot = self.get_boot_samples(self.sample_frac, self.replace)
-        val_pred_boot, test_pred_boot = self.bootstrap_predict(X_boot, y_boot, n_boot)
-
-        val_pred_boot = np.mean(val_pred_boot, axis=1)
-        test_pred_boot = np.mean(test_pred_boot, axis=1)
-
-        best_match_idx, residuals_match = self.array_match(val_pred_boot, test_pred_boot)
-        self.residuals_match[:, n] = residuals_match
-
-        resid_test_pred = self.residuals_pred(y_boot, val_pred_boot, test_pred_boot, best_match_idx)
-        self.pred_dist[:, n] = resid_test_pred
-
-    def run_bootstrap(self, N, sample_frac, replace, label_append=True, n_jobs=-1):
-
-        self.sample_frac = sample_frac
-        self.replace = replace
-        self.pred_dist = np.empty(shape=(self.pr_rows, N))
-        self.residuals_match = np.empty(shape=(self.pr_rows, N))
-
-        if n_jobs == 1:
-            for n in range(N): self.bootstrap_iter(n)
-        else:
-            Parallel(n_jobs=n_jobs, backend='threading')(delayed(self.bootstrap_iter)(n) for n in range(N))
-
-        if label_append:
-            self.pred_dist = pd.concat([self.labels, pd.DataFrame(self.pred_dist)], axis=1)
-        else:
-            self.pred_dist = pd.Dataframe(self.pred_dist)
-        return self.pred_dist
-        
-
-# final_models = [bm for bm in best_models_reg if bm.steps[-1][0] in best_val_reg.columns]
-final_models = [bm for bm in best_models_quant if bm.steps[-1][0] in best_val_quant.columns]
 
 output = add_actual(output_start).rename(columns={'actual_pts': 'y_act'})
-
-bs_pred = BootstrapPredictions(final_models, X_stack, y_stack, X_predict, output, random_state=36)
-df_out = bs_pred.run_bootstrap(N=25, sample_frac=0.5, replace=True, label_append=True, n_jobs=-1)
-df_out
-
-#%%
-cols = ['sd3_low', 'sd2_low', 'sd1_low', 'sd1_high', 'sd2_high', 'sd3_high']
-percs = [0.15, 2.5, 16, 82, 97.5, 99.85]
-for c,p in zip(cols, percs):
-    df_out[c] = np.percentile(df_out[range(N)], p, axis=1)
-
-
-one_std = df_out[(df_out.y_act < df_out['sd1_high']) & \
-                (df_out.y_act >  df_out['sd1_low'])].shape[0] / \
-                    df_out.shape[0]
-one_std -= .68
-
-two_std = df_out[(df_out.y_act < df_out['sd2_high']) & \
-                (df_out.y_act >  df_out['sd2_low'])].shape[0] / \
-                    df_out.shape[0]
-two_std -= .95
-
-three_std = df_out[(df_out.y_act < df_out['sd3_high']) & \
-                   (df_out.y_act >  df_out['sd3_low'])].shape[0] / \
-                    df_out.shape[0]
-three_std -= .997
-
-pct_min = df_out[df_out.y_act < df_out[range(N)].min(axis=1)].shape[0] / df_out.shape[0]
-pct_max = df_out[df_out.y_act > df_out[range(N)].max(axis=1)].shape[0] / df_out.shape[0]
-
-pct_min = np.round(pct_min*100, 1)
-one_std = np.round(one_std*100, 1)
-two_std = np.round(two_std*100, 1)
-three_std = np.round(three_std*100, 1)
-pct_max = np.round(pct_max*100, 1)
-
-print(f'Min Pct: {pct_min}%, Pct Missed 1 Std: {one_std}%, 2 std: {two_std}%, 3 std: {three_std}%, Max Pct: {pct_max}%')
-output = output.drop('y_act', axis=1)
-
+output = pd.concat([output, pd.Series(sigmas_test, name='std_dev'), pd.DataFrame(intervals)], axis=1)
+output = output.sort_values(by=1)
+print('Outside:', output[(output.y_act < output[0]) | (output.y_act > output[1])].shape[0] / output.shape[0])
+# output[(output.y_act < output[0]) | (output.y_act > output[1])]
+output
 #%%
 
-df_out[(df_out.player=='Joe Burrow') & (df_out.week==18)].iloc[0,4:].plot.hist()
+cps_mond_norm.evaluate(y_hat=y_hat_test, y=output.y_act.values, sigmas=sigmas_test, bins=bins_test, confidence=0.9, y_min=np.min(y_stack))
+
+#%%
+sample = dist[0]
+x = np.linspace(np.min(sample), np.max(sample))
+dx = x[1]-x[0]
+deriv = np.diff(sample)/dx
+plt.plot(x, sample[:-1], label="cdf")
+plt.plot(x[1:]-dx/2, deriv[:-1], label="derivative")
+plt.legend(loc=1)
+plt.show()
+
+#%%        
+# output = add_actual(output_start).rename(columns={'actual_pts': 'y_act'})
+
+# final_models = [bm for bm in best_models_reg if bm.steps[-1][0] in best_val_reg.columns]
+# bs_pred = BootstrapPredictions(final_models, X_stack, y_stack, X_predict, output, random_state=12546)
+# df_out = bs_pred.run_bootstrap(N=500, sample_frac=np.random.choice(np.arange(0.5, 1, 0.05)), 
+#                                replace=np.random.choice([True, False]), 
+#                                label_append=True, n_jobs=-1)
+
+# final_models = [bm for bm in best_models_quant if bm.steps[-1][0] in best_val_quant.columns]
+# bs_pred = BootstrapPredictions(final_models, X_stack, y_stack, X_predict, output, random_state=36)
+# df_out_quant = bs_pred.run_bootstrap(N=500, sample_frac=np.random.choice(np.arange(0.5, 1, 0.05)), 
+#                                      replace=np.random.choice([True, False]), 
+#                                      label_append=False, n_jobs=-1)
+
+# df_out_quant.columns = [int(c)+500 for c in df_out_quant.columns]
+# df_out = pd.concat([df_out, df_out_quant], axis=1)
+
+# #%%
+
+# def measure_dist_accuracy(df, N):
+#     cols = ['perc1', 'perc5', 'perc25', 'perc75', 'perc95', 'perc99']
+#     percs = [1, 5, 25, 75, 95, 99]
+    
+#     for c,p in zip(cols, percs):
+#         df[c] = np.percentile(df[range(N)], p, axis=1)
+    
+#     perc1 = df[df.y_act < df['perc1']].shape[0] / df.shape[0]
+#     perc1 -= 0.01
+    
+#     perc99 = df[df.y_act > df['perc99']].shape[0] / df.shape[0]
+#     perc99 -= 0.01
+
+#     perc95 = df[df.y_act > df['perc95']].shape[0] / df.shape[0]
+#     perc95 -= 0.05
+
+#     perc90 = df_out[(df.y_act < df['perc95']) & (df.y_act > df['perc5'])].shape[0] / df.shape[0]
+#     perc90 -= .90
+
+#     perc50 = df_out[(df.y_act > df['perc25']) & (df.y_act <  df['perc75'])].shape[0] / df.shape[0]
+#     perc50 -= .50
+
+#     pct1 = np.round(perc1*100, 1)
+#     pct99 = np.round(perc99*100, 1)
+#     pct95 = np.round(perc95*100, 1)
+#     pct90 = np.round(perc90*100, 1)
+#     pct50 = np.round(perc50*100, 1)
+
+#     print(f'Accuracy = Lower 1%: {pct1}%, Middle 50%: {pct50}%, Middle 90%: {pct90}%, Upper 5%: {pct95}, Upper 1%: {pct99}%,')
+
+
+# measure_dist_accuracy(normal_trunc, 1000)
+# measure_dist_accuracy(df_out, 1000)
+
+# #%%
+
+# df_out['mean_pred'] = df_out[range(1000)].mean(axis=1)
+# df_out.drop(range(1000), axis=1).sort_values(by='mean_pred', ascending=False).iloc[:50]
+
+# #%%
+
+# df_out[(df_out.player=='Josh Jacobs') & (df_out.week==12)].iloc[0,6:].plot.hist()
+# normal_trunc[(normal_trunc.player=='Patrick Mahomes') & (normal_trunc.week==17)].iloc[0,6:].plot.hist()
 
 #%%
 
@@ -1441,208 +1576,3 @@ df_out[(df_out.player=='Joe Burrow') & (df_out.week==18)].iloc[0,4:].plot.hist()
 #                 results_df = pd.DataFrame(results, columns=['reg_wt', 'class_wt', 'quant_wt', 'pct_min', 'pct_max', 'one_std', 'two_std', 'three_std'])
 #                 results_df['total_error'] = results_df[['pct_min', 'pct_max', 'one_std', 'two_std', 'three_std']].abs().sum(axis=1)
 # results_df.sort_values(by='total_error')
-
-# # %%
-
-# def select_main_slate_teams(df):
-
-#     import datetime as dt
-
-#     good_teams = dm.read(f'''
-#                     SELECT away_team team, gametime, week, year 
-#                     FROM Gambling_Lines 
-#                     WHERE year >= 2020
-#                     UNION
-#                     SELECT home_team team, gametime, week, year 
-#                     FROM Gambling_Lines
-#                     WHERE year >= 2020
-#                 ''', 'Pre_TeamData')
-
-#     good_teams.gametime = pd.to_datetime(good_teams.gametime)
-#     good_teams['day_of_week'] = good_teams.gametime.apply(lambda x: x.weekday())
-#     good_teams['hour_in_day'] = good_teams.gametime.apply(lambda x: x.hour)
-
-#     good_teams = good_teams[(good_teams.day_of_week==6) & (good_teams.hour_in_day <= 17) & (good_teams.hour_in_day > 10)]
-#     good_teams = good_teams[['team', 'week', 'year']]
-
-#     if set_pos == 'Defense': 
-#         good_teams = good_teams.rename(columns={'team': 'player'})
-#         df = pd.merge(df, good_teams, on=['player', 'week', 'year'])
-
-#     else:
-#         df = pd.merge(df, good_teams, on=['team', 'week', 'year'])
-
-#     return df
-
-
-# def add_sal_columns(df):
-    
-#     for c in df.columns:
-#         if 'expert' in c: df[c+'_salary'] = df[c] * df.dk_salary
-#         if 'proj' in c: df[c+'_salary'] = df[c] / df.dk_salary
-    
-#     return df
-
-# def predict_million_df(df, run_params):
-
-#     df = select_main_slate_teams(df)
-
-#     df = df.drop('y_act', axis=1)
-#     top_players = dm.read("SELECT player, week, year, y_act FROM Top_Players", "DK_Results")
-
-#     df = pd.merge(df, top_players, on=['player', 'week', 'year'], how='left')
-#     df = df.fillna({'y_act': 0})
-
-#     df_train_mil, df_predict_mil, _, min_samples_mil = train_predict_split(df, run_params)
-#     run_params['n_splits'] = 4
-
-#     return df_train_mil, df_predict_mil, min_samples_mil, run_params
-
-
-# for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
-
-#     run_params['set_week'] = w
-#     runs = [
-#         ['QB', 'full_model', ''],
-#         ['RB', 'full_model', ''],
-#         ['WR', 'full_model', ''],
-#         ['TE', 'full_model', ''],
-#         ['Defense', 'full_model', ''],
-#         ['QB', 'backfill', ''],
-#         ['RB', 'backfill', ''],
-#         ['WR', 'backfill', ''],
-#         ['TE', 'backfill', '']
-#     ]
-#     for set_pos, model_type, rush_pass in runs:
-
-#         print(f'\n----------\n{set_pos} week {w} {model_type}\n----------\n')
-#         run_params['rush_pass'] = rush_pass
-
-#         # load data and filter down
-#         pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
-#         df, run_params = load_data(model_type, set_pos, run_params)
-#         df, run_params = create_game_date(df, run_params)
-#         df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
-            
-
-
-
-
-
-
-# # %%
-
-# for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
-
-#     run_params['set_week'] = w
-#     runs = [
-#         # ['QB', 'full_model', ''],
-#         # ['RB', 'full_model', ''],
-#         # ['WR', 'full_model', ''],
-#         # ['TE', 'full_model', ''],
-#         # ['Defense', 'full_model', ''],
-#         # ['QB', 'backfill', ''],
-#         # ['RB', 'backfill', ''],
-#         # ['WR', 'backfill', ''],
-#         # ['TE', 'backfill', '']
-#     ]
-#     for set_pos, model_type, rush_pass in runs:
-
-#         run_params['rush_pass'] = rush_pass
-
-#         # load data and filter down
-#         pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
-#         df, run_params = load_data(model_type, set_pos, run_params)
-#         df, run_params = create_game_date(df, run_params)
-#         df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
-
-#         df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
-                
-#         pred, actual, models_mil, scores, full_hold_mil = mf.load_all_pickles(model_output_path, 'million')
-#         X_stack_mil, y_stack_mil, _ = mf.X_y_stack('mil', full_hold_mil, pred, actual)
-#         _, X, y = get_skm(df_train_mil, 'class', to_drop=run_params['drop_cols'])
-#         X_predict_mil = create_stack_predict(df_predict_mil, models_mil, X, y, proba=True)
-#         scores = [s[1] for s in scores]
-
-#         final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
-#         final_models = ['class_'+m+'_million' for m in final_models]
-#         best_val_mil, best_predictions_mil, _ = average_stack_models(scores, final_models, y_stack_mil, X_stack_mil, 
-#                                                                             X_predict_mil, model_obj='class', show_plot=True, 
-#                                                                             min_include=min_include)
-
-#         test_output = pd.concat([df_predict_mil[['player', 'team', 'week', 'year']], 
-#                                  pd.Series(best_predictions_mil.mean(axis=1), name='pred_fp_per_game_class')], 
-#                                  axis=1).sort_values(by='pred_fp_per_game_class', ascending=False)
-#         display(test_output)
-#         save_val_to_db(model_output_path, best_val_mil, run_params, 'million', table_name='Model_Validations_Million')
-#         save_prob_to_db(test_output, run_params, 'Predicted_Million')
-
-# # %%
-
-
-# pred, actual, models_reg, scores, full_hold_reg = mf.load_all_pickles(model_output_path, 'reg')
-# scores = [s[1] for s in scores.values()]
-
-# final_models = [c for c in X_stack if 'reg' in c]
-# best_val_class, best_predictions_reg, _ = average_stack_models(scores, final_models, y_stack, X_stack, 
-#                                                                     X_predict, model_obj='reg', show_plot=show_plot, 
-#                                                                     min_include=min_include)
-
-# output_no_stack = pd.concat([df_predict[['player']], pd.Series(best_predictions_reg.mean(axis=1), name='reg_pred')], axis=1).sort_values(by='reg_pred', ascending=False)
-# output_no_stack = output_no_stack.assign(week=w, year=run_params['set_year'])
-# output_no_stack = add_actual(output_no_stack)
-# display(output_no_stack)
-# if show_plot: mf.show_scatter_plot(output_no_stack.reg_pred, output_no_stack.actual_pts)
-
-
-# #%%
-
-# df = dm.read('''SELECT * FROM Model_Predictions 
-#                  WHERE version= 'sera1_rsq0_brier1_matt1_lowsample_perc'
-#                        AND ensemble_vers='no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
-#                        AND std_dev_type='pred_spline_class80_q80_matt1_brier1_kfold3'
-#                        AND week=11
-#                        AND year =2022
-                       
-# ''', 'Simulation')
-
-# df['ensemble_vers'] = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3'
-# # df['version'] = 'sera1_rsq0_brier1_matt1_lowsample_perc'
-
-# del_str = f'''week=11
-#               AND year=2022
-#               AND version='sera1_rsq0_brier1_matt1_lowsample_perc'
-#               AND ensemble_vers='no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3'
-#                 '''
-# dm.delete_from_db('Simulation', 'Model_Predictions', del_str, create_backup=False)
-# dm.write_to_db(df, 'Simulation', 'Model_Predictions', 'append')
-
-
-# # %%
-# week=12
-# year=2022
-
-# df = dm.read(f'''SELECT player_id, AVG(pred_fp_per_game) projection, pred_ownership ownership
-#                 FROM Model_Predictions
-#                 JOIN (
-#                       SELECT player, player_id
-#                       FROM Player_Ids
-#                       WHERE league={week}
-#                             AND year={year}
-#                      ) USING (player)
-#                 JOIN (
-#                       SELECT player, pred_ownership
-#                       FROM Predicted_Ownership
-#                       WHERE week={week}
-#                             AND year={year}
-#                     ) USING (player)
-#                 WHERE week={week}
-#                       AND year={year}
-#                 GROUP BY player
-#              ''', 'Simulation')
-
-# df['ownership'] = np.exp(df.ownership) * 100
-# df.to_csv('c:/Users/mborysia/Downloads/sim_saber.csv', index=False)
-
-
-# # %%

@@ -24,10 +24,10 @@ set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
-ensemble_vers ='no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack'   
+ensemble_vers ='no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack'   
 lineups_per_param = 2
 pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
-std_dev_type = 'pred_spline_class80_q80_matt0_brier1_kfold3'
+std_dev_type = 'boot_reg_quant_frac_random_replace_random'
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
 trial_num = max_trial_num + 1
@@ -191,29 +191,29 @@ for repeat_num in range(10):
                       'static_top_players', 'use_ownership', 'own_neg_frac', 
                       'max_salary_remain', 'num_iters']
 
-        d ={'adjust_pos_counts': {True: 0.8, False: 0.2},
+        d ={'adjust_pos_counts': {True: 0.96, False: 0.04},
             'player_drop_multiple': {4: 0.43, 2: 0.12, 0: 0.45},
-            'matchup_seed': {True: 0.5, False: 0.5},
-            'matchup_drop': {1: 0.1, 2: 0.1, 3: 0.7, 0: 0, 4: 0.1},
-            'top_n_choices': {1: 0.3, 2: 0, 0: 0.7},
-            'full_model_weight': {5: 0.5, 0.2: 0.5},
-            'covar_type': {'no_covar': 0.3, 'team_points_trunc': 0.7},
-            'max_team_type': {'player_points': 0.3, 'vegas_points': 0.7},
-            'min_player_same_team': {2: 0, 3: 0.3, 'Auto': 0.7},
-            'num_top_players': {2: 0.3, 3: 0.6, 5: 0.1},
-            'ownership_vers': {'mil_only': 0.1,
-                                'mil_times_standard_ln': 0.3,
-                                'mil_div_standard_ln': 0.3,
-                                'standard_ln': 0.3},
-            'qb_min_iter': {0: 0.3, 2: 0, 9: 0.7},
+            'matchup_seed': {True: 0.86, False: 0.14},
+            'matchup_drop': {1: 0.38, 2: 0.17, 3: 0.13, 0: 0.32},
+            'top_n_choices': {1: 0.32, 2: 0.07, 0: 0.61},
+            'full_model_weight': {5: 0.74, 0.2: 0.26},
+            'covar_type': {'no_covar': 0.32, 'team_points_trunc': 0.68},
+            'max_team_type': {'player_points': 0.18, 'vegas_points': 0.82},
+            'min_player_same_team': {2: 0.02, 3: 0.05, 'Auto': 0.93},
+            'num_top_players': {2: 0.3, 3: 0.49, 5: 0.21},
+            'ownership_vers': {'mil_only': 0.06,
+                                'mil_times_standard_ln': 0.09,
+                                'mil_div_standard_ln': 0.12,
+                                'standard_ln': 0.73},
+            'qb_min_iter': {0: 0.48, 2: 0.37, 9: 0.15},
             'qb_set_max_team': {True: 0.89, False: 0.11},
-            'qb_solo_start': {True: 0.8, False: 0.2},
-            'static_top_players': {True: 0.7, False: 0.3},
-            'use_ownership': {0.9: 0.2, 0.8: 0.6, 1: 0.2},
-            'own_neg_frac': {0.8: 0.1, 1: 0.9},
-            'max_salary_remain': {200: 0.1, 500: 0.1, 1000: 0.7, 1500: 0.1},
-            'num_iters': {200: 0.1, 150: 0.45, 100: 0.45, 50: 0},
-            'min_players_opp_team': {1: 0.5, 2: 0.3, 'Auto': 0.2}}
+            'qb_solo_start': {True: 0.44, False: 0.56},
+            'static_top_players': {True: 0.26, False: 0.74},
+            'use_ownership': {0.9: 0.32, 0.8: 0.23, 1: 0.45},
+            'own_neg_frac': {0.8: 0.52, 1: 0.48},
+            'max_salary_remain': {200: 0.25, 500: 0.1, 1000: 0.12, 1500: 0.53},
+            'num_iters': {150: 0, 100: 0.99, 50: 0.01},
+            'min_players_opp_team': {1: 0.39, 2: 0.37, 'Auto': 0.24}}
 
         d = {k: d[k] for k in d_ordering}
         params = []

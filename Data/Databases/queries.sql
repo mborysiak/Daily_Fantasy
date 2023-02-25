@@ -19,9 +19,9 @@ SELECT trial_num, AVG(winnings) AvgWinnings, MIN(winnings) MinWinnings, MAX(winn
 FROM (
 		SELECT trial_num, 
 			   repeat_num, 
-			   sum(CASE WHEN avg_winnings > 10000 THEN 10000 ELSE avg_winnings END) winnings 
+			   sum(CASE WHEN avg_winnings > 25000 THEN 25000 ELSE avg_winnings END) winnings 
 			   FROM Entry_Optimize_Results
--- 		WHERE week=5
+		WHERE trial_num > 161
 		GROUP BY trial_num, repeat_num
 )
 GROUP BY trial_num
@@ -46,7 +46,7 @@ FROM (
 							   repeat_num, 
 							   sum(CASE WHEN avg_winnings > 5000 THEN 5000 ELSE avg_winnings END) winnings 
 						FROM Entry_Optimize_Results
-						--WHERE trial_num > 24
+						WHERE trial_num >= 161
 						GROUP BY week, trial_num, repeat_num
 				)
 				GROUP BY week, trial_num

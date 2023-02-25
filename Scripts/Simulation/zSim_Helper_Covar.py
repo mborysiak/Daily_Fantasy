@@ -35,11 +35,18 @@ class FootballSimulation:
         self.use_covar = use_covar
         self.use_ownership = use_ownership
         self.salary_remain_max = salary_remain_max  
+        self.boot = False
 
-        if self.use_covar: 
+        if self.use_covar and 'boot' not in std_dev_type: 
             player_data = self.get_covar_means()
             self.covar = self.pull_covar()
-        else:
+            
+        elif 'boot' in std_dev_type:
+            player_data, self.points_dist = self.get_boot_data()
+            self.boot = True
+            self.use_covar = False
+
+        else: 
             player_data = self.get_model_predictions()
 
         # join in salary data to player data
@@ -117,6 +124,49 @@ class FootballSimulation:
         df = df[~df.team.isin(drop_teams)].reset_index(drop=True)
 
         return df.drop('weighting', axis=1)
+    
+    def get_boot_data(self):
+        df = self.dm.read(f'''SELECT *
+                              FROM Model_Predictions_Boot
+                              WHERE week={self.week}
+                                    AND year={self.set_year}
+                                    AND version='{self.pred_vers}'
+                                    AND ensemble_vers='{self.ensemble_vers}'
+                                    AND std_dev_type='{self.std_dev_type}'
+                                    AND pos !='K'
+                                    AND pos IS NOT NULL
+                                    AND player!='Ryan Griffin'
+                                        ''', 'Simulation')
+        
+        df['weighting'] = 1
+        df.loc[df.model_type=='full_model', 'weighting'] = self.full_model_rel_weight
+
+        score_cols = []
+        agg_dict = {'weighting': 'sum'}
+        for c in df.columns:
+            if c not in ('player', 'team', 'week', 'year', 'dk_salary', 'pos', 'version', 'ensemble_vers', 'std_dev_type', 'model_type', 'weighting'):
+                df[c] = df[c] * df.weighting
+                df = df.rename(columns={c: int(c)})
+                score_cols.append(int(c))
+                agg_dict[int(c)] = 'sum'
+                
+        # Groupby and aggregate with namedAgg [1]:
+        df = df.groupby(['player', 'pos'], as_index=False).agg(agg_dict)
+        
+        for c in score_cols:
+            df[c] = df[c] / df.weighting
+        points = df.drop(['pos', 'weighting'], axis=1)
+
+        df = df[['player', 'pos']].assign(pred_fp_per_game=df[score_cols].mean(axis=1))
+        teams = self.dm.read(f"SELECT player, team FROM Player_Teams WHERE week={self.week} AND year={self.set_year}", 'Simulation')
+        df = pd.merge(df, teams, on=['player'])
+
+        drop_teams = self.get_drop_teams()
+        df = df[~df.team.isin(drop_teams)].reset_index(drop=True)
+        
+        df.loc[df.pos=='Defense', 'pos'] = 'DEF'
+        
+        return df, points
 
 
     def get_drop_teams(self):
@@ -159,6 +209,7 @@ class FootballSimulation:
                                             AND ownership_vers='{self.ownership_vers}' ''', 'Simulation')
 
         if self.use_covar: df = df.drop(['pred_fp_per_game'], axis=1)
+        elif self.boot: df = df.copy()
         else: df = df.drop(['pred_fp_per_game', 'std_dev', 'min_score','max_score'], axis=1)
 
         df = pd.merge(df, ownership, how='left', on='player')
@@ -328,17 +379,44 @@ class FootballSimulation:
         dists = pd.merge(self.player_data[['player']], dists, on='player').drop('player', axis=1)
 
         return dists.reset_index(drop=True)
+    
+    @staticmethod
+    def _df_shuffle(df):
+        '''
+        Input: A dataframe to be shuffled, row-by-row indepedently.
+        Return: The same dataframe whose columns have been shuffled for each row.
+        '''
+        # store the index before converting to numpy
+        idx = df.player
+        df = df.drop('player', axis=1).values
+
+        # shuffle each row separately, inplace, and convert o df
+        _ = [np.random.shuffle(i) for i in df]
+
+        return pd.DataFrame(df, index=idx).reset_index()
 
 
     def get_predictions(self, col, ownership=False, num_options=500):
 
+        labels = self.player_data[['player', 'pos', 'team', 'salary']]
+
         if self.use_covar and not ownership: 
             predictions = self.covar_dist(num_options)
+            predictions = pd.concat([labels, predictions], axis=1)
+
+        elif self.boot:
+            points_dist = self._df_shuffle(self.points_dist)
+            idx_choices = ['player']
+            idx_choices.extend(np.random.choice(range(1000), size=num_options))
+            predictions = pd.merge(labels, points_dist[idx_choices], on=['player'])
+            
+            cols = ['player', 'pos', 'team', 'salary']
+            cols.extend(range(num_options))
+            predictions.columns = cols
+
         else: 
             predictions = self.trunc_normal_dist(col, num_options)
-
-        labels = self.player_data[['player', 'pos', 'team', 'salary']]
-        predictions = pd.concat([labels, predictions], axis=1)
+            predictions = pd.concat([labels, predictions], axis=1)
 
         return predictions
 
@@ -847,12 +925,12 @@ class FootballSimulation:
 # dm = DataManage(db_path)
 
 
-# adjust_select = False
+# adjust_select = True
 # matchup_drop = 2
 # full_model_weight = 5
 # covar_type = 'no_covar'
 # max_team_type = 'vegas_points'
-# use_covar = False
+# use_covar = True
 # min_players_same_team = 'Auto'
 # min_players_opp_team = 2
 # top_n_players = 2
@@ -863,14 +941,14 @@ class FootballSimulation:
 # use_ownership = 1
 # own_neg_frac = 1
 # salary_remain_max = 1000
-# num_iters = 20
+# num_iters = 150
 
 # pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
-# ens_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack'
-# std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
-# ownership_vers = 'mil_div_standard_ln'
+# ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack'
+# std_dev_type = 'boot_reg_quant_frac_random_replace_random'
+# ownership_vers = 'standard_ln'
 
-# week = 1
+# week = 12
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
