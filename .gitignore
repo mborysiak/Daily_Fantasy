@@ -15,6 +15,12 @@ Archive/
 *.p
 DB_Versioning/
 
+*DK_Results.sqlite3
+*Model_Features.sqlite3
+*Results.sqlite3
+*Validations.sqlite3
+*Simulation.sqlite3
+
 # C extensions
 *.so
 
