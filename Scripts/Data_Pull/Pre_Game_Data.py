@@ -24,14 +24,14 @@ dm = DataManage(db_path)
 
 
 
-def move_download_to_folder(root_path, folder, fname):
+def move_download_to_folder(root_path, folder, fname, week=''):
     try:
         os.replace(f"/Users/mborysia/Downloads/{fname}", 
-                    f'{root_path}/Data/OtherData/{folder}/{set_year}/{fname}')
+                    f'{root_path}/Data/OtherData/{folder}/{set_year}/{week}{fname}')
     except:
         pass
 
-    df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{fname}')
+    df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{week}{fname}')
     
     return df
 
@@ -272,7 +272,16 @@ dm.delete_from_db('Pre_PlayerData', 'FFToday_Projections', f"week={set_week} AND
 dm.write_to_db(output, 'Pre_PlayerData', 'FFToday_Projections', 'append')
 
 #%%
+# move fantasydata projections
+df = move_download_to_folder(root_path, 'FantasyData', 'fantasy-football-weekly-projections.csv', week=set_week)
+df = df.drop('Week', axis=1).assign(week=set_week, year=set_year)
+df.player = df.player.apply(dc.name_clean)
+df.team = df.team.map(team_map)
 
+dm.delete_from_db('Pre_PlayerData', 'FantasyData', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData', 'append')
+
+#%%
 df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
 df = format_fantasy_cruncher(df, set_week, set_year)
 
@@ -790,3 +799,37 @@ dm.write_to_db(k_points, 'Simulation', 'Model_Predictions', 'append')
 # dm.write_to_db(df_team, 'Pre_TeamData', 'Daily_Salaries', 'append')
 
 
+#%%
+
+df = dm.read("SELECT * FROM FantasyData", 'Pre_PlayerData')
+
+# df = df.drop('Week', axis=1).assign(week=set_week, year=set_year)
+cols = {
+        'Name': 'player', 
+        'Team': 'team', 
+        'Position': 'position',
+        'Opponent': 'opp',
+        'PassingYards': 'fd_pass_yds',
+        'PassingTouchdowns': 'fd_pass_td',
+        'PassingInterceptions': 'fd_pass_int',
+        'RushingYards': 'fd_rush_yds',
+        'RushingTouchdowns': 'fd_rush_td',
+        'Receptions': 'fd_rec',
+        'ReceivingYards': 'fd_rec_yds',
+        'ReceivingTouchdowns': 'fd_rec_td',
+        'Sacks': 'fd_sack',
+        'Interceptions': 'fd_int',
+        'FumblesRecovered': 'fd_fum_rec',
+        'FumblesForced': 'fd_fum_forced',
+        'FantasyPointsPerGameDraftKings': 'fd_dk_points_per_game',
+        'FantasyPointsDraftKings': 'fd_dk_points',
+        }
+df = df[df.Position.isin(['QB', 'RB', 'WR', 'TE', 'DST'])].reset_index(drop=True)
+df = df.rename(columns=cols)
+df.player = df.player.apply(dc.name_clean)
+df.team = df.team.map(team_map)
+df.loc[df.position=='DST', 'player'] = df.loc[df.position=='DST', 'player'].map(team_map)
+
+# dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData', 'append')
+
+# %%

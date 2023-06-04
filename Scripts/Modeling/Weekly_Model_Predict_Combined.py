@@ -554,19 +554,7 @@ def assign_sd_max(output, df_predict, sd_df, sd_cols, sd_m, max_m, min_m, iso_sp
     
     return output
 
-def val_std_dev(model_output_path, output, best_val, best_val_class=None, best_val_quant=None,
-                metrics={'pred_fp_per_game': 1}, iso_spline='iso', show_plot=True):
-
-    _, _, _, _, oof_data = mf.load_all_pickles(model_output_path, 'reg')
-    val_data = oof_data['reg_adp'][['player', 'team', 'year', 'week', 'y_act']].reset_index(drop=True)
-    
-    val_data['pred_fp_per_game'] = best_val.mean(axis=1)
-
-    if 'pred_fp_per_game_class' in metrics.keys() and best_val_class is not None:
-        val_data['pred_fp_per_game_class'] = best_val_class.mean(axis=1)
-    
-    if 'pred_fp_per_game_quantile' in metrics.keys() and best_val_quant is not None:
-        val_data['pred_fp_per_game_quantile'] = best_val_quant.mean(axis=1)
+def val_std_dev(val_data, metrics={'pred_fp_per_game': 1}, iso_spline='iso', show_plot=True):
         
     sd_max_met = StandardScaler().fit(val_data[list(metrics.keys())]).transform(output[list(metrics.keys())])
     sd_max_met = np.mean(sd_max_met, axis=1)
@@ -622,15 +610,22 @@ def vegas_points(run_params, metrics={'implied_points_for': 1}, show_plot=False)
 
 
 def add_actual(df):
-    if set_pos=='Defense': pl = 'defTeam'
-    else: pl = 'player'
 
     if run_params['rush_pass'] != '': rush_pass = f"_{run_params['rush_pass']}"
     else: rush_pass = ''
-    actual_pts = dm.read(f'''SELECT {pl} player, week, season year, fantasy_pts{rush_pass} actual_pts
-                            FROM {set_pos}_Stats 
-                            WHERE week>={run_params['set_week']} 
-                                and season={run_params['set_year']}''', 'FastR')
+
+    actual_pts = pd.DataFrame()
+    for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+        if pos=='Defense': pl = 'defTeam'
+        else: pl = 'player'
+
+        actual_pts_cur = dm.read(f'''SELECT {pl} player, week, season year, fantasy_pts{rush_pass} actual_pts
+                                     FROM {pos}_Stats 
+                                     WHERE week>={run_params['set_week']} 
+                                           and week < 18
+                                           and season={run_params['set_year']
+                                           }''', 'FastR')
+        actual_pts = pd.concat([actual_pts, actual_pts_cur], axis=0)
     
     if len(actual_pts) > 0:
         df = pd.merge(df, actual_pts, on=['player', 'week', 'year'], how='left')
@@ -865,16 +860,28 @@ def save_output_to_db(output, run_params):
     
 def cleanup_X_y(X, y):
     X_player = X.copy()
-    X = X.drop(['player', 'week', 'year'], axis=1).dropna(axis=0)
+    X = X.drop(['player', 'team', 'week', 'year'], axis=1).dropna(axis=0)
     y = y[y.index.isin(X.index)].y_act
     X, y = X.reset_index(drop=True), y.reset_index(drop=True)
     return X_player, X, y
 
+def add_to_all(df, df_all):
+    df_all = pd.concat([df_all, df.assign(set_pos=set_pos)], axis=0).reset_index(drop=True)
+    return df_all
 
 def join_stats_mil(X_stack_mil, X_stack_player, X_predict_mil, X_predict_player):
     X_stack_mil = pd.merge(X_stack_mil, X_stack_player, on=['player', 'team', 'week', 'year'], how='left')
     X_predict_mil = pd.merge(X_predict_mil, X_predict_player,  on=['player', 'team', 'week', 'year'], how='left')
     return X_stack_mil, X_predict_mil
+
+
+def create_final_val_df(X_stack_player, y_stack_all, best_val_reg, best_val_class, best_val_quant):
+    df_val_final = pd.concat([X_stack_player[['player', 'team', 'week', 'year']], 
+                              pd.Series(best_val_reg.mean(axis=1), name='pred_fp_per_game'),
+                              pd.Series(best_val_class.mean(axis=1), name='pred_fp_per_game_class'),
+                              pd.Series(best_val_quant.mean(axis=1), name='pred_fp_per_game_quantile')], axis=1)
+    df_val_final = pd.merge(df_val_final, y_stack_all, on=['player', 'team', 'week', 'year'])
+    return df_val_final
 
 
 def load_run_models(run_params, final_models, X_stack, y_stack, X_predict, model_obj, alpha=None, grp=None, suffix=''):
@@ -1013,7 +1020,7 @@ set_weeks = [12]
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']
 
-ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack']
+ensemble_versions = len(set_weeks) * ['sera1_rsq0_include2_fullstack_combined']
 # ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3']
 # ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack']
 # ensemble_versions = len(set_weeks) * ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3']
@@ -1032,16 +1039,24 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     run_params['set_week'] = w
     run_params['ensemble_vers'] = ensemble_vers
     runs = [
-        ['QB', 'full_model', ''],
+        # ['QB', 'full_model', ''],
         # ['RB', 'full_model', ''],
         # ['WR', 'full_model', ''],
         # ['TE', 'full_model', ''],
         # ['Defense', 'full_model', ''],
-        # ['QB', 'backfill', ''],
-        # ['RB', 'backfill', ''],
-        # ['WR', 'backfill', ''],
-        # ['TE', 'backfill', '']
+        ['QB', 'backfill', ''],
+        ['RB', 'backfill', ''],
+        ['WR', 'backfill', ''],
+        ['TE', 'backfill', '']
     ]
+
+    X_stack_all = pd.DataFrame()
+    y_stack_all = pd.DataFrame()
+    X_predict_all = pd.DataFrame()
+    y_stack_class_all = pd.DataFrame()
+    output_start_all = pd.DataFrame()
+    df_train_all = pd.DataFrame()
+
     for set_pos, model_type, rush_pass in runs:
 
         run_params['rush_pass'] = rush_pass
@@ -1069,38 +1084,50 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path, class_cut)
         X_predict_player, X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, models_reg, models_class, models_quant)
         
-        # cleanup the X and y datasets
-        X_stack_player, X_stack, y_stack = cleanup_X_y(X_stack, y_stack)
-        _, _, y_stack_class = cleanup_X_y(X_stack_player, y_stack_class)
+        # add the X and y datasets to the all datasets
+        X_stack_all = add_to_all(X_stack, X_stack_all)
+        X_predict_all = add_to_all(X_predict, X_predict_all)
+        y_stack_all = add_to_all(y_stack, y_stack_all)
+        y_stack_class_all = add_to_all(y_stack_class, y_stack_class_all)
+        output_start_all = add_to_all(output_start, output_start_all)
 
-        # class metrics
-        final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
-        best_val_class, best_predictions_class = load_run_models(run_params, final_models, X_stack, y_stack_class, X_predict, 'class')
-        if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
-        # save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
+#%%
+    # cleanup the X and y datasets
+    X_stack_player, X_stack, y_stack = cleanup_X_y(X_stack_all, y_stack_all)
+    _, _, y_stack_class = cleanup_X_y(X_stack_player, y_stack_class_all)
 
-        # quantile regression metrics
-        final_models = ['qr_q', 'gbm_q', 'lgbm_q', 'rf_q', 'knn_q']
-        best_val_quant, best_predictions_quant = load_run_models(run_params, final_models, X_stack, y_stack, X_predict, 'quantile', alpha=0.8)
+    X_predict = X_predict_all.copy()
+    X_stack = pd.concat([X_stack, pd.get_dummies(X_stack.set_pos)], axis=1).drop('set_pos', axis=1)
+    X_predict = pd.concat([X_predict, pd.get_dummies(X_predict.set_pos)], axis=1).drop('set_pos', axis=1)
 
-        # create the stacking models
-        final_models = ['ridge', 'lasso', 'huber', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm', 'gbmh', 'knn']
-        best_val_reg, best_predictions = load_run_models(run_params, final_models, X_stack, y_stack, X_predict, 'reg')
-        # save_val_to_db(model_output_path, best_val_reg, run_params, 'reg', table_name='Model_Validations')
+    # class metrics
+    final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
+    best_val_class, best_predictions_class = load_run_models(run_params, final_models, X_stack, y_stack_class, X_predict, 'class')
+    if show_plot: show_calibration_curve(y_stack_class, best_val_class.mean(axis=1), n_bins=8)
+    # save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
 
-        
-        # create the output and add standard deviations / max scores
-        output = create_output(output_start, best_predictions, best_predictions_class, best_predictions_quant)
+    # quantile regression metrics
+    final_models = ['qr_q', 'gbm_q', 'lgbm_q', 'rf_q', 'knn_q']
+    best_val_quant, best_predictions_quant = load_run_models(run_params, final_models, X_stack, y_stack, X_predict, 'quantile', alpha=0.8)
 
-        # loop through std dev types and display / save output
-        for std_dev_type in std_dev_types:            
-            metrics = metrics_dict[std_dev_type]
-            output = val_std_dev(model_output_path, output, best_val_reg, best_val_class, best_val_quant, 
-                                 metrics=metrics, iso_spline='spline', show_plot=show_plot)
-            display_output(output)
-            # save_output_to_db(output, run_params)
+    # create the stacking models
+    final_models = ['ridge', 'lasso', 'huber', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm', 'gbmh', 'knn']
+    best_val_reg, best_predictions = load_run_models(run_params, final_models, X_stack, y_stack, X_predict, 'reg')
+    # save_val_to_db(model_output_path, best_val_reg, run_params, 'reg', table_name='Model_Validations')
 
+    df_val_final = create_final_val_df(X_stack_player, y_stack_all, best_val_reg, best_val_class, best_val_quant)
 
+    # create the output and add standard deviations / max scores
+    output = create_output(output_start_all, best_predictions, best_predictions_class, best_predictions_quant)
+
+    # loop through std dev types and display / save output
+    for std_dev_type in std_dev_types:            
+        metrics = metrics_dict[std_dev_type]
+        output = val_std_dev(df_val_final, metrics=metrics, iso_spline='spline', show_plot=show_plot)
+        display_output(output)
+        # save_output_to_db(output, run_params)
+
+#%%
         #-------------
         # Running the million dataset
         #-------------

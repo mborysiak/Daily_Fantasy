@@ -256,7 +256,7 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_seed, matchup_dr
 def adjust_high_winnings(tw, max_adjust=10000):
     tw = np.array(tw)
     tw[tw>max_adjust] = max_adjust
-    return tw
+    return list(tw)
 
 def show_params(bayes_params):
     print_params = {}
@@ -405,53 +405,64 @@ def objective(bayes_params):
     show_params(bayes_params)
     print('\n')
 
-    
     lineups_per_param = bayes_params['lineups_per_param']
     pred_vers = bayes_params['pred_vers']
     ensemble_vers = bayes_params['ensemble_vers']
     std_dev_type = bayes_params['std_dev_type']
 
     d = convert_param_options(bayes_params)
-    
+    print(d)
     total_winnings = []
     iter_cats = zip(set_weeks, set_years)
     for week, year in iter_cats:
 
-        winnings = 150
-        try:
-            params = create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type)
-            
-            # print(params)
-            # winnings = []
-            # for adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers in params:
-            #     print(pred_vers, ensemble_vers, std_dev_type, own_vers)
-            #     cur_winnings = sim_winnings(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, lpp, week, year, pred_vers, ensemble_vers, std_dev_type, own_vers)
-            #     winnings.append(cur_winnings)
-            
-            winnings = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
-                                                                            ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
-                                                                            week, year, pred_vers, ensemble_vers, std_dev_type) for 
-                                                                            adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
-                                                                            ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
-                                                                            week, year, pred_vers, ensemble_vers, std_dev_type  in params)
+        params = create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type)
         
-            winnings = [item for sublist in winnings for item in sublist]
-            winnings = avg_winnings_contest(winnings)
-            winnings = int(np.sum(winnings))
-            total_winnings.append(winnings)
+        mean_loss = []
+        median_loss = []
+        winnings_iter = []
+        for i in range(3):
+            print(f'Iteration {i}')
+            winnings = 150
+            try:
+                winnings = []
+                # for adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp, week, year, pred_vers, ensemble_vers, std_dev_type in params:
+                #     cur_winnings = sim_winnings(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp, week, year, pred_vers, ensemble_vers, std_dev_type)
+                #     winnings.append(cur_winnings)
+                
+                winnings = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
+                                                                                ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
+                                                                                week, year, pred_vers, ensemble_vers, std_dev_type) for 
+                                                                                adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
+                                                                                ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
+                                                                                week, year, pred_vers, ensemble_vers, std_dev_type  in params)
+            
+                winnings = [item for sublist in winnings for item in sublist]
+                winnings = avg_winnings_contest(winnings)
+                winnings = int(np.sum(winnings))
+                winnings_iter.append(winnings)
 
-        except:
-            print(f'Week {week} {year} failed. Filling in 150 winnings')
-            total_winnings.append(150)
+            except:
+                print(f'Week {week} {year} failed. Filling in 150 winnings')
+                total_winnings.append(150)
 
-        print(f'Week {week} Winnings: {winnings}') 
+            print(f'Week {week} Iter Winnings: {winnings_iter}') 
+        
+        winnings_iter = int(np.mean(winnings_iter))
+        total_winnings.append(winnings_iter)
+        print(f'Week {week} Average Winnings: {winnings_iter}') 
         print(f'Total Cumulative Winnings: {int(np.sum(total_winnings))}\n')
-    
-    total_winnings = adjust_high_winnings(total_winnings, max_adjust=5000)
-    
-    mean_loss = -np.mean(total_winnings)
-    median_loss = -np.percentile(total_winnings, 50)
-    loss = mean_loss + median_loss    
+        
+        total_winnings = adjust_high_winnings(total_winnings, max_adjust=5000)
+
+        
+        mean_loss.append(-np.mean(total_winnings))
+        median_loss.append(-np.percentile(total_winnings, 50))
+        print('Mean Loss:', mean_loss, 'Median Loss:', median_loss)
+
+    mean_loss = np.mean(mean_loss)
+    median_loss = np.mean(median_loss)
+    loss = mean_loss + median_loss  
     print('Mean Loss:', mean_loss, 'Median Loss:', median_loss, ' Current Loss:', loss)
     return loss
 
@@ -606,28 +617,52 @@ full_space = {
 
 
 # trial_name = 'adjust5000_meanonly_week1to17_2022_million_own_pct_matchupdropnew'
-trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
+# trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
 
 #%%
 
-class BayesTrain:
-    def __init__(self, trial_name, save_path, warm_start_evals=10, full_evals=50):
+# class BayesTrain:
+#     def __init__(self, trial_name, save_path, warm_start_evals=10, full_evals=50):
 
-        self.trial_name = trial_name
-        self.warm_start_evals = warm_start_evals
-        self.full_evals = full_evals
-        self.save_path = save_path
+#         self.trial_name = trial_name
+#         self.warm_start_evals = warm_start_evals
+#         self.full_evals = full_evals
+#         self.save_path = save_path
+#         self.warm_start_exists = self.check_warm_start_exists()
+#         self.full_trial_exists = self.check_full_trial_exists()
 
-    def check_warm_start_exists(self):
-        if os.path.exists(self.save_path+f'warm_start_{self.trial_name}.p'):
-            self.warm_start_exists = True
+#     def check_warm_start_exists(self):
+#         if os.path.exists(self.save_path+f'warm_start_{self.trial_name}.p'):
+#             self.warm_start_exists = True
 
-    def check_full_trial_exists(self):
-        if os.path.exists(self.save_path+f'full_space_{self.trial_name}.p'):
-            self.full_trial_exists = True
+#         else:
+#             self.warm_start_exists = False
+
+#     def check_full_trial_exists(self):
+#         if os.path.exists(self.save_path+f'full_space_{self.trial_name}.p'):
+#             self.full_trial_exists = True
+
+#         else:
+#             self.full_trial_exists = False
+
+#     def run_bayes_opt(self):
+#         if self.full_trial_exists:
+#             self.trials  = load_pickle(self.save_path, f'full_space_{se.ftrial_name}')
+#             save_pickle(trials, self.save_path, f'full_space_{self.trial_name}')
+
+#         elif self.warm_start_exists and not self.full_trial_exists:
+#             self.trials  = load_pickle(self.save_path, f'warm_start_{self.trial_name}')
+
+#         else:
+#             trials = Trials()
+#             save_pickle(trials, save_path, f'warm_start_{trial_name}')
+
+        
+
+trial_name = 'adjust5000_mean_median_week1to17_2022_3trials'
 
 
-for i in range(1, 16):
+for i in range(7, 16):
 
     if os.path.exists(save_path+f'full_space_{trial_name}.p'):
 
@@ -657,23 +692,23 @@ for i in range(1, 16):
     
 
 #%%
-trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
+trial_name = 'adjust5000_mean_median_week1to17_2022_3trials'
 results = results_to_df(save_path, f'full_space_{trial_name}')
 dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
 dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'append')
 
-
 #%%
-trial_name = 'adjust5000_meanonly_week1to17_2022_million_own_pct_matchupdropnew'
-# trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
-show_trial_best_params('full_space_'+trial_name, 2)
+# #%%
+# trial_name = 'adjust5000_meanonly_week1to17_2022_million_own_pct_matchupdropnew'
+# # trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
+# show_trial_best_params('full_space_'+trial_name, 2)
 
-#%%
+# #%%
 
-df = dm.read("SELECT * FROM Entry_Optimize_Bayes", 'Results')
-df['num_iters_150'] = 0
-dm.write_to_db(df, 'Results','Entry_Optimize_Bayes', 'replace')
-# %%
+# df = dm.read("SELECT * FROM Entry_Optimize_Bayes", 'Results')
+# df['num_iters_150'] = 0
+# dm.write_to_db(df, 'Results','Entry_Optimize_Bayes', 'replace')
+# # %%
 
 # bayes_params = {'adjust_pos_counts_True': 0.727, 'covar_type_no_covar': 0.584, 
 # 'ensemble_vers': 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack', 
