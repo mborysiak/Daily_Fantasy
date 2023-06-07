@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2022
-WEEK = 18
+WEEK = 17
 
 #%%
 import pandas as pd 
@@ -697,6 +697,9 @@ def pos_rank_stats(df, team_pos_rank, pos):
 
     pos_stats = pd.merge(team_pos_rank, pos_stats, on=['pos_rank', 'team', 'week', 'year'])
     pos_stats = pos_stats.drop(['pos_rank_' + c for c in pos_rank_cols], axis=1)
+
+    # remove cincy-buf due to cancellation
+    pos_stats = pos_stats[~((pos_stats.team.isin(['BUF', 'CIN'])) & (pos_stats.week==17) & (pos_stats.year==2022))].reset_index(drop=True)
 
     pos_stats['week'] = pos_stats['week'] + 1
     pos_stats = switch_seasons(pos_stats)
@@ -2084,7 +2087,7 @@ defense = remove_low_corrs(defense)
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 #%%
 
-chk_week = 18
+chk_week = 17
 backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={chk_week} AND year={YEAR}", 'Model_Features').player.values
 sal = dm.read(f"SELECT player, salary FROM Salaries WHERE league={chk_week} AND year={YEAR}", 'Simulation')
 sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
