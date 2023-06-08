@@ -40,7 +40,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [15]
+run_weeks = [1, 2]
 run_params = {
     
     # set year and week to analyze
@@ -63,8 +63,8 @@ run_params = {
     # set number of weeks back to begin validation
     'back_weeks': {
         'QB': 32,
-        'RB': 28,
-        'WR': 28,
+        'RB': 32,
+        'WR': 32,
         'TE': 32,
         'Defense': 32
     },
@@ -85,7 +85,7 @@ matt_wt = 1
 brier_wt = 1
 
 # set version and iterations
-vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc_bayes'
+vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
 
 #----------------
 # Data Loading
@@ -488,7 +488,7 @@ def update_output_dict(label, m, suffix, out_dict, oof_data, best_models, param_
     return out_dict
 
 
-def unpack_results(out_dict, model_list, results):
+def unpack_results(out_dict, model_obj, model_list, results):
     for model_name, result in zip(model_list, results):
         best_models, oof_data, param_scores, trials, col_label = result
         out_dict = update_output_dict(model_obj, model_name, col_label, out_dict, oof_data, best_models, param_scores, trials)
@@ -565,14 +565,14 @@ for w in run_weeks:
         # Run Regression Models
         #----------
 
-        func_param, model_list = get_model_names('reg')
+        func_params, model_list = get_model_names('reg')
 
         results = Parallel(n_jobs=-1, verbose=50)( 
                         delayed(get_model_output)
                         (m, df_train, 'reg', run_params, i, min_samples) for m,i in func_params
                 )
 
-        out_reg = unpack_results(out_reg, model_list, results)
+        out_reg = unpack_results(out_reg, 'reg', model_list, results)
         save_output_dict(out_reg, model_output_path, 'reg', rush_pass)
 
         #----------
@@ -590,7 +590,7 @@ for w in run_weeks:
                             (m, df_train_class, 'class', run_params, i, min_samples) for m,i in func_params
                     )
 
-            out_class = unpack_results(out_class, model_list, results)
+            out_class = unpack_results(out_class, 'class', model_list, results)
             save_output_dict(out_class, model_output_path, 'class', rush_pass)
 
 
@@ -608,7 +608,7 @@ for w in run_weeks:
                             (m, df_train, 'quantile', run_params, i, min_samples, alpha=alph) for m,i in func_params
                     )
 
-            out_quant = unpack_results(out_quant, model_list, results)
+            out_quant = unpack_results(out_quant, 'quant', model_list, results)
             save_output_dict(out_quant, model_output_path, 'quant', rush_pass)
 
         #----------
@@ -624,64 +624,7 @@ for w in run_weeks:
                         (m, df_train_mil, 'class', run_params, i, min_samples) for m,i in func_params
                 )
         
-        out_million = unpack_results(out_million, model_list, results)
+        out_million = unpack_results(out_million, 'class', model_list, results)
         save_output_dict(out_million, model_output_path, 'million', rush_pass)
 
-       
-
 #%%
-
-model_obj = 'reg'
-model_list = ['ridge', 'lgbm']
-func_params = [[m, i] for i, m in enumerate(model_list)]
-
-results = Parallel(n_jobs=-1, verbose=1)( 
-                delayed(get_model_output)
-                (m, df_train, 'reg', run_params, i, min_samples) for m,i in func_params
-          )
-
-out_reg = unpack_results(out_reg, model_list, results)
-save_output_dict(out_reg, model_output_path, 'reg', rush_pass)
-
-
-#%%
-
-best_models, oof_data, param_scores, trials, col_label = get_model_output('adp', df_train, 'reg', run_params, 0, min_samples)
-
-# %%
-
-from functools import partial
-from sklearn.model_selection import cross_val_score
-from hyperopt import fmin, tpe, hp, space_eval, Trials
-
-model_name = 'ridge'
-cur_df = df_train.copy()
-model_obj = 'reg'
-alpha = ''
-cut = ''
-i = 100
-
-trials = Trials()
-skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'])
-pipe, params = get_full_pipe(skm, 'huber', alpha, min_samples=min_samples, bayes_rand='bayes')
-
-def objective(params, pipe):
-    pipe.set_params(**params)
-    return -np.mean(cross_val_score(pipe, X, y))
-
-best_params = fmin(fn=partial(objective, pipe=pipe), space=params, algo=tpe.suggest, max_evals=20, trials=trials)
-
-best_score = np.max(trials.losses())
-param_output = pd.DataFrame()
-for i, t in enumerate(trials.trials):
-    trial_params = space_eval(params, {k:v[0] for k,v in t['misc']['vals'].items()})
-    score = t['result']['loss']
-    
-    if i > 10 and score < best_score:
-        best_score = score
-        best_params = trial_params
-
-    trial_params['score'] = score
-    param_output = pd.concat([param_output, pd.Series(trial_params)], axis=1)
-param_output = param_output.T
-# %%
