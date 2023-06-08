@@ -7,6 +7,8 @@ import gzip
 import pickle
 import datetime as dt
 import matplotlib.pyplot as plt
+import time
+from hyperopt import Trials
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -38,7 +40,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [9, 10, 11, 12, 13, 14]
+run_weeks = [15]
 run_params = {
     
     # set year and week to analyze
@@ -49,12 +51,12 @@ run_params = {
     'val_week_min': 14,
 
     # opt params
-    'n_iters': 25,
+    'n_iters': 20,
     'n_splits': 5,
 
     # other parameters
     'use_sample_weight': False,
-    'opt_type': 'custom_rand',
+    'opt_type': 'bayes',
     'cuts': [33, 80, 95],
     'met': 'y_act',
 
@@ -83,7 +85,7 @@ matt_wt = 1
 brier_wt = 1
 
 # set version and iterations
-vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
+vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc_bayes'
 
 #----------------
 # Data Loading
@@ -215,21 +217,17 @@ def get_class_data(df, cut, run_params):
 #----------------
 
 def output_dict():
-    return {'pred': {}, 'actual': {}, 'scores': {}, 'models': {}, 'full_hold':{}}
+    return {'pred': {}, 'actual': {}, 'scores': {}, 'models': {}, 'full_hold':{}, 'param_scores': {}, 'trials': {}}
 
-
-def update_output_dict(label, m, suffix, out_dict, oof_data, best_models):
-
-    # append all of the metric outputs
-    lbl = f'{label}_{m}{suffix}'
-    out_dict['pred'][lbl] = oof_data['hold']
-    out_dict['actual'][lbl] = oof_data['actual']
-    out_dict['scores'][lbl] = oof_data['scores']
-    out_dict['models'][lbl] = best_models
-    out_dict['full_hold'][lbl] = oof_data['full_hold']
-
-    return out_dict
-
+def get_model_names(model_obj):
+    all_models = {
+        'reg': ['adp', 'bridge', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'gbm', 'gbmh', 'rf', 'knn'],
+        'class': ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c'],
+        'quantile': ['gbm_q', 'lgbm_q', 'qr_q', 'knn_q', 'rf_q']
+    } 
+    model_list = all_models[model_obj]
+    func_params = [[m, i] for i, m in enumerate(model_list)]
+    return func_params, model_list
 
 def get_skm(skm_df, model_obj, to_drop):
     
@@ -245,10 +243,9 @@ def get_skm(skm_df, model_obj, to_drop):
     return skm, X, y
 
 
-def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
+def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_rand='rand'):
 
     if m == 'adp':
-        
         
         # set up the ADP model pipe
         pipe = skm.model_pipe([skm.piece('feature_select'), 
@@ -301,7 +298,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
 
 
     # get the params for the current pipe and adjust if needed
-    params = skm.default_params(pipe, 'rand')
+    params = skm.default_params(pipe, bayes_rand, min_samples=min_samples)
     if m=='adp': 
         params['feature_select__cols'] = [
                                             ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
@@ -309,50 +306,89 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10):
                                             [ 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank']
                                         ]
         params['k_best__k'] = range(1, 14)
-    if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
-    if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
-    if m=='knn_q': params['knn_q__n_neighbors'] = range(1, min_samples-1)
-    if stack_model: params['k_best__k'] = range(2, 40)
-
+    
     return pipe, params
 
-
-def post_model_fit(bm, X, y):
-    bm.fit(X, y)
-    return bm
-
-def get_model_output(model_name, cur_df, model_obj, out_dict, run_params, i, min_samples=10, alpha=''):
-
-    print(f'\n{model_name}\n============\n')
-
-    skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'])
-    pipe, params = get_full_pipe(skm, model_name, alpha, min_samples=min_samples)
-
+def get_proba(model_obj, alpha):
     if model_obj == 'class': 
         proba = True
         alpha = f'_{cut}' 
     else: 
         proba = False
+    return proba, alpha
+
+def adjust_adp(model_name):
+    if model_name == 'adp': bayes_rand = 'rand'
+    else: bayes_rand = run_params['opt_type']
+    return bayes_rand
+
+def get_newest_folder(path):
+    folders = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
+    newest_folder = max(folders, key=lambda f: os.path.getctime(os.path.join(path, f)))
+    return os.path.join(path, newest_folder)
+
+def get_newest_folder_with_keywords(path, keywords, ignore_keywords=None):
+    folders = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
+    
+    # Apply ignore_keywords if provided
+    if ignore_keywords:
+        folders = [f for f in folders if not any(ignore_keyword in f for ignore_keyword in ignore_keywords)]
+    
+    matching_folders = [f for f in folders if all(keyword in f for keyword in keywords)]
+    
+    if not matching_folders:
+        return None
+    
+    newest_folder = max(matching_folders, key=lambda f: os.path.getctime(os.path.join(path, f)))
+    return os.path.join(path, newest_folder)
+
+
+def get_trials(model_obj, m, suffix, bayes_rand):
+
+    newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
+    recent_save = get_newest_folder_with_keywords(newest_folder, [set_pos, model_type, vers], [str(run_params['set_week'])])
+    if recent_save is not None and bayes_rand=='bayes': 
+        try:
+            trials = load_pickle(recent_save, f'{rush_pass}reg_trials')
+            trials = trials[f'{model_obj}_{m}{suffix}']
+            print('Loading previous trials')
+        except:
+            print('No Previous Trials Exist')
+            trials = Trials()
+
+    elif bayes_rand=='bayes':
+        print('Creating new Trials object')
+        trials = Trials()
+
+    else:
+        trials = None
+
+    return trials
+    
+
+def get_model_output(model_name, cur_df, model_obj, run_params, i, min_samples=10, alpha='', trials=None):
+
+    print(f'\n{model_name}\n============\n')
+    
+    bayes_rand = adjust_adp(model_name)
+    proba, alpha = get_proba(model_obj, alpha)
+    col_label = str(alpha)+run_params['rush_pass']
+    trials = get_trials(model_obj, model_name, col_label, bayes_rand)
+
+    skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'])
+    pipe, params = get_full_pipe(skm, model_name, alpha, min_samples=min_samples, bayes_rand=bayes_rand)
 
     # fit and append the ADP model
-    import time
     start = time.time()
-    best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=run_params['n_iters'], n_splits=run_params['n_splits'],
-                                                             col_split='game_date', time_split=run_params['cv_time_input'],
-                                                             bayes_rand=run_params['opt_type'], proba=proba,
-                                                             random_seed=(i+7)*19+(i*12)+6, alpha=alpha)
+    best_models, oof_data, param_scores, trials = skm.time_series_cv(pipe, X, y, params, n_iter=run_params['n_iters'], 
+                                                                     n_splits=run_params['n_splits'], col_split='game_date', 
+                                                                     time_split=run_params['cv_time_input'],
+                                                                     bayes_rand=bayes_rand, proba=proba, trials=trials,
+                                                                     random_seed=(i+7)*19+(i*12)+6, alpha=alpha)
 
     print('Time Elapsed:', np.round((time.time()-start)/60,1), 'Minutes')
-    # best_models = Parallel(n_jobs=-1, verbose=0)(delayed(post_model_fit)(bm, X, y) for bm in best_models)
     
-    col_label = str(alpha)+run_params['rush_pass']
-    out_dict = update_output_dict(model_obj, model_name, col_label, out_dict, oof_data, best_models)
-    # db_output = add_result_db_output('reg', m, oof_data['scores'], db_output, run_params)
-
-    try: save_param_scores(param_scores, model_obj, model_name, run_params)
-    except: print(f'Param save for {model_name} failed')
-
-    return out_dict, best_models, oof_data
+    return best_models, oof_data, param_scores, trials, col_label
 
 
 #------------------
@@ -437,6 +473,27 @@ def predict_million_df_roi(df, run_params):
 # Saving Data / Handling
 #-----------------
 
+def update_output_dict(label, m, suffix, out_dict, oof_data, best_models, param_scores, trials):
+
+    # append all of the metric outputs
+    lbl = f'{label}_{m}{suffix}'
+    out_dict['pred'][lbl] = oof_data['hold']
+    out_dict['actual'][lbl] = oof_data['actual']
+    out_dict['scores'][lbl] = oof_data['scores']
+    out_dict['models'][lbl] = best_models
+    out_dict['full_hold'][lbl] = oof_data['full_hold']
+    out_dict['param_scores'][lbl] = param_scores
+    out_dict['trials'][lbl] = trials
+
+    return out_dict
+
+
+def unpack_results(out_dict, model_list, results):
+    for model_name, result in zip(model_list, results):
+        best_models, oof_data, param_scores, trials, col_label = result
+        out_dict = update_output_dict(model_obj, model_name, col_label, out_dict, oof_data, best_models, param_scores, trials)
+    return out_dict
+
 
 def save_pickle(obj, path, fname, protocol=-1):
     with gzip.open(f"{path}/{fname}.p", 'wb') as f:
@@ -444,33 +501,12 @@ def save_pickle(obj, path, fname, protocol=-1):
 
     print(f'Saved {fname} to path {path}')
 
+
 def load_pickle(path, fname):
     with gzip.open(f"{path}/{fname}.p", 'rb') as f:
         loaded_object = pickle.load(f)
         return loaded_object
 
-def add_result_db_output(model_type, model, results, db_output, run_params):
-    db_output['pkey'].append(pkey)
-    db_output['set_pos'].append(set_pos)
-    db_output['set_year'].append(run_params['set_year'])
-    db_output['set_week'].append(run_params['set_week'])
-    db_output['model_type'].append(model_type)
-    db_output['model'].append(model)
-    db_output['validation_score'].append(results[0])
-    db_output['test_score'].append(results[1])
-
-    return db_output
-
-def save_param_scores(df, obj_type, model, run_params):
-    for c in df.columns:
-        if 'class_weight' in c:
-            df[c] = df[c].apply(lambda x: x[0])
-
-    df = df.assign(model=model, year=run_params['set_year'], week=run_params['set_week'], pos=set_pos, model_type=model_type)
-    exist = dm.read(f"SELECT * FROM {obj_type}_{model}", 'Results')
-    df = pd.concat([exist, df], axis=0, sort=False)
-
-    dm.write_to_db(df, 'Results', f'{obj_type}_{model}', 'replace')
 
 def save_output_dict(out_dict, model_output_path, label, rush_pass):
 
@@ -479,20 +515,22 @@ def save_output_dict(out_dict, model_output_path, label, rush_pass):
     save_pickle(out_dict['models'], model_output_path, f'{rush_pass}{label}_models')
     save_pickle(out_dict['scores'], model_output_path, f'{rush_pass}{label}_scores')
     save_pickle(out_dict['full_hold'], model_output_path, f'{rush_pass}{label}_full_hold')
+    save_pickle(out_dict['param_scores'], model_output_path, f'{rush_pass}{label}_param_scores')
+    save_pickle(out_dict['trials'], model_output_path, f'{rush_pass}{label}_trials')
 
 
 
 #%%
 run_list = [
             ['QB', '', 'full_model'],
-            ['RB', '', 'full_model'],
-            ['WR', '', 'full_model'],
-            ['TE', '', 'full_model'],
-            ['Defense', '', 'full_model'],
-            ['QB', '', 'backfill'],
-            ['RB', '', 'backfill'],
-            ['WR', '', 'backfill'],
-            ['TE', '', 'backfill'],
+            # ['RB', '', 'full_model'],
+            # ['WR', '', 'full_model'],
+            # ['TE', '', 'full_model'],
+            # ['Defense', '', 'full_model'],
+            # ['QB', '', 'backfill'],
+            # ['RB', '', 'backfill'],
+            # ['WR', '', 'backfill'],
+            # ['TE', '', 'backfill'],
 
             # ['QB', 'rush', 'full_model'],
             # ['QB', 'pass', 'full_model'],
@@ -523,54 +561,127 @@ for w in run_weeks:
         # set up blank dictionaries for all metrics
         out_reg, out_class, out_quant, out_million = output_dict(), output_dict(), output_dict(), output_dict()
 
-        #=========
-        # Run Models
-        #=========
+        #----------
+        # Run Regression Models
+        #----------
 
-        # run all other models
-        model_list = ['adp', 'bridge', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
-        for i, m in enumerate(model_list):
-            out_reg, _, _ = get_model_output(m, df_train, 'reg', out_reg, run_params, i, min_samples)
+        func_param, model_list = get_model_names('reg')
+
+        results = Parallel(n_jobs=-1, verbose=50)( 
+                        delayed(get_model_output)
+                        (m, df_train, 'reg', run_params, i, min_samples) for m,i in func_params
+                )
+
+        out_reg = unpack_results(out_reg, model_list, results)
         save_output_dict(out_reg, model_output_path, 'reg', rush_pass)
 
-        # run all other models
-        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
+        #----------
+        # Run Class Models
+        #----------
+
+        func_params, model_list = get_model_names('class')
+
         for cut in run_params['cuts']:
             print(f"\n--------------\nPercentile {cut}\n--------------\n")
-            df_train_class, df_predict_class = get_class_data(df, cut, run_params)    
-            for i, m in enumerate(model_list):
-                out_class, _, _= get_model_output(m, df_train_class, 'class', out_class, run_params, i, min_samples)
-        save_output_dict(out_class, model_output_path, 'class', rush_pass)
+            df_train_class, df_predict_class = get_class_data(df, cut, run_params) 
 
-        # run all other models
-        model_list = ['gbm_q', 'lgbm_q', 'qr_q', 'knn_q', 'rf_q']
-        for i, m in enumerate(model_list):
-            for alph in [0.8, 0.95]:
-                out_quant, _, _ = get_model_output(m, df_train, 'quantile', out_quant, run_params, i, alpha=alph)
-        save_output_dict(out_quant, model_output_path, 'quant', rush_pass)
+            results = Parallel(n_jobs=-1, verbose=50)( 
+                            delayed(get_model_output)
+                            (m, df_train_class, 'class', run_params, i, min_samples) for m,i in func_params
+                    )
 
-        # run the million predict
-        print(f"\n--------------\nRunning Million Predict\n--------------\n")
-        n_splits = run_params['n_splits']; cut='million'
+            out_class = unpack_results(out_class, model_list, results)
+            save_output_dict(out_class, model_output_path, 'class', rush_pass)
+
+
+        #----------
+        # Run Quantile Models
+        #----------
+
+        func_params, model_list = get_model_names('quantile')
+
+        for alph in [0.8, 0.95]:
+            print(f"\n--------------\nAlpha {alph}\n--------------\n")
+
+            results = Parallel(n_jobs=-1, verbose=50)( 
+                            delayed(get_model_output)
+                            (m, df_train, 'quantile', run_params, i, min_samples, alpha=alph) for m,i in func_params
+                    )
+
+            out_quant = unpack_results(out_quant, model_list, results)
+            save_output_dict(out_quant, model_output_path, 'quant', rush_pass)
+
+        #----------
+        # Run Million Predict
+        #----------
+
+        cut='million'
         df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
+        func_params, model_list = get_model_names('class')
 
-        model_list = ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c']
-        for i, m in enumerate(model_list):
-            out_million, _, _= get_model_output(m, df_train_mil, 'class', out_million, run_params, i, min_samples)
+        results = Parallel(n_jobs=-1, verbose=50)(
+                        delayed(get_model_output)
+                        (m, df_train_mil, 'class', run_params, i, min_samples) for m,i in func_params
+                )
+        
+        out_million = unpack_results(out_million, model_list, results)
         save_output_dict(out_million, model_output_path, 'million', rush_pass)
 
+       
 
-        # # run the million predict ROI
-        # print(f"\n--------------\nRunning Million Predict ROI\n--------------\n")
-        # df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df_roi(df, run_params)
+#%%
 
-        # model_list = ['adp', 'huber', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn', 'gbm', 'gbmh', 'rf']
-        # for i, m in enumerate(model_list):
-        #     out_million, _, _= get_model_output(m, df_train_mil, 'reg', out_million, run_params, i, min_samples)
-        # save_output_dict(out_million, model_output_path, 'million', rush_pass)
+model_obj = 'reg'
+model_list = ['ridge', 'lgbm']
+func_params = [[m, i] for i, m in enumerate(model_list)]
 
-        
+results = Parallel(n_jobs=-1, verbose=1)( 
+                delayed(get_model_output)
+                (m, df_train, 'reg', run_params, i, min_samples) for m,i in func_params
+          )
 
+out_reg = unpack_results(out_reg, model_list, results)
+save_output_dict(out_reg, model_output_path, 'reg', rush_pass)
 
 
 #%%
+
+best_models, oof_data, param_scores, trials, col_label = get_model_output('adp', df_train, 'reg', run_params, 0, min_samples)
+
+# %%
+
+from functools import partial
+from sklearn.model_selection import cross_val_score
+from hyperopt import fmin, tpe, hp, space_eval, Trials
+
+model_name = 'ridge'
+cur_df = df_train.copy()
+model_obj = 'reg'
+alpha = ''
+cut = ''
+i = 100
+
+trials = Trials()
+skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'])
+pipe, params = get_full_pipe(skm, 'huber', alpha, min_samples=min_samples, bayes_rand='bayes')
+
+def objective(params, pipe):
+    pipe.set_params(**params)
+    return -np.mean(cross_val_score(pipe, X, y))
+
+best_params = fmin(fn=partial(objective, pipe=pipe), space=params, algo=tpe.suggest, max_evals=20, trials=trials)
+
+best_score = np.max(trials.losses())
+param_output = pd.DataFrame()
+for i, t in enumerate(trials.trials):
+    trial_params = space_eval(params, {k:v[0] for k,v in t['misc']['vals'].items()})
+    score = t['result']['loss']
+    
+    if i > 10 and score < best_score:
+        best_score = score
+        best_params = trial_params
+
+    trial_params['score'] = score
+    param_output = pd.concat([param_output, pd.Series(trial_params)], axis=1)
+param_output = param_output.T
+# %%
