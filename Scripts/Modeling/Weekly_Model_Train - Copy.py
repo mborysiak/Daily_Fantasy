@@ -40,8 +40,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [1, 2]
-verbosity = 1
+run_weeks = [1]
 run_params = {
     
     # set year and week to analyze
@@ -52,7 +51,7 @@ run_params = {
     'val_week_min': 14,
 
     # opt params
-    'n_iters': 10,
+    'n_iters': 20,
     'n_splits': 5,
 
     # other parameters
@@ -82,11 +81,11 @@ model_type = 'full_model'
 # set weights for running model
 r2_wt = 0
 sera_wt = 1
-matt_wt = 0
+matt_wt = 1
 brier_wt = 1
 
 # set version and iterations
-vers = 'sera1_rsq0_brier1_matt0_bayes'
+vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
 
 #----------------
 # Data Loading
@@ -310,10 +309,13 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
     
     return pipe, params
 
-def get_proba(model_obj):
-    if model_obj == 'class': proba = True
-    else: proba = False
-    return proba
+def get_proba(model_obj, alpha):
+    if model_obj == 'class': 
+        proba = True
+        alpha = f'_{cut}' 
+    else: 
+        proba = False
+    return proba, alpha
 
 def adjust_adp(model_name):
     if model_name == 'adp': bayes_rand = 'rand'
@@ -341,16 +343,14 @@ def get_newest_folder_with_keywords(path, keywords, ignore_keywords=None):
     return os.path.join(path, newest_folder)
 
 
-def get_trials(label, m, bayes_rand):
+def get_trials(model_obj, m, suffix, bayes_rand):
 
     newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
-    recent_save = get_newest_folder_with_keywords(newest_folder, [set_pos, model_type, vers], [f"_week{run_params['set_week']}_"])
-    short_label = label.split('_')[0]
-
+    recent_save = get_newest_folder_with_keywords(newest_folder, [set_pos, model_type, vers], [str(run_params['set_week'])])
     if recent_save is not None and bayes_rand=='bayes': 
         try:
-            trials = load_pickle(recent_save, f'{short_label}_trials')
-            trials = trials[f'{label}_{m}']
+            trials = load_pickle(recent_save, f'{rush_pass}reg_trials')
+            trials = trials[f'{model_obj}_{m}{suffix}']
             print('Loading previous trials')
         except:
             print('No Previous Trials Exist')
@@ -366,13 +366,14 @@ def get_trials(label, m, bayes_rand):
     return trials
     
 
-def get_model_output(model_name, label, cur_df, model_obj, run_params, i, min_samples=10, alpha='', trials=None):
+def get_model_output(model_name, cur_df, model_obj, run_params, i, min_samples=10, alpha='', trials=None):
 
     print(f'\n{model_name}\n============\n')
     
     bayes_rand = adjust_adp(model_name)
-    proba = get_proba(model_obj)
-    trials = get_trials(label, model_name, bayes_rand)
+    proba, alpha = get_proba(model_obj, alpha)
+    col_label = str(alpha)+run_params['rush_pass']
+    trials = get_trials(model_obj, model_name, col_label, bayes_rand)
 
     skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'])
     pipe, params = get_full_pipe(skm, model_name, alpha, min_samples=min_samples, bayes_rand=bayes_rand)
@@ -387,7 +388,7 @@ def get_model_output(model_name, label, cur_df, model_obj, run_params, i, min_sa
 
     print('Time Elapsed:', np.round((time.time()-start)/60,1), 'Minutes')
     
-    return best_models, oof_data, param_scores, trials
+    return best_models, oof_data, param_scores, trials, col_label
 
 
 #------------------
@@ -472,12 +473,10 @@ def predict_million_df_roi(df, run_params):
 # Saving Data / Handling
 #-----------------
 
-def update_output_dict(out_dict, label, m, result):
-
-    best_models, oof_data, param_scores, trials = result
+def update_output_dict(label, m, suffix, out_dict, oof_data, best_models, param_scores, trials):
 
     # append all of the metric outputs
-    lbl = f'{label}_{m}'
+    lbl = f'{label}_{m}{suffix}'
     out_dict['pred'][lbl] = oof_data['hold']
     out_dict['actual'][lbl] = oof_data['actual']
     out_dict['scores'][lbl] = oof_data['scores']
@@ -489,9 +488,10 @@ def update_output_dict(out_dict, label, m, result):
     return out_dict
 
 
-def unpack_results(out_dict, label, model_list, results):
+def unpack_results(out_dict, model_obj, model_list, results):
     for model_name, result in zip(model_list, results):
-        out_dict = update_output_dict(out_dict, label, model_name, result)
+        best_models, oof_data, param_scores, trials, col_label = result
+        out_dict = update_output_dict(model_obj, model_name, col_label, out_dict, oof_data, best_models, param_scores, trials)
     return out_dict
 
 
@@ -508,30 +508,29 @@ def load_pickle(path, fname):
         return loaded_object
 
 
-def save_output_dict(out_dict, label, model_output_path):
+def save_output_dict(out_dict, model_output_path, label, rush_pass):
 
-    label = label.split('_')[0]
-    save_pickle(out_dict['pred'], model_output_path, f'{label}_pred')
-    save_pickle(out_dict['actual'], model_output_path, f'{label}_actual')
-    save_pickle(out_dict['models'], model_output_path, f'{label}_models')
-    save_pickle(out_dict['scores'], model_output_path, f'{label}_scores')
-    save_pickle(out_dict['full_hold'], model_output_path, f'{label}_full_hold')
-    save_pickle(out_dict['param_scores'], model_output_path, f'{label}_param_scores')
-    save_pickle(out_dict['trials'], model_output_path, f'{label}_trials')
+    save_pickle(out_dict['pred'], model_output_path, f'{rush_pass}{label}_pred')
+    save_pickle(out_dict['actual'], model_output_path, f'{rush_pass}{label}_actual')
+    save_pickle(out_dict['models'], model_output_path, f'{rush_pass}{label}_models')
+    save_pickle(out_dict['scores'], model_output_path, f'{rush_pass}{label}_scores')
+    save_pickle(out_dict['full_hold'], model_output_path, f'{rush_pass}{label}_full_hold')
+    save_pickle(out_dict['param_scores'], model_output_path, f'{rush_pass}{label}_param_scores')
+    save_pickle(out_dict['trials'], model_output_path, f'{rush_pass}{label}_trials')
 
 
 
 #%%
 run_list = [
             ['QB', '', 'full_model'],
-            ['RB', '', 'full_model'],
-            ['WR', '', 'full_model'],
-            ['TE', '', 'full_model'],
-            ['Defense', '', 'full_model'],
-            ['QB', '', 'backfill'],
-            ['RB', '', 'backfill'],
-            ['WR', '', 'backfill'],
-            ['TE', '', 'backfill'],
+            # ['RB', '', 'full_model'],
+            # ['WR', '', 'full_model'],
+            # ['TE', '', 'full_model'],
+            # ['Defense', '', 'full_model'],
+            # ['QB', '', 'backfill'],
+            # ['RB', '', 'backfill'],
+            # ['WR', '', 'backfill'],
+            # ['TE', '', 'backfill'],
 
             # ['QB', 'rush', 'full_model'],
             # ['QB', 'pass', 'full_model'],
@@ -562,27 +561,19 @@ for w in run_weeks:
         # set up blank dictionaries for all metrics
         out_reg, out_class, out_quant, out_million = output_dict(), output_dict(), output_dict(), output_dict()
 
-        # label = 'million'
-        # model_list = ['lr_c']
-        # i=0
-        # df_train_class, df_predict_class = get_class_data(df, 80, run_params) 
-        # results = get_model_output('lr_c', label, df_train_class, 'class', run_params, i, min_samples)
-        # out_reg = unpack_results(out_reg, label, ['lr_c', 'extra'], [results, results])
-        # save_output_dict(out_reg, label, model_output_path)
-
         #----------
         # Run Regression Models
         #----------
 
         func_params, model_list = get_model_names('reg')
-        label = 'reg'
-        results = Parallel(n_jobs=-1, verbose=verbosity)( 
+
+        results = Parallel(n_jobs=-1, verbose=50)( 
                         delayed(get_model_output)
-                        (m, label, df_train, 'reg', run_params, i, min_samples) for m,i in func_params
+                        (m, df_train, 'reg', run_params, i, min_samples) for m,i in func_params
                 )
 
-        out_reg = unpack_results(out_reg, label, model_list, results)
-        save_output_dict(out_reg, label, model_output_path)
+        out_reg = unpack_results(out_reg, 'reg', model_list, results)
+        save_output_dict(out_reg, model_output_path, 'reg', rush_pass)
 
         #----------
         # Run Class Models
@@ -593,15 +584,14 @@ for w in run_weeks:
         for cut in run_params['cuts']:
             print(f"\n--------------\nPercentile {cut}\n--------------\n")
             df_train_class, df_predict_class = get_class_data(df, cut, run_params) 
-            label = f'class_{cut}'
 
-            results = Parallel(n_jobs=-1, verbose=verbosity)( 
+            results = Parallel(n_jobs=-1, verbose=50)( 
                             delayed(get_model_output)
-                            (m, label, df_train_class, 'class', run_params, i, min_samples) for m,i in func_params
+                            (m, df_train_class, 'class', run_params, i, min_samples) for m,i in func_params
                     )
 
-            out_class = unpack_results(out_class, label, model_list, results)
-            save_output_dict(out_class, label, model_output_path)
+            out_class = unpack_results(out_class, 'class', model_list, results)
+            save_output_dict(out_class, model_output_path, 'class', rush_pass)
 
 
         #----------
@@ -612,27 +602,31 @@ for w in run_weeks:
 
         for alph in [0.8, 0.95]:
             print(f"\n--------------\nAlpha {alph}\n--------------\n")
-            label = f'quant_{alph}'
-            results = Parallel(n_jobs=-1, verbose=verbosity)( 
+
+            results = Parallel(n_jobs=-1, verbose=50)( 
                             delayed(get_model_output)
-                            (m, label, df_train, 'quantile', run_params, i, min_samples, alpha=alph) for m,i in func_params
+                            (m, df_train, 'quantile', run_params, i, min_samples, alpha=alph) for m,i in func_params
                     )
 
-            out_quant = unpack_results(out_quant, label, model_list, results)
-            save_output_dict(out_quant, label, model_output_path)
+            out_quant = unpack_results(out_quant, 'quant', model_list, results)
+            save_output_dict(out_quant, model_output_path, 'quant', rush_pass)
 
         #----------
         # Run Million Predict
         #----------
 
+        cut='million'
         df_train_mil, df_predict_mil, min_samples_mil, run_params = predict_million_df(df, run_params)
         func_params, model_list = get_model_names('class')
-        label = 'million'
-        results = Parallel(n_jobs=-1, verbose=verbosity)(
+
+        results = Parallel(n_jobs=-1, verbose=50)(
                         delayed(get_model_output)
-                        (m, label, df_train_mil, 'class', run_params, i, min_samples) for m,i in func_params
+                        (m, df_train_mil, 'class', run_params, i, min_samples) for m,i in func_params
                 )
         
-        out_million = unpack_results(out_million, label, model_list, results)
-        save_output_dict(out_million, label, model_output_path)
+        out_million = unpack_results(out_million, 'class', model_list, results)
+        save_output_dict(out_million, model_output_path, 'million', rush_pass)
 
+#%%
+
+results = load_pickle(model_output_path, f'{rush_pass}reg_models')

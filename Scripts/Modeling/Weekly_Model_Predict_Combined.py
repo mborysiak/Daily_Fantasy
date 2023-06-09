@@ -913,18 +913,18 @@ def load_run_models(run_params, final_models, X_stack, y_stack, X_predict, model
 
 
 def create_mil_output(df_predict_mil, best_predictions_mil):
-            output_mil = pd.concat([df_predict_mil[['player', 'team', 'week', 'year']], 
-                                    pd.Series(best_predictions_mil.mean(axis=1), name='pred_mil')], axis=1)
-            try:
-                actuals = dm.read("SELECT * FROM Top_Players", 'DK_Results')
-                mil_results = pd.merge(output_mil, actuals[['player', 'week', 'year', 'y_act']], 
-                                       on=['player', 'week', 'year'], how='left').fillna(0)
-                display(mil_results.sort_values(by='pred_mil', ascending=False))
-                show_calibration_curve(mil_results['y_act'], mil_results['pred_mil'], n_bins=8)
-            except:
-                display(output_mil.sort_values(by='pred_mil', ascending=False))
+    output_mil = pd.concat([df_predict_mil[['player', 'team', 'week', 'year']], 
+                            pd.Series(best_predictions_mil.mean(axis=1), name='pred_mil')], axis=1)
+    try:
+        actuals = dm.read("SELECT * FROM Top_Players", 'DK_Results')
+        mil_results = pd.merge(output_mil, actuals[['player', 'week', 'year', 'y_act']], 
+                            on=['player', 'week', 'year'], how='left').fillna(0)
+        display(mil_results.sort_values(by='pred_mil', ascending=False))
+        show_calibration_curve(mil_results['y_act'], mil_results['pred_mil'], n_bins=8)
+    except:
+        display(output_mil.sort_values(by='pred_mil', ascending=False))
 
-            return output_mil
+    return output_mil
             
 
 def display_output(output):
