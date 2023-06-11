@@ -1867,7 +1867,7 @@ def qb_pull(rush_or_pass):
     df = remove_non_uniques(df)
     df = df[(df.ProjPts > 10) & (df.projected_points > 10)].reset_index(drop=True)
     df = drop_duplicate_players(df)
-    df = remove_low_corrs(df, corr_cut=0.02)
+    df = remove_low_corrs(df, corr_cut=0.03)
 
     print('Total Rows:', df.shape[0])
     print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
@@ -1958,7 +1958,7 @@ for pos in ['RB', 'WR', 'TE']:
     df = df.dropna().reset_index(drop=True); print(df.shape[0])
     df = remove_non_uniques(df)
     df = drop_duplicate_players(df)
-    df = remove_low_corrs(df, corr_cut=0.02)
+    df = remove_low_corrs(df, corr_cut=0.03)
 
     print('Total Rows:', df.shape[0])
     print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
@@ -2016,7 +2016,7 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     if pos=='QB': df = one_qb_per_week(df); print(df.shape[0])
     
     df = drop_duplicate_players(df)
-    df = remove_low_corrs(df, corr_cut=0.02)
+    df = remove_low_corrs(df, corr_cut=0.03)
 
     print('Data Size:', df.shape[0])
     print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
@@ -2104,7 +2104,7 @@ print('Team Counts by Week:', defense[['year', 'week', 'player']].drop_duplicate
 
 defense.columns = [c.replace('_dst', '') for c in defense.columns]
 defense = remove_non_uniques(defense)
-defense = remove_low_corrs(defense)
+defense = remove_low_corrs(defense, corr_cut=0.02)
 
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 #%%
