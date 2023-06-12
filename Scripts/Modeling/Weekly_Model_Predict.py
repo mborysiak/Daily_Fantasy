@@ -213,7 +213,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
                                 ])
 
     # get the params for the current pipe and adjust if needed
-    params = skm.default_params(pipe, 'rand')
+    params = skm.default_params(pipe, 'rand', min_samples)
     if m=='adp': 
         params['feature_select__cols'] = [
                                             ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
@@ -227,10 +227,6 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_sa
         elif m in ('rf_q', 'knn_q'): pipe.steps[-1][-1].q = alpha
         else: pipe.steps[-1][-1].alpha = alpha
 
-    if m=='knn_c': params['knn_c__n_neighbors'] = range(1, min_samples-1)
-    if m=='knn': params['knn__n_neighbors'] = range(1, min_samples-1)
-    if m=='knn_q': params['knn_q__n_neighbors'] = range(1, min_samples-1)
-    
     if stack_model and full_stack_features: 
         params['random_sample__frac'] = np.arange(0.6, 1.05, 0.05)
         params['select_perc__percentile'] = range(60, 105, 5)
@@ -949,6 +945,28 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
+import yaml
+
+def process_config(config):
+    config['pred_vers'] = config['pred_vers'].format(**config['pred_params'])
+    config['ensemble_vers'] = config['ensemble_vers'].format(**config['ensemble_params'])
+    config['std_dev_type'] = config['std_dev_type'].format(**config['std_dev_params'])
+
+    return config
+
+def read_config(file_path):
+    with open(file_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config
+
+# Assuming the config file is in the same directory as the Python script
+config_file = f'{root_path}/Scripts/config.yaml'
+config = read_config(config_file)
+config = process_config(config)
+
+globals().update(config)
+
+#%%
 #---------------
 # Settings
 #---------------

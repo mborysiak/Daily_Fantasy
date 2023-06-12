@@ -220,15 +220,41 @@ def get_class_data(df, cut, run_params):
 def output_dict():
     return {'pred': {}, 'actual': {}, 'scores': {}, 'models': {}, 'full_hold':{}, 'param_scores': {}, 'trials': {}}
 
-def get_model_names(model_obj):
-    all_models = {
-        'reg': ['adp', 'bridge', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'gbm', 'gbmh', 'rf', 'knn'],
-        'class': ['lr_c', 'xgb_c',  'lgbm_c', 'gbm_c', 'rf_c', 'knn_c', 'gbmh_c'],
-        'quantile': ['gbm_q', 'lgbm_q', 'qr_q', 'knn_q', 'rf_q']
-    } 
-    model_list = all_models[model_obj]
-    func_params = [[m, i] for i, m in enumerate(model_list)]
-    return func_params, model_list
+
+def reg_params(df_train, min_samples):
+    model_list = ['adp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn']
+    label = 'reg'
+    func_params = [[m, label, df_train, 'reg', i, min_samples, ''] for i, m  in enumerate(model_list)]
+
+    return func_params
+
+def class_params(df, cuts, run_params, min_samples):
+    model_list = ['lr_c', 'gbm_c', 'rf_c','gbmh_c', 'xgb_c', 'lgbm_c', 'knn_c' ]
+    func_params_c = []
+    for cut in cuts:
+        label = f'class_{cut}'
+        df_train_class, _ = get_class_data(df, cut, run_params) 
+        func_params_c.extend([[m, label, df_train_class, 'class', i, min_samples, ''] for i, m  in enumerate(model_list)])
+
+    return func_params_c
+
+def quant_params(df_train, alphas, min_samples):
+    model_list = ['knn_q','gbm_q', 'rf_q', 'qr_q', 'lgbm_q', ]
+    func_params_q = []
+    for alph in alphas:
+        label = f'quant_{alph}'
+        func_params_q.extend([[m, label, df_train, 'quantile', i, min_samples, alph] for i, m  in enumerate(model_list)])
+
+    return func_params_q
+
+def million_params(df, run_params):
+    model_list = ['lr_c', 'gbm_c', 'rf_c', 'gbmh_c', 'xgb_c', 'lgbm_c', 'knn_c']
+    label = 'million'
+    df_train_mil, _, min_samples_mil = predict_million_df(df, run_params)
+    func_params = [[m, label, df_train_mil, 'class', i,min_samples_mil, ''] for i, m  in enumerate(model_list)]
+
+    return func_params
+
 
 def get_skm(skm_df, model_obj, to_drop):
     
@@ -489,8 +515,9 @@ def update_output_dict(out_dict, label, m, result):
     return out_dict
 
 
-def unpack_results(out_dict, label, model_list, results):
-    for model_name, result in zip(model_list, results):
+def unpack_results(out_dict, func_params, results):
+    for fp, result in zip(func_params, results):
+        model_name, label, _, _, _, _, _ = fp
         out_dict = update_output_dict(out_dict, label, model_name, result)
     return out_dict
 
@@ -523,15 +550,15 @@ def save_output_dict(out_dict, label, model_output_path):
 
 #%%
 run_list = [
-            ['QB', '', 'full_model'],
-            ['RB', '', 'full_model'],
-            ['WR', '', 'full_model'],
-            ['TE', '', 'full_model'],
+            # ['QB', '', 'full_model'],
+            # ['RB', '', 'full_model'],
+            # ['WR', '', 'full_model'],
+            # ['TE', '', 'full_model'],
             ['Defense', '', 'full_model'],
-            ['QB', '', 'backfill'],
-            ['RB', '', 'backfill'],
-            ['WR', '', 'backfill'],
-            ['TE', '', 'backfill'],
+            # ['QB', '', 'backfill'],
+            # ['RB', '', 'backfill'],
+            # ['WR', '', 'backfill'],
+            # ['TE', '', 'backfill'],
 
             # ['QB', 'rush', 'full_model'],
             # ['QB', 'pass', 'full_model'],
@@ -559,140 +586,20 @@ for w in run_weeks:
 
         df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
-        # set up blank dictionaries for all metrics
-        out_reg, out_class, out_quant, out_million = output_dict(), output_dict(), output_dict(), output_dict()
-
-        # label = 'million'
-        # model_list = ['lr_c']
-        # i=0
-        # df_train_class, df_predict_class = get_class_data(df, 80, run_params) 
-        # results = get_model_output('lr_c', label, df_train_class, 'class', run_params, i, min_samples)
-        # out_reg = unpack_results(out_reg, label, ['lr_c', 'extra'], [results, results])
-        # save_output_dict(out_reg, label, model_output_path)
-
-        # #----------
-        # # Run Regression Models
-        # #----------
-
-        # func_params, model_list = get_model_names('reg')
-        # label = 'reg'
-        # results = Parallel(n_jobs=-1, verbose=verbosity)( 
-        #                 delayed(get_model_output)
-        #                 (m, label, df_train, 'reg', run_params, i, min_samples) for m,i in func_params
-        #         )
-
-        # out_reg = unpack_results(out_reg, label, model_list, results)
-        # save_output_dict(out_reg, label, model_output_path)
-
-        # #----------
-        # # Run Class Models
-        # #----------
-
-        # func_params, model_list = get_model_names('class')
-
-        # for cut in run_params['cuts']:
-        #     print(f"\n--------------\nPercentile {cut}\n--------------\n")
-        #     df_train_class, _ = get_class_data(df, cut, run_params) 
-        #     label = f'class_{cut}'
-
-        #     results = Parallel(n_jobs=-1, verbose=verbosity)( 
-        #                     delayed(get_model_output)
-        #                     (m, label, df_train_class, 'class', run_params, i, min_samples) for m,i in func_params
-        #             )
-
-        #     out_class = unpack_results(out_class, label, model_list, results)
-        #     save_output_dict(out_class, label, model_output_path)
-
-
-        # #----------
-        # # Run Quantile Models
-        # #----------
-
-        # func_params, model_list = get_model_names('quantile')
-
-        # for alph in [0.8, 0.95]:
-        #     print(f"\n--------------\nAlpha {alph}\n--------------\n")
-        #     label = f'quant_{alph}'
-        #     results = Parallel(n_jobs=-1, verbose=verbosity)( 
-        #                     delayed(get_model_output)
-        #                     (m, label, df_train, 'quantile', run_params, i, min_samples, alpha=alph) for m,i in func_params
-        #             )
-
-        #     out_quant = unpack_results(out_quant, label, model_list, results)
-        #     save_output_dict(out_quant, label, model_output_path)
-
-        # #----------
-        # # Run Million Predict
-        # #----------
-
-        # df_train_mil, _, min_samples_mil = predict_million_df(df, run_params)
-        # func_params, model_list = get_model_names('class')
-        # label = 'million'
-        # results = Parallel(n_jobs=-1, verbose=verbosity)(
-        #                 delayed(get_model_output)
-        #                 (m, label, df_train_mil, 'class', run_params, i, min_samples_mil) for m,i in func_params
-        #         )
-        
-        # out_million = unpack_results(out_million, label, model_list, results)
-        # save_output_dict(out_million, label, model_output_path)
-
-
-
-
-        def reg_params(df_train, min_samples):
-            model_list = ['adp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'xgb', 'knn']
-            label = 'reg'
-            func_params = [[m, label, df_train, 'reg', i, min_samples, ''] for i, m  in enumerate(model_list)]
-
-            return func_params
-
-        def class_params(df, cuts, run_params, min_samples):
-            model_list = ['lr_c', 'gbm_c', 'rf_c','gbmh_c', 'xgb_c', 'lgbm_c', 'knn_c' ]
-            func_params_c = []
-            for cut in cuts:
-                label = f'class_{cut}'
-                df_train_class, _ = get_class_data(df, cut, run_params) 
-                func_params_c.extend([[m, label, df_train_class, 'class', i, min_samples, ''] for i, m  in enumerate(model_list)])
-
-            return func_params_c
-
-        def quant_params(df_train, alphas, min_samples):
-            model_list = ['gbm_q', 'rf_q', 'qr_q', 'lgbm_q', 'knn_q']
-            func_params_q = []
-            for alph in alphas:
-                label = f'quant_{alph}'
-                func_params_q.extend([[m, label, df_train, 'quantile', i, min_samples, alph] for i, m  in enumerate(model_list)])
-
-            return func_params_q
-
-        def million_params(df, run_params):
-            model_list = ['lr_c', 'gbm_c', 'rf_c', 'gbmh_c', 'xgb_c', 'lgbm_c', 'knn_c']
-            label = 'million'
-            df_train_mil, _, min_samples_mil = predict_million_df(df, run_params)
-            func_params = [[m, label, df_train_mil, 'class', i,min_samples_mil, ''] for i, m  in enumerate(model_list)]
-
-            return func_params
-
+        # get all model iterations for various model types
         func_params = []
+        func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples))
         func_params.extend(reg_params(df_train, min_samples))
         func_params.extend(class_params(df, run_params['cuts'], run_params, min_samples))
-        func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples))
         func_params.extend(million_params(df, run_params))
 
+        # run all models in parallel
         results = Parallel(n_jobs=-1, verbose=verbosity)(
                         delayed(get_model_output)
                         (m, label, df, model_obj, run_params, i, min_samples, alpha) for m, label, df, model_obj, i, min_samples, alpha in func_params
                             )
 
-
-        def unpack_results(out_dict, func_params, results):
-            for fp, result in zip(func_params, results):
-                model_name, label, _, _, _, _, _ = fp
-                out_dict = update_output_dict(out_dict, label, model_name, result)
-            return out_dict
-
+        # save output for all models
         out_dict = output_dict()
         out_dict = unpack_results(out_dict, func_params, results)
         save_output_dict(out_dict, 'all_models', model_output_path)
-
-# %%
