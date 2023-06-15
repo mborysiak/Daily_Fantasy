@@ -40,7 +40,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [1]
+run_weeks = [5, 6, 7, 8, 9, 10, 11]
 verbosity = 50
 run_params = {
     
@@ -229,7 +229,7 @@ def reg_params(df_train, min_samples):
     return func_params
 
 def class_params(df, cuts, run_params, min_samples):
-    model_list = ['lr_c', 'gbm_c', 'rf_c','gbmh_c', 'xgb_c', 'lgbm_c', 'knn_c' ]
+    model_list = ['gbm_c', 'rf_c','gbmh_c', 'xgb_c', 'lgbm_c', 'lr_c', 'knn_c' ]
     func_params_c = []
     for cut in cuts:
         label = f'class_{cut}'
@@ -239,7 +239,7 @@ def class_params(df, cuts, run_params, min_samples):
     return func_params_c
 
 def quant_params(df_train, alphas, min_samples):
-    model_list = ['knn_q','gbm_q', 'rf_q', 'qr_q', 'lgbm_q', ]
+    model_list = ['gbm_q', 'rf_q', 'qr_q', 'lgbm_q', 'knn_q']
     func_params_q = []
     for alph in alphas:
         label = f'quant_{alph}'
@@ -248,7 +248,7 @@ def quant_params(df_train, alphas, min_samples):
     return func_params_q
 
 def million_params(df, run_params):
-    model_list = ['lr_c', 'gbm_c', 'rf_c', 'gbmh_c', 'xgb_c', 'lgbm_c', 'knn_c']
+    model_list = ['gbm_c', 'rf_c', 'gbmh_c', 'xgb_c', 'lgbm_c', 'lr_c', 'knn_c']
     label = 'million'
     df_train_mil, _, min_samples_mil = predict_million_df(df, run_params)
     func_params = [[m, label, df_train_mil, 'class', i,min_samples_mil, ''] for i, m  in enumerate(model_list)]
@@ -371,11 +371,10 @@ def get_trials(label, m, bayes_rand):
 
     newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
     recent_save = get_newest_folder_with_keywords(newest_folder, [set_pos, model_type, vers], [f"_week{run_params['set_week']}_"])
-    short_label = label.split('_')[0]
 
     if recent_save is not None and bayes_rand=='bayes': 
         try:
-            trials = load_pickle(recent_save, f'{short_label}_trials')
+            trials = load_pickle(recent_save, 'all_trials')
             trials = trials[f'{label}_{m}']
             print('Loading previous trials')
         except:
@@ -550,20 +549,17 @@ def save_output_dict(out_dict, label, model_output_path):
 
 #%%
 run_list = [
-            # ['QB', '', 'full_model'],
-            # ['RB', '', 'full_model'],
-            # ['WR', '', 'full_model'],
-            # ['TE', '', 'full_model'],
+            ['QB', '', 'full_model'],
+            ['RB', '', 'full_model'],
+            ['WR', '', 'full_model'],
+            ['TE', '', 'full_model'],
             ['Defense', '', 'full_model'],
-            # ['QB', '', 'backfill'],
-            # ['RB', '', 'backfill'],
-            # ['WR', '', 'backfill'],
-            # ['TE', '', 'backfill'],
+            ['QB', '', 'backfill'],
+            ['RB', '', 'backfill'],
+            ['WR', '', 'backfill'],
+            ['TE', '', 'backfill'],
 
-            # ['QB', 'rush', 'full_model'],
-            # ['QB', 'pass', 'full_model'],
-            # ['QB', 'rush', 'backfill'],
-            # ['QB', 'pass', 'backfill'],
+    
 ]
 
 for w in run_weeks:
@@ -602,4 +598,7 @@ for w in run_weeks:
         # save output for all models
         out_dict = output_dict()
         out_dict = unpack_results(out_dict, func_params, results)
-        save_output_dict(out_dict, 'all_models', model_output_path)
+        save_output_dict(out_dict, 'all', model_output_path)
+
+
+# %%
