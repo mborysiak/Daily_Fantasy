@@ -40,7 +40,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [5, 6, 7, 8, 9, 10, 11]
+run_weeks = [11]
 verbosity = 50
 run_params = {
     
@@ -336,6 +336,23 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
     
     return pipe, params
 
+def update_trials_params(trials, m, params, pipe):
+
+    m_params = [p.split('__')[1] for p in params.keys() if m in p]
+
+    hyper_params = {
+        p: pipe.steps[-1][1].get_params()[p] for p in m_params
+    }
+
+    for trial in trials:
+        # Update each trial with the new hyperparameters
+        for k,v in hyper_params.items():
+            if k not in trial['misc']['vals']:
+                trial['misc']['vals'][k] = [v]
+                trial['misc']['idxs'][k] = [trial['tid']]
+
+    return trials
+
 def get_proba(model_obj):
     if model_obj == 'class': proba = True
     else: proba = False
@@ -401,6 +418,7 @@ def get_model_output(model_name, label, cur_df, model_obj, run_params, i, min_sa
 
     skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'])
     pipe, params = get_full_pipe(skm, model_name, alpha, min_samples=min_samples, bayes_rand=bayes_rand)
+    trials = update_trials_params(trials, model_name, params, pipe)
 
     # fit and append the ADP model
     start = time.time()
@@ -558,8 +576,6 @@ run_list = [
             ['RB', '', 'backfill'],
             ['WR', '', 'backfill'],
             ['TE', '', 'backfill'],
-
-    
 ]
 
 for w in run_weeks:

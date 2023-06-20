@@ -15,7 +15,8 @@ from Fix_Standard_Dev import *
 from sklearn.metrics import brier_score_loss
 import zModel_Functions as mf
 from joblib import Parallel, delayed
-from hyperopt import Trials
+from hyperopt import Trials, hp
+from hyperopt.pyll import scope
 
 pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', None)
@@ -89,7 +90,7 @@ def train_predict_split(df, run_params):
     df_train = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 
-    df_predict = df[df.game_date >= run_params['train_time_split']].reset_index(drop=True)
+    df_predict = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
     output_start = df_predict[['player', 'team', 'week', 'year', 'dk_salary']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
@@ -103,7 +104,7 @@ def get_class_data(df, cut, run_params):
 
     # set up the training and prediction datasets for the classification 
     df_train_class = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
-    df_predict_class = df[df.game_date >= run_params['train_time_split']].reset_index(drop=True)
+    df_predict_class = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
 
     # set up the target variable to be categorical based on Xth percentile
     cut_perc = df_train_class.groupby('game_date')['y_act'].apply(lambda x: np.percentile(x, cut))
@@ -138,109 +139,90 @@ def get_skm(skm_df, model_obj, to_drop):
     return skm, X, y
 
 
-def get_full_pipe(skm, m, alpha=None, stack_model=False, std_model=False, min_samples=10, bayes_rand='rand'):
+def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_rand='rand'):
 
-    if m == 'adp':
-        
-        # set up the ADP model pipe
-        pipe = skm.model_pipe([skm.piece('feature_select'), 
-                               skm.piece('std_scale'), 
-                               skm.piece('k_best'),
-                               skm.piece('lr')])
+    if skm.model_obj=='class': kb = 'k_best_c'
+    else: kb = 'k_best'
 
-    elif stack_model and full_stack_features:
-        if skm.model_obj=='class': kb = 'k_best_c'
-        else: kb = 'k_best'
+    stack_models = {
 
-        pipe = skm.model_pipe([skm.piece('random_sample'),
-                                skm.piece('std_scale'), 
-                                skm.piece('select_perc'),
-                                skm.feature_union([
-                                                skm.piece('agglomeration'), 
-                                                skm.piece(kb),
-                                                skm.piece('pca')
-                                                ]),
-                                skm.piece(kb),
-                                skm.piece(m)])
+        'full_stack': skm.model_pipe([
+                                      skm.piece('std_scale'), 
+                                      skm.feature_union([
+                                                    skm.piece('agglomeration'), 
+                                                    skm.piece(kb),
+                                                    skm.piece('pca')
+                                                    ]),
+                                      skm.piece(kb),
+                                      skm.piece(m)
+                                      ]),
 
-    elif stack_model:
-        if skm.model_obj=='class': kb = 'k_best_c'
-        else: kb = 'k_best'
+        'random_full_stack': skm.model_pipe([
+                                      skm.piece('random_sample'),
+                                      skm.piece('std_scale'), 
+                                      skm.feature_union([
+                                                    skm.piece('agglomeration'), 
+                                                    skm.piece(kb),
+                                                    skm.piece('pca')
+                                                    ]),
+                                      skm.piece(kb),
+                                      skm.piece(m)
+                                      ]),
 
-        pipe = skm.model_pipe([
-                            skm.piece('random_sample'),
-                            skm.piece('std_scale'), 
-                            skm.piece(kb),
-                            skm.piece(m)
-                        ])
+        'kbest': skm.model_pipe([
+                                 skm.piece('std_scale'),
+                                 skm.piece(kb),
+                                 skm.piece(m)
+                                 ]),
 
-    elif std_model:
-        pipe = skm.model_pipe([
-                            skm.piece('std_scale'),
-                            skm.piece('k_best'),
-                            skm.piece(m)
-                        ])
+        'random' : skm.model_pipe([
+                                    skm.piece('random_sample'),
+                                    skm.piece('std_scale'),
+                                    skm.piece(m)
+                                    ]),
 
-    elif skm.model_obj == 'reg':
-        pipe = skm.model_pipe([skm.piece('random_sample'),
-                                skm.piece('std_scale'), 
-                                skm.piece('select_perc'),
-                                skm.feature_union([
-                                                skm.piece('agglomeration'), 
-                                                skm.piece('k_best'),
-                                                skm.piece('pca')
-                                                ]),
-                                skm.piece('k_best'),
-                                skm.piece(m)])
+        'random_kbest': skm.model_pipe([
+                                        skm.piece('random_sample'),
+                                        skm.piece('std_scale'),
+                                        skm.piece(kb),
+                                        skm.piece(m)
+                                        ])
+    }
 
-    elif skm.model_obj == 'class':
-        pipe = skm.model_pipe([skm.piece('random_sample'),
-                               skm.piece('std_scale'), 
-                               skm.feature_union([
-                                                skm.piece('agglomeration'), 
-                                                skm.piece('k_best_c'),
-                                                ]),
-                               skm.piece('k_best_c'),
-                               skm.piece(m)])
-    
-    
-
-    elif skm.model_obj == 'quantile':
-        pipe = skm.model_pipe([
-                                skm.piece('random_sample'),
-                                skm.piece('std_scale'), 
-                                skm.piece('k_best'), 
-                                skm.piece(m)
-                                ])
-
-    # get the params for the current pipe and adjust if needed
-    params = skm.default_params(pipe, bayes_rand, min_samples)
-    if m=='adp': 
-        params['feature_select__cols'] = [
-                                            ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
-                                            ['year', 'week',  'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
-                                            [ 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank']
-                                        ]
-        params['k_best__k'] = range(1, 14)
+    pipe = stack_models[stack_model]
+    params = skm.default_params(pipe, bayes_rand=bayes_rand, min_samples=min_samples)
     
     if skm.model_obj == 'quantile':
         if m == 'qr_q': pipe.steps[-1][-1].quantile = alpha
         elif m in ('rf_q', 'knn_q'): pipe.steps[-1][-1].q = alpha
         else: pipe.steps[-1][-1].alpha = alpha
 
-    if stack_model and full_stack_features: 
-        params['random_sample__frac'] = np.arange(0.6, 1.05, 0.05)
-        params['select_perc__percentile'] = range(60, 105, 5)
-        params['feature_union__agglomeration__n_clusters'] = range(2, 10, 1)
-        params[f'feature_union__{kb}__k'] = range(5, 20, 2)
-        params['feature_union__pca__n_components'] = range(2, 10, 1)
-        params[f'{kb}__k'] = range(1, 30)
-    
-    # elif stack_model:
-    #     params['random_sample__frac'] = np.arange(0.3, 1, 0.05)
-    #     params[f'{kb}__k'] = range(1, 30)
+    if stack_model=='random_full_stack': 
+        params['random_sample__frac'] = hp.uniform('random_sample__frac', 0.5, 1)
+        # params['select_perc__percentile'] = hp.uniform('percentile', 0.5, 1)
+        # params['feature_union__agglomeration__n_clusters'] = scope.int(hp.quniform('n_clusters', 2, 10, 1))
+        # params['feature_union__pca__n_components'] = scope.int(hp.quniform('n_components', 2, 10, 1))
 
     return pipe, params
+
+
+def update_trials_params(trials, m, params, pipe):
+
+    m_params = [p.split('__')[1] for p in params.keys() if m in p]
+
+    hyper_params = {
+        p: pipe.steps[-1][1].get_params()[p] for p in m_params
+    }
+
+    for trial in trials:
+        # Update each trial with the new hyperparameters
+        for k,v in hyper_params.items():
+            if k not in trial['misc']['vals']:
+                trial['misc']['vals'][k] = [v]
+                trial['misc']['idxs'][k] = [trial['tid']]
+
+    return trials
+
 
 def load_all_pickles(model_output_path, label):
     models = load_pickle(model_output_path, f'{label}_models')
@@ -291,6 +273,29 @@ def load_all_stack_pred(model_output_path):
 
     return X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant
 
+def load_all_stack_pred_million(model_output_path):
+    models_mil, full_hold = load_all_pickles(model_output_path, 'all')
+    models_mil = {k: v for k, v in models_mil.items() if 'million' in k}
+    i = 0
+    y_mil = None
+    for k, v in full_hold.items():
+        if 'million' in k:
+            if i == 0:
+                df = v.copy().drop('y_act', axis=1)
+                df = df.rename(columns={'pred': k})
+            else:
+                if y_mil is None:
+                    y_mil = v[['player', 'team', 'week', 'year', 'y_act']]
+                df_cur = v.rename(columns={'pred': k}).drop('y_act', axis=1)
+                df = pd.merge(df, df_cur, on=['player', 'team', 'week','year'])
+            i+=1
+
+    X_mil = df.reset_index(drop=True)
+    y_mil = pd.merge(X_mil, y_mil, on=['player', 'team', 'week', 'year'])
+    y_mil = y_mil[['player', 'team', 'week', 'year', 'y_act']]
+    return X_mil, X_mil, y_mil, models_mil
+
+
 
 def fit_and_predict(m, df_predict, X, y, proba):
     
@@ -335,6 +340,15 @@ def get_stack_predict_data(df_train, df_predict, df, run_params,
     X_predict_player = pd.concat([df_predict[['player', 'team', 'week', 'year']], X_predict], axis=1)
 
     return X_predict_player, X_predict
+
+
+def get_stack_predict_data_mil(df_train, df_predict, run_params, models_mil):
+
+    _, X, y = get_skm(df_train, 'class', to_drop=run_params['drop_cols'])
+    print('Predicting Million Models')
+    X_predict = create_stack_predict(df_predict, models_mil, X, y)
+    X_predict = pd.concat([df_predict[['player', 'team', 'week', 'year']], X_predict], axis=1)
+    return X_predict
 
 
 def stack_predictions(X_predict, best_models, final_models, model_obj='reg'):
@@ -438,7 +452,7 @@ def create_output(output_start, predictions, predictions_class=None, predictions
 def std_dev_features(cur_df, model_name, run_params, show_plot=True):
 
     skm, X, y = get_skm(cur_df, 'reg', to_drop=run_params['drop_cols'])
-    pipe, params = get_full_pipe(skm, model_name, std_model=True)
+    pipe, params = get_full_pipe(skm, model_name, stack_model='kbest')
 
     # fit and append the ADP model
     best_models, _, _ = skm.time_series_cv(pipe, X, y, params, n_iter=run_params['n_iters'], n_splits=run_params['n_splits'],
@@ -649,28 +663,15 @@ def predict_million_df(df, run_params):
     return df_train_mil, df_predict_mil, min_samples_mil, run_params
 
 
-def X_y_stack_mil(df, run_params):
-    df_train_mil, df_predict_mil, _, run_params = predict_million_df(df, run_params)
-
-    # load the regregression predictions
-    pred, actual, models_mil, _, full_hold_mil = mf.load_all_pickles(model_output_path, 'million')
-    X_stack_mil, y_stack_mil, df_labels = mf.X_y_stack('mil', full_hold_mil, pred, actual)
-    X_stack_mil = pd.concat([df_labels[['player', 'team', 'week', 'year']], X_stack_mil], axis=1)
-
-    _, X, y = get_skm(df_train_mil, 'class', to_drop=run_params['drop_cols'])
-    X_predict_mil = create_stack_predict(df_predict_mil, models_mil, X, y, proba=True)
-    X_predict_mil = pd.concat([df_predict_mil[['player', 'team', 'week', 'year']], X_predict_mil], axis=1)
-
-    return df_predict_mil, X_stack_mil, y_stack_mil, X_predict_mil
 
 
-def save_mil_data(df_predict_mil, best_predictions_mil, best_val_mil, run_params):
+
+def save_mil_data(X_mil, y_mil, best_val_mil, df_predict_mil, best_predictions_mil,  run_params):
     test_output = pd.concat([df_predict_mil[['player', 'team', 'week', 'year']], 
                             pd.Series(best_predictions_mil.mean(axis=1), name='pred_fp_per_game_class')], 
                             axis=1).sort_values(by='pred_fp_per_game_class', ascending=False)
-    print(test_output)
 
-    save_val_to_db(model_output_path, best_val_mil, run_params, 'million', table_name='Model_Validations_Million')
+    save_val_to_db(X_mil, y_mil, best_val_mil, run_params, table_name='Model_Validations_Million')
     save_prob_to_db(test_output, run_params, 'Predicted_Million')
 
 #-----------------------
@@ -688,23 +689,17 @@ def load_pickle(path, fname):
         loaded_object = pickle.load(f)
         return loaded_object
 
-def validation_compare_df(model_output_path, best_val, model_obj='reg'):
-    
-    _, _, _, _, oof_data = mf.load_all_pickles(model_output_path, model_obj)
-    
-    if model_obj == 'reg': label='reg_adp'
-    elif model_obj == 'class': label = 'class_lr_c_80'
-    elif model_obj == 'million': label = 'class_lr_c_million'
-    oof_data = oof_data[label][['player', 'team', 'year', 'week', 'y_act']].reset_index(drop=True)
+def validation_compare_df(X, y, best_val):
+
     best_val = pd.Series(best_val.mean(axis=1), name='pred_fp_per_game')
-    val_compare = pd.concat([oof_data, best_val], axis=1)
+    val_compare = pd.concat([X[['player', 'team', 'week', 'year']], y, best_val], axis=1)
     
     return val_compare
 
 
-def save_val_to_db(model_output_path, best_val, run_params, model_obj, table_name):
+def save_val_to_db(X, y, best_val, run_params, table_name):
 
-    df = validation_compare_df(model_output_path, best_val, model_obj)
+    df = validation_compare_df(X, y, best_val)
 
     df['pos'] = set_pos
     df['pred_version'] = vers
@@ -822,15 +817,15 @@ def get_newest_folder_with_keywords(path, keywords, ignore_keywords=None, req_fn
     return os.path.join(path, newest_folder)
 
 
-def get_proba_adp_coef(model_obj, final_m, print_coef):
+def get_proba_adp_coef(model_obj, final_m, run_params):
     if model_obj == 'class': proba = True
     else: proba = False
 
     if model_obj in ('class', 'quantile'): run_adp = False
     else: run_adp = True
 
-    if 'gbmh' in final_m or 'knn' in final_m: print_coef = False
-    else: print_coef = print_coef
+    if 'gbmh' in final_m or 'knn' in final_m or 'full_stack' in run_params['stack_model']: print_coef = False
+    else: print_coef = run_params['print_coef']
 
     return proba, run_adp, print_coef
 
@@ -865,10 +860,10 @@ def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_
     print(f'\n{final_m}')
 
     min_samples = int(len(y_stack)/10)
-    proba, run_adp, print_coef = get_proba_adp_coef(model_obj, final_m, run_params['print_coef'])
+    proba, run_adp, print_coef = get_proba_adp_coef(model_obj, final_m, run_params)
 
     skm, _, _ = get_skm(pd.concat([X_stack, y_stack], axis=1), model_obj, to_drop=[])
-    pipe, params = get_full_pipe(skm, final_m, stack_model=True, alpha=alpha, 
+    pipe, params = get_full_pipe(skm, final_m, stack_model=run_params['stack_model'], alpha=alpha, 
                                  min_samples=min_samples, bayes_rand=run_params['opt_type'])
     
     trials = get_trials(fname, final_m, run_params['opt_type'])
@@ -904,11 +899,12 @@ def unpack_results(model_list, results):
     return best_models, scores, stack_val_pred, trials
     
 def cleanup_X_y(X, y):
-    X_player = X.copy()
+    X_player = X[['player', 'team', 'week', 'year']].copy()
     X = X.drop(['player', 'team', 'week', 'year'], axis=1).dropna(axis=0)
     y = y[y.index.isin(X.index)].y_act
     X, y = X.reset_index(drop=True), y.reset_index(drop=True)
     X = col_ordering(X)
+    X_player = pd.concat([X_player, X], axis=1)
     return X_player, X, y
 
 
@@ -926,13 +922,16 @@ def load_stack_runs(model_output_path, fname):
     return stack_in['best_models'], stack_in['scores'], stack_in['stack_val_pred']
 
 
-def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=None):
+def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=None, is_million=False):
     
     if alpha is not None: alpha_label = alpha*100
     else: alpha_label = ''
 
+    if is_million: model_obj_label = 'million'
+    else: model_obj_label = model_obj
+
     path = run_params['model_output_path']
-    fname = f"{model_obj}{alpha_label}_{run_params['ensemble_vers']}"    
+    fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"    
     model_list, func_params = get_func_params(model_obj)
     
     if os.path.exists(f"{path}/{fname}.p"):
@@ -951,8 +950,9 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
         
     predictions = stack_predictions(X_predict, best_models, model_list, model_obj=model_obj)
     best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack, stack_val_pred, 
-                                                         predictions, model_obj=model_obj, show_plot=show_plot, 
-                                                         min_include=min_include)
+                                                         predictions, model_obj=model_obj, 
+                                                         show_plot=run_params['show_plot'], 
+                                                         min_include=run_params['min_include'])
 
     return best_val, best_predictions
 
@@ -980,19 +980,21 @@ def create_mil_output(df_predict_mil, best_predictions_mil):
         actuals = dm.read("SELECT * FROM Top_Players", 'DK_Results')
         mil_results = pd.merge(output_mil, actuals[['player', 'week', 'year', 'y_act']], 
                             on=['player', 'week', 'year'], how='left').fillna(0)
-        display(mil_results.sort_values(by='pred_mil', ascending=False))
+        print('Showing Actual Results')
+        display(mil_results.sort_values(by='pred_mil', ascending=False).iloc[:50])
         show_calibration_curve(mil_results['y_act'], mil_results['pred_mil'], n_bins=8)
     except:
-        display(output_mil.sort_values(by='pred_mil', ascending=False))
+        display(output_mil.sort_values(by='pred_mil', ascending=False).iloc[:50])
 
     return output_mil
             
 
-def display_output(output):
+def display_output(output, show_plot=True):
      
     try:  
         output = add_actual(output)
         output = output[output.week!=18].reset_index(drop=True)
+        print('Showing Actual Results')
         print(output.loc[:50, ['player', 'week', 'year', 'dk_salary', 'dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class',
                                 'pred_fp_per_game_quantile', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
                         
@@ -1053,6 +1055,8 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
+    'stack_model': 'random',
+
     # opt params
     'opt_type': 'bayes',
     'n_iters': 50,
@@ -1061,7 +1065,6 @@ run_params = {
     'show_plot': True,
     'print_coef': True,
     'min_include': 2,
-    'full_stack_features': False,
 
     # other parameters
     'use_sample_weight': False,
@@ -1071,29 +1074,23 @@ run_params = {
    
 }
 
-full_stack_features = False
-
-min_include = 2
-show_plot= True
-print_coef = True
-num_k_folds = 3
-
 r2_wt = 0
 sera_wt = 1
 mse_wt = 0
 brier_wt = 1
 matt_wt = 0
 
-calibrate = False
-
 # set the model version
-set_weeks = [4]
+set_weeks = [4, 5]
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt0_bayes']
 
-ensemble_versions = len(set_weeks) * ['sera1_rsq0_include2_kfold3']
+ensemble_versions = len(set_weeks)*['random_sera1_rsq0_mse0_include2_kfold3']
 
-std_dev_types = ['spline_pred_class80_q80_matt0_brier1_kfold3']
+std_dev_types = ['spline_pred_class80_q80_matt0_brier1_kfold3',
+                 'spline_pred_class80_matt0_brier1_kfold3',
+                 'spline_pred_q80_matt0_brier1_kfold3',
+                 'spline_class80_q80_matt0_brier1_kfold3']
 std_dev_type = std_dev_types[0]
 
 for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
@@ -1102,14 +1099,14 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     run_params['ensemble_vers'] = ensemble_vers
     runs = [
         ['QB', 'full_model', ''],
-        # ['RB', 'full_model', ''],
-        # ['WR', 'full_model', ''],
-        # ['TE', 'full_model', ''],
-        # ['Defense', 'full_model', ''],
-        # ['QB', 'backfill', ''],
-        # ['RB', 'backfill', ''],
-        # ['WR', 'backfill', ''],
-        # ['TE', 'backfill', '']
+        ['RB', 'full_model', ''],
+        ['WR', 'full_model', ''],
+        ['TE', 'full_model', ''],
+        ['Defense', 'full_model', ''],
+        ['QB', 'backfill', ''],
+        ['RB', 'backfill', ''],
+        ['WR', 'backfill', ''],
+        ['TE', 'backfill', '']
     ]
 
     for set_pos, model_type, rush_pass in runs:
@@ -1140,66 +1137,89 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         # run the class, quant, and reg models
         best_val_class, best_predictions_class = load_run_models(run_params, X_stack, y_stack_class, X_predict, 'class')
         best_val_quant, best_predictions_quant = load_run_models(run_params, X_stack, y_stack, X_predict, 'quantile', alpha=0.8)
-        best_val_reg, best_predictions = load_run_models(run_params, X_stack, y_stack, X_predict, 'reg')
+        best_val_reg, best_predictions_reg = load_run_models(run_params, X_stack, y_stack, X_predict, 'reg')
     
-    #     # save_val_to_db(model_output_path, best_val_class, run_params, 'class', table_name='Model_Validations_Class')
-    #     # save_val_to_db(model_output_path, best_val_reg, run_params, 'reg', table_name='Model_Validations')
+        save_val_to_db(X_stack_player, y_stack_class, best_val_class, run_params, table_name='Model_Validations_Class')
+        save_val_to_db(X_stack_player, y_stack_class, best_val_reg, run_params, table_name='Model_Validations')
 
         # create the output and add standard deviations / max score datasets
         df_val_final = create_final_val_df(X_stack_player, y_stack, best_val_reg, best_val_class, best_val_quant)
-        output = create_output(output_start, best_predictions, best_predictions_class, best_predictions_quant)
+        output = create_output(output_start, best_predictions_reg, best_predictions_class, best_predictions_quant)
 
         # loop through std dev types and display / save output
-        for std_dev_type in std_dev_types:            
+        for i, std_dev_type in enumerate(std_dev_types):     
+            print('Standard Deviation Type:', std_dev_type)       
             metrics = metrics_dict[std_dev_type]
-            output = val_std_dev(df_val_final, metrics=metrics, iso_spline='spline', show_plot=show_plot)
-            display_output(output)
-    #     # save_output_to_db(output, run_params)
+            if i==0: sd_plot = True
+            else: sd_plot = False
+            output = val_std_dev(df_val_final, metrics=metrics, iso_spline='spline', show_plot=sd_plot)
+            if i==0: display_output(output, run_params['show_plot'])
+            save_output_to_db(output, run_params)
 
-    #     #-------------
-    #     # Running the million dataset
-    #     #-------------
+        #-------------
+        # Running the million dataset
+        #-------------
 
-        # df_predict_mil, X_stack_mil, y_stack_mil, X_predict_mil = X_y_stack_mil(df, run_params)    
-        # X_stack_mil, X_predict_mil = join_stats_mil(X_stack_mil, X_stack_player, X_predict_mil, X_predict_player)
+        df_train_mil, df_predict_mil, _, run_params = predict_million_df(df, run_params)
+        X_mil_player, X_stack_mil, y_stack_mil, models_mil = load_all_stack_pred_million(model_output_path)
+        X_predict_mil = get_stack_predict_data_mil(df_train_mil, df_predict_mil, run_params, models_mil)
+        X_stack_mil, X_predict_mil = join_stats_mil(X_stack_mil, X_stack_player, X_predict_mil, X_predict_player)
 
-    #     X_stack_mil = add_sal_columns(X_stack_mil, df_train)
-    #     X_predict_mil = add_sal_columns(X_predict_mil, df_predict_mil)
+        X_stack_mil = add_sal_columns(X_stack_mil, df_train_mil)
+        X_predict_mil = add_sal_columns(X_predict_mil, df_predict_mil)
 
-    #     X_predict_mil = X_predict_mil.drop(['player', 'team', 'week', 'year'], axis=1)
-    #     X_stack_mil = X_stack_mil.drop(['player', 'team', 'week', 'year'], axis=1)
+        X_predict_mil = X_predict_mil.drop(['player', 'team', 'week', 'year'], axis=1)
+        X_stack_mil = X_stack_mil.drop(['player', 'team', 'week', 'year'], axis=1)
+        y_stack_mil = y_stack_mil.y_act
+        # class metrics
+        best_val_mil, best_predictions_mil = load_run_models(run_params, X_stack_mil, y_stack_mil, X_predict_mil, 'class', is_million=True)
 
-    #     # class metrics
-    #     final_models = ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c']
-    #     best_val_mil, best_predictions_mil = load_run_models(run_params, final_models, X_stack_mil, y_stack_mil, X_predict_mil, 'class', suffix='_mil')
-    #     if show_plot: show_calibration_curve(y_stack_mil, best_val_mil.mean(axis=1), n_bins=8)
+        output_mil = create_mil_output(df_predict_mil, best_predictions_mil)
+        save_mil_data(X_mil_player, y_stack_mil, best_val_mil, df_predict_mil, best_predictions_mil, run_params)
 
-    #     output_mil = create_mil_output(df_predict_mil, best_predictions_mil)
-        
-    #     # save_mil_data(df_predict_mil, best_predictions_mil, best_val_mil, run_params)
+    #---------------
+    # Save vegas points and std dev
+    #---------------
 
-    # # #---------------
-    # # # Save vegas points and std dev
-    # # #---------------
+    vp = vegas_points(run_params, metrics={'implied_points_for': 1}, show_plot=run_params['show_plot'])
+    dm.delete_from_db('Simulation', 'Vegas_Points', f"week={run_params['set_week']} AND year={run_params['set_year']}", create_backup=False)
+    dm.write_to_db(vp, 'Simulation', 'Vegas_Points', 'append')
+    print('All Runs Finished')
 
-    # # vp = vegas_points(run_params, metrics={'implied_points_for': 1}, show_plot=show_plot)
-    # # dm.delete_from_db('Simulation', 'Vegas_Points', f"week={run_params['set_week']} AND year={run_params['set_year']}", create_backup=False)
-    # # dm.write_to_db(vp, 'Simulation', 'Vegas_Points', 'append')
-    # # print('All Runs Finished')
-
+#%%
+x=2
 
 # %%
 trials = load_pickle('/Users/mborysia/Documents/Github/Daily_Fantasy//Model_Outputs/2022/QB_year2022_week3_full_modelsera1_rsq0_brier1_matt0_bayes/', 
                      'reg_sera1_rsq0_include2_kfold3')['trials']
-trials['ridge'].tids
+trials['lgbm'].tids
 
 #%%
-fname = 'reg_sera1_rsq0_include2_kfold3'
-final_m = 'ridge'
+run_params['stack_model'] = 'full_stack'
+fname = 'reg_sera1_rsq0_include2_kfold3_test'
+final_m = 'lgbm'
 i = 0
 model_obj = 'reg'
 alpha = None
-run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params) 
+# run_stack_models(fname, final_m, i, model_obj, alpha, X_stack_mil, y_stack_mil, run_params) 
+
+min_samples = int(len(y_stack)/10)
+proba, run_adp, print_coef = get_proba_adp_coef(model_obj, final_m, run_params)
+
+skm, _, _ = get_skm(pd.concat([X_stack, y_stack], axis=1), model_obj, to_drop=[])
+pipe, params = get_full_pipe(skm, final_m, stack_model=run_params['stack_model'], alpha=alpha, 
+                                min_samples=min_samples, bayes_rand=run_params['opt_type'])
+
+trials = get_trials(fname, final_m, run_params['opt_type'])
+trials = update_trials_params(trials, final_m, params, pipe)
+
+best_model, stack_scores, stack_pred, trial = skm.best_stack(pipe, params, X_stack, y_stack, 
+                                                            n_iter=50, alpha=alpha,
+                                                            trials=trials, bayes_rand=run_params['opt_type'],
+                                                            run_adp=run_adp, print_coef=print_coef,
+                                                            proba=proba, num_k_folds=run_params['num_k_folds'],
+                                                            random_state=(i*2)+(i*7))
+best_model
 # %%
 models, full_hold = load_all_pickles(model_output_path, 'all')
 full_hold['reg_adp'].plot.scatter(x='pred', y='y_act')
@@ -1214,17 +1234,21 @@ _, X, y = get_skm(df_train, 'reg', to_drop=run_params['drop_cols'])
 X_predict_quant = create_stack_predict(df_predict, models_quant, X, y)
 # %%
 
-fname = 'reg_sera1_rsq0_include2_kfold3'
-final_m = 'lr_c'
+fname = 'million_sera1_rsq0_include2_kfold3'
+final_m = 'lgbm'
 i = 0
 model_obj = 'class'
 alpha = None
+is_million=True
 
 if alpha is not None: alpha_label = alpha*100
 else: alpha_label = ''
 
+if is_million: model_obj_label = 'million'
+else: model_obj_label = model_obj
+
 path = run_params['model_output_path']
-fname = f"{model_obj}{alpha_label}_{run_params['ensemble_vers']}"    
+fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"    
 model_list, func_params = get_func_params(model_obj)
 
 if os.path.exists(f"{path}/{fname}.p"):
@@ -1235,7 +1259,7 @@ else:
     
     results = Parallel(n_jobs=-1, verbose=50)(
                     delayed(run_stack_models)
-                    (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params) 
+                    (fname, final_m, i, model_obj, alpha, X_stack_mil, y_stack_mil, run_params) 
                     for final_m, i, model_obj, alpha in func_params
                     )
 
