@@ -20,13 +20,13 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
- #  13, 14, 15, 16, 17,
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+    # 11, 12, 13, 14, 15, 16, 17
 ]
 
 set_years = [
-     # 2021, 2021, 2021, 2021, 2021,
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+      #2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
 save_path = "c:/Users/mborysia/Documents/Github/Daily_Fantasy/Model_Outputs/2022/Bayes_Sim_Opt/"
@@ -411,7 +411,6 @@ def objective(bayes_params):
     std_dev_type = bayes_params['std_dev_type']
 
     d = convert_param_options(bayes_params)
-    print(d)
     total_winnings = []
     iter_cats = zip(set_weeks, set_years)
     for week, year in iter_cats:
@@ -475,20 +474,18 @@ def objective(bayes_params):
 
 init_space = {
 
-       'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc',
-                                             'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']),
+       'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt0_bayes']),
          
-        'ensemble_vers':  hp.choice('ensemble_vers', ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack',
-                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack']),
+        'ensemble_vers':  hp.choice('ensemble_vers', ['random_sera1_rsq0_mse0_include2_kfold3']),
 
-        'std_dev_type':  hp.choice('std_dev_type', ['pred_spline_class80_q80_matt0_brier1_kfold3',
-                                                    'pred_spline_class80_matt0_brier1_kfold3',
-                                                    'pred_spline_q80_matt0_brier1_kfold3',
+        'std_dev_type':  hp.choice('std_dev_type', ['spline_pred_class80_q80_matt0_brier1_kfold3',
+                                                    'spline_pred_class80_matt0_brier1_kfold3',
+                                                    'spline_pred_q80_matt0_brier1_kfold3',
                                                     'spline_class80_q80_matt0_brier1_kfold3']),
 
-        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.1),
-        'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.1),
-        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.3),
+        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.25),
+        'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.25),
+        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.25),
 
         'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0.5, 1),
 
@@ -547,20 +544,18 @@ init_space = {
 
 full_space = {
 
-        'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc',
-                                             'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']),
+        'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt0_bayes']),
          
-        'ensemble_vers':  hp.choice('ensemble_vers', ['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack',
-                                                      'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack']),
+        'ensemble_vers':  hp.choice('ensemble_vers', ['random_sera1_rsq0_mse0_include2_kfold3']),
 
-        'std_dev_type':  hp.choice('std_dev_type', ['pred_spline_class80_q80_matt0_brier1_kfold3',
-                                                    'pred_spline_class80_matt0_brier1_kfold3',
-                                                    'pred_spline_q80_matt0_brier1_kfold3',
+        'std_dev_type':  hp.choice('std_dev_type', ['spline_pred_class80_q80_matt0_brier1_kfold3',
+                                                    'spline_pred_class80_matt0_brier1_kfold3',
+                                                    'spline_pred_q80_matt0_brier1_kfold3',
                                                     'spline_class80_q80_matt0_brier1_kfold3']),
 
-        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.2),
-        'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.2),
-        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.2),
+        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.25),
+        'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.25),
+        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.25),
         
         'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0.2, 1),
 
@@ -659,10 +654,10 @@ full_space = {
 
         
 
-trial_name = 'adjust5000_mean_median_week1to17_2022_3trials'
+trial_name = 'adjust5000_mean_median_week1to10_2022_newbayesmodel'
 
 
-for i in range(7, 16):
+for i in range(1, 2):
 
     if os.path.exists(save_path+f'full_space_{trial_name}.p'):
 
@@ -692,18 +687,18 @@ for i in range(7, 16):
     
 
 #%%
-trial_name = 'adjust5000_mean_median_week1to17_2022_3trials'
+trial_name = 'adjust5000_mean_median_week1to10_2022_newbayesmodel'
 results = results_to_df(save_path, f'full_space_{trial_name}')
 dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
 dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'append')
 
 #%%
-# #%%
-# trial_name = 'adjust5000_meanonly_week1to17_2022_million_own_pct_matchupdropnew'
-# # trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
-# show_trial_best_params('full_space_'+trial_name, 2)
+#%%
+trial_name = 'adjust5000_mean_median_week1to10_2022_newbayesmodel'
+# trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
+show_trial_best_params('warm_start_'+trial_name, 1)
 
-# #%%
+#%%
 
 # df = dm.read("SELECT * FROM Entry_Optimize_Bayes", 'Results')
 # df['num_iters_150'] = 0

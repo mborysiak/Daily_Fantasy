@@ -298,11 +298,13 @@ def load_all_stack_pred_million(model_output_path):
 
 
 def fit_and_predict(m, df_predict, X, y, proba):
-    
-    m.fit(X,y)
+    try:
+        m.fit(X,y)
 
-    if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
-    else: cur_predict = m.predict(df_predict[X.columns])
+        if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
+        else: cur_predict = m.predict(df_predict[X.columns])
+    except:
+        cur_predict = []
 
     return cur_predict
 
@@ -312,6 +314,7 @@ def create_stack_predict(df_predict, models, X, y, proba=False):
     X_predict = pd.DataFrame()
     for k, ind_models in models.items():
         predictions = Parallel(n_jobs=-1, verbose=0)(delayed(fit_and_predict)(m, df_predict, X, y, proba) for m in ind_models)
+        predictions = [p for p in predictions if len(p) > 0]
         predictions = pd.Series(pd.DataFrame(predictions).T.mean(axis=1), name=k)
         X_predict = pd.concat([X_predict, predictions], axis=1)
 
@@ -880,9 +883,9 @@ def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_
 def get_func_params(model_obj):
 
     model_list = {
-        'reg': ['ridge', 'lasso', 'huber', 'lgbm', 'xgb', 'rf', 'bridge', 'gbm', 'gbmh', 'knn'],
-        'class': ['lr_c', 'lgbm_c', 'rf_c', 'gbm_c', 'gbmh_c', 'xgb_c', 'knn_c'],
-        'quantile': ['qr_q', 'gbm_q', 'lgbm_q', 'rf_q', 'knn_q']
+        'reg': ['rf', 'gbm', 'gbmh', 'huber', 'xgb', 'lgbm', 'knn', 'ridge', 'lasso', 'bridge'],
+        'class': ['rf_c', 'gbm_c', 'gbmh_c', 'xgb_c','lgbm_c', 'knn_c', 'lr_c'],
+        'quantile': ['qr_q', 'gbm_q', 'rf_q', 'lgbm_q', 'knn_q']
     }
     if model_obj=='quantile': alpha=0.8
     else: alpha=''
@@ -1055,7 +1058,7 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random',
+    'stack_model': 'random_kbest',
 
     # opt params
     'opt_type': 'bayes',
@@ -1081,11 +1084,11 @@ brier_wt = 1
 matt_wt = 0
 
 # set the model version
-set_weeks = [4, 5]
+set_weeks = [2]
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt0_bayes']
 
-ensemble_versions = len(set_weeks)*['random_sera1_rsq0_mse0_include2_kfold3']
+ensemble_versions = len(set_weeks)*['random_kbest_sera1_rsq0_mse0_include2_kfold3']
 
 std_dev_types = ['spline_pred_class80_q80_matt0_brier1_kfold3',
                  'spline_pred_class80_matt0_brier1_kfold3',
@@ -1098,11 +1101,11 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     run_params['set_week'] = w
     run_params['ensemble_vers'] = ensemble_vers
     runs = [
-        ['QB', 'full_model', ''],
-        ['RB', 'full_model', ''],
-        ['WR', 'full_model', ''],
-        ['TE', 'full_model', ''],
-        ['Defense', 'full_model', ''],
+        # ['QB', 'full_model', ''],
+        # ['RB', 'full_model', ''],
+        # ['WR', 'full_model', ''],
+        # ['TE', 'full_model', ''],
+        # ['Defense', 'full_model', ''],
         ['QB', 'backfill', ''],
         ['RB', 'backfill', ''],
         ['WR', 'backfill', ''],
@@ -1138,7 +1141,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         best_val_class, best_predictions_class = load_run_models(run_params, X_stack, y_stack_class, X_predict, 'class')
         best_val_quant, best_predictions_quant = load_run_models(run_params, X_stack, y_stack, X_predict, 'quantile', alpha=0.8)
         best_val_reg, best_predictions_reg = load_run_models(run_params, X_stack, y_stack, X_predict, 'reg')
-    
+
         save_val_to_db(X_stack_player, y_stack_class, best_val_class, run_params, table_name='Model_Validations_Class')
         save_val_to_db(X_stack_player, y_stack_class, best_val_reg, run_params, table_name='Model_Validations')
 
@@ -1230,8 +1233,9 @@ best_models = load_pickle('/Users/mborysia/Documents/Github/Daily_Fantasy//Model
                      'reg_sera1_rsq0_include2_kfold3')['best_models']
 best_models[0].predict(X_predict)
 # %%
-_, X, y = get_skm(df_train, 'reg', to_drop=run_params['drop_cols'])
+_, X, y = get_skm(df_train, 'quantile', to_drop=run_params['drop_cols'])
 X_predict_quant = create_stack_predict(df_predict, models_quant, X, y)
+
 # %%
 
 fname = 'million_sera1_rsq0_include2_kfold3'

@@ -40,7 +40,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [11]
+run_weeks = [12,13]
 verbosity = 50
 run_params = {
     
@@ -418,7 +418,7 @@ def get_model_output(model_name, label, cur_df, model_obj, run_params, i, min_sa
 
     skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'])
     pipe, params = get_full_pipe(skm, model_name, alpha, min_samples=min_samples, bayes_rand=bayes_rand)
-    trials = update_trials_params(trials, model_name, params, pipe)
+    if trials is not None: trials = update_trials_params(trials, model_name, params, pipe)
 
     # fit and append the ADP model
     start = time.time()

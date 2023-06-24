@@ -403,51 +403,9 @@ def join_coef(i, all_coef, coef_vals, X_all, X, m):
 def show_coef(all_coef, X_all):
     try:
         all_coef = pd.Series(all_coef.mean(axis=1).values, index=all_coef.metric)
-        all_coef[abs(all_coef) > 0.005].sort_values().plot.barh(figsize=(10,10))
+        all_coef[abs(all_coef) > 0.005].sort_values().plot.barh(figsize=(10,18))
     except:
         shap.summary_plot(all_coef.values, X_all, feature_names=X_all.columns, plot_size=(8,10), max_display=30, show=False)
-
-#%%
-
-
-weeks = [10, 11, 12, 13, 14, 15, 16, 17, 1, 2, 3, 4, 5, 6]
-years = [2021, 2021, 2021, 2021, 2021, 2021, 2021, 2021, 2022, 2022, 2022, 2022, 2022, 2022]
-# weeks = [3]
-# years = [2022]
-
-i=0
-all_coef = None; X_all = None
-for w, yr in zip(weeks, years):
-    df = dm.read(f'''SELECT * 
-                    FROM Winnings_Optimize
-                    WHERE NumPlayers=9
-                        and week = {w}
-                        and year = {yr}
-                        and max_winnings < 50000
-                    ORDER BY year, week''', 'Results')
-
-    model_name = 'enet'
-    m = model_type[model_name]
-    X, y = winnings_importance(df)
-    coef_vals, X = get_model_coef(X, y, m)
-    all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1
-
-show_coef(all_coef, X_all)
-
-#%%
-
-df = dm.read(f'''SELECT * 
-                FROM Winnings_Optimize
-                WHERE NumPlayers=9
-                      and max_winnings < 50000
-                ORDER BY year, week''', 'Results')
-
-m = model_type['enet']
-X, y = winnings_importance(df)
-coef_vals, X = get_model_coef(X, y, m)
-show_coef(coef_vals, X)
-
-#%%
 
 def entry_optimize_params(df, max_adjust, model_name):
 
@@ -478,14 +436,15 @@ def entry_optimize_params(df, max_adjust, model_name):
     y = df.winnings
 
     return X, y
-
+#%%
 df = dm.read('''SELECT *  
                 FROM Entry_Optimize_Params_Detail 
                 JOIN (
                      SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num > 161
+                WHERE trial_num > 150
+                      AND week <= 10
                 ''', 'Results')
 
 model_type = {
@@ -496,16 +455,16 @@ model_type = {
  'lgbm': LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
 
 }
-
+w=1
 model_name='lgbm'
 m = model_type[model_name] 
-X, y = entry_optimize_params(df, max_adjust=5000, model_name=model_name)
+X, y = entry_optimize_params(df, max_adjust=1000, model_name=model_name)
 coef_vals, X = get_model_coef(X, y, m)
 show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
 
 i=0
@@ -517,14 +476,14 @@ for w, yr in zip(weeks, years):
                             SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num > 161
+                     WHERE trial_num > 150
                            AND week = {w}
                            AND year = {yr}
                      ''', 'Results')
 
     model_name = 'enet'
     m = model_type[model_name]
-    X, y = entry_optimize_params(df, max_adjust=5000, model_name=model_name)
+    X, y = entry_optimize_params(df, max_adjust=1000, model_name=model_name)
     coef_vals, X = get_model_coef(X, y, m)
     all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1
 
