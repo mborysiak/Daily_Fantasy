@@ -8,6 +8,7 @@ import numpy as np
 import copy
 import sqlite3
 from zSim_Helper_Covar import FootballSimulation
+from ff.db_operations import DataManage
 
 year = 2022
 week = 2
@@ -23,7 +24,8 @@ def get_conn(filename):
     from pathlib import Path
     filepath = Path(__file__).parents[0] / filename
     conn = sqlite3.connect(filepath)
-    return conn
+    dm = DataManage(filepath)
+    return conn, dm
 
 def pull_op_params(conn, week, year):
 
@@ -46,7 +48,7 @@ def pull_ownership(conn, week, year):
     return ownership
 
 
-def pull_requirements():
+def pull_sim_requirements():
     # set league information, included position requirements, number of teams, and salary cap
     salary_cap = 50000
     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -133,9 +135,12 @@ def main():
     st.set_page_config(layout="wide")
     
     col1, col2 = st.columns(2)
-    conn = get_conn('Simulation_App.sqlite3')
+    conn, dm = get_conn('Simulation_App.sqlite3')
     op_params = pull_op_params(conn, week, year)
     ownership = pull_ownership(conn, week, year)
+    salary_cap, pos_require_start, pos_require_flex, total_pos = pull_sim_requirements()
+    
+    sim = initiate_class(op_params, salary_cap, pos_require_start)
 
     with col1:
         st.write(ownership.head())
