@@ -292,7 +292,7 @@ for t in ['Model_Predictions', 'Covar_Means', 'Covar_Matrix']:
                         AND ensemble_vers='{ensemble_vers}'
                         AND std_dev_type='{std_dev_type}'
                         ''', 'Simulation')
-    dm_app.write_to_db(df, 'Simulation', t, 'replace')
+    dm_app.write_to_db(df, 'Simulation_App', t, 'replace')
 
 
 # %%

@@ -109,7 +109,7 @@ def main():
     st.set_page_config(layout="wide")
     
     col1, col2 = st.columns(2)
-    conn = get_conn('Simulation.sqlite3')
+    conn = get_conn('Simulation_App.sqlite3')
     op_params = pull_op_params(conn, week, year)
     ownership = pull_ownership(conn, week, year)
 
