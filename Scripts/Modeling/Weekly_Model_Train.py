@@ -222,17 +222,14 @@ def output_dict():
 
 
 def reg_params(df_train, min_samples):
-    model_list = ['adp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'knn'
-                  'xgb'
-                  ]
+    model_list = ['adp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'knn','xgb']
     label = 'reg'
     func_params = [[m, label, df_train, 'reg', i, min_samples, ''] for i, m  in enumerate(model_list)]
 
     return func_params
 
 def class_params(df, cuts, run_params, min_samples):
-    model_list = ['gbm_c', 'rf_c','gbmh_c', 'lgbm_c', 'lr_c', 'knn_c' 
-                   'xgb_c'
+    model_list = ['gbm_c', 'rf_c','gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c'
                   ]
     func_params_c = []
     for cut in cuts:
@@ -252,9 +249,7 @@ def quant_params(df_train, alphas, min_samples):
     return func_params_q
 
 def million_params(df, run_params):
-    model_list = ['gbm_c', 'rf_c', 'gbmh_c', 'lgbm_c', 'lr_c', 'knn_c',
-                   'xgb_c'
-                  ]
+    model_list = ['gbm_c', 'rf_c', 'gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c' ]
     label = 'million'
     df_train_mil, _, min_samples_mil = predict_million_df(df, run_params)
     func_params = [[m, label, df_train_mil, 'class', i,min_samples_mil, ''] for i, m  in enumerate(model_list)]
@@ -581,7 +576,7 @@ run_list = [
             # ['QB', '', 'backfill'],
             # ['RB', '', 'backfill'],
             # ['WR', '', 'backfill'],
-            # ['TE', '', 'backfill'],
+            ['TE', '', 'backfill'],
 ]
 
 for w in run_weeks:
@@ -606,7 +601,7 @@ for w in run_weeks:
 
         # get all model iterations for various model types
         func_params = []
-        # func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples))
+        func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples))
         func_params.extend(reg_params(df_train, min_samples))
         func_params.extend(class_params(df, run_params['cuts'], run_params, min_samples))
         func_params.extend(million_params(df, run_params))
@@ -620,7 +615,6 @@ for w in run_weeks:
         # save output for all models
         out_dict = output_dict()
         out_dict = unpack_results(out_dict, func_params, results)
-        # save_output_dict(out_dict, 'all', model_output_path)
+        save_output_dict(out_dict, 'all', model_output_path)
 
-9# %
 # %%
