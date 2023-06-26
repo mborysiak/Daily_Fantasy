@@ -333,31 +333,26 @@ covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
-  #   13, 14, 15, 16, 17,
-     #1, 2, 3, 4, 5, 6, 7,
-      8, 9, 10, 11, 12, 13, 14, 
-     #15, 16, 17
-
+     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
+     #11, 12, 13, 14, 15, 16, 17
         ]
 
 set_years = [
-     # 2021, 2021, 2021, 2021, 2021,
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 2022, 2022, 2022, 2022,
-      2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022 
+    #   2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
-pred_versions = 16*len(set_weeks)*['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']
+pred_versions = 4*len(set_weeks)*['sera1_rsq0_brier1_matt0_bayes']
 
-ensemble_versions = 4*len(set_weeks)*['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack'] + \
-                    4*len(set_weeks)*['no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack']
+ensemble_versions = 4*len(set_weeks)*['random_sera1_rsq0_mse0_include2_kfold3']
 
-std_dev_types = 2*(len(set_weeks)*['pred_spline_class80_q80_matt0_brier1_kfold3'] + \
-                   len(set_weeks)*['pred_spline_class80_matt0_brier1_kfold3'] + \
-                   len(set_weeks)*['pred_spline_q80_matt0_brier1_kfold3'] + \
+std_dev_types = 1*(len(set_weeks)*['spline_pred_class80_q80_matt0_brier1_kfold3'] + \
+                   len(set_weeks)*['spline_pred_class80_matt0_brier1_kfold3'] + \
+                   len(set_weeks)*['spline_pred_q80_matt0_brier1_kfold3'] + \
                    len(set_weeks)*['spline_class80_q80_matt0_brier1_kfold3'])
 
-set_weeks = 16*set_weeks
-set_years = 16*set_years
+set_weeks = 4*set_weeks
+set_years = 4*set_years
 
 # # set the model version
 # set_weeks = [18]

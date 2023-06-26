@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from ff import data_clean as dc
 import datetime as dt
+from hyperopt import Trials
 
 from ff.db_operations import DataManage   
 import ff.general as ffgeneral 
@@ -15,12 +16,12 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
-pred_version = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
-ens_version = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack'
-std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
+pred_version = 'sera1_rsq0_brier1_matt0_bayes'
+ens_version = 'random_sera1_rsq0_mse0_include2_kfold3'
+std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
 
 set_year = 2022
-set_week = 18
+set_week = 1
 contest = 'Million'
 include_dst = False
 
@@ -430,13 +431,15 @@ def run_model_mean(m, df_train, df_test, time_split):
                            skm.piece(m)
                         ])
 
-    params = skm.default_params(pipe)
+    params = skm.default_params(pipe,bayes_rand='rand')
     params['k_best__k'] = range(1, X.shape[1]+1)
     
     # run the model with parameter search
-    best_models, oof_data, _ = skm.time_series_cv(pipe, X, y, 
+    trials = Trials()
+    best_models, oof_data, _, _ = skm.time_series_cv(pipe, X, y, 
                                                  params, n_iter=25,
-                                                 bayes_rand='custom_rand',
+                                                 bayes_rand='rand', 
+                                                 trials=trials,
                                                  col_split='game_date',
                                                  time_split=time_split)
 
@@ -715,14 +718,14 @@ def save_current_week_pred(ownership_vers, set_week, set_year, include_dst=True)
 # Predict Ownership Pct
 #================
 
-for set_week, set_year in zip([#13, 14, 15, 16, 17, 
-                               1, 2, 3, 4, 5, 6, 7,
-                               # 8, 9, 10, 11, 12, 13, 14
-                               15, 16, 17
+for set_week, set_year in zip([ 
+                               1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                              # 11, 12, 13, 14, 15, 16, 17
                                ], 
-                              [#2021, 2021, 2021, 2021, 2021,
-                               2022, 2022, 2022, 2022, 2022, 2022, 2022, #2022, 2022, 2022, 2022, 2022, 2022
-                               2022, 2022, 2022]):
+                              [
+                               2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+                              # 2022, 2022, 2022, 2022, 2022, 2022, 2022
+                               ]):
 
     print(f'Running week {set_week} year {set_year}')
     ownership_vers = 'standard_ln'

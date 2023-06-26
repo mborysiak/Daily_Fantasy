@@ -15,19 +15,17 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
-  # 13, 14, 15, 16, 17,
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
 ]
 
 set_years = [
-    #  2021, 2021, 2021, 2021, 2021,
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
-ensemble_vers ='no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack'   
-lineups_per_param = 2
-pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
-std_dev_type = 'boot_reg_quant_frac_random_replace_random'
+ensemble_vers ='random_sera1_rsq0_mse0_include2_kfold3'   
+lineups_per_param = 3
+pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
+std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
 trial_num = max_trial_num + 1
@@ -191,29 +189,29 @@ for repeat_num in range(10):
                       'static_top_players', 'use_ownership', 'own_neg_frac', 
                       'max_salary_remain', 'num_iters']
 
-        d ={'adjust_pos_counts': {True: 0.96, False: 0.04},
-            'player_drop_multiple': {4: 0.43, 2: 0.12, 0: 0.45},
-            'matchup_seed': {True: 0.86, False: 0.14},
-            'matchup_drop': {1: 0.38, 2: 0.17, 3: 0.13, 0: 0.32},
-            'top_n_choices': {1: 0.32, 2: 0.07, 0: 0.61},
-            'full_model_weight': {5: 0.74, 0.2: 0.26},
-            'covar_type': {'no_covar': 0.32, 'team_points_trunc': 0.68},
-            'max_team_type': {'player_points': 0.18, 'vegas_points': 0.82},
-            'min_player_same_team': {2: 0.02, 3: 0.05, 'Auto': 0.93},
-            'num_top_players': {2: 0.3, 3: 0.49, 5: 0.21},
-            'ownership_vers': {'mil_only': 0.06,
-                                'mil_times_standard_ln': 0.09,
-                                'mil_div_standard_ln': 0.12,
-                                'standard_ln': 0.73},
-            'qb_min_iter': {0: 0.48, 2: 0.37, 9: 0.15},
-            'qb_set_max_team': {True: 0.89, False: 0.11},
-            'qb_solo_start': {True: 0.44, False: 0.56},
-            'static_top_players': {True: 0.26, False: 0.74},
-            'use_ownership': {0.9: 0.32, 0.8: 0.23, 1: 0.45},
-            'own_neg_frac': {0.8: 0.52, 1: 0.48},
-            'max_salary_remain': {200: 0.25, 500: 0.1, 1000: 0.12, 1500: 0.53},
-            'num_iters': {150: 0, 100: 0.99, 50: 0.01},
-            'min_players_opp_team': {1: 0.39, 2: 0.37, 'Auto': 0.24}}
+        d ={'adjust_pos_counts': {True: 0.7, False: 0.3},
+            'player_drop_multiple': {4: 0.09, 2: 0.06, 0: 0.85},
+            'matchup_seed': {True: 0.8, False: 0.2},
+            'matchup_drop': {1: 0.18, 2: 0.17, 3: 0.12, 0: 0.53},
+            'top_n_choices': {1: 0.3, 2: 0, 0: 0.7},
+            'full_model_weight': {5: 0.67, 0.2: 0.33},
+            'covar_type': {'no_covar': 0.4, 'team_points_trunc': 0.6},
+            'max_team_type': {'player_points': 0.9, 'vegas_points': 0.1},
+            'min_player_same_team': {2: 0.0, 3: 0.26, 'Auto': 0.74},
+            'num_top_players': {2: 0.5, 3: 0, 5: 0.5},
+            'ownership_vers': {'mil_only': 0.3,
+                                'mil_times_standard_ln': 0.3,
+                                'mil_div_standard_ln': 0.1,
+                                'standard_ln': 0.3},
+            'qb_min_iter': {0: 0.5, 2: 0.4, 9: 0.1},
+            'qb_set_max_team': {True: 0.9, False: 0.1},
+            'qb_solo_start': {True: 0.3, False: 0.7},
+            'static_top_players': {True: 0.1, False: 0.9},
+            'use_ownership': {0.9: 0, 0.8: 0.5, 1: 0.5},
+            'own_neg_frac': {0.8: 0.1, 1: 0.9},
+            'max_salary_remain': {200: 0.6, 500: 0, 1000: 0, 1500: 0.4},
+            'num_iters': {150: 0.07, 100: 0.77, 50: 0.16},
+            'min_players_opp_team': {1: 0.2, 2: 0, 'Auto': 0.8}}
 
         d = {k: d[k] for k in d_ordering}
         params = []

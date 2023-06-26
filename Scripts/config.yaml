@@ -1,0 +1,75 @@
+
+
+run_weeks: [1, 2]
+run_years: [2022]
+
+# pred params
+pred_params:
+  r2_wt: 0
+  sera_wt: 1
+  mse_wt: 0
+  brier_wt: 1
+  matt_wt: 0
+
+pred_vers: "sera{sera_wt}_rsq{r2_wt}_brier{brier_wt}_matt{matt_wt}_bayes"
+
+# ensemble params
+ensemble_params:
+  r2_wt: 0
+  sera_wt: 1
+  mse_wt: 0
+  brier_wt: 1
+  matt_wt: 0
+  include_models: 2
+  kfolds: 3
+
+ensemble_vers: "sera{sera_wt}_rsq{r2_wt}_include{include_models}_kfold{kfolds}"
+
+
+# std dev params
+std_dev_params:
+  model_type: 'spline'
+  brier_wt: 1
+  matt_wt: 0
+  class: 'class80'
+  quant: 'q80'
+  pred: 'pred'
+  kfolds: 3
+
+std_dev_type: "{model_type}_{pred}_{class}_{quant}_matt{matt_wt}_brier{brier_wt}_kfold{kfolds}"
+
+metrics_dict:
+  spline_pred_class80_q80_matt1_brier1_kfold3:
+    pred_fp_per_game: 1
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 1
+   
+  spline_pred_class80_matt1_brier1_kfold3:
+    pred_fp_per_game: 1
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 0
+
+  spline_pred_q80_matt1_brier1_kfold3:
+    pred_fp_per_game: 1
+    pred_fp_per_game_quantile: 1
+
+  spline_class80_q80_matt1_brier1_kfold3:
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 1
+
+  spline_pred_class80_q80_matt0_brier1_kfold3:
+    pred_fp_per_game: 1
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 1
+
+  spline_pred_class80_matt0_brier1_kfold3:
+    pred_fp_per_game: 1
+    pred_fp_per_game_class: 1
+
+  spline_pred_q80_matt0_brier1_kfold3:
+    pred_fp_per_game: 1
+    pred_fp_per_game_quantile: 1
+
+  spline_class80_q80_matt0_brier1_kfold3:
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 1

@@ -14,12 +14,13 @@ dm = DataManage(db_path)
 #===============
 
 year=2022
-week=18
+week=2
 
-pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
-ensemble_vers = 'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack'
-std_dev_type = 'pred_spline_class80_q80_matt0_brier1_kfold3'
-ownership_vers = 'standard_ln'
+
+pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
+ensemble_vers = 'random_sera1_rsq0_mse0_include2_kfold3'
+std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
+ownership_vers = 'mil_only'
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -235,7 +236,7 @@ def create_database_output(my_team, j):
 
 #%%
 
-dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={week}', create_backup=False)
+# dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={week}', create_backup=False)
 
 from joblib import Parallel, delayed
 
@@ -251,8 +252,8 @@ lineups = clean_lineup_list(lineups_list, player_data)
 
 lineups = lineups.sample(frac=1)
 
-for j, i in enumerate(lineups.TeamNum.unique()):
-    create_database_output(lineups[lineups.TeamNum==i], j)
+# for j, i in enumerate(lineups.TeamNum.unique()):
+#     create_database_output(lineups[lineups.TeamNum==i], j)
 
 # %%
 
@@ -271,6 +272,28 @@ for param, param_options in d.items():
 
 run_params_df = pd.DataFrame(run_params_dict)
 
-dm.delete_from_db('Simulation', 'Run_Params', f"week={week} AND year={year}", create_backup=False)
-dm.write_to_db(run_params_df, 'Simulation', 'Run_Params', 'replace')
+dm_app = DataManage('c:/Users/mborysia/Documents/Github/Daily_Fantasy_App/app/')
+dm_app.write_to_db(run_params_df, 'Simulation', 'Run_Params', 'replace')
+
+for t in ['Predicted_Ownership', 'Gambling_Lines', 'Salaries']:
+    if t == 'Salaries': week_var = 'league'
+    else: week_var = 'week'
+    df = dm.read(f"SELECT * FROM {t} WHERE year={year} and {week_var}={week}", 'Simulation')
+    dm_app.write_to_db(df, 'Simulation', t, 'replace')
+
+for t in ['Model_Predictions', 'Covar_Means', 'Covar_Matrix']:
+    if t =='Model_Predictions': pred_var = 'version'
+    else: pred_var = 'pred_vers'
+    df = dm.read(f'''SELECT * 
+                    FROM {t}
+                    WHERE week={week}
+                        AND year={year}
+                        AND {pred_var}='{pred_vers}'
+                        AND ensemble_vers='{ensemble_vers}'
+                        AND std_dev_type='{std_dev_type}'
+                        ''', 'Simulation')
+    dm_app.write_to_db(df, 'Simulation', t, 'replace')
+
+
 # %%
+
