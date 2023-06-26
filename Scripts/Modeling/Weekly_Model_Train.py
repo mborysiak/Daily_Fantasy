@@ -601,7 +601,7 @@ for w in run_weeks:
 
         # get all model iterations for various model types
         func_params = []
-        func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples))
+        # func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples))
         func_params.extend(reg_params(df_train, min_samples))
         func_params.extend(class_params(df, run_params['cuts'], run_params, min_samples))
         func_params.extend(million_params(df, run_params))

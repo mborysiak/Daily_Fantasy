@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import copy
 import sqlite3
-
+from zSim_Helper_Covar import FootballSimulation
 
 year = 2022
 week = 2
@@ -58,6 +58,30 @@ def pull_requirements():
     pos_require_flex['DEF'] = 1
     total_pos = np.sum(list(pos_require_flex.values()))
     return salary_cap, pos_require_start, pos_require_flex, total_pos
+
+def initiate_class(op_params, salary_cap, pos_require_start):
+
+    # extract all the operating parameters
+    pred_vers = op_params['pred_vers']
+    ensemble_vers = op_params['ensemble_vers']
+    std_dev_type = op_params['std_dev_type']
+    ownership_vers = op_params['ownership_vers']
+    full_model_rel_weight = eval(op_params['full_model_weight'])
+    covar_type = eval(op_params['covar_type'])
+    use_ownership = eval(op_params['use_ownership'])
+    salary_remain_max = eval(op_params['max_salary_remain'])
+
+    print('Full Model Weight:', full_model_rel_weight, 'Use Ownership:', use_ownership)
+
+    if covar_type == 'no_covar': use_covar=False
+    else: use_covar=True
+    # instantiate simulation class and add salary information to data
+    sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters,
+                            pred_vers, ensemble_vers, std_dev_type, covar_type, ownership_vers,
+                            full_model_rel_weight, use_covar, use_ownership=1,
+                            salary_remain_max=salary_remain_max)
+
+    return sim
 
 #------------------
 # App Components
