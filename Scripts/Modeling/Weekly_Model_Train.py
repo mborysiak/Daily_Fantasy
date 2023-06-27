@@ -239,8 +239,12 @@ def class_params(df, cuts, run_params, min_samples):
 
     return func_params_c
 
-def quant_params(df_train, alphas, min_samples):
-    model_list = ['gbm_q', 'rf_q', 'qr_q', 'lgbm_q', 'knn_q']
+def quant_params(df_train, alphas, min_samples, choose_models):
+    model_list_opt = {
+                  'gbm_only': ['gbm_q'],
+                  'no_gbm': ['rf_q','qr_q','lgbm_q','knn_q']
+                }
+    model_list = model_list_opt[choose_models]
     func_params_q = []
     for alph in alphas:
         label = f'quant_{alph}'
@@ -601,20 +605,41 @@ for w in run_weeks:
 
         # get all model iterations for various model types
         func_params = []
-        # func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples))
+        func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples, 'gbm_only'))
         func_params.extend(reg_params(df_train, min_samples))
         func_params.extend(class_params(df, run_params['cuts'], run_params, min_samples))
         func_params.extend(million_params(df, run_params))
 
         # run all models in parallel
         results = Parallel(n_jobs=-1, verbose=verbosity)(
-                        delayed(get_model_output)
-                        (m, label, df, model_obj, run_params, i, min_samples, alpha) for m, label, df, model_obj, i, min_samples, alpha in func_params
-                            )
+                          delayed(get_model_output)
+                          (m, label, df, model_obj, run_params, i, min_samples, alpha) for m, label, df, model_obj, i, min_samples, alpha in func_params
+                        )
+        
+        func_params_no_gbm = quant_params(df_train, [0.8, 0.95], min_samples, 'no_gbm')
+        results_no_gbm = Parallel(n_jobs=-1, verbose=verbosity)(
+                          delayed(get_model_output)
+                          (m, label, df, model_obj, run_params, i, min_samples, alpha) for m, label, df, model_obj, i, min_samples, alpha in func_params_no_gbm
+                        )
+        results.extend(results_no_gbm)
+        func_params.extend(func_params_no_gbm)
 
         # save output for all models
         out_dict = output_dict()
         out_dict = unpack_results(out_dict, func_params, results)
         save_output_dict(out_dict, 'all', model_output_path)
 
+
 # %%
+
+all_trials = load_pickle(model_output_path, 'all_trials')
+
+times = []
+for k,v in all_trials.items():
+    if k!='reg_adp':
+        max_trial = len(v.trials) - 1
+        min_trial = max_trial - run_params['n_iters'] * run_params['n_splits'] + 1
+        trial_time = (v.trials[max_trial]['book_time'] - v.trials[min_trial]['book_time']).seconds
+        times.append([k, int(trial_time / 60)])
+
+pd.DataFrame(times, columns=['model', 'time']).sort_values(by='time', ascending=False)

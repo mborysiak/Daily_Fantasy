@@ -1,4 +1,6 @@
 #%%
+import cvxopt
+#%%
 # core packages
 from random import sample
 import pandas as pd

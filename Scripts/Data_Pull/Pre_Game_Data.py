@@ -645,16 +645,16 @@ salary_id.player = salary_id.player.apply(dc.name_clean)
 salary_id = pd.concat([salary_id, defense.rename(columns={'TeamAbbrev': 'player'})], axis=0)
 
 salary = salary_id[['player', 'salary']]
-salary = salary.assign(year=set_year).assign(league=set_week)
+salary = salary.assign(year=set_year).assign(week=set_week)
 
 ids = salary_id[['player', 'player_id']]
-ids = ids.assign(year=set_year).assign(league=set_week)
+ids = ids.assign(year=set_year).assign(week=set_week)
 
 
-dm.delete_from_db('Simulation', 'Salaries', f"league={set_week} AND year={set_year}", create_backup=False)
+dm.delete_from_db('Simulation', 'Salaries', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(salary, 'Simulation', 'Salaries', 'append')
 
-dm.delete_from_db('Simulation', 'Player_Ids', f"league={set_week} AND year={set_year}")
+dm.delete_from_db('Simulation', 'Player_Ids', f"week={set_week} AND year={set_year}")
 dm.write_to_db(ids, 'Simulation', 'Player_Ids', 'append')
 
 

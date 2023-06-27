@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import copy
 import sqlite3
-from zSim_Helper_Covar import FootballSimulation
+from daily_sim import FootballSimulation
 from ff.db_operations import DataManage
 
 year = 2022
@@ -22,9 +22,11 @@ total_lineups = 5
 
 def get_conn(filename):
     from pathlib import Path
+    folderpath = Path(__file__).parents[0]
     filepath = Path(__file__).parents[0] / filename
     conn = sqlite3.connect(filepath)
-    dm = DataManage(filepath)
+    dm = DataManage(folderpath)
+    
     return conn, dm
 
 def pull_op_params(conn, week, year):
@@ -61,7 +63,7 @@ def pull_sim_requirements():
     total_pos = np.sum(list(pos_require_flex.values()))
     return salary_cap, pos_require_start, pos_require_flex, total_pos
 
-def initiate_class(op_params, salary_cap, pos_require_start):
+def initiate_fantasysim(dm, op_params, salary_cap, pos_require_start):
 
     # extract all the operating parameters
     pred_vers = op_params['pred_vers']
@@ -77,11 +79,12 @@ def initiate_class(op_params, salary_cap, pos_require_start):
 
     if covar_type == 'no_covar': use_covar=False
     else: use_covar=True
+
     # instantiate simulation class and add salary information to data
     sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters,
-                            pred_vers, ensemble_vers, std_dev_type, covar_type, ownership_vers,
-                            full_model_rel_weight, use_covar, use_ownership=1,
-                            salary_remain_max=salary_remain_max)
+                            pred_vers, ensemble_vers, std_dev_type, covar_type,
+                            full_model_rel_weight, matchup_seed=False, use_covar=use_covar, use_ownership=1,
+                            salary_remain_max=salary_remain_max, db_name='Simulation_App')
 
     return sim
 
@@ -140,7 +143,7 @@ def main():
     ownership = pull_ownership(conn, week, year)
     salary_cap, pos_require_start, pos_require_flex, total_pos = pull_sim_requirements()
     
-    sim = initiate_class(op_params, salary_cap, pos_require_start)
+    sim = initiate_fantasysim(dm, op_params, salary_cap, pos_require_start)
 
     with col1:
         st.write(ownership.head())

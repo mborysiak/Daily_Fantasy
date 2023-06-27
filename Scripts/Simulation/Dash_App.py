@@ -7,9 +7,10 @@ from zSim_Helper_Covar import *
 import os
 
 # set the root path and database management object
-from ff.db_operations import DataManage
 from ff import general as ffgeneral
+from ff.db_operations import DataManage
 
+#%%
 # root_path = '/Users/sammyers/Desktop/Daily/'
 if 'mborysia' in os.getcwd():
     root_path = ffgeneral.get_main_path('Daily_Fantasy')

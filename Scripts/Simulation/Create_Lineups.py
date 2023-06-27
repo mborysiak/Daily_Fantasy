@@ -1,6 +1,7 @@
 #%%
 from zSim_Helper_Covar import *
 import pprint
+
 # set the root path and database management object
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -272,14 +273,13 @@ for param, param_options in d.items():
 
 run_params_df = pd.DataFrame(run_params_dict)
 
-dm_app = DataManage('c:/Users/mborysia/Documents/Github/Daily_Fantasy_App/app/')
+dm_app = DataManage('c:/Users/mborysia/Documents/Github/Daily_Fantasy/Scripts/Simulation/')
 dm_app.write_to_db(run_params_df, 'Simulation', 'Run_Params', 'replace')
 
-for t in ['Predicted_Ownership', 'Gambling_Lines', 'Salaries']:
-    if t == 'Salaries': week_var = 'league'
-    else: week_var = 'week'
-    df = dm.read(f"SELECT * FROM {t} WHERE year={year} and {week_var}={week}", 'Simulation')
-    dm_app.write_to_db(df, 'Simulation', t, 'replace')
+for t in ['Predicted_Ownership', 'Mean_Ownership', 'Gambling_Lines', 'Vegas_Points', 'Salaries', 'Player_Teams', 'Player_Ids']:
+
+    df = dm.read(f"SELECT * FROM {t} WHERE year={year} and week={week}", 'Simulation')
+    dm_app.write_to_db(df, 'Simulation_App', t, 'replace')
 
 for t in ['Model_Predictions', 'Covar_Means', 'Covar_Matrix']:
     if t =='Model_Predictions': pred_var = 'version'
