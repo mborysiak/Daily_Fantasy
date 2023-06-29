@@ -333,7 +333,7 @@ covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
-     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
+     1, 2,# 3, 4, 5, 6, 7, 8, 9, 10, 
      #11, 12, 13, 14, 15, 16, 17
         ]
 
@@ -344,7 +344,7 @@ set_years = [
 
 pred_versions = 4*len(set_weeks)*['sera1_rsq0_brier1_matt0_bayes']
 
-ensemble_versions = 4*len(set_weeks)*['random_sera1_rsq0_mse0_include2_kfold3']
+ensemble_versions = 4*len(set_weeks)*['random_kbest_sera1_rsq0_mse0_include2_kfold3']
 
 std_dev_types = 1*(len(set_weeks)*['spline_pred_class80_q80_matt0_brier1_kfold3'] + \
                    len(set_weeks)*['spline_pred_class80_matt0_brier1_kfold3'] + \

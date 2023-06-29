@@ -108,9 +108,6 @@ class FootballSimulation:
 
         score_cols = ['pred_fp_per_game', 'std_dev', 'min_score', 'max_score']
         for c in score_cols: 
-            print(df.dtypes)
-            df[c] = df[c].astype('float')
-            print(df.dtypes)
             df[c] = df[c] * df.weighting
 
         # Groupby and aggregate with namedAgg [1]:
@@ -930,30 +927,30 @@ class FootballSimulation:
 # dm = DataManage(db_path)
 
 
-# adjust_select = True
-# matchup_drop = 2
+# adjust_select = False
+# matchup_drop = 0
 # full_model_weight = 5
 # covar_type = 'no_covar'
-# max_team_type = 'vegas_points'
-# use_covar = True
-# min_players_same_team = 'Auto'
-# min_players_opp_team = 2
-# top_n_players = 2
-# qb_min_iter = 5
+# max_team_type = 'player_points'
+# use_covar = False
+# min_players_same_team = 2
+# min_players_opp_team = 0
+# top_n_players = 5
+# qb_min_iter = 9
 # qb_solo_start = False
 # qb_set_max_team = False
 # static_top_players = True
 # use_ownership = 1
 # own_neg_frac = 1
 # salary_remain_max = 1000
-# num_iters = 150
+# num_iters = 50
 
-# pred_vers = 'sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc'
-# ens_vers = 'no_weight_yes_kbest_randsample_sera10_rsq1_include2_kfold3_fullstack'
-# std_dev_type = 'boot_reg_quant_frac_random_replace_random'
+# pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
+# ens_vers = 'random_sera1_rsq0_mse0_include2_kfold3'
+# std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
 # ownership_vers = 'standard_ln'
 
-# week = 12
+# week = 2
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}

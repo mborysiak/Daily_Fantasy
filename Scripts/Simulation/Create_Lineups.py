@@ -19,7 +19,7 @@ week=2
 
 
 pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
-ensemble_vers = 'random_sera1_rsq0_mse0_include2_kfold3'
+ensemble_vers = 'random_kbest_sera1_rsq0_mse0_include2_kfold3'
 std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
 ownership_vers = 'mil_only'
 
@@ -273,8 +273,8 @@ for param, param_options in d.items():
 
 run_params_df = pd.DataFrame(run_params_dict)
 
-dm_app = DataManage('c:/Users/mborysia/Documents/Github/Daily_Fantasy/Scripts/Simulation/')
-dm_app.write_to_db(run_params_df, 'Simulation', 'Run_Params', 'replace')
+dm_app = DataManage('c:/Users/mborysia/Documents/Github/Daily_Fantasy_App/app/')
+dm_app.write_to_db(run_params_df, 'Simulation_App', 'Run_Params', 'replace')
 
 for t in ['Predicted_Ownership', 'Mean_Ownership', 'Gambling_Lines', 'Vegas_Points', 'Salaries', 'Player_Teams', 'Player_Ids']:
 
@@ -296,4 +296,6 @@ for t in ['Model_Predictions', 'Covar_Means', 'Covar_Matrix']:
 
 
 # %%
+run_params_df
 
+# %%

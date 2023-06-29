@@ -40,7 +40,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [11]
+run_weeks = [12]
 verbosity = 50
 run_params = {
     
@@ -574,12 +574,12 @@ def save_output_dict(out_dict, label, model_output_path):
 run_list = [
             # ['QB', '', 'full_model'],
             # ['RB', '', 'full_model'],
-            # ['WR', '', 'full_model'],
-            # ['TE', '', 'full_model'],
+            ['WR', '', 'full_model'],
+            ['TE', '', 'full_model'],
             ['Defense', '', 'full_model'],
-            # ['QB', '', 'backfill'],
-            # ['RB', '', 'backfill'],
-            # ['WR', '', 'backfill'],
+            ['QB', '', 'backfill'],
+            ['RB', '', 'backfill'],
+            ['WR', '', 'backfill'],
             ['TE', '', 'backfill'],
 ]
 

@@ -1086,7 +1086,7 @@ brier_wt = 1
 matt_wt = 0
 
 # set the model version
-set_weeks = [2]
+set_weeks = [7,8,9,10]
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt0_bayes']
 
@@ -1103,11 +1103,11 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     run_params['set_week'] = w
     run_params['ensemble_vers'] = ensemble_vers
     runs = [
-        # ['QB', 'full_model', ''],
-        # ['RB', 'full_model', ''],
-        # ['WR', 'full_model', ''],
-        # ['TE', 'full_model', ''],
-        # ['Defense', 'full_model', ''],
+        ['QB', 'full_model', ''],
+        ['RB', 'full_model', ''],
+        ['WR', 'full_model', ''],
+        ['TE', 'full_model', ''],
+        ['Defense', 'full_model', ''],
         ['QB', 'backfill', ''],
         ['RB', 'backfill', ''],
         ['WR', 'backfill', ''],
