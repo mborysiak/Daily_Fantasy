@@ -329,30 +329,31 @@ def get_mean_points(preds):
     return mean_points
 
 #%%
+
+import itertools
 covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
-     1, 2,# 3, 4, 5, 6, 7, 8, 9, 10, 
-     #11, 12, 13, 14, 15, 16, 17
+     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15#, 16, 17
         ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022 
-    #   2022, 2022, 2022, 2022, 2022, 2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022#, 2022, 2022
 ]
 
-pred_versions = 4*len(set_weeks)*['sera1_rsq0_brier1_matt0_bayes']
+pred_versions = ['sera1_rsq0_brier1_matt0_bayes']
 
-ensemble_versions = 4*len(set_weeks)*['random_kbest_sera1_rsq0_mse0_include2_kfold3']
+ensemble_versions = ['random_kbest_sera1_rsq0_mse0_include2_kfold3',
+                     'random_sera1_rsq0_mse0_include2_kfold3']
 
-std_dev_types = 1*(len(set_weeks)*['spline_pred_class80_q80_matt0_brier1_kfold3'] + \
-                   len(set_weeks)*['spline_pred_class80_matt0_brier1_kfold3'] + \
-                   len(set_weeks)*['spline_pred_q80_matt0_brier1_kfold3'] + \
-                   len(set_weeks)*['spline_class80_q80_matt0_brier1_kfold3'])
+std_dev_types = ['spline_pred_class80_q80_matt0_brier1_kfold3',
+                 'spline_pred_class80_matt0_brier1_kfold3',
+                 'spline_pred_q80_matt0_brier1_kfold3',
+                 'spline_class80_q80_matt0_brier1_kfold3']
 
-set_weeks = 4*set_weeks
-set_years = 4*set_years
+iter_cats = list(set(itertools.product(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)))
+iter_cats = pd.DataFrame(iter_cats).sort_values(by=[0, 3]).values
 
 # # set the model version
 # set_weeks = [18]
@@ -364,9 +365,7 @@ set_years = 4*set_years
 # std_dev_types = ['pred_spline_class80_q80_matt0_brier1_kfold3']
 
 full_model_weights = [0.2, 5]
-
-i = 1000000000
-iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
+i = 0
 for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
     print(set_week, set_year, pred_vers, ensemble_vers, std_dev_type)

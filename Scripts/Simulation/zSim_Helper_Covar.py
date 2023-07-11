@@ -208,7 +208,9 @@ class FootballSimulation:
                                       FROM Predicted_Ownership
                                       WHERE year={self.set_year}
                                             AND week={self.week}
-                                            AND ownership_vers='{self.ownership_vers}' ''', self.db_name)
+                                            AND ownership_vers='{self.ownership_vers}'
+                                            AND pred_vers='{self.pred_vers}'
+                                            AND ensemble_vers='{self.ensemble_vers}' ''', self.db_name)
 
         if self.use_covar: df = df.drop(['pred_fp_per_game'], axis=1)
         elif self.boot: df = df.copy()
@@ -342,13 +344,6 @@ class FootballSimulation:
 
         return pd.DataFrame(pred_list)
 
-    # def covar_dist(self, num_options=500):
-    #     import scipy.stats as ss
-    #     dist = ss.multivariate_normal(mean=self.player_data.pred_fp_per_game.values, 
-    #                                   cov=self.covar.drop('player', axis=1).values, 
-    #                                   allow_singular=True)
-    #     predictions = pd.DataFrame(dist.rvs(num_options)).T
-    #     return predictions
 
     @staticmethod
     def unique_matchup_pairs(matchups):
@@ -555,13 +550,15 @@ class FootballSimulation:
                                               WHERE week={self.week}
                                                     AND year={self.set_year}
                                                     AND ownership_vers='{self.ownership_vers}'
+                                                    AND pred_vers='{self.pred_vers}'
+                                                    AND ensemble_vers='{self.ensemble_vers}'
                                         ''', self.db_name).values[0]
 
         mean_own = self.pos_or_neg * np.random.normal(mean_own, std_own, size=1).reshape(1, 1)
         return mean_own
 
     @staticmethod
-    def create_G_team(team_map, player_map, adjust_select):
+    def create_G_team(team_map, player_map):
 
         pos_wt = {
             'QB': -2,
@@ -602,7 +599,7 @@ class FootballSimulation:
         col_idx = np.random.choice(range(1,self.cur_vegas_pts.shape[1]), size=1)[0]
         best_teams = self.cur_vegas_pts.iloc[:, [0,col_idx]]
         best_teams = best_teams.sort_values(by=col_idx-1, ascending=False)
-        best_teams = list(best_teams.team[:3].values)
+        best_teams = list(best_teams.team.values)[:3]
         return best_teams
 
     def get_max_team(self, labels, c_points, added_teams):
@@ -662,10 +659,10 @@ class FootballSimulation:
         return h_players
 
     @staticmethod
-    def sample_c_points(data, max_entries):
+    def sample_c_points(data, max_entries, num_avg_pts):
 
         labels = data[['player', 'pos', 'team', 'salary']]
-        current_points = -1 * data.iloc[:, np.random.choice(range(4, max_entries+4))]
+        current_points = -1 * data.iloc[:, np.random.choice(range(4, max_entries+4), size=num_avg_pts)].mean(axis=1)
 
         return labels, current_points
 
@@ -758,7 +755,8 @@ class FootballSimulation:
     def run_sim(self, to_add, to_drop, min_players_same_team_input, set_max_team, 
                 min_players_opp_team_input=0, adjust_select=False, max_team_type='player_points',
                 num_matchup_drop=0, own_neg_frac=1, n_top_players=5, ownership_vers='standard_ln',
-                static_top_players=True, qb_min_iter=9, qb_set_max_team=False, qb_solo_start=True):
+                static_top_players=True, qb_min_iter=9, qb_set_max_team=False, qb_solo_start=True,
+                num_avg_pts=1):
         
         # can set as argument, but static set for now
         num_options=250
@@ -849,10 +847,10 @@ class FootballSimulation:
                 G_players = self.create_G_players(player_idx_map)
                 h_players = self.create_h_players(player_idx_map, h_player_add)
 
-                G_teams = self.create_G_team(team_map, idx_player_map, adjust_select)
+                G_teams = self.create_G_team(team_map, idx_player_map)
         
             # generate the c matrix with the point values to be optimized
-            self.labels, self.c_points = self.sample_c_points(predictions, num_options)
+            self.labels, self.c_points = self.sample_c_points(predictions, num_options, num_avg_pts)
             
             if remaining_pos_cnt > (min_players_same_team+min_player_opp_team-1) and max_added_team_cnt < min_players_same_team:
              
@@ -927,30 +925,30 @@ class FootballSimulation:
 # dm = DataManage(db_path)
 
 
-# adjust_select = False
-# matchup_drop = 0
+# adjust_select = True
+# matchup_drop = 1
 # full_model_weight = 5
-# covar_type = 'no_covar'
+# covar_type = 'team_points_trunc'
 # max_team_type = 'player_points'
 # use_covar = False
-# min_players_same_team = 2
-# min_players_opp_team = 0
-# top_n_players = 5
-# qb_min_iter = 9
-# qb_solo_start = False
-# qb_set_max_team = False
-# static_top_players = True
-# use_ownership = 1
+# min_players_same_team = 'Auto'
+# min_players_opp_team = 'Auto'
+# top_n_players = 3
+# qb_min_iter = 2
+# qb_solo_start = True
+# qb_set_max_team = True
+# static_top_players = False
+# use_ownership = 0.1
 # own_neg_frac = 1
-# salary_remain_max = 1000
-# num_iters = 50
+# salary_remain_max = 500
+# num_iters = 100
 
 # pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
-# ens_vers = 'random_sera1_rsq0_mse0_include2_kfold3'
+# ens_vers = 'random_kbest_sera1_rsq0_mse0_include2_kfold3'
 # std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
-# ownership_vers = 'standard_ln'
+# ownership_vers = 'mil_only'
 
-# week = 2
+# week = 4
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -970,7 +968,7 @@ class FootballSimulation:
 #                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
 #                                     n_top_players=top_n_players, static_top_players=static_top_players,
 #                                      qb_solo_start=qb_solo_start, ownership_vers=ownership_vers,
-#                                     qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter)
+#                                     qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter, num_avg_pts=5)
 
 # print(max_team_cnt)
 # results

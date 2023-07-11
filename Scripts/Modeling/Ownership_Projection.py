@@ -17,13 +17,13 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 pred_version = 'sera1_rsq0_brier1_matt0_bayes'
-ens_version = 'random_sera1_rsq0_mse0_include2_kfold3'
+ens_version = 'random_kbest_sera1_rsq0_mse0_include2_kfold3'
 std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
 
 set_year = 2022
 set_week = 1
 contest = 'Million'
-include_dst = False
+include_dst = True
 
 #%%
 
@@ -708,9 +708,17 @@ def save_current_week_pred(ownership_vers, set_week, set_year, include_dst=True)
             sim_values.loc[sim_values.player.str.len()<=4, ['pred_ownership', 'std_dev']].mean().values
 
     sim_values['ownership_vers'] = ownership_vers
+    sim_values['pred_vers'] = pred_version
+    sim_values['ensemble_vers'] = ens_version
 
     display(sim_values.sort_values(by='pred_ownership', ascending=False).iloc[:50])
-    dm.delete_from_db('Simulation', 'Predicted_Ownership', f"week={set_week} AND year={set_year} AND ownership_vers='{ownership_vers}'")
+    del_q = f'''year={set_year} 
+                            AND week={set_week} 
+                            AND ownership_vers='{ownership_vers}'
+                            AND pred_vers='{pred_version}'
+                            AND ensemble_vers='{ens_version}' 
+                            '''
+    dm.delete_from_db('Simulation', 'Predicted_Ownership', del_q, create_backup=False)
     dm.write_to_db(sim_values, 'Simulation', 'Predicted_Ownership', 'append')
 
 #%%
@@ -718,13 +726,11 @@ def save_current_week_pred(ownership_vers, set_week, set_year, include_dst=True)
 # Predict Ownership Pct
 #================
 
-for set_week, set_year in zip([ 
-                               1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                              # 11, 12, 13, 14, 15, 16, 17
+for set_week, set_year in zip([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 
+                               #16, 17
                                ], 
                               [
-                               2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-                              # 2022, 2022, 2022, 2022, 2022, 2022, 2022
+                               2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
                                ]):
 
     print(f'Running week {set_week} year {set_year}')
@@ -820,18 +826,19 @@ for set_week, set_year in zip([
             full_dist, mean_output = agg_ownership_group(df_lineups, full_dist, include_dst)
 
             if base_place==1:
-
-                dm.delete_from_db('Simulation', 'Mean_Ownership', f"year={set_year} AND week={set_week} AND ownership_vers='{ownership_vers}'", create_backup=False)
+                mean_output['pred_vers'] = pred_version
+                mean_output['ensemble_vers'] = ens_version
+                del_q = f'''year={set_year} 
+                            AND week={set_week} 
+                            AND ownership_vers='{ownership_vers}'
+                            AND pred_vers='{pred_version}'
+                            AND ensemble_vers='{ens_version}' 
+                            '''
+                dm.delete_from_db('Simulation', 'Mean_Ownership', del_q, create_backup=False)
                 dm.write_to_db(mean_output, 'Simulation', 'Mean_Ownership', 'append')
 
         run_ttest(full_dist, greater_or_less='greater')
         save_current_week_pred(ownership_vers, set_week, set_year, include_dst)
     
 
-# %%
-df_lineups[df_lineups.place==1].groupby(['week', 'year']).agg({'player': 'count'})
-# %%
-df_lineups[(df_lineups.week==14) & (df_lineups.year==2021) & (df_lineups.place==1)]
-# %%
-full_entries[(full_entries.week==14) & (full_entries.year==2021) & (full_entries.Rank==1)].Lineup.values[0]
 # %%

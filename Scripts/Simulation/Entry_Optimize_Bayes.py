@@ -10,6 +10,7 @@ import gzip
 import os
 from hyperopt import fmin, tpe, hp, space_eval, Trials
 import pprint
+from functools import partial
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -20,13 +21,11 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-    # 11, 12, 13, 14, 15, 16, 17
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, #16, 17
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-      #2022, 2022, 2022, 2022, 2022, 2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 2022
 ]
 
 save_path = "c:/Users/mborysia/Documents/Github/Daily_Fantasy/Model_Outputs/2022/Bayes_Sim_Opt/"
@@ -194,7 +193,7 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_seed, matchup_dr
                 full_model_rel_weight, covar_type, max_team_type, min_players_same_team, 
                 min_players_opp_team, num_top_players, ownership_vers, qb_min_iter, qb_set_max_team, qb_solo_start,
                 static_top_players, use_ownership, own_neg_frac, max_salary_remain, 
-                num_iters, lineups_per_param, 
+                num_iters, num_avg_pts, lineups_per_param, 
                 week, year, pred_vers, ensemble_vers, std_dev_type
                 ):
     
@@ -233,7 +232,8 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_seed, matchup_dr
                                      num_matchup_drop=matchup_drop, ownership_vers=ownership_vers,
                                      own_neg_frac=own_neg_frac, n_top_players=num_top_players,
                                      static_top_players=static_top_players, qb_min_iter=qb_min_iter,
-                                     qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
+                                     qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start,
+                                     num_avg_pts=num_avg_pts)
             
             prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
             try: 
@@ -381,7 +381,14 @@ def convert_param_options(bp):
             150: bp['num_iters_150'],
             100: bp['num_iters_100'],
             50: 1 - bp['num_iters_100'] - bp['num_iters_150']
-        },
+        },  
+
+        'num_avg_pts': {
+            2: bp['num_avg_pts_2'],
+            3: bp['num_avg_pts_3'],
+            5: bp['num_avg_pts_5'],
+            1: 1 - bp['num_avg_pts_2'] - bp['num_avg_pts_3'] - bp['num_avg_pts_5']
+        }
     }
     return d
 
@@ -416,6 +423,7 @@ def objective(bayes_params):
     for week, year in iter_cats:
 
         params = create_params_list(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type)
+        # params = [sublist + [i] for sublist in params for i in range(3)]
         
         mean_loss = []
         median_loss = []
@@ -429,12 +437,14 @@ def objective(bayes_params):
                 #     cur_winnings = sim_winnings(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp, week, year, pred_vers, ensemble_vers, std_dev_type)
                 #     winnings.append(cur_winnings)
                 
-                winnings = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
-                                                                                ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
-                                                                                week, year, pred_vers, ensemble_vers, std_dev_type) for 
-                                                                                adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
-                                                                                ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni,lpp,
-                                                                                week, year, pred_vers, ensemble_vers, std_dev_type  in params)
+                winnings = Parallel(n_jobs=-1, verbose=0)(
+                    delayed(sim_winnings)(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
+                                          ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, lpp, 
+                                          week, year, pred_vers, ensemble_vers, std_dev_type) for 
+                                          adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, 
+                                          ownership_vers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, lpp, 
+                                          week, year, pred_vers, ensemble_vers, std_dev_type  in params
+                                          )
             
                 winnings = [item for sublist in winnings for item in sublist]
                 winnings = avg_winnings_contest(winnings)
@@ -476,7 +486,9 @@ init_space = {
 
        'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt0_bayes']),
          
-        'ensemble_vers':  hp.choice('ensemble_vers', ['random_sera1_rsq0_mse0_include2_kfold3']),
+        'ensemble_vers':  hp.choice('ensemble_vers', ['random_kbest_sera1_rsq0_mse0_include2_kfold3',
+                                                      'random_sera1_rsq0_mse0_include2_kfold3',
+                                                     ]),
 
         'std_dev_type':  hp.choice('std_dev_type', ['spline_pred_class80_q80_matt0_brier1_kfold3',
                                                     'spline_pred_class80_matt0_brier1_kfold3',
@@ -537,6 +549,9 @@ init_space = {
         'num_iters_100': hp.uniform('num_iters_100', 0.6, 0.8),
         'num_iters_150': hp.uniform('num_iters_150', 0, 0.2),
 
+        'num_avg_pts_2': hp.uniform('num_avg_pts_2', 0, 0.25),
+        'num_avg_pts_3': hp.uniform('num_avg_pts_3', 0, 0.25),
+        'num_avg_pts_5': hp.uniform('num_avg_pts_5', 0, 0.25),
 
         'lineups_per_param': hp.choice('lineups_per_param', [2, 3])
 }
@@ -546,16 +561,17 @@ full_space = {
 
         'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_brier1_matt0_bayes']),
          
-        'ensemble_vers':  hp.choice('ensemble_vers', ['random_sera1_rsq0_mse0_include2_kfold3']),
+        'ensemble_vers':  hp.choice('ensemble_vers', ['random_sera1_rsq0_mse0_include2_kfold3',
+                                                      'random_kbest_sera1_rsq0_mse0_include2_kfold3']),
 
         'std_dev_type':  hp.choice('std_dev_type', ['spline_pred_class80_q80_matt0_brier1_kfold3',
                                                     'spline_pred_class80_matt0_brier1_kfold3',
                                                     'spline_pred_q80_matt0_brier1_kfold3',
                                                     'spline_class80_q80_matt0_brier1_kfold3']),
 
-        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.25),
-        'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.25),
-        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.25),
+        'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.4),
+        'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.4),
+        'ownership_vers_mil_div_standard_ln': hp.uniform('ownership_vers_mil_div_standard_ln', 0, 0.2),
         
         'adjust_pos_counts_True': hp.uniform('adjust_pos_counts_True', 0.2, 1),
 
@@ -607,6 +623,10 @@ full_space = {
         'num_iters_100': hp.uniform('num_iters_100', 0.3, 0.6),
         'num_iters_150': hp.uniform('num_iters_150', 0, 0.4),
 
+        'num_avg_pts_2': hp.uniform('num_avg_pts_2', 0, 0.33),
+        'num_avg_pts_3': hp.uniform('num_avg_pts_3', 0, 0.33),
+        'num_avg_pts_5': hp.uniform('num_avg_pts_5', 0, 0.33),
+
         'lineups_per_param': hp.choice('lineups_per_param', [1, 2, 3])
 }
 
@@ -654,10 +674,10 @@ full_space = {
 
         
 
-trial_name = 'adjust5000_mean_median_week1to10_2022_newbayesmodel'
+trial_name = 'adjust5000_mean_median_week1to15_2022_newbayesmodel_kbest_numavgpts'
 
 
-for i in range(1, 2):
+for i in range(3, 6):
 
     if os.path.exists(save_path+f'full_space_{trial_name}.p'):
 
@@ -665,7 +685,7 @@ for i in range(1, 2):
         print('Loading Full Space')
 
         print('Running Full Space')
-        best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=i*20)
+        best = fmin(objective, space=full_space, algo=partial(tpe.suggest, n_startup_jobs=10), trials=trials, max_evals=i*20)
         print(space_eval(full_space, best))
         save_pickle(trials, save_path, f'full_space_{trial_name}')
     
@@ -674,14 +694,14 @@ for i in range(1, 2):
         print('Loading Warm Start')
 
         print('Running Full Space')
-        best = fmin(objective, space=full_space, algo=tpe.suggest, trials=trials, max_evals=i*20)
+        best = fmin(objective, space=full_space, algo=partial(tpe.suggest, n_startup_jobs=10), trials=trials, max_evals=i*20)
         print(space_eval(full_space, best))
         save_pickle(trials, save_path, f'full_space_{trial_name}')
     
     else:
         trials = Trials()
         print('Running Warm Start')
-        best = fmin(objective, space=init_space, algo=tpe.suggest, trials=trials, max_evals=i*20)
+        best = fmin(objective, space=init_space, algo=partial(tpe.suggest, n_startup_jobs=10), trials=trials, max_evals=i*20)
         save_pickle(trials, save_path, f'warm_start_{trial_name}')
 
     
