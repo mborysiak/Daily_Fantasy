@@ -842,3 +842,30 @@ for set_week, set_year in zip([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
     
 
 # %%
+
+pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
+old_ens_vers = 'random_sera1_rsq0_mse0_include2_kfold3'
+new_ens_vers = 'random_sera0_rsq0_mse1_include2_kfold3'
+
+df = dm.read("SELECT * FROM Mean_Ownership", 'Simulation')
+df = df.loc[df.ensemble_vers == old_ens_vers].reset_index(drop=True)
+df['ensemble_vers'] = new_ens_vers
+
+del_q = f'''pred_vers='{pred_version}'
+            AND ensemble_vers='{new_ens_vers}' 
+            '''
+dm.delete_from_db('Simulation', 'Mean_Ownership', del_q, create_backup=False)
+dm.write_to_db(df, 'Simulation', 'Mean_Ownership', 'append')
+
+
+df = dm.read("SELECT * FROM Predicted_Ownership", 'Simulation')
+df = df.loc[df.ensemble_vers == old_ens_vers].reset_index(drop=True)
+df['ensemble_vers'] = new_ens_vers
+
+
+del_q = f'''pred_vers='{pred_version}'
+            AND ensemble_vers='{new_ens_vers}' 
+            '''
+dm.delete_from_db('Simulation', 'Predicted_Ownership', del_q, create_backup=False)
+dm.write_to_db(df, 'Simulation', 'Predicted_Ownership', 'append')
+# %%
