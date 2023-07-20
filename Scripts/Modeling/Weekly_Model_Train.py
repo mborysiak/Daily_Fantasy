@@ -221,25 +221,62 @@ def output_dict():
     return {'pred': {}, 'actual': {}, 'scores': {}, 'models': {}, 'full_hold':{}, 'param_scores': {}, 'trials': {}}
 
 
-def reg_params(df_train, min_samples):
+def get_trial_times(model_output_path):
+    all_trials = load_pickle(model_output_path, 'all_trials')
+
+    times = []
+    for k,v in all_trials.items():
+        if k!='reg_adp':
+            max_trial = len(v.trials) - 1
+            trial_times = []
+            for i in range(max_trial-100, max_trial):
+                trial_times.append(v.trials[i]['refresh_time'] - v.trials[i]['book_time'])
+            trial_time = np.mean(trial_times).seconds
+            times.append([k, np.round(trial_time / 60, 2)])
+
+    time_per_trial = pd.DataFrame(times, columns=['model', 'time_per_trial']).sort_values(by='time_per_trial', ascending=False)
+    time_per_trial['total_time'] = time_per_trial.time_per_trial * 100
+    return time_per_trial
+
+def calc_num_trials(time_per_trial, run_params):
+
+    n_splits = run_params['n_iters']
+    time_per_trial['percentile_90_time'] = time_per_trial.time_per_trial.quantile(0.9)
+    time_per_trial['num_trials'] = n_splits * time_per_trial.percentile_90_time / time_per_trial.time_per_trial
+    time_per_trial['num_trials'] = time_per_trial.num_trials.apply(lambda x: np.min([n_splits, np.max([x, n_splits/2])])).astype('int')
+    return {k:v for k,v in zip(time_per_trial.model, time_per_trial.num_trials)}
+
+try:
+    trial_times = get_trial_times(model_output_path)
+    num_trials = calc_num_trials(trial_times, run_params)
+except:
+    num_trials = None
+
+def reg_params(df_train, min_samples, num_trials, run_params):
     model_list = ['adp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'knn','xgb']
     label = 'reg'
-    func_params = [[m, label, df_train, 'reg', i, min_samples, ''] for i, m  in enumerate(model_list)]
+    func_params = []
+    for i, m  in enumerate(model_list):
+        try: num_trial = num_trials[f'{label}_{m}']
+        except: num_trial = run_params['n_iters']
+        func_params.append([m, label, df_train, 'reg', i, min_samples, '', num_trial])
 
     return func_params
 
-def class_params(df, cuts, run_params, min_samples):
-    model_list = ['gbm_c', 'rf_c','gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c'
-                  ]
+def class_params(df, min_samples, num_trials, run_params):
+    model_list = ['gbm_c', 'rf_c','gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c']
     func_params_c = []
-    for cut in cuts:
+    for cut in run_params['cuts']:
         label = f'class_{cut}'
         df_train_class, _ = get_class_data(df, cut, run_params) 
-        func_params_c.extend([[m, label, df_train_class, 'class', i, min_samples, ''] for i, m  in enumerate(model_list)])
+        for i, m  in enumerate(model_list):
+            try: num_trial = num_trials[f'{label}_{m}']
+            except: num_trial = run_params['n_iters']
+            func_params_c.append([m, label, df_train_class, 'class', i, min_samples, '', num_trial])
 
     return func_params_c
 
-def quant_params(df_train, alphas, min_samples, choose_models):
+def quant_params(df_train, alphas, min_samples, choose_models, num_trials, run_params):
     model_list_opt = {
                   'gbm_only': ['gbm_q'],
                   'no_gbm': ['rf_q','qr_q','lgbm_q','knn_q']
@@ -248,17 +285,62 @@ def quant_params(df_train, alphas, min_samples, choose_models):
     func_params_q = []
     for alph in alphas:
         label = f'quant_{alph}'
-        func_params_q.extend([[m, label, df_train, 'quantile', i, min_samples, alph] for i, m  in enumerate(model_list)])
+        for i, m  in enumerate(model_list):
+            try: num_trial = num_trials[f'{label}_{m}']
+            except: num_trial = run_params['n_iters']
+            func_params_q.append([m, label, df_train, 'quantile', i, min_samples, alph, num_trial])
 
     return func_params_q
 
-def million_params(df, run_params):
+def million_params(df, num_trials, run_params):
     model_list = ['gbm_c', 'rf_c', 'gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c' ]
     label = 'million'
     df_train_mil, _, min_samples_mil = predict_million_df(df, run_params)
-    func_params = [[m, label, df_train_mil, 'class', i,min_samples_mil, ''] for i, m  in enumerate(model_list)]
+    for i, m  in enumerate(model_list):
+        try: num_trial = num_trials[f'{label}_{m}']
+        except: num_trial = run_params['n_iters']
+        func_params.append([m, label, df_train_mil, 'class', i, min_samples_mil, '', num_trial])
 
     return func_params
+
+# def reg_params(df_train, min_samples):
+#     model_list = ['adp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'knn','xgb']
+#     label = 'reg'
+#     func_params = [[m, label, df_train, 'reg', i, min_samples, ''] for i, m  in enumerate(model_list)]
+
+#     return func_params
+
+# def class_params(df, cuts, run_params, min_samples):
+#     model_list = ['gbm_c', 'rf_c','gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c'
+#                   ]
+#     func_params_c = []
+#     for cut in cuts:
+#         label = f'class_{cut}'
+#         df_train_class, _ = get_class_data(df, cut, run_params) 
+#         func_params_c.extend([[m, label, df_train_class, 'class', i, min_samples, ''] for i, m  in enumerate(model_list)])
+
+#     return func_params_c
+
+# def quant_params(df_train, alphas, min_samples, choose_models):
+#     model_list_opt = {
+#                   'gbm_only': ['gbm_q'],
+#                   'no_gbm': ['rf_q','qr_q','lgbm_q','knn_q']
+#                 }
+#     model_list = model_list_opt[choose_models]
+#     func_params_q = []
+#     for alph in alphas:
+#         label = f'quant_{alph}'
+#         func_params_q.extend([[m, label, df_train, 'quantile', i, min_samples, alph] for i, m  in enumerate(model_list)])
+
+#     return func_params_q
+
+# def million_params(df, run_params):
+#     model_list = ['gbm_c', 'rf_c', 'gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c' ]
+#     label = 'million'
+#     df_train_mil, _, min_samples_mil = predict_million_df(df, run_params)
+#     func_params = [[m, label, df_train_mil, 'class', i,min_samples_mil, ''] for i, m  in enumerate(model_list)]
+
+#     return func_params
 
 
 def get_skm(skm_df, model_obj, to_drop):
@@ -574,10 +656,10 @@ def save_output_dict(out_dict, label, model_output_path):
 run_list = [
             # ['QB', '', 'full_model'],
             # ['RB', '', 'full_model'],
-            # ['WR', '', 'full_model'],
+            ['WR', '', 'full_model'],
             # ['TE', '', 'full_model'],
             # ['Defense', '', 'full_model'],
-            ['QB', '', 'backfill'],
+            # ['QB', '', 'backfill'],
             # ['RB', '', 'backfill'],
             # ['WR', '', 'backfill'],
             # ['TE', '', 'backfill'],
@@ -603,12 +685,18 @@ for w in run_weeks:
 
         df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
-        # get all model iterations for various model types
+        # # get all model iterations for various model types
+        # func_params = []
+        # func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples, 'gbm_only'))
+        # func_params.extend(reg_params(df_train, min_samples))
+        # func_params.extend(class_params(df, run_params['cuts'], run_params, min_samples))
+        # func_params.extend(million_params(df, run_params))
+
         func_params = []
-        func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples, 'gbm_only'))
-        func_params.extend(reg_params(df_train, min_samples))
-        func_params.extend(class_params(df, run_params['cuts'], run_params, min_samples))
-        func_params.extend(million_params(df, run_params))
+        func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples, 'gbm_only',  num_trials, run_params))
+        func_params.extend(reg_params(df_train, min_samples, num_trials, run_params))
+        func_params.extend(class_params(df, min_samples, num_trials, run_params))
+        func_params.extend(million_params(df, num_trials, run_params))
 
         # run all models in parallel
         results = Parallel(n_jobs=-1, verbose=verbosity)(
@@ -631,15 +719,3 @@ for w in run_weeks:
 
 
 # %%
-
-all_trials = load_pickle(model_output_path, 'all_trials')
-
-times = []
-for k,v in all_trials.items():
-    if k!='reg_adp':
-        max_trial = len(v.trials) - 1
-        min_trial = max_trial - run_params['n_iters'] * run_params['n_splits'] + 1
-        trial_time = (v.trials[max_trial]['book_time'] - v.trials[min_trial]['book_time']).seconds
-        times.append([k, int(trial_time / 60)])
-
-pd.DataFrame(times, columns=['model', 'time']).sort_values(by='time', ascending=False)

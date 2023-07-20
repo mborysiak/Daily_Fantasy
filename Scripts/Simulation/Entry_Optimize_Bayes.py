@@ -750,7 +750,7 @@ full_space = {
 trial_name = 'adjust5000_mean_week1to15_2022_newbayesmodel_kbest_numavgpts_newpar'
 
 
-for i in range(3,7):
+for i in range(4,7):
 
     if os.path.exists(save_path+f'full_space_{trial_name}.p'):
 
