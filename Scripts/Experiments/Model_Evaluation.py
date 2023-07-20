@@ -443,7 +443,7 @@ df = dm.read('''SELECT *
                      SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num > 150
+                WHERE trial_num > 162
                       AND week <= 10
                 ''', 'Results')
 
@@ -476,7 +476,7 @@ for w, yr in zip(weeks, years):
                             SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num > 150
+                     WHERE trial_num > 162
                            AND week = {w}
                            AND year = {yr}
                      ''', 'Results')
@@ -574,20 +574,59 @@ df['error'] = df.y_act - df.pred_fp_per_game
 
 #%%
 
+actual_pts = pd.DataFrame()
+for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+    if pos=='Defense': pl = 'defTeam'
+    else: pl = 'player'
 
+    actual_pts_cur = dm.read(f'''SELECT {pl} player, week, season year, fantasy_pts y_act
+                                    FROM {pos}_Stats 
+                                    WHERE week>=1
+                                        and week < 18
+                                        and season >= 2020
+                                        ''', 'FastR')
+    actual_pts = pd.concat([actual_pts, actual_pts_cur], axis=0)
+
+if len(actual_pts) > 0:
+    df = pd.merge(df, actual_pts, on=['player', 'week', 'year'], how='left')
+
+#%%
+from sklearn.metrics import r2_score, mean_squared_error
 skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
-df = dm.read("SELECT * FROM Model_Validations WHERE model_type='full_model' AND set_year=2022", 'Simulation')
+df = dm.read(f'''SELECT * 
+                FROM Model_Validations 
+                WHERE model_type='full_model' 
+                      AND set_year=2022
+                      AND set_week <= 15
+                      AND (pred_version LIKE '%ffa%' 
+                           OR pred_version LIKE '%bayes%')
+             ''', 'Validations')
+
+df = df.drop('y_act', axis=1)
+df = pd.merge(df, actual_pts, on=['player', 'week', 'year'], how='left').dropna().reset_index(drop=True)
 gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', ]
-df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['y_act'], x['pred_fp_per_game'])[0]).reset_index()
+df = df.groupby(gcols).apply(lambda x: mean_squared_error(x['y_act'], x['pred_fp_per_game'])).reset_index()
 display(df.sort_values(by=['set_year', 'set_week', 'pos', 0],
                ascending=[True, True, False, False]).iloc[:50])
 
 #%%
 
+df.groupby(['pos', 'pred_version', 'ensemble_vers']).agg({0: 'mean'}).sort_values(by=['pos', 0],
+               ascending=[False, True])
+
+#%%
+
 skm = SciKitModel(pd.DataFrame({'x': [1, 2]}))
-df = dm.read("SELECT * FROM Model_Test_Validations WHERE model_type='full_model' AND set_year=2022", 'Simulation')
+df = dm.read(f'''SELECT * 
+                FROM Model_Test_Validations 
+                WHERE model_type='full_model' 
+                      AND set_year=2022
+                      AND (pred_version LIKE '%ffa%' 
+                           OR pred_version LIKE '%bayes%')
+             ''', 'Validations')
+
 gcols = ['set_week', 'set_year', 'pos', 'pred_version', 'ensemble_vers', ]
-df = df.groupby(gcols).apply(lambda x: skm.test_scores(x['actual_pts'], x['pred_fp_per_game'])[0]).reset_index()
+df = df.groupby(gcols).apply(lambda x:r2_score(x['actual_pts'], x['pred_fp_per_game'])).reset_index()
 display(df.sort_values(by=['set_year', 'set_week', 'pos', 0],
                ascending=[True, True, False, False]).iloc[:50])
 

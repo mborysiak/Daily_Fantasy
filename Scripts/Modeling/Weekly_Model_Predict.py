@@ -668,8 +668,6 @@ def predict_million_df(df, run_params):
 
 
 
-
-
 def save_mil_data(X_mil, y_mil, best_val_mil, df_predict_mil, best_predictions_mil,  run_params):
     test_output = pd.concat([df_predict_mil[['player', 'team', 'week', 'year']], 
                             pd.Series(best_predictions_mil.mean(axis=1), name='pred_fp_per_game_class')], 
@@ -986,7 +984,7 @@ def create_mil_output(df_predict_mil, best_predictions_mil):
                             on=['player', 'week', 'year'], how='left').fillna(0)
         print('Showing Actual Results')
         display(mil_results.sort_values(by='pred_mil', ascending=False).iloc[:50])
-        show_calibration_curve(mil_results['y_act'], mil_results['pred_mil'], n_bins=8)
+        show_calibration_curve(mil_results['y_act'], mil_results['pred_mil'], n_bins=5)
     except:
         display(output_mil.sort_values(by='pred_mil', ascending=False).iloc[:50])
 
@@ -1079,17 +1077,20 @@ run_params = {
 }
 
 r2_wt = 0
-sera_wt = 1
-mse_wt = 0
+sera_wt = 0
+mse_wt = 1
 brier_wt = 1
 matt_wt = 0
 
 # set the model version
-set_weeks = [6]
+# set_weeks = [1,2,3,4]
+# set_weeks = [5,6,7,8]
+# set_weeks = [9,10,11,12]
+set_weeks = [13,14,15,16]
 
 pred_versions = len(set_weeks)*['sera1_rsq0_brier1_matt0_bayes']
 
-ensemble_versions = len(set_weeks)*['random_kbest_sera1_rsq0_mse0_include2_kfold3']
+ensemble_versions = len(set_weeks)*['random_kbest_sera0_rsq0_mse1_include2_kfold3']
 
 std_dev_types = ['spline_pred_class80_q80_matt0_brier1_kfold3',
                  'spline_pred_class80_matt0_brier1_kfold3',
@@ -1102,15 +1103,15 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     run_params['set_week'] = w
     run_params['ensemble_vers'] = ensemble_vers
     runs = [
-        # ['QB', 'full_model', ''],
-        # ['RB', 'full_model', ''],
-        # ['WR', 'full_model', ''],
-        # ['TE', 'full_model', ''],
+        ['QB', 'full_model', ''],
+        ['RB', 'full_model', ''],
+        ['WR', 'full_model', ''],
+        ['TE', 'full_model', ''],
         ['Defense', 'full_model', ''],
-        # ['QB', 'backfill', ''],
-        # ['RB', 'backfill', ''],
-        # ['WR', 'backfill', ''],
-        # ['TE', 'backfill', '']
+        ['QB', 'backfill', ''],
+        ['RB', 'backfill', ''],
+        ['WR', 'backfill', ''],
+        ['TE', 'backfill', '']
     ]
 
     for set_pos, model_type, rush_pass in runs:
@@ -1144,7 +1145,7 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
         best_val_reg, best_predictions_reg = load_run_models(run_params, X_stack, y_stack, X_predict, 'reg')
 
         save_val_to_db(X_stack_player, y_stack_class, best_val_class, run_params, table_name='Model_Validations_Class')
-        save_val_to_db(X_stack_player, y_stack_class, best_val_reg, run_params, table_name='Model_Validations')
+        save_val_to_db(X_stack_player, y_stack, best_val_reg, run_params, table_name='Model_Validations')
 
         # create the output and add standard deviations / max score datasets
         df_val_final = create_final_val_df(X_stack_player, y_stack, best_val_reg, best_val_class, best_val_quant)
@@ -1191,88 +1192,34 @@ for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
     print('All Runs Finished')
 
 #%%
-x=2
 
-# %%
-trials = load_pickle('/Users/mborysia/Documents/Github/Daily_Fantasy//Model_Outputs/2022/QB_year2022_week3_full_modelsera1_rsq0_brier1_matt0_bayes/', 
-                     'reg_sera1_rsq0_include2_kfold3')['trials']
-trials['lgbm'].tids
+import os
+import shutil
 
-#%%
-run_params['stack_model'] = 'full_stack'
-fname = 'reg_sera1_rsq0_include2_kfold3_test'
-final_m = 'lgbm'
-i = 0
-model_obj = 'reg'
-alpha = None
-# run_stack_models(fname, final_m, i, model_obj, alpha, X_stack_mil, y_stack_mil, run_params) 
 
-min_samples = int(len(y_stack)/10)
-proba, run_adp, print_coef = get_proba_adp_coef(model_obj, final_m, run_params)
+def navigate_folders(root_dir, search_keywords, old_filename, new_filename):
+    for dirpath, _, _ in os.walk(root_dir):
+        if all(keyword in dirpath for keyword in search_keywords):
+            try:
+                source_path = os.path.join(dirpath, old_filename)
+                destination_path = os.path.join(dirpath, new_filename)
+                shutil.copy2(source_path, destination_path)
+            except:
+                print(dirpath, 'failed')
 
-skm, _, _ = get_skm(pd.concat([X_stack, y_stack], axis=1), model_obj, to_drop=[])
-pipe, params = get_full_pipe(skm, final_m, stack_model=run_params['stack_model'], alpha=alpha, 
-                                min_samples=min_samples, bayes_rand=run_params['opt_type'])
+root_directory = '/Users/mborysia/Documents/Github/Daily_Fantasy//Model_Outputs/2022/'
+search_keywords = ['bayes']
 
-trials = get_trials(fname, final_m, run_params['opt_type'])
-trials = update_trials_params(trials, final_m, params, pipe)
+# old_filename = 'quantile80.0_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
+# new_filename = 'quantile80.0_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
 
-best_model, stack_scores, stack_pred, trial = skm.best_stack(pipe, params, X_stack, y_stack, 
-                                                            n_iter=50, alpha=alpha,
-                                                            trials=trials, bayes_rand=run_params['opt_type'],
-                                                            run_adp=run_adp, print_coef=print_coef,
-                                                            proba=proba, num_k_folds=run_params['num_k_folds'],
-                                                            random_state=(i*2)+(i*7))
-best_model
-# %%
-models, full_hold = load_all_pickles(model_output_path, 'all')
-full_hold['reg_adp'].plot.scatter(x='pred', y='y_act')
-# %%
-pd.concat([X_stack, y_stack.reset_index(drop=True)], axis=1).plot.scatter(x='reg_adp', y='y_act')
-# %%
-best_models = load_pickle('/Users/mborysia/Documents/Github/Daily_Fantasy//Model_Outputs/2022/QB_year2022_week1_full_modelsera1_rsq0_brier1_matt0_bayes/', 
-                     'reg_sera1_rsq0_include2_kfold3')['best_models']
-best_models[0].predict(X_predict)
-# %%
-_, X, y = get_skm(df_train, 'quantile', to_drop=run_params['drop_cols'])
-X_predict_quant = create_stack_predict(df_predict, models_quant, X, y)
+# old_filename = 'class_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
+# new_filename=   'class_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
 
-# %%
+old_filename = 'million_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
+new_filename = 'million_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
 
-fname = 'million_sera1_rsq0_include2_kfold3'
-final_m = 'lgbm'
-i = 0
-model_obj = 'class'
-alpha = None
-is_million=True
+# Call the function to navigate and copy/rename files
+navigate_folders(root_directory, search_keywords,  old_filename, new_filename)
 
-if alpha is not None: alpha_label = alpha*100
-else: alpha_label = ''
-
-if is_million: model_obj_label = 'million'
-else: model_obj_label = model_obj
-
-path = run_params['model_output_path']
-fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"    
-model_list, func_params = get_func_params(model_obj)
-
-if os.path.exists(f"{path}/{fname}.p"):
-    print('Loading Existing Model Runs')
-    best_models, scores, stack_val_pred = load_stack_runs(path, fname)
-
-else:
-    
-    results = Parallel(n_jobs=-1, verbose=50)(
-                    delayed(run_stack_models)
-                    (fname, final_m, i, model_obj, alpha, X_stack_mil, y_stack_mil, run_params) 
-                    for final_m, i, model_obj, alpha in func_params
-                    )
-
-    best_models, scores, stack_val_pred, trials = unpack_results(model_list, results)
-    save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
-
-predictions = stack_predictions(X_predict, best_models, model_list, model_obj=model_obj)
-best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack_class, stack_val_pred, 
-                                                        predictions, model_obj=model_obj, show_plot=show_plot, 
-                                                        min_include=min_include)
 # %%
