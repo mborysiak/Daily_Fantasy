@@ -780,16 +780,16 @@ for i in range(4,7):
     
 
 #%%
-trial_name = 'adjust5000_mean_median_week1to15_2022_newbayesmodel_kbest_numavgpts'
+trial_name = 'adjust5000_mean_week1to15_2022_newbayesmodel_kbest_numavgpts_newpar'
 results = results_to_df(save_path, f'full_space_{trial_name}')
 dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
 dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'append')
 
 #%%
 #%%
-trial_name = 'adjust5000_mean_median_week1to15_2022_newbayesmodel_kbest_numavgpts'
+trial_name = 'adjust5000_mean_week1to15_2022_newbayesmodel_kbest_numavgpts_newpar'
 # trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
-show_trial_best_params('full_space_'+trial_name, 0)
+show_trial_best_params('full_space_'+trial_name, 4)
 
 #%%
 

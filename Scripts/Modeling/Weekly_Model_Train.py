@@ -244,13 +244,8 @@ def calc_num_trials(time_per_trial, run_params):
     time_per_trial['percentile_90_time'] = time_per_trial.time_per_trial.quantile(0.9)
     time_per_trial['num_trials'] = n_splits * time_per_trial.percentile_90_time / time_per_trial.time_per_trial
     time_per_trial['num_trials'] = time_per_trial.num_trials.apply(lambda x: np.min([n_splits, np.max([x, n_splits/2])])).astype('int')
+    
     return {k:v for k,v in zip(time_per_trial.model, time_per_trial.num_trials)}
-
-try:
-    trial_times = get_trial_times(model_output_path)
-    num_trials = calc_num_trials(trial_times, run_params)
-except:
-    num_trials = None
 
 def reg_params(df_train, min_samples, num_trials, run_params):
     model_list = ['adp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'knn','xgb']
@@ -691,6 +686,12 @@ for w in run_weeks:
         # func_params.extend(reg_params(df_train, min_samples))
         # func_params.extend(class_params(df, run_params['cuts'], run_params, min_samples))
         # func_params.extend(million_params(df, run_params))
+
+        try:
+            trial_times = get_trial_times(model_output_path)
+            num_trials = calc_num_trials(trial_times, run_params)
+        except:
+            num_trials = None
 
         func_params = []
         func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples, 'gbm_only',  num_trials, run_params))

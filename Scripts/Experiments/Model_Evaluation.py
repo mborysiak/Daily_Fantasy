@@ -444,7 +444,7 @@ df = dm.read('''SELECT *
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
                 WHERE trial_num > 162
-                      AND week <= 10
+                      AND week <= 15
                 ''', 'Results')
 
 model_type = {
@@ -464,7 +464,7 @@ show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
 
 i=0
@@ -483,7 +483,7 @@ for w, yr in zip(weeks, years):
 
     model_name = 'enet'
     m = model_type[model_name]
-    X, y = entry_optimize_params(df, max_adjust=1000, model_name=model_name)
+    X, y = entry_optimize_params(df, max_adjust=5000, model_name=model_name)
     coef_vals, X = get_model_coef(X, y, m)
     all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1
 
