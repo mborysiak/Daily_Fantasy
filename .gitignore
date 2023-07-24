@@ -5,6 +5,7 @@ __pycache__/
 
 #ipynb
 *.ipynb
+*.zip
 
 *Model_Features.sqlite3
 Backups/
