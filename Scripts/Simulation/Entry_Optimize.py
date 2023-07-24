@@ -25,7 +25,7 @@ set_years = [
 ensemble_vers ='random_sera0_rsq0_mse1_include2_kfold3'   
 lineups_per_param = 1
 pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
-std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
+std_dev_type = 'spline_pred_class80_matt0_brier1_kfold3'
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
 trial_num = max_trial_num + 1
@@ -189,30 +189,30 @@ for repeat_num in range(10):
                       'static_top_players', 'use_ownership', 'own_neg_frac', 
                       'max_salary_remain', 'num_iters', 'num_avg_pts']
 
-        d ={'adjust_pos_counts': {True: 0.4, False: 0.6},
+        d ={'adjust_pos_counts': {True: 0.2, False: 0.8},
             'player_drop_multiple': {4: 0, 2: 0, 0: 1},
-            'matchup_seed': {True: 0.7, False: 0.3},
+            'matchup_seed': {True: 0.3, False: 0.7},
             'matchup_drop': {1: 0.1, 2: 0.1, 3: 0, 0: 0.8},
-            'top_n_choices': {1: 0, 2: 0.6, 3:0.2, 0: 0.2},
-            'full_model_weight': {5: 0.51, 0.2: 0.49},
+            'top_n_choices': {1: 0, 2: 0, 3: 0.3, 0: 0.7},
+            'full_model_weight': {5: 0.5, 0.2: 0.5},
             'covar_type': {'no_covar': 0.2, 'team_points_trunc': 0.8},
             'max_team_type': {'player_points': 0.2, 'vegas_points': 0.8},
-            'min_player_same_team': {2: 0.2, 3: 0.6, 'Auto': 0.2},
-            'num_top_players': {2: 0.3, 3: 0.6, 5: 0.1},
-            'ownership_vers': {'mil_only': 0.7,
-                                'mil_times_standard_ln': 0.1,
+            'min_player_same_team': {2: 0, 3: 0.7, 'Auto': 0.3},
+            'num_top_players': {2: 0.3, 3: 0.7, 5: 0},
+            'ownership_vers': {'mil_only': 0.8,
+                                'mil_times_standard_ln': 0.2,
                                 'mil_div_standard_ln': 0,
-                                'standard_ln': 0.2},
-            'qb_min_iter': {0: 0.7, 2: 0, 9: 0.3},
+                                'standard_ln': 0},
+            'qb_min_iter': {0: 0.1, 2: 0.1, 9: 0.8},
             'qb_set_max_team': {True: 0.5, False: 0.5},
-            'qb_solo_start': {True: 0.4, False: 0.7},
+            'qb_solo_start': {True: 0.4, False: 0.6},
             'static_top_players': {True: 0.3, False: 0.7},
-            'use_ownership': {0.9: 0, 0.8: 0.2, 1: 0.8},
+            'use_ownership': {0.9: 0, 0.8: 0.3, 1: 0.7},
             'own_neg_frac': {0.8: 0, 1: 1},
-            'max_salary_remain': {200: .3, 500: 0, 1000: 0.7, 1500: 0},
-            'num_iters': {150: 0.15, 100: 0.7, 50: 0.15},
+            'max_salary_remain': {200: .4, 500: 0, 1000: 0.6, 1500: 0},
+            'num_iters': {150: 0.3, 100: 0.7, 50: 0},
             'num_avg_pts': {2: 0.3, 3: 0.3, 5: 0.3, 1: 0.1},
-            'min_players_opp_team': {1: 0.2, 2: 0, 'Auto': 0.8}}
+            'min_players_opp_team': {1: 0, 2: 0, 'Auto': 1}}
 
         d = {k: d[k] for k in d_ordering}
         params = []

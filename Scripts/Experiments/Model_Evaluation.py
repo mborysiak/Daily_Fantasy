@@ -445,6 +445,7 @@ df = dm.read('''SELECT *
                       ) USING (week, year, trial_num, repeat_num)
                 WHERE trial_num > 162
                       AND week <= 15
+            
                 ''', 'Results')
 
 model_type = {
@@ -464,7 +465,7 @@ show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+weeks = [1, 2, 3, 4, 5, 6, 7, 8,  9, 10, 11, 12, 13, 14, 15]
 years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
 
 i=0
