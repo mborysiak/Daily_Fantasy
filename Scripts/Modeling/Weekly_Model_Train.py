@@ -1,3 +1,4 @@
+
 #%%
 # core packages
 import pandas as pd
@@ -16,16 +17,9 @@ from skmodel import SciKitModel
 import zModel_Functions as mf
 from joblib import Parallel, delayed
 
-import pandas_bokeh
-pandas_bokeh.output_notebook()
-
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning) 
 warnings.filterwarnings("ignore", category=UserWarning) 
-
-pd.set_option('display.max_columns', 999)
-# from sklearn import set_config
-# set_config(display='diagram')
 
 #==========
 # General Setting
@@ -254,13 +248,13 @@ def calc_num_trials(time_per_trial, run_params):
 def reg_params(df_train, min_samples, num_trials, run_params):
     model_list = ['adp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'knn','xgb']
     label = 'reg'
-    func_params = []
+    func_params_reg = []
     for i, m  in enumerate(model_list):
         try: num_trial = num_trials[f'{label}_{m}']
         except: num_trial = run_params['n_iters']
-        func_params.append([m, label, df_train, 'reg', i, min_samples, '', num_trial])
+        func_params_reg.append([m, label, df_train, 'reg', i, min_samples, '', num_trial])
 
-    return func_params
+    return func_params_reg
 
 def class_params(df, min_samples, num_trials, run_params):
     model_list = ['gbm_c', 'rf_c','gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c']
@@ -278,7 +272,7 @@ def class_params(df, min_samples, num_trials, run_params):
 def quant_params(df_train, alphas, min_samples, choose_models, num_trials, run_params):
     model_list_opt = {
                   'gbm_only': ['gbm_q'],
-                  'no_gbm': ['rf_q','qr_q','lgbm_q','knn_q']
+                  'no_gbm': ['rf_q','qr_q','lgbm_q','knn_q', 'gbm_q']
                 }
     model_list = model_list_opt[choose_models]
     func_params_q = []
@@ -295,52 +289,20 @@ def million_params(df, num_trials, run_params):
     model_list = ['gbm_c', 'rf_c', 'gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c' ]
     label = 'million'
     df_train_mil, _, min_samples_mil = predict_million_df(df, run_params)
+
+    func_params_mil = []
     for i, m  in enumerate(model_list):
         try: num_trial = num_trials[f'{label}_{m}']
         except: num_trial = run_params['n_iters']
-        func_params.append([m, label, df_train_mil, 'class', i, min_samples_mil, '', num_trial])
+        func_params_mil.append([m, label, df_train_mil, 'class', i, min_samples_mil, '', num_trial])
 
+    return func_params_mil
+
+def order_func_params(func_params, trial_times):
+    
+    trial_order = list(trial_times.model.values) + ['reg_adp']
+    func_params = sorted(func_params, key=lambda x: trial_order.index(f'{x[1]}_{x[0]}'))
     return func_params
-
-# def reg_params(df_train, min_samples):
-#     model_list = ['adp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'knn','xgb']
-#     label = 'reg'
-#     func_params = [[m, label, df_train, 'reg', i, min_samples, ''] for i, m  in enumerate(model_list)]
-
-#     return func_params
-
-# def class_params(df, cuts, run_params, min_samples):
-#     model_list = ['gbm_c', 'rf_c','gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c'
-#                   ]
-#     func_params_c = []
-#     for cut in cuts:
-#         label = f'class_{cut}'
-#         df_train_class, _ = get_class_data(df, cut, run_params) 
-#         func_params_c.extend([[m, label, df_train_class, 'class', i, min_samples, ''] for i, m  in enumerate(model_list)])
-
-#     return func_params_c
-
-# def quant_params(df_train, alphas, min_samples, choose_models):
-#     model_list_opt = {
-#                   'gbm_only': ['gbm_q'],
-#                   'no_gbm': ['rf_q','qr_q','lgbm_q','knn_q']
-#                 }
-#     model_list = model_list_opt[choose_models]
-#     func_params_q = []
-#     for alph in alphas:
-#         label = f'quant_{alph}'
-#         func_params_q.extend([[m, label, df_train, 'quantile', i, min_samples, alph] for i, m  in enumerate(model_list)])
-
-#     return func_params_q
-
-# def million_params(df, run_params):
-#     model_list = ['gbm_c', 'rf_c', 'gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c' ]
-#     label = 'million'
-#     df_train_mil, _, min_samples_mil = predict_million_df(df, run_params)
-#     func_params = [[m, label, df_train_mil, 'class', i,min_samples_mil, ''] for i, m  in enumerate(model_list)]
-
-#     return func_params
-
 
 def get_skm(skm_df, model_obj, to_drop):
     
@@ -651,17 +613,17 @@ def save_output_dict(out_dict, label, model_output_path):
 
 
 
-#%%
+ #%%
 run_list = [
             # ['QB', '', 'full_model'],
             # ['RB', '', 'full_model'],
             # ['WR', '', 'full_model'],
             # ['TE', '', 'full_model'],
             # ['Defense', '', 'full_model'],
-            # ['QB', '', 'backfill'],
-            ['RB', '', 'backfill'],
-            ['WR', '', 'backfill'],
-            ['TE', '', 'backfill'],
+            ['QB', '', 'backfill'],
+            # ['RB', '', 'backfill'],
+            # ['WR', '', 'backfill'],
+            # ['TE', '', 'backfill'],
 ]
 
 for w in run_weeks:
@@ -684,13 +646,6 @@ for w in run_weeks:
 
         df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
-        # # get all model iterations for various model types
-        # func_params = []
-        # func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples, 'gbm_only'))
-        # func_params.extend(reg_params(df_train, min_samples))
-        # func_params.extend(class_params(df, run_params['cuts'], run_params, min_samples))
-        # func_params.extend(million_params(df, run_params))
-
         try:
             trial_times = get_trial_times(root_path, run_params, set_pos, model_type, vers)
             num_trials = calc_num_trials(trial_times, run_params)
@@ -699,33 +654,38 @@ for w in run_weeks:
             num_trials = None
 
         func_params = []
-        func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples, 'gbm_only',  num_trials, run_params))
+        func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples, 'no_gbm',  num_trials, run_params))
         func_params.extend(reg_params(df_train, min_samples, num_trials, run_params))
         func_params.extend(class_params(df, min_samples, num_trials, run_params))
         func_params.extend(million_params(df, num_trials, run_params))
-
+        func_params = order_func_params(func_params, trial_times)
+        
         # run all models in parallel
         results = Parallel(n_jobs=-1, verbose=verbosity)(
                           delayed(get_model_output)
                           (m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params
                         )
         
-        func_params_no_gbm = quant_params(df_train, [0.8, 0.95], min_samples, 'no_gbm', num_trials, run_params)
-        results_no_gbm = Parallel(n_jobs=-1, verbose=verbosity)(
-                          delayed(get_model_output)
-                          (m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params_no_gbm
-                        )
-        results.extend(results_no_gbm)
-        func_params.extend(func_params_no_gbm)
+        for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params[2:3]:
+            get_model_output(m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter)
 
-        # save output for all models
-        out_dict = output_dict()
-        out_dict = unpack_results(out_dict, func_params, results)
-        save_output_dict(out_dict, 'all', model_output_path)
+        # func_params_no_gbm = quant_params(df_train, [0.8, 0.95], min_samples, 'no_gbm', num_trials, run_params)
+        # results_no_gbm = Parallel(n_jobs=-1, verbose=verbosity)(
+        #                   delayed(get_model_output)
+        #                   (m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params_no_gbm
+        #                 )
+        # results.extend(results_no_gbm)
+        # func_params.extend(func_params_no_gbm)
 
+        # # save output for all models
+        # out_dict = output_dict()
+        # out_dict = unpack_results(out_dict, func_params, results)
+        # save_output_dict(out_dict, 'all', model_output_path)
 
 # %%
 
+
+#%%
 import os
 import shutil
 
@@ -755,10 +715,3 @@ new_filename = 'million_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
 filename = 'all_trials'
 all_trials = load_pickle(f'/Users/mborysia/Documents/Github/Daily_Fantasy//Model_Outputs/2022/WR_year2022_week16_backfillsera1_rsq0_brier1_matt0_bayes', filename)
 
-# %%
-copy_dict = {}
-for k,v in all_trials.items():
-    if 'reg' not in k:
-        copy_dict[k] = v
-
-# %%
