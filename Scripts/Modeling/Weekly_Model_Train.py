@@ -10,6 +10,7 @@ import datetime as dt
 import matplotlib.pyplot as plt
 import time
 from hyperopt import Trials
+from wakepy import keep
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -34,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [17]
+run_weeks = [2]
 verbosity = 50
 run_params = {
     
@@ -75,12 +76,13 @@ model_type = 'full_model'
 
 # set weights for running model
 r2_wt = 0
-sera_wt = 1
-matt_wt = 0
+sera_wt = 0
+mse_wt = 1
+matt_wt = 1
 brier_wt = 1
 
 # set version and iterations
-vers = 'sera1_rsq0_brier1_matt0_bayes'
+vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 
 #----------------
 # Data Loading
@@ -181,7 +183,7 @@ def train_predict_split(df, run_params):
     output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
-    min_samples = int(df_train[df_train.game_date < run_params['cv_time_input']].shape[0])  
+    min_samples = int(df_train[df_train.game_date < run_params['cv_time_input']].shape[0] / 2)  
     print('Shape of Train Set', df_train.shape)
 
     return df_train, df_predict, output_start, min_samples
@@ -241,7 +243,7 @@ def calc_num_trials(time_per_trial, run_params):
     n_iters = run_params['n_iters']
     time_per_trial['percentile_90_time'] = time_per_trial.time_per_trial.quantile(0.9)
     time_per_trial['num_trials'] = n_iters * time_per_trial.percentile_90_time / time_per_trial.time_per_trial
-    time_per_trial['num_trials'] = time_per_trial.num_trials.apply(lambda x: np.min([n_iters, np.max([x, n_iters/2])])).astype('int')
+    time_per_trial['num_trials'] = time_per_trial.num_trials.apply(lambda x: np.min([n_iters, np.max([x, n_iters/3])])).astype('int')
     
     return {k:v for k,v in zip(time_per_trial.model, time_per_trial.num_trials)}
 
@@ -269,12 +271,8 @@ def class_params(df, min_samples, num_trials, run_params):
 
     return func_params_c
 
-def quant_params(df_train, alphas, min_samples, choose_models, num_trials, run_params):
-    model_list_opt = {
-                  'gbm_only': ['gbm_q'],
-                  'no_gbm': ['rf_q','qr_q','lgbm_q','knn_q', 'gbm_q']
-                }
-    model_list = model_list_opt[choose_models]
+def quant_params(df_train, alphas, min_samples, num_trials, run_params):
+    model_list =  ['qr_q', 'lgbm_q', 'gbm_q', 'gbmh_q']#'knn_q','rf_q',
     func_params_q = []
     for alph in alphas:
         label = f'quant_{alph}'
@@ -300,8 +298,11 @@ def million_params(df, num_trials, run_params):
 
 def order_func_params(func_params, trial_times):
     
-    trial_order = list(trial_times.model.values) + ['reg_adp']
-    func_params = sorted(func_params, key=lambda x: trial_order.index(f'{x[1]}_{x[0]}'))
+    if trial_times is not None:
+        missing_trials = [f'{x[1]}_{x[0]}' for x in func_params if f'{x[1]}_{x[0]}' not in trial_times.values]
+        trial_order = missing_trials + list(trial_times.model.values)
+        func_params = sorted(func_params, key=lambda x: trial_order.index(f'{x[1]}_{x[0]}'))
+
     return func_params
 
 def get_skm(skm_df, model_obj, to_drop):
@@ -366,7 +367,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
                                 skm.piece(m)
                                 ])
 
-        if m == 'qr_q': pipe.steps[-1][-1].quantile = alpha
+        if m in ('qr_q', 'gbmh_q'): pipe.steps[-1][-1].quantile = alpha
         elif m in ('rf_q', 'knn_q'): pipe.steps[-1][-1].q = alpha
         else: pipe.steps[-1][-1].alpha = alpha
     
@@ -613,76 +614,81 @@ def save_output_dict(out_dict, label, model_output_path):
 
 
 
- #%%
-run_list = [
-            # ['QB', '', 'full_model'],
-            # ['RB', '', 'full_model'],
-            # ['WR', '', 'full_model'],
-            # ['TE', '', 'full_model'],
-            # ['Defense', '', 'full_model'],
-            ['QB', '', 'backfill'],
-            # ['RB', '', 'backfill'],
-            # ['WR', '', 'backfill'],
-            # ['TE', '', 'backfill'],
-]
+#%%
 
-for w in run_weeks:
-    run_params['set_week'] = w
 
-    for set_pos, rush_pass, model_type in run_list:
+with keep.running() as m:
+    if not m.success:
+        print('Fell Asleep')
 
-        run_params['rush_pass'] = rush_pass
-        run_params['n_splits'] = n_splits
-        print(f"\n==================\n{set_pos} {model_type} {rush_pass} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
+    run_list = [
+                # ['QB', '', 'full_model'],
+                # ['RB', '', 'full_model'],
+                # ['WR', '', 'full_model'],
+                # ['TE', '', 'full_model'],
+                ['Defense', '', 'full_model'],
+                ['QB', '', 'backfill'],
+                ['RB', '', 'backfill'],
+                ['WR', '', 'backfill'],
+                ['TE', '', 'backfill'],
+    ]
 
-        #==========
-        # Pull and clean compiled data
-        #==========
+    for w in run_weeks:
+        run_params['set_week'] = w
 
-        # load data and filter down
-        pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
-        df, run_params = load_data(model_type, set_pos, run_params)
-        df, run_params = create_game_date(df, run_params)
+        for set_pos, rush_pass, model_type in run_list:
 
-        df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
+            run_params['rush_pass'] = rush_pass
+            run_params['n_splits'] = n_splits
+            print(f"\n==================\n{set_pos} {model_type} {rush_pass} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
 
-        try:
-            trial_times = get_trial_times(root_path, run_params, set_pos, model_type, vers)
-            num_trials = calc_num_trials(trial_times, run_params)
-            print('Lower trials:', {k:v for k,v in num_trials.items() if v < run_params['n_iters']})
-        except:
-            num_trials = None
+            #==========
+            # Pull and clean compiled data
+            #==========
 
-        func_params = []
-        func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples, 'no_gbm',  num_trials, run_params))
-        func_params.extend(reg_params(df_train, min_samples, num_trials, run_params))
-        func_params.extend(class_params(df, min_samples, num_trials, run_params))
-        func_params.extend(million_params(df, num_trials, run_params))
-        func_params = order_func_params(func_params, trial_times)
-        
-        # run all models in parallel
-        results = Parallel(n_jobs=-1, verbose=verbosity)(
-                          delayed(get_model_output)
-                          (m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params
-                        )
-        
-        for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params[2:3]:
-            get_model_output(m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter)
+            # load data and filter down
+            pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
+            df, run_params = load_data(model_type, set_pos, run_params)
+            df, run_params = create_game_date(df, run_params)
 
-        # func_params_no_gbm = quant_params(df_train, [0.8, 0.95], min_samples, 'no_gbm', num_trials, run_params)
-        # results_no_gbm = Parallel(n_jobs=-1, verbose=verbosity)(
-        #                   delayed(get_model_output)
-        #                   (m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params_no_gbm
-        #                 )
-        # results.extend(results_no_gbm)
-        # func_params.extend(func_params_no_gbm)
+            df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
-        # # save output for all models
-        # out_dict = output_dict()
-        # out_dict = unpack_results(out_dict, func_params, results)
-        # save_output_dict(out_dict, 'all', model_output_path)
+            try:
+                trial_times = get_trial_times(root_path, run_params, set_pos, model_type, vers)
+                num_trials = calc_num_trials(trial_times, run_params)
+                print('Lower trials:', {k:v for k,v in num_trials.items() if v < run_params['n_iters']})
+            except:
+                num_trials = None
+                trial_times = None
 
-# %%
+            func_params = []
+            func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples,  num_trials, run_params))
+            func_params.extend(reg_params(df_train, min_samples, num_trials, run_params))
+            func_params.extend(class_params(df, min_samples, num_trials, run_params))
+            func_params.extend(million_params(df, num_trials, run_params))
+            func_params = order_func_params(func_params, trial_times)
+            
+            # run all models in parallel
+            results = Parallel(n_jobs=-1, verbose=verbosity)(
+                            delayed(get_model_output)
+                            (m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
+                                for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params
+                            )
+            
+            # save output for all models
+            out_dict = output_dict()
+            out_dict = unpack_results(out_dict, func_params, results)
+            save_output_dict(out_dict, 'all', model_output_path)
+
+#%%
+for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params[:2]:
+    get_model_output(m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter)
+
+#%%
+
+skm, X, y = get_skm(df_train, 'quantile', to_drop=run_params['drop_cols'])
+pipe, params = get_full_pipe(skm, 'gbmh_q', alpha=0.8, min_samples=min_samples, bayes_rand='bayes')
+pipe.fit(X,y)
 
 
 #%%
@@ -715,3 +721,5 @@ new_filename = 'million_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
 filename = 'all_trials'
 all_trials = load_pickle(f'/Users/mborysia/Documents/Github/Daily_Fantasy//Model_Outputs/2022/WR_year2022_week16_backfillsera1_rsq0_brier1_matt0_bayes', filename)
 
+
+# %%
