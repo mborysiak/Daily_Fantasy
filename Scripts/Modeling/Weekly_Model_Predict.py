@@ -977,12 +977,12 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
     fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"    
     model_list, func_params = get_func_params(model_obj)
 
-    # try:
-    time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type, vers)
-    print(time_per_trial)
-    num_trials = calc_num_trials(time_per_trial, run_params)
-    # except: 
-    #     num_trials = {m: run_params['n_iters'] for m in model_list}
+    try:
+        time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type, vers)
+        print(time_per_trial)
+        num_trials = calc_num_trials(time_per_trial, run_params)
+    except: 
+        num_trials = {m: run_params['n_iters'] for m in model_list}
     print(num_trials)
 
     if os.path.exists(f"{path}/{fname}.p"):
@@ -1106,7 +1106,7 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_kbest',
+    'stack_model': 'random',
 
     # opt params
     'opt_type': 'bayes',
@@ -1132,15 +1132,15 @@ brier_wt = 1
 matt_wt = 0
 
 # set the model version
-set_weeks=[7,8]
-# set_weeks = [1,2,3,4,5]
-# set_weeks = [5,6,7,8]
+# set_weeks=[7,8]
+# set_weeks = [1,2,3,4]
+set_weeks = [5,6,7,8]
 # set_weeks = [9,10,11,12]
 # set_weeks = [13,14,15,16]
 
 pred_versions = len(set_weeks)*['sera0_rsq0_mse1_brier1_matt1_bayes']
 
-ensemble_versions = len(set_weeks)*['random_kbest_sera0_rsq0_mse1_include2_kfold3']
+ensemble_versions = len(set_weeks)*['random_sera0_rsq0_mse1_include2_kfold3']
 
 std_dev_types = ['spline_pred_class80_q80_matt0_brier1_kfold3',
                  'spline_pred_class80_matt0_brier1_kfold3',
