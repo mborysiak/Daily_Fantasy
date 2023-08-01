@@ -824,6 +824,40 @@ def get_newest_folder_with_keywords(path, keywords, ignore_keywords=None, req_fn
     return os.path.join(path, newest_folder)
 
 
+def get_trial_times(root_path, fname, run_params, set_pos, model_type, vers):
+
+    newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
+    keep_words = [set_pos, model_type, vers]
+    drop_words = [f"_week{run_params['set_week']}_"]
+    recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
+
+    all_trials = load_pickle(recent_save, fname)['trials']
+
+    times = []
+    for k,v in all_trials.items():
+        if k!='reg_adp':
+            max_trial = len(v.trials) - 1
+            trial_times = []
+            for i in range(max_trial-50, max_trial):
+                trial_times.append(v.trials[i]['refresh_time'] - v.trials[i]['book_time'])
+            trial_time = np.mean(trial_times).seconds
+            times.append([k, np.round(trial_time / 60, 4)])
+
+    time_per_trial = pd.DataFrame(times, columns=['model', 'time_per_trial']).sort_values(by='time_per_trial', ascending=False)
+    time_per_trial['total_time'] = time_per_trial.time_per_trial * 50
+    return time_per_trial
+
+
+def calc_num_trials(time_per_trial, run_params):
+
+    n_iters = run_params['n_iters']
+    time_per_trial['percentile_90_time'] = time_per_trial.time_per_trial.quantile(0.6)
+    time_per_trial['num_trials'] = n_iters * (time_per_trial.percentile_90_time + 0.001) / (time_per_trial.time_per_trial +  0.001)
+    time_per_trial['num_trials'] = time_per_trial.num_trials.apply(lambda x: np.min([n_iters, np.max([x, n_iters/10])])).astype('int')
+    
+    return {k:v for k,v in zip(time_per_trial.model, time_per_trial.num_trials)}
+
+
 def get_proba_adp_coef(model_obj, final_m, run_params):
     if model_obj == 'class': proba = True
     else: proba = False
@@ -862,7 +896,7 @@ def get_trials(fname, final_m, bayes_rand):
 
     return trials
 
-def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params):
+def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials):
 
     print(f'\n{final_m}')
 
@@ -874,9 +908,11 @@ def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_
                                  min_samples=min_samples, bayes_rand=run_params['opt_type'])
     
     trials = get_trials(fname, final_m, run_params['opt_type'])
+    try: n_iter = num_trials[final_m]
+    except: n_iter = run_params['n_iters']
 
     best_model, stack_scores, stack_pred, trial = skm.best_stack(pipe, params, X_stack, y_stack, 
-                                                                n_iter=run_params['n_iters'], alpha=alpha,
+                                                                n_iter=n_iter, alpha=alpha,
                                                                 trials=trials, bayes_rand=run_params['opt_type'],
                                                                 run_adp=run_adp, print_coef=print_coef,
                                                                 proba=proba, num_k_folds=run_params['num_k_folds'],
@@ -940,7 +976,15 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
     path = run_params['model_output_path']
     fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"    
     model_list, func_params = get_func_params(model_obj)
-    
+
+    # try:
+    time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type, vers)
+    print(time_per_trial)
+    num_trials = calc_num_trials(time_per_trial, run_params)
+    # except: 
+    #     num_trials = {m: run_params['n_iters'] for m in model_list}
+    print(num_trials)
+
     if os.path.exists(f"{path}/{fname}.p"):
         best_models, scores, stack_val_pred = load_stack_runs(path, fname)
     
@@ -948,7 +992,7 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
         
         results = Parallel(n_jobs=-1, verbose=50)(
                         delayed(run_stack_models)
-                        (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params) 
+                        (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials) 
                         for final_m, i, model_obj, alpha in func_params
                         )
 
@@ -1066,7 +1110,7 @@ run_params = {
 
     # opt params
     'opt_type': 'bayes',
-    'n_iters': 50,
+    'n_iters': 100,
     'n_splits': 5,
     'num_k_folds': 3,
     'show_plot': True,
@@ -1088,7 +1132,7 @@ brier_wt = 1
 matt_wt = 0
 
 # set the model version
-set_weeks=[3,4,5,6]
+set_weeks=[7,8]
 # set_weeks = [1,2,3,4,5]
 # set_weeks = [5,6,7,8]
 # set_weeks = [9,10,11,12]
@@ -1235,9 +1279,14 @@ navigate_folders(root_directory, search_keywords,  old_filename, new_filename)
 
 # %%
 
-alpha=None
-is_million=None
-model_obj='class'
+load_run_models(run_params, X_stack, y_stack, X_predict, model_obj='reg', alpha=None, is_million=False)
+
+# %%
+
+
+alpha = None
+is_million = False
+model_obj = 'reg'
 
 if alpha is not None: alpha_label = alpha*100
 else: alpha_label = ''
@@ -1246,40 +1295,48 @@ if is_million: model_obj_label = 'million'
 else: model_obj_label = model_obj
 
 path = run_params['model_output_path']
-fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"    
-model_list, func_params = get_func_params(model_obj)
+fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"
 
-if os.path.exists(f"{path}/{fname}.p"):
-    best_models, scores, stack_val_pred = load_stack_runs(path, fname)
+newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
+keep_words = [set_pos, model_type, vers]
+drop_words = [f"_week{run_params['set_week']}_"]
+recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
+recent_save
 
-else:
-    
-    results = Parallel(n_jobs=-1, verbose=50)(
-                    delayed(run_stack_models)
-                    (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params) 
-                    for final_m, i, model_obj, alpha in func_params
-                    )
+all_trials = load_pickle(recent_save, fname)['trials']
 
-    best_models, scores, stack_val_pred, trials = unpack_results(model_list, results)
-    save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
-    
+times = []
+for k,v in all_trials.items():
+    if k!='reg_adp':
+        max_trial = len(v.trials) - 1
+        trial_times = []
+        for i in range(max_trial-100, max_trial):
+            trial_times.append(v.trials[i]['refresh_time'] - v.trials[i]['book_time'])
+        trial_time = np.mean(trial_times).seconds
+        times.append([k, np.round(trial_time / 60, 2)])
 
-predictions = stack_predictions(X_predict, best_models, model_list, model_obj=model_obj)
-best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack_class, stack_val_pred, 
-                                                        predictions, model_obj=model_obj, 
-                                                        show_plot=run_params['show_plot'], 
-                                                        min_include=run_params['min_include'])
+time_per_trial = pd.DataFrame(times, columns=['model', 'time_per_trial']).sort_values(by='time_per_trial', ascending=False)
+time_per_trial['total_time'] = time_per_trial.time_per_trial * 100
+time_per_trial
+
+#%%
+
+alpha = None
+is_million = False
+model_obj = 'class'
+
+
+
+if alpha is not None: alpha_label = alpha*100
+else: alpha_label = ''
+
+if is_million: model_obj_label = 'million'
+else: model_obj_label = model_obj
+
+fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"
+
+
+time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type, vers)
+num_trials = calc_num_trials(time_per_trial, run_params)
+num_trials
 # %%
-
-predictions = pd.DataFrame()
-for bm, fm in zip(best_models[1:], model_list[1:]):
-    print(fm)
-    
-    if model_obj in ('reg', 'quantile'): cur_prediction = np.round(bm.predict(X_predict), 2)
-    elif model_obj=='class': cur_prediction = np.round(bm.predict_proba(X_predict)[:,1], 3)
-    
-    cur_prediction = pd.Series(cur_prediction, name=fm)
-    predictions = pd.concat([predictions, cur_prediction], axis=1)
-
-# %%
-    
