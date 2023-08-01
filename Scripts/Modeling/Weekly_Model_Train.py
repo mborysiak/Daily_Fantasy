@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [2]
+run_weeks = [9,10]
 verbosity = 50
 run_params = {
     
@@ -519,7 +519,7 @@ def select_main_slate_teams(df):
 
 
 def add_sal_columns(df):
-    
+
     for c in df.columns:
         if 'expert' in c: df[c+'_salary'] = df[c] * df.dk_salary
         if 'rank' in c: df[c+'_salary'] = df[c] * df.dk_salary
@@ -622,10 +622,10 @@ with keep.running() as m:
         print('Fell Asleep')
 
     run_list = [
-                # ['QB', '', 'full_model'],
-                # ['RB', '', 'full_model'],
-                # ['WR', '', 'full_model'],
-                # ['TE', '', 'full_model'],
+                ['QB', '', 'full_model'],
+                ['RB', '', 'full_model'],
+                ['WR', '', 'full_model'],
+                ['TE', '', 'full_model'],
                 ['Defense', '', 'full_model'],
                 ['QB', '', 'backfill'],
                 ['RB', '', 'backfill'],

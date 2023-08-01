@@ -6,18 +6,18 @@ run_years: [2022]
 # pred params
 pred_params:
   r2_wt: 0
-  sera_wt: 1
-  mse_wt: 0
+  sera_wt: 0
+  mse_wt: 1
   brier_wt: 1
-  matt_wt: 0
+  matt_wt: 1
 
 pred_vers: "sera{sera_wt}_rsq{r2_wt}_brier{brier_wt}_matt{matt_wt}_bayes"
 
 # ensemble params
 ensemble_params:
   r2_wt: 0
-  sera_wt: 1
-  mse_wt: 0
+  sera_wt: 0
+  mse_wt: 1
   brier_wt: 1
   matt_wt: 0
   include_models: 2
