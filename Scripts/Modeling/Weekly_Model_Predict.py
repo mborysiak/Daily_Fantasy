@@ -870,7 +870,7 @@ def get_proba_adp_coef(model_obj, final_m, run_params):
 def get_trials(fname, final_m, bayes_rand):
 
     newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
-    keep_words = [set_pos, model_type, vers]
+    keep_words = [set_pos, model_type, run_params['pred_vers']]
     drop_words = [f"_week{run_params['set_week']}_"]
     recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
 
@@ -916,15 +916,13 @@ def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_
     
     return best_model, stack_scores, stack_pred, trial
 
-def get_func_params(model_obj):
+def get_func_params(model_obj, alpha):
 
     model_list = {
         'reg': ['rf', 'gbm', 'gbmh', 'huber', 'xgb', 'lgbm', 'knn', 'ridge', 'lasso', 'bridge'],
         'class': ['rf_c', 'gbm_c', 'gbmh_c', 'xgb_c','lgbm_c', 'knn_c', 'lr_c'],
         'quantile': ['qr_q', 'gbm_q', 'lgbm_q', 'gbmh_q', 'rf_q']#, 'knn_q']
     }
-    if model_obj=='quantile': alpha=0.8
-    else: alpha=''
 
     func_params = [[m, i, model_obj, alpha] for i, m  in enumerate(model_list[model_obj])]
 
@@ -966,11 +964,16 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
     if model_obj=='reg': ens_vers = run_params['reg_ens_vers']
     elif model_obj=='class': ens_vers = run_params['class_ens_vers']
     elif model_obj=='quantile': ens_vers = run_params['quant_ens_vers']
-    elif is_million: ens_vers = run_params['million_ens_vers']
+
+    if is_million: 
+        model_obj_label = 'million'
+        ens_vers = run_params['million_ens_vers']
+    else: 
+        model_obj_label = model_obj
 
     path = run_params['model_output_path']
-    fname = f"{model_obj}_{ens_vers}"    
-    model_list, func_params = get_func_params(model_obj)
+    fname = f"{model_obj_label}_{ens_vers}"    
+    model_list, func_params = get_func_params(model_obj, alpha)
 
     try:
         time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type)
@@ -979,6 +982,8 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
     except: 
         num_trials = {m: run_params['n_iters'] for m in model_list}
     print(num_trials)
+
+    print(path, fname)
 
     if os.path.exists(f"{path}/{fname}.p"):
         best_models, scores, stack_val_pred = load_stack_runs(path, fname)
@@ -1133,9 +1138,9 @@ matt_wt = 0
 alpha = 80
 class_cut = 80
 
-# set_weeks=[7,8]
+set_weeks=[1]
 # set_weeks = [1,2,3,4]
-set_weeks = [5,6,7,8]
+# set_weeks = [5,6,7,8]
 # set_weeks = [9,10,11,12]
 # set_weeks = [13,14,15,16]
 
@@ -1143,7 +1148,7 @@ pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
 class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
-million_ens_vers = f"{s_mod}_million_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
+million_ens_vers = f"{s_mod}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
 
 run_params['pred_vers'] = pred_vers
 run_params['reg_ens_vers'] = reg_ens_vers
@@ -1170,14 +1175,14 @@ with keep.running() as m:
         run_params['set_week'] = w
         runs = [
             ['QB', 'full_model', ''],
-            ['RB', 'full_model', ''],
-            ['WR', 'full_model', ''],
-            ['TE', 'full_model', ''],
-            ['Defense', 'full_model', ''],
-            ['QB', 'backfill', ''],
-            ['RB', 'backfill', ''],
-            ['WR', 'backfill', ''],
-            ['TE', 'backfill', '']
+            # ['RB', 'full_model', ''],
+            # ['WR', 'full_model', ''],
+            # ['TE', 'full_model', ''],
+            # ['Defense', 'full_model', ''],
+            # ['QB', 'backfill', ''],
+            # ['RB', 'backfill', ''],
+            # ['WR', 'backfill', ''],
+            # ['TE', 'backfill', '']
         ]
 
         for set_pos, model_type, rush_pass in runs:
@@ -1207,11 +1212,11 @@ with keep.running() as m:
 
             # run the class, quant, and reg models
             best_val_class, best_predictions_class = load_run_models(run_params, X_stack, y_stack_class, X_predict, 'class')
-            best_val_quant, best_predictions_quant = load_run_models(run_params, X_stack, y_stack, X_predict, 'quantile', alpha=0.8)
+            best_val_quant, best_predictions_quant = load_run_models(run_params, X_stack, y_stack, X_predict, 'quantile', alpha=alpha/100)
             best_val_reg, best_predictions_reg = load_run_models(run_params, X_stack, y_stack, X_predict, 'reg')
 
-            save_val_to_db(X_stack_player, y_stack_class, best_val_class, run_params, table_name='Model_Validations_Class')
-            save_val_to_db(X_stack_player, y_stack, best_val_reg, run_params, table_name='Model_Validations')
+            # save_val_to_db(X_stack_player, y_stack_class, best_val_class, run_params, table_name='Model_Validations_Class')
+            # save_val_to_db(X_stack_player, y_stack, best_val_reg, run_params, table_name='Model_Validations')
 
             # create the output and add standard deviations / max score datasets
             df_val_final = create_final_val_df(X_stack_player, y_stack, best_val_reg, best_val_class, best_val_quant)
@@ -1225,7 +1230,7 @@ with keep.running() as m:
                 else: sd_plot = False
                 output = val_std_dev(df_val_final, metrics=metrics, iso_spline='spline', show_plot=sd_plot)
                 if i==0: display_output(output, run_params['show_plot'])
-                save_output_to_db(output, run_params)
+                # save_output_to_db(output, run_params)
 
             #-------------
             # Running the million dataset
@@ -1246,7 +1251,7 @@ with keep.running() as m:
             best_val_mil, best_predictions_mil = load_run_models(run_params, X_stack_mil, y_stack_mil, X_predict_mil, 'class', is_million=True)
 
             output_mil = create_mil_output(df_predict_mil, best_predictions_mil)
-            save_mil_data(X_mil_player, y_stack_mil, best_val_mil, df_predict_mil, best_predictions_mil, run_params)
+            # save_mil_data(X_mil_player, y_stack_mil, best_val_mil, df_predict_mil, best_predictions_mil, run_params)
 
         #---------------
         # Save vegas points and std dev
@@ -1270,84 +1275,77 @@ def navigate_folders(root_dir, search_keywords, old_filename, new_filename):
                 source_path = os.path.join(dirpath, old_filename)
                 destination_path = os.path.join(dirpath, new_filename)
                 shutil.copy2(source_path, destination_path)
+                os.remove(source_path)
             except:
                 print(dirpath, 'failed')
 
-root_directory = '/Users/mborysia/Documents/Github/Daily_Fantasy//Model_Outputs/2022/'
-search_keywords = ['bayes']
+run_params = {
+    
+    'stack_model': 'random',
 
-# old_filename = 'quantile80.0_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
-# new_filename = 'quantile80.0_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
+    # opt params
+    'opt_type': 'bayes',
+    'n_iters': 100,
+    'n_splits': 5,
+    'num_k_folds': 3,
+    'show_plot': True,
+    'print_coef': True,
+    'min_include': 2,
+    
+    'met': 'y_act',
 
-# old_filename = 'class_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
-# new_filename=   'class_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
+   
+}
 
-old_filename = 'million_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
-new_filename = 'million_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
+s_mod = run_params['stack_model']
+min_inc = run_params['min_include']
+kfold = run_params['num_k_folds']
 
-# Call the function to navigate and copy/rename files
-navigate_folders(root_directory, search_keywords,  old_filename, new_filename)
+r2_wt = 0
+sera_wt = 0
+mse_wt = 1
+brier_wt = 1
+matt_wt = 0
 
-# %%
+alpha = 80
+class_cut = 80
 
-load_run_models(run_params, X_stack, y_stack, X_predict, model_obj='reg', alpha=None, is_million=False)
+pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
+reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
+quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
+class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
+million_ens_vers = f"{s_mod}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
 
-# %%
-
-
-alpha = None
-is_million = False
-model_obj = 'reg'
-
-if alpha is not None: alpha_label = alpha*100
-else: alpha_label = ''
-
-if is_million: model_obj_label = 'million'
-else: model_obj_label = model_obj
-
-path = run_params['model_output_path']
-fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"
-
-newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
-keep_words = [set_pos, model_type, vers]
-drop_words = [f"_week{run_params['set_week']}_"]
-recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
-recent_save
-
-all_trials = load_pickle(recent_save, fname)['trials']
-
-times = []
-for k,v in all_trials.items():
-    if k!='reg_adp':
-        max_trial = len(v.trials) - 1
-        trial_times = []
-        for i in range(max_trial-100, max_trial):
-            trial_times.append(v.trials[i]['refresh_time'] - v.trials[i]['book_time'])
-        trial_time = np.mean(trial_times).seconds
-        times.append([k, np.round(trial_time / 60, 2)])
-
-time_per_trial = pd.DataFrame(times, columns=['model', 'time_per_trial']).sort_values(by='time_per_trial', ascending=False)
-time_per_trial['total_time'] = time_per_trial.time_per_trial * 100
-time_per_trial
+root_directory = '/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022_Update/'
+search_keywords = [pred_vers]
 
 #%%
 
-alpha = None
-is_million = False
-model_obj = 'class'
 
+q_old = f'quantile80.0_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
+q_new = f'quantile_{quant_ens_vers}.p'
 
+c_old = f'class_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
+c_new=  f'class_{class_ens_vers}.p'
 
-if alpha is not None: alpha_label = alpha*100
-else: alpha_label = ''
+m_old = f'million_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
+m_new = f'million_{million_ens_vers}.p'
 
-if is_million: model_obj_label = 'million'
-else: model_obj_label = model_obj
+# r_old = f'reg_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
+# r_new = f'reg_{reg_ens_vers}.p'
 
-fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"
+for old_filename, new_filename in zip([q_old, c_old, m_old], [q_new, c_new, m_new]):
+    print(old_filename, '->', new_filename)
 
+# Call the function to navigate and copy/rename files
+# navigate_folders(root_directory, search_keywords,  old_filename, new_filename)
 
-time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type, vers)
-num_trials = calc_num_trials(time_per_trial, run_params)
-num_trials
+# %%
+
+for old_filename, new_filename in zip([q_old, c_old, m_old], [q_new, c_new, m_new]):
+    print(old_filename, '->', new_filename)
+    navigate_folders(root_directory, search_keywords,  old_filename, new_filename)
+# %%
+
+navigate_folders(root_directory, search_keywords,  r_old, r_new)
 # %%
