@@ -34,10 +34,10 @@ set_config(display='text')
 # Data Loading Functions
 #====================
 
-def create_pkey_output_path(set_pos, run_params, model_type, vers):
+def create_pkey_output_path(set_pos, run_params, model_type):
 
 
-    pkey = f"{set_pos}_year{run_params['set_year']}_week{run_params['set_week']}_{model_type}{vers}"
+    pkey = f"{set_pos}_year{run_params['set_year']}_week{run_params['set_week']}_{model_type}{run_params['pred_vers']}"
     model_output_path = f"{root_path}/Model_Outputs/{run_params['set_year']}/{pkey}/"
     if not os.path.exists(model_output_path): os.makedirs(model_output_path)
     run_params['model_output_path'] = model_output_path
@@ -708,34 +708,34 @@ def save_val_to_db(X, y, best_val, run_params, table_name):
 
     df = validation_compare_df(X, y, best_val)
 
+    if 'Million' in table_name: ens_vers = 'million_ens_vers'
+    else: ens_vers = 'reg_ens_vers'
+
     df['pos'] = set_pos
-    df['pred_version'] = vers
-    df['ensemble_vers'] = ensemble_vers
-    df['std_dev_type'] = std_dev_type
+    df['pred_version'] = run_params['pred_vers']
+    df[ens_vers] = run_params[ens_vers]
     df['model_type'] = model_type
     df['set_week'] = run_params['set_week']
     df['set_year'] = run_params['set_year']
 
     df = df[['player', 'team', 'year', 'week',  'y_act', 'pred_fp_per_game', 'pos',
-             'pred_version', 'ensemble_vers', 'std_dev_type', 'model_type', 'set_week', 'set_year']]
+             'pred_version', 'ens_vers', 'model_type', 'set_week', 'set_year']]
 
     del_str = f'''pos='{set_pos}' 
-                  AND pred_version='{vers}'
-                  AND ensemble_vers='{ensemble_vers}' 
-                  AND std_dev_type='{std_dev_type}'
+                  AND pred_version='{run_params['pred_vers']}'
+                  AND ens_vers='{run_params[ens_vers]}' 
                   AND set_week={run_params['set_week']} 
                   AND set_year={run_params['set_year']}
                   AND model_type='{model_type}'
                 '''
     
- 
     dm.delete_from_db('Validations', table_name, del_str, create_backup=False)
     dm.write_to_db(df, 'Validations', table_name, 'append')
 
   
 
 
-def save_prob_to_db(output, run_params, table_name):
+def save_mil_to_db(output, run_params, table_name):
 
     
     df = output[['player', 'team', 'week', 'year', 'pred_fp_per_game_class']].copy()
@@ -746,20 +746,18 @@ def save_prob_to_db(output, run_params, table_name):
     df['max_score'] = df.max_score.apply(lambda x: np.min([x, 1]))
 
     df['pos'] = set_pos
-    df['pred_version'] = vers
-    df['ensemble_vers'] = ensemble_vers
-    df['std_dev_type'] = std_dev_type
+    df['pred_version'] = run_params['pred_vers']
+    df['million_ens_vers'] = run_params['million_ens_vers']
     df['model_type'] = model_type
     df['week'] = df.set_week
     df['year'] = df.set_year
 
     df = df[['player', 'set_week', 'set_year', 'pos', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score',
-             'pred_version', 'ensemble_vers', 'model_type', 'std_dev_type', 'week', 'year']]
+             'pred_version', 'million_ens_vers', 'model_type', 'week', 'year']]
 
     del_str = f'''pos='{set_pos}' 
-                  AND pred_version='{vers}'
-                  AND ensemble_vers='{ensemble_vers}' 
-                  AND std_dev_type='{std_dev_type}' 
+                  AND pred_version='{run_params['pred_vers']}'
+                  AND million_ens_vers='{run_params['million_ens_vers']}' 
                   AND set_week={run_params['set_week']} 
                   AND set_year={run_params['set_year']}
                   AND model_type='{model_type}'
@@ -771,26 +769,24 @@ def save_prob_to_db(output, run_params, table_name):
 def save_output_to_db(output, run_params):
 
     output['pos'] = set_pos
-    output['version'] = vers
-    output['ensemble_vers'] = ensemble_vers
+    output['pred_version'] = run_params['pred_vers']
+    output['reg_ens_vers'] = run_params['reg_ens_vers']
     output['std_dev_type'] = std_dev_type
     output['model_type'] = model_type
     output['week'] = run_params['set_week']
     output['year'] = run_params['set_year']
-    output['rush_pass'] = run_params['rush_pass']
 
     output = output[['player', 'dk_salary', 'pred_fp_per_game', 'std_dev',
-                     'dk_rank', 'pos', 'version', 'model_type', 'max_score', 'min_score',
-                      'week', 'year', 'ensemble_vers', 'std_dev_type', 'rush_pass']]
+                     'dk_rank', 'pos', 'pred_version', 'model_type', 'max_score', 'min_score',
+                     'week', 'year', 'reg_ens_vers', 'std_dev_type']]
 
     del_str = f'''pos='{set_pos}' 
-                AND version='{vers}'
-                AND ensemble_vers='{ensemble_vers}' 
+                AND pred_version='{run_params['pred_vers']}'
+                AND reg_ens_vers='{run_params['reg_ens_vers']}' 
                 AND std_dev_type='{std_dev_type}'
                 AND week={run_params['set_week']} 
                 AND year={run_params['set_year']}
                 AND model_type='{model_type}'
-                AND rush_pass="{run_params['rush_pass']}"
                 '''
     dm.delete_from_db('Simulation', 'Model_Predictions', del_str, create_backup=False)
     dm.write_to_db(output, 'Simulation', f'Model_Predictions', 'append')
@@ -824,10 +820,10 @@ def get_newest_folder_with_keywords(path, keywords, ignore_keywords=None, req_fn
     return os.path.join(path, newest_folder)
 
 
-def get_trial_times(root_path, fname, run_params, set_pos, model_type, vers):
+def get_trial_times(root_path, fname, run_params, set_pos, model_type):
 
     newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
-    keep_words = [set_pos, model_type, vers]
+    keep_words = [set_pos, model_type, run_params['pred_vers']]
     drop_words = [f"_week{run_params['set_week']}_"]
     recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
 
@@ -967,18 +963,17 @@ def load_stack_runs(model_output_path, fname):
 
 def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=None, is_million=False):
     
-    if alpha is not None: alpha_label = alpha*100
-    else: alpha_label = ''
-
-    if is_million: model_obj_label = 'million'
-    else: model_obj_label = model_obj
+    if model_obj=='reg': ens_vers = run_params['reg_ens_vers']
+    elif model_obj=='class': ens_vers = run_params['class_ens_vers']
+    elif model_obj=='quantile': ens_vers = run_params['quant_ens_vers']
+    elif is_million: ens_vers = run_params['million_ens_vers']
 
     path = run_params['model_output_path']
-    fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"    
+    fname = f"{model_obj}_{ens_vers}"    
     model_list, func_params = get_func_params(model_obj)
 
     try:
-        time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type, vers)
+        time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type)
         print(time_per_trial)
         num_trials = calc_num_trials(time_per_trial, run_params)
     except: 
@@ -1125,27 +1120,44 @@ run_params = {
    
 }
 
+s_mod = run_params['stack_model']
+min_inc = run_params['min_include']
+kfold = run_params['num_k_folds']
+
 r2_wt = 0
 sera_wt = 0
 mse_wt = 1
 brier_wt = 1
 matt_wt = 0
 
-# set the model version
+alpha = 80
+class_cut = 80
+
 # set_weeks=[7,8]
 # set_weeks = [1,2,3,4]
 set_weeks = [5,6,7,8]
 # set_weeks = [9,10,11,12]
 # set_weeks = [13,14,15,16]
 
-pred_versions = len(set_weeks)*['sera0_rsq0_mse1_brier1_matt1_bayes']
+pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
+quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
+class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
+million_ens_vers = f"{s_mod}_million_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
 
-ensemble_versions = len(set_weeks)*['random_sera0_rsq0_mse1_include2_kfold3']
+run_params['pred_vers'] = pred_vers
+run_params['reg_ens_vers'] = reg_ens_vers
+run_params['quant_ens_vers'] = quant_ens_vers
+run_params['class_ens_vers'] = class_ens_vers
+run_params['million_ens_vers'] = million_ens_vers
 
-std_dev_types = ['spline_pred_class80_q80_matt0_brier1_kfold3',
-                 'spline_pred_class80_matt0_brier1_kfold3',
-                 'spline_pred_q80_matt0_brier1_kfold3',
-                 'spline_class80_q80_matt0_brier1_kfold3']
+std_dev_types = [
+    f'spline_pred_class{class_cut}_q{alpha}_matt{matt_wt}_brier{brier_wt}_kfold{kfold}',
+    f'spline_pred_class{class_cut}_matt{matt_wt}_brier{brier_wt}_kfold{kfold}',
+    f'spline_pred_q{alpha}_matt{matt_wt}_brier{brier_wt}_kfold{kfold}',
+    f'spline_class{class_cut}_q{alpha}_matt{matt_wt}_brier{brier_wt}_kfold{kfold}'
+]
+
 std_dev_type = std_dev_types[0]
 
 with keep.running() as m:
@@ -1153,10 +1165,9 @@ with keep.running() as m:
     if not m.success:
         print('Fell Asleep')
             
-    for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
+    for w in set_weeks:
 
         run_params['set_week'] = w
-        run_params['ensemble_vers'] = ensemble_vers
         runs = [
             ['QB', 'full_model', ''],
             ['RB', 'full_model', ''],
@@ -1174,7 +1185,7 @@ with keep.running() as m:
             run_params['rush_pass'] = rush_pass
 
             # load data and filter down
-            pkey, run_params, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
+            pkey, run_params, model_output_path = create_pkey_output_path(set_pos, run_params, model_type)
             df, run_params = load_data(model_type, set_pos, run_params)
             df, run_params = create_game_date(df, run_params)
             df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
