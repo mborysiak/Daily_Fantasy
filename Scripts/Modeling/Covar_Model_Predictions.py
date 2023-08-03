@@ -335,19 +335,19 @@ covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
-     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15#, 16, 17
+     1, 2, 3, 4, 5, 6, 7, 8,# 9, 10, 11, 12, 13, 14, 15#, 16, 17
         ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022#, 2022, 2022
 ]
 
-pred_versions = ['sera1_rsq0_brier1_matt0_bayes']
+pred_versions = ['sera0_rsq0_mse1_brier1_matt1_bayes']
 
-ensemble_versions = ['random_kbest_sera1_rsq0_mse0_include2_kfold3',
-                     'random_sera1_rsq0_mse0_include2_kfold3',
-                     'random_kbest_sera0_rsq0_mse1_include2_kfold3',
-                     'random_sera0_rsq0_mse1_include2_kfold3']
+ensemble_versions = [
+                    'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+                   # 'random_sera0_rsq0_mse1_include2_kfold3'
+                     ]
 
 std_dev_types = ['spline_pred_class80_q80_matt0_brier1_kfold3',
                  'spline_pred_class80_matt0_brier1_kfold3',
@@ -367,7 +367,7 @@ iter_cats = pd.DataFrame(iter_cats).sort_values(by=[0, 3]).values
 # std_dev_types = ['pred_spline_class80_q80_matt0_brier1_kfold3']
 
 full_model_weights = [0.2, 5]
-i = 0
+i = 100
 for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
 
     print(set_week, set_year, pred_vers, ensemble_vers, std_dev_type)

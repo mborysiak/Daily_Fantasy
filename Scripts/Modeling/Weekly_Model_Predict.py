@@ -1126,13 +1126,13 @@ run_params = {
 }
 
 r2_wt = 0
-sera_wt = 0
-mse_wt = 1
+sera_wt = 1
+mse_wt = 0
 brier_wt = 1
 matt_wt = 0
 
 # set the model version
-# set_weeks=[7,8]
+# set_weeks=[8]
 # set_weeks = [1,2,3,4]
 set_weeks = [5,6,7,8]
 # set_weeks = [9,10,11,12]
