@@ -191,13 +191,13 @@ def get_drop_teams(week, year):
     return drop_teams
 
 
-def get_predictions(drop_teams, pred_vers,std_dev_type, set_week, set_year, full_model_rel_weight):
+def get_predictions(drop_teams, pred_vers, reg_ens_vers, std_dev_type, set_week, set_year, full_model_rel_weight):
 
     preds = dm.read(f'''SELECT * 
                         FROM Model_Predictions 
-                        WHERE version='{pred_vers}'
+                        WHERE pred_vers='{pred_vers}'
                               AND std_dev_type = '{std_dev_type}'
-                              AND ensemble_vers='{ensemble_vers}'
+                              AND reg_ens_vers='{reg_ens_vers}'
                               AND week = '{set_week}'
                               AND year = '{set_year}' 
                               AND player != 'Ryan Griffin'
@@ -305,7 +305,7 @@ def cleanup_pred_covar(pred_cov):
 
     pred_cov_final = pred_cov_final.assign(week=set_week, year=set_year,
                                            pred_vers=pred_vers, 
-                                           ensemble_vers=ensemble_vers,
+                                           reg_ens_vers=reg_ens_vers,
                                            std_dev_type=std_dev_type,
                                            covar_type=covar_type,
                                            full_model_rel_weight=full_model_rel_weight)
@@ -320,7 +320,7 @@ def get_mean_points(preds):
     mean_points = mean_points.rename(columns={'index': 'player'})
     mean_points.loc[mean_points.pos=='Defense', 'pos'] = 'DEF' 
     mean_points = mean_points.assign(week=set_week, year=set_year, 
-                                    pred_vers=pred_vers, ensemble_vers=ensemble_vers,
+                                    pred_vers=pred_vers, reg_ens_vers=reg_ens_vers,
                                     std_dev_type=std_dev_type,
                                     covar_type=covar_type,
                                     full_model_rel_weight=full_model_rel_weight,
@@ -335,27 +335,33 @@ covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
-     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15#, 16, 17
+     1,# 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15#, 16, 17
         ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022#, 2022, 2022
 ]
 
-pred_versions = ['sera1_rsq0_brier1_matt0_bayes']
+pred_versions = ['sera0_rsq0_mse1_brier1_matt1_bayes']
 
-ensemble_versions = ['random_kbest_sera1_rsq0_mse0_include2_kfold3',
-                     'random_sera1_rsq0_mse0_include2_kfold3',
-                     'random_kbest_sera0_rsq0_mse1_include2_kfold3',
-                     'random_sera0_rsq0_mse1_include2_kfold3']
+reg_ens_versions = [
+                       'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+                    #  'random_sera1_rsq0_mse0_include2_kfold3',
+                    #  'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+                    #  'random_sera0_rsq0_mse1_include2_kfold3'
+                ]
 
-std_dev_types = ['spline_pred_class80_q80_matt0_brier1_kfold3',
+std_dev_types = [
+                'spline_pred_class80_q80_matt0_brier1_kfold3',
                  'spline_pred_class80_matt0_brier1_kfold3',
                  'spline_pred_q80_matt0_brier1_kfold3',
-                 'spline_class80_q80_matt0_brier1_kfold3']
+                 'spline_class80_q80_matt0_brier1_kfold3'
+                 ]
 
-iter_cats = list(set(itertools.product(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)))
-iter_cats = pd.DataFrame(iter_cats).sort_values(by=[0, 3]).values
+full_model_weights = [0.2, 5]
+
+iter_cats = list(set(itertools.product(pred_versions, reg_ens_versions, std_dev_types, full_model_weights)))
+iter_cats = pd.DataFrame(iter_cats).sort_values(by=[0, 1]).values
 
 # # set the model version
 # set_weeks = [18]
@@ -366,29 +372,31 @@ iter_cats = pd.DataFrame(iter_cats).sort_values(by=[0, 3]).values
 # ensemble_versions = ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack']
 # std_dev_types = ['pred_spline_class80_q80_matt0_brier1_kfold3']
 
-full_model_weights = [0.2, 5]
+
 i = 0
-for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
+for set_week, set_year in zip(set_weeks, set_years):
 
-    print(set_week, set_year, pred_vers, ensemble_vers, std_dev_type)
+    print(set_week, set_year)
 
-    for full_model_rel_weight in full_model_weights:
+    # get the player and opposing player data to create correlation matrices
+    player_data, _ = get_max_metrics(set_week, set_year)
+    corr_data = create_pos_rank(player_data)
+    opp_corr_data = create_pos_rank(player_data, opponent=True)
+    opp_corr_data = opp_corr_data[~opp_corr_data.team.isnull()].reset_index(drop=True)
+    corr_data = pd.concat([corr_data, opp_corr_data], axis=0)
 
-        # get the player and opposing player data to create correlation matrices
-        player_data, _ = get_max_metrics(set_week, set_year)
-        corr_data = create_pos_rank(player_data)
-        opp_corr_data = create_pos_rank(player_data, opponent=True)
-        opp_corr_data = opp_corr_data[~opp_corr_data.team.isnull()].reset_index(drop=True)
-        corr_data = pd.concat([corr_data, opp_corr_data], axis=0)
+    # use  team level data to get the covariance for team-level groups
+    corr_data = get_team_totals(corr_data, 'pos_rank')
+    corr_data = corr_data[['team', 'week', 'year', 'pos_rank', 'max_metric', 'y_act', 'team_total']]
+    matrices, percs = get_group_covars(corr_data)
 
-        # use  team level data to get the covariance for team-level groups
-        corr_data = get_team_totals(corr_data, 'pos_rank')
-        corr_data = corr_data[['team', 'week', 'year', 'pos_rank', 'max_metric', 'y_act', 'team_total']]
-        matrices, percs = get_group_covars(corr_data)
+    # pull in the prediction data and create player matches for position type
+    drop_teams = get_drop_teams(set_week, set_year)
 
-        # pull in the prediction data and create player matches for position type
-        drop_teams = get_drop_teams(set_week, set_year)
-        preds = get_predictions(drop_teams, pred_vers,std_dev_type, set_week, set_year, full_model_rel_weight)
+    for pred_vers, reg_ens_vers, std_dev_type, full_model_rel_weight in iter_cats:
+        
+        print(pred_vers, reg_ens_vers, std_dev_type, full_model_rel_weight)
+        preds = get_predictions(drop_teams, pred_vers, reg_ens_vers, std_dev_type, set_week, set_year, full_model_rel_weight)
         pred_cov = create_player_matches(preds, opponent=False)
         opp_pred_cov = create_player_matches(preds, opponent=True)
         pred_cov = pd.concat([pred_cov, opp_pred_cov], axis=0).reset_index(drop=True)

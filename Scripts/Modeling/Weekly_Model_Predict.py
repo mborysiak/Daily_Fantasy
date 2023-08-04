@@ -679,7 +679,7 @@ def save_mil_data(X_mil, y_mil, best_val_mil, df_predict_mil, best_predictions_m
                             axis=1).sort_values(by='pred_fp_per_game_class', ascending=False)
 
     save_val_to_db(X_mil, y_mil, best_val_mil, run_params, table_name='Model_Validations_Million')
-    save_prob_to_db(test_output, run_params, 'Predicted_Million')
+    save_mil_to_db(test_output, run_params, 'Predicted_Million')
 
 #-----------------------
 # Saving validations
@@ -712,18 +712,18 @@ def save_val_to_db(X, y, best_val, run_params, table_name):
     else: ens_vers = 'reg_ens_vers'
 
     df['pos'] = set_pos
-    df['pred_version'] = run_params['pred_vers']
+    df['pred_vers'] = run_params['pred_vers']
     df[ens_vers] = run_params[ens_vers]
     df['model_type'] = model_type
     df['set_week'] = run_params['set_week']
     df['set_year'] = run_params['set_year']
 
     df = df[['player', 'team', 'year', 'week',  'y_act', 'pred_fp_per_game', 'pos',
-             'pred_version', 'ens_vers', 'model_type', 'set_week', 'set_year']]
+             'pred_vers', ens_vers, 'model_type', 'set_week', 'set_year']]
 
     del_str = f'''pos='{set_pos}' 
-                  AND pred_version='{run_params['pred_vers']}'
-                  AND ens_vers='{run_params[ens_vers]}' 
+                  AND pred_vers='{run_params['pred_vers']}'
+                  AND {ens_vers}='{run_params[ens_vers]}' 
                   AND set_week={run_params['set_week']} 
                   AND set_year={run_params['set_year']}
                   AND model_type='{model_type}'
@@ -739,27 +739,28 @@ def save_mil_to_db(output, run_params, table_name):
 
     
     df = output[['player', 'team', 'week', 'year', 'pred_fp_per_game_class']].copy()
-    df = df.rename(columns={'week': 'set_week', 'year': 'set_year', 'pred_fp_per_game_class': 'pred_fp_per_game'})
+    df = df.rename(columns={'pred_fp_per_game_class': 'pred_fp_per_game'})
     df['std_dev'] = df.pred_fp_per_game * 0.25
     df['min_score'] = 0
     df['max_score'] = df.pred_fp_per_game * 1.5
     df['max_score'] = df.max_score.apply(lambda x: np.min([x, 1]))
 
     df['pos'] = set_pos
-    df['pred_version'] = run_params['pred_vers']
+    df['pred_vers'] = run_params['pred_vers']
     df['million_ens_vers'] = run_params['million_ens_vers']
     df['model_type'] = model_type
-    df['week'] = df.set_week
-    df['year'] = df.set_year
+    df['week'] = run_params['set_week']
+    df['year'] = run_params['set_year']
 
-    df = df[['player', 'set_week', 'set_year', 'pos', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score',
-             'pred_version', 'million_ens_vers', 'model_type', 'week', 'year']]
+    df = df[['player', 'week', 'year', 'pos', 'pred_fp_per_game', 
+             'std_dev', 'min_score', 'max_score',
+             'pred_vers', 'million_ens_vers', 'model_type']]
 
     del_str = f'''pos='{set_pos}' 
-                  AND pred_version='{run_params['pred_vers']}'
+                  AND pred_vers='{run_params['pred_vers']}'
                   AND million_ens_vers='{run_params['million_ens_vers']}' 
-                  AND set_week={run_params['set_week']} 
-                  AND set_year={run_params['set_year']}
+                  AND week={run_params['set_week']} 
+                  AND year={run_params['set_year']}
                   AND model_type='{model_type}'
                 '''
     dm.delete_from_db('Simulation', table_name, del_str, create_backup=False)
@@ -769,7 +770,7 @@ def save_mil_to_db(output, run_params, table_name):
 def save_output_to_db(output, run_params):
 
     output['pos'] = set_pos
-    output['pred_version'] = run_params['pred_vers']
+    output['pred_vers'] = run_params['pred_vers']
     output['reg_ens_vers'] = run_params['reg_ens_vers']
     output['std_dev_type'] = std_dev_type
     output['model_type'] = model_type
@@ -777,11 +778,11 @@ def save_output_to_db(output, run_params):
     output['year'] = run_params['set_year']
 
     output = output[['player', 'dk_salary', 'pred_fp_per_game', 'std_dev',
-                     'dk_rank', 'pos', 'pred_version', 'model_type', 'max_score', 'min_score',
+                     'dk_rank', 'pos', 'pred_vers', 'model_type', 'max_score', 'min_score',
                      'week', 'year', 'reg_ens_vers', 'std_dev_type']]
 
     del_str = f'''pos='{set_pos}' 
-                AND pred_version='{run_params['pred_vers']}'
+                AND pred_vers='{run_params['pred_vers']}'
                 AND reg_ens_vers='{run_params['reg_ens_vers']}' 
                 AND std_dev_type='{std_dev_type}'
                 AND week={run_params['set_week']} 
@@ -1129,6 +1130,11 @@ s_mod = run_params['stack_model']
 min_inc = run_params['min_include']
 kfold = run_params['num_k_folds']
 
+# pred mse1: rand, mse=1, rsq=0, sera=0, matt=1, brier=1, class=80 CHECK
+# pred mse1: rand, mse=1, matt=0, brier=1 CHECK
+# pred mse1: kbest, mse=1, matt=1, brier=1 CHECK
+# pred mse1: kbest, mse=1, matt=0, brier=1 CHECK
+
 r2_wt = 0
 sera_wt = 0
 mse_wt = 1
@@ -1138,9 +1144,8 @@ matt_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks=[1]
-# set_weeks = [1,2,3,4]
-# set_weeks = [5,6,7,8]
+# set_weeks=[1]
+set_weeks = [1,2,3,4,5,6,7,8]
 # set_weeks = [9,10,11,12]
 # set_weeks = [13,14,15,16]
 
@@ -1175,14 +1180,14 @@ with keep.running() as m:
         run_params['set_week'] = w
         runs = [
             ['QB', 'full_model', ''],
-            # ['RB', 'full_model', ''],
-            # ['WR', 'full_model', ''],
-            # ['TE', 'full_model', ''],
-            # ['Defense', 'full_model', ''],
-            # ['QB', 'backfill', ''],
-            # ['RB', 'backfill', ''],
-            # ['WR', 'backfill', ''],
-            # ['TE', 'backfill', '']
+            ['RB', 'full_model', ''],
+            ['WR', 'full_model', ''],
+            ['TE', 'full_model', ''],
+            ['Defense', 'full_model', ''],
+            ['QB', 'backfill', ''],
+            ['RB', 'backfill', ''],
+            ['WR', 'backfill', ''],
+            ['TE', 'backfill', '']
         ]
 
         for set_pos, model_type, rush_pass in runs:
@@ -1214,9 +1219,7 @@ with keep.running() as m:
             best_val_class, best_predictions_class = load_run_models(run_params, X_stack, y_stack_class, X_predict, 'class')
             best_val_quant, best_predictions_quant = load_run_models(run_params, X_stack, y_stack, X_predict, 'quantile', alpha=alpha/100)
             best_val_reg, best_predictions_reg = load_run_models(run_params, X_stack, y_stack, X_predict, 'reg')
-
-            # save_val_to_db(X_stack_player, y_stack_class, best_val_class, run_params, table_name='Model_Validations_Class')
-            # save_val_to_db(X_stack_player, y_stack, best_val_reg, run_params, table_name='Model_Validations')
+            save_val_to_db(X_stack_player, y_stack, best_val_reg, run_params, table_name='Model_Validations')
 
             # create the output and add standard deviations / max score datasets
             df_val_final = create_final_val_df(X_stack_player, y_stack, best_val_reg, best_val_class, best_val_quant)
@@ -1230,7 +1233,7 @@ with keep.running() as m:
                 else: sd_plot = False
                 output = val_std_dev(df_val_final, metrics=metrics, iso_spline='spline', show_plot=sd_plot)
                 if i==0: display_output(output, run_params['show_plot'])
-                # save_output_to_db(output, run_params)
+                save_output_to_db(output, run_params)
 
             #-------------
             # Running the million dataset
@@ -1247,11 +1250,10 @@ with keep.running() as m:
             X_predict_mil = X_predict_mil.drop(['player', 'team', 'week', 'year'], axis=1)
             X_stack_mil = X_stack_mil.drop(['player', 'team', 'week', 'year'], axis=1)
             y_stack_mil = y_stack_mil.y_act
-            # class metrics
             best_val_mil, best_predictions_mil = load_run_models(run_params, X_stack_mil, y_stack_mil, X_predict_mil, 'class', is_million=True)
 
             output_mil = create_mil_output(df_predict_mil, best_predictions_mil)
-            # save_mil_data(X_mil_player, y_stack_mil, best_val_mil, df_predict_mil, best_predictions_mil, run_params)
+            save_mil_data(X_mil_player, y_stack_mil, best_val_mil, df_predict_mil, best_predictions_mil, run_params)
 
         #---------------
         # Save vegas points and std dev
@@ -1264,6 +1266,11 @@ with keep.running() as m:
 
 #%%
 
+
+
+
+
+#%%
 import os
 import shutil
 
@@ -1347,5 +1354,39 @@ for old_filename, new_filename in zip([q_old, c_old, m_old], [q_new, c_new, m_ne
     navigate_folders(root_directory, search_keywords,  old_filename, new_filename)
 # %%
 
-navigate_folders(root_directory, search_keywords,  r_old, r_new)
+df = dm.read(f'''SELECT * 
+                 FROM Predicted_Million 
+                 WHERE pred_vers='{pred_vers}' 
+                 AND million_ens_vers='{reg_ens_vers}' 
+                 ''', 'Simulation')
+print(df.head())
+df['million_ens_vers'] = million_ens_vers
+df
+#%%
+dm.delete_from_db('Simulation', 'Predicted_Million', f"pred_vers='{pred_vers}' AND million_ens_vers='{reg_ens_vers}'", create_backup=False)
+dm.delete_from_db('Simulation', 'Predicted_Million', f"pred_vers='{pred_vers}' AND million_ens_vers='{million_ens_vers}'", create_backup=False)
+dm.write_to_db(df, 'Simulation', 'Predicted_Million', 'append')
+
+# %%
+df = dm.read(f'''SELECT player, week, year, model_type, pred_fp_per_game random_pred
+                 FROM Predicted_Million 
+                 WHERE pred_vers='{pred_vers}' 
+                 AND million_ens_vers='random_sera0_rsq0_mse1_include2_kfold3' 
+                 ''', 'Simulation')
+df2 = dm.read(f'''SELECT player, week, year, model_type, pred_fp_per_game kbest_pred
+                 FROM Predicted_Million 
+                 WHERE pred_vers='{pred_vers}' 
+                 AND million_ens_vers='random_sera1_rsq0_mse0_include2_kfold3' 
+                 ''', 'Simulation')
+
+pd.merge(df, df2, on=['player', 'week', 'year', 'model_type']).sort_values(by='random_pred', ascending=False).iloc[:50]
+
+# %%
+df = dm.read(f'''SELECT player, week, year, model_type, pred_fp_per_game random_pred
+                 FROM Predicted_Million 
+                 WHERE pred_vers='{pred_vers}' 
+                 AND million_ens_vers='random_sera1_rsq0_mse0_include2_kfold3' 
+                 ''', 'Simulation')
+
+df[(df.player=='Rachaad White') & (df.week==12)]
 # %%
