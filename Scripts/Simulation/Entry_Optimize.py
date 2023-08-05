@@ -15,17 +15,18 @@ dm = DataManage(db_path)
 #===============
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13,14,15
+   1, 2, 3, 4, 5, 6, 7, 8, #9, 10,11,12,13,14,15
 ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,2022,2022,2022,2022
 ]
 
-ensemble_vers ='random_sera0_rsq0_mse1_include2_kfold3'   
 lineups_per_param = 1
-pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
-std_dev_type = 'spline_pred_class80_matt0_brier1_kfold3'
+pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+reg_ens_vers ='random_sera0_rsq0_mse1_include2_kfold3'
+std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
+million_ens_vers = 'random_matt0_brier1_include2_kfold3'
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
 trial_num = max_trial_num + 1
@@ -195,7 +196,7 @@ for repeat_num in range(10):
             'matchup_drop': {1: 0.1, 2: 0.1, 3: 0, 0: 0.8},
             'top_n_choices': {1: 0, 2: 0, 3: 0.3, 0: 0.7},
             'full_model_weight': {5: 0.5, 0.2: 0.5},
-            'covar_type': {'no_covar': 0.2, 'team_points_trunc': 0.8},
+            'covar_type': {'no_covar': 0.3, 'team_points_trunc': 0.7},
             'max_team_type': {'player_points': 0.2, 'vegas_points': 0.8},
             'min_player_same_team': {2: 0, 3: 0.7, 'Auto': 0.3},
             'num_top_players': {2: 0.3, 3: 0.7, 5: 0},
@@ -254,7 +255,7 @@ for repeat_num in range(10):
                 to_add = []
 
                 sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-                                        pred_vers, ensemble_vers=ensemble_vers, 
+                                        pred_vers, reg_ens_vers=reg_ens_vers, million_ens_vers=million_ens_vers,
                                         std_dev_type=std_dev_type, covar_type=covar_type, 
                                         full_model_rel_weight=full_model_rel_weight, matchup_seed=matchup_seed,
                                         use_covar=use_covar, use_ownership=use_ownership, 
@@ -312,7 +313,7 @@ for repeat_num in range(10):
 
         all_winnings.append(cur_week_avg_winnings)
         print('Total Cumulative Winnings:', int(np.sum(all_winnings)))
-        output_results.append([week, year, pred_vers, ensemble_vers, std_dev_type, cur_week_avg_winnings])
+        output_results.append([week, year, pred_vers, reg_ens_vers, std_dev_type, million_ens_vers, cur_week_avg_winnings])
 
         # save out the details of each lineup
         param_output = detailed_param_output(d, weighted_winnings, week, year, trial_num, repeat_num)
@@ -322,7 +323,7 @@ for repeat_num in range(10):
         dm.write_to_db(lineup_output_cur, 'Results', 'Entry_Optimize_Lineups', 'append')
 
     # save out the high level results of the overall week
-    output_results = pd.DataFrame(output_results, columns=['week', 'year', 'pred_vers', 'ensemble_vers', 'std_dev_type', 'avg_winnings'])
+    output_results = pd.DataFrame(output_results, columns=['week', 'year', 'pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers', 'avg_winnings'])
     output_results['ownership_vers'] = 'variable'
     output_results['trial_num'] = trial_num
     output_results['repeat_num'] = repeat_num

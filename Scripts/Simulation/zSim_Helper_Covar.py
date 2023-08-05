@@ -939,15 +939,15 @@ class FootballSimulation:
 # qb_solo_start = True
 # qb_set_max_team = True
 # static_top_players = False
-# use_ownership = 0.1
+# use_ownership = 1
 # own_neg_frac = 1
 # salary_remain_max = 500
 # num_iters = 100
 
 # pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 # reg_ens_vers = 'random_sera0_rsq0_mse1_include2_kfold3'
-# million_vers = 'random_kbest_matt0_brier1_include2_kfold3'
-# std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
+# million_vers = 'random_matt0_brier1_include2_kfold3'
+# std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
 # ownership_vers = 'mil_only'
 
 # week = 1
@@ -962,7 +962,7 @@ class FootballSimulation:
 #                          use_ownership=use_ownership, salary_remain_max=salary_remain_max, matchup_seed=False)
 
 
-# to_add = ['Joe Burrow', "Ja'Marr Chase"]
+# to_add = ['Dameon Pierce', 'Joe Burrow', "Ja'Marr Chase"]
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 

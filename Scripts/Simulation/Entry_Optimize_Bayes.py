@@ -697,7 +697,7 @@ full_space = {
 
         
 
-trial_name = 'adjust5000_mean_week1to15_2022_newbayesmodel_kbest_numavgpts_newpar'
+trial_name = 'adjust5000_mean_week1to8_2022_newbayesmodel_mse1_newpar'
 
 
 for i in range(4,7):

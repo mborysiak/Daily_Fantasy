@@ -345,10 +345,10 @@ set_years = [
 pred_versions = ['sera0_rsq0_mse1_brier1_matt1_bayes']
 
 reg_ens_versions = [
-                       'random_sera0_rsq0_mse1_include2_kfold3',
-                       'random_kbest_sera0_rsq0_mse1_include2_kfold3',
-                       'random_sera1_rsq0_mse0_include2_kfold3',
-                    #    'random_kbest_sera1_rsq0_mse0_include2_kfold3'
+                    #    'random_sera0_rsq0_mse1_include2_kfold3',
+                    #    'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+                    #    'random_sera1_rsq0_mse0_include2_kfold3',
+                       'random_kbest_sera1_rsq0_mse0_include2_kfold3'
                 ]
 
 std_dev_types = [
@@ -377,7 +377,7 @@ iter_cats = pd.DataFrame(iter_cats).sort_values(by=[0, 1]).values
 # std_dev_types = ['pred_spline_class80_q80_matt0_brier1_kfold3']
 
 
-i = 0
+i = 1
 for set_week, set_year in zip(set_weeks, set_years):
 
     print(set_week, set_year)
