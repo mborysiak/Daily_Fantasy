@@ -103,6 +103,7 @@ class FootballSimulation:
                                AND pos !='K'
                                AND pos IS NOT NULL
                                AND player!='Ryan Griffin'
+                    
                                 ''', self.db_name)
         df['weighting'] = 1
         df.loc[df.model_type=='full_model', 'weighting'] = self.full_model_rel_weight
@@ -915,7 +916,7 @@ class FootballSimulation:
 
 
 
-#%%
+# #%%
 
 # # set the root path and database management object
 # from ff.db_operations import DataManage
@@ -929,7 +930,7 @@ class FootballSimulation:
 # adjust_select = True
 # matchup_drop = 1
 # full_model_weight = 5
-# covar_type = 'team_points_trunc'
+# covar_type = 'no_covar'
 # max_team_type = 'player_points'
 # use_covar = False
 # min_players_same_team = 'Auto'
@@ -962,7 +963,7 @@ class FootballSimulation:
 #                          use_ownership=use_ownership, salary_remain_max=salary_remain_max, matchup_seed=False)
 
 
-# to_add = ['Dameon Pierce', 'Joe Burrow', "Ja'Marr Chase"]
+# to_add = []
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 

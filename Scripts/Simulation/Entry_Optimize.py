@@ -24,7 +24,7 @@ set_years = [
 
 lineups_per_param = 1
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-reg_ens_vers ='random_sera0_rsq0_mse1_include2_kfold3'
+reg_ens_vers ='random_kbest_sera1_rsq0_mse0_include2_kfold3'
 std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
 million_ens_vers = 'random_matt0_brier1_include2_kfold3'
 
@@ -190,30 +190,30 @@ for repeat_num in range(10):
                       'static_top_players', 'use_ownership', 'own_neg_frac', 
                       'max_salary_remain', 'num_iters', 'num_avg_pts']
 
-        d ={'adjust_pos_counts': {True: 0.2, False: 0.8},
-            'player_drop_multiple': {4: 0, 2: 0, 0: 1},
+        d ={'adjust_pos_counts': {True: 0.5, False: 0.5},
+            'player_drop_multiple': {4: 0.1, 2: 0.2, 0: 0.7},
             'matchup_seed': {True: 0.3, False: 0.7},
-            'matchup_drop': {1: 0.1, 2: 0.1, 3: 0, 0: 0.8},
-            'top_n_choices': {1: 0, 2: 0, 3: 0.3, 0: 0.7},
-            'full_model_weight': {5: 0.5, 0.2: 0.5},
-            'covar_type': {'no_covar': 0.3, 'team_points_trunc': 0.7},
+            'matchup_drop': {1: 0.1, 2: 0.1, 3: 0.0, 0: 0.8},
+            'top_n_choices': {1: 0.3, 2: 0.0, 0: 0.7},
+            'full_model_weight': {5: 0.3, 0.2: 0.7},
+            'covar_type': {'no_covar': 0.2, 'team_points_trunc': 0.8},
             'max_team_type': {'player_points': 0.2, 'vegas_points': 0.8},
-            'min_player_same_team': {2: 0, 3: 0.7, 'Auto': 0.3},
-            'num_top_players': {2: 0.3, 3: 0.7, 5: 0},
-            'ownership_vers': {'mil_only': 0.8,
-                                'mil_times_standard_ln': 0.2,
-                                'mil_div_standard_ln': 0,
-                                'standard_ln': 0},
-            'qb_min_iter': {0: 0.1, 2: 0.1, 9: 0.8},
-            'qb_set_max_team': {True: 0.5, False: 0.5},
-            'qb_solo_start': {True: 0.4, False: 0.6},
-            'static_top_players': {True: 0.3, False: 0.7},
-            'use_ownership': {0.9: 0, 0.8: 0.3, 1: 0.7},
-            'own_neg_frac': {0.8: 0, 1: 1},
-            'max_salary_remain': {200: .4, 500: 0, 1000: 0.6, 1500: 0},
-            'num_iters': {150: 0.3, 100: 0.7, 50: 0},
+            'min_player_same_team': {2: 0.5, 3: 0.1, 'Auto': 0.4},
+            'num_top_players': {2: 0.1, 3: 0.7, 5: 0.2},
+            'ownership_vers': {'mil_only': 0.15,
+                                'mil_times_standard_ln': 0.15,
+                                'mil_div_standard_ln': 0.2,
+                                'standard_ln': 0.5},
+            'qb_min_iter': {0: 0.2, 2: 0, 9: 0.8},
+            'qb_set_max_team': {True: 0.3, False: 0.7},
+            'qb_solo_start': {True: 0.1, False: 0.9},
+            'static_top_players': {True: 0.7, False: 0.3},
+            'use_ownership': {0.9: 0, 0.8: 0.5, 1: 0.5},
+            'own_neg_frac': {0.8: 0.1, 1: 0.9},
+            'max_salary_remain': {200: 0, 500: 0, 1000: 0.7, 1500: 0.3},
+            'num_iters': {150: 0.2, 100: 0.3, 50: 0.5},
             'num_avg_pts': {2: 0.3, 3: 0.3, 5: 0.3, 1: 0.1},
-            'min_players_opp_team': {1: 0, 2: 0, 'Auto': 1}}
+            'min_players_opp_team': {1: 0.3, 2: 0.3, 'Auto': 0.4}}
 
         d = {k: d[k] for k in d_ordering}
         params = []
@@ -336,7 +336,7 @@ dm.write_to_db(output, 'Results', 'Entry_Optimize_Params', 'append')
 
 #%%
 
-to_delete_num=134
+to_delete_num=189
 df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
 dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
 
@@ -352,15 +352,15 @@ dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 
 #%%
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
-# add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
-# add_on = add_on.assign(param='num_avg_pts', param_option=1, option_value=1)
-# add_on = add_on[df.columns]
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
+add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
+add_on = add_on.assign(param='num_avg_pts', param_option=1, option_value=1)
+add_on = add_on[df.columns]
 
-# df = pd.concat([df, add_on], axis=0)
-# df = df.sort_values(by='trial_num')
+df = pd.concat([df, add_on], axis=0)
+df = df.sort_values(by='trial_num')
 
-# # # df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
+# # df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
 # dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
 
 # #%%
@@ -373,7 +373,23 @@ dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 
 #%%
 
-# for adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, onf, msr, ni, param_i in params:
-#     print(param_i)
-#     sim_winnings(adj, pdm, md, tn, fmw, ct, mpst, mpot, uo, onf, msr, ni, param_i)
+# df = dm.read(f"SELECT * FROM Entry_Optimize_Results", 'Results')
 
+# df['rk'] = np.where(df.reg_ens_vers.str.contains('random_kbest'), 'random_kbest_', 'random_')
+# df['matthews'] = np.where(df.std_dev_type.str.contains('matt1'), 'matt1_', 'matt0_')
+# df['brier'] = np.where(df.std_dev_type.str.contains('brier1'), 'brier1_', 'brier0_')
+# df['include'] = np.where(df.reg_ens_vers.str.contains('include2'), 'include2_', 'include0_')
+# df['kfold'] = np.where(df.reg_ens_vers.str.contains('kfold3'), 'kfold3', 'kfold0')
+
+# df.loc[(df.trial_num > 162) & (df.million_ens_vers.isnull()), 'million_ens_vers'] = (
+#     df.loc[(df.trial_num > 162) & (df.million_ens_vers.isnull()), 'rk'] +
+#     df.loc[(df.trial_num > 162) & (df.million_ens_vers.isnull()), 'matthews'] +
+#     df.loc[(df.trial_num > 162) & (df.million_ens_vers.isnull()), 'brier'] +
+#     df.loc[(df.trial_num > 162) & (df.million_ens_vers.isnull()), 'include'] +
+#     df.loc[(df.trial_num > 162) & (df.million_ens_vers.isnull()), 'kfold']
+# )
+
+# df = df.drop(['rk', 'matthews', 'brier', 'include', 'kfold'], axis=1)
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
+
+# %%

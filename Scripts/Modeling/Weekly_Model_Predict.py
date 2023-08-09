@@ -523,8 +523,15 @@ def assign_sd_max(output, df_predict, sd_df, sd_cols, sd_m, max_m, min_m, iso_sp
         output['max_score'] = max_m.predict(pred_sd_max)
         output['min_score'] = min_m.predict(pred_sd_max)
 
+    output.loc[output.std_dev < 0, 'std_dev'] = 1
+
     output.loc[(output.max_score < output.pred_fp_per_game), 'max_score'] = \
         output.loc[(output.max_score < output.pred_fp_per_game), 'pred_fp_per_game'] * 2
+    
+    output.loc[output.max_score < 0, 'max_score'] = 1
+    
+    output.loc[(output.pred_fp_per_game < output.min_score), 'min_score'] = \
+        output.loc[(output.pred_fp_per_game < output.min_score), 'pred_fp_per_game'] / 2
     
     return output
 
@@ -751,10 +758,11 @@ def save_mil_to_db(output, run_params, table_name):
     df['model_type'] = model_type
     df['week'] = run_params['set_week']
     df['year'] = run_params['set_year']
+    df['date_run'] = dt.datetime.now().strftime('%m-%d-%Y %H:%M')
 
     df = df[['player', 'week', 'year', 'pos', 'pred_fp_per_game', 
              'std_dev', 'min_score', 'max_score',
-             'pred_vers', 'million_ens_vers', 'model_type']]
+             'pred_vers', 'million_ens_vers', 'model_type', 'date_run']]
 
     del_str = f'''pos='{set_pos}' 
                   AND pred_vers='{run_params['pred_vers']}'
@@ -776,10 +784,11 @@ def save_output_to_db(output, run_params):
     output['model_type'] = model_type
     output['week'] = run_params['set_week']
     output['year'] = run_params['set_year']
+    output['date_run'] = dt.datetime.now().strftime('%m-%d-%Y %H:%M')
 
     output = output[['player', 'dk_salary', 'pred_fp_per_game', 'std_dev',
                      'dk_rank', 'pos', 'pred_vers', 'model_type', 'max_score', 'min_score',
-                     'week', 'year', 'reg_ens_vers', 'std_dev_type']]
+                     'week', 'year', 'reg_ens_vers', 'std_dev_type', 'date_run']]
 
     del_str = f'''pos='{set_pos}' 
                 AND pred_vers='{run_params['pred_vers']}'
@@ -959,6 +968,8 @@ def load_stack_runs(model_output_path, fname):
     stack_in = load_pickle(model_output_path, fname)
     return stack_in['best_models'], stack_in['scores'], stack_in['stack_val_pred']
 
+def remove_knn_rf_q(X):
+    return X[[c for c in X.columns if 'knn_q' not in c and 'rf_q' not in c]]
 
 def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=None, is_million=False):
     
@@ -1074,8 +1085,8 @@ dm = DataManage(db_path)
 
 def process_config(config):
     config['pred_vers'] = config['pred_vers'].format(**config['pred_params'])
-    config['ensemble_vers'] = config['ensemble_vers'].format(**config['ensemble_params'])
-    config['std_dev_type'] = config['std_dev_type'].format(**config['std_dev_params'])
+    # config['ensemble_vers'] = config['ensemble_vers'].format(**config['ensemble_params'])
+    # config['std_dev_type'] = config['std_dev_type'].format(**config['std_dev_params'])
 
     return config
 
@@ -1107,7 +1118,7 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_kbest',
+    'stack_model': 'random',
 
     # opt params
     'opt_type': 'bayes',
@@ -1136,20 +1147,20 @@ kfold = run_params['num_k_folds']
 # pred mse1: kbest, mse=1, matt=0, brier=1 CHECK
 
 r2_wt = 0
-sera_wt = 1
-mse_wt = 0
+sera_wt = 0
+mse_wt = 1
 brier_wt = 1
 matt_wt = 1
 
 alpha = 80
 class_cut = 80
 
-# set_weeks=[1]
-set_weeks = [1,2,3,4,5,6,7,8]
+set_weeks=[1]
+# set_weeks = [1,2,3,4,5,6,7,8]
 # set_weeks = [9,10,11,12]
 # set_weeks = [13,14,15,16]
 
-pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
 class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
@@ -1210,6 +1221,10 @@ with keep.running() as m:
             # get the training data for stacking and prediction data after stacking
             X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path)
             X_predict_player, X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, models_reg, models_class, models_quant)
+            
+            X_stack = remove_knn_rf_q(X_stack)
+            X_predict = remove_knn_rf_q(X_predict)
+            X_predict_player = remove_knn_rf_q(X_predict_player)
 
             # cleanup the X and y datasets
             X_stack_player, X_stack, y_stack = cleanup_X_y(X_stack, y_stack)
@@ -1243,6 +1258,9 @@ with keep.running() as m:
             X_mil_player, X_stack_mil, y_stack_mil, models_mil = load_all_stack_pred_million(model_output_path)
             X_predict_mil = get_stack_predict_data_mil(df_train_mil, df_predict_mil, run_params, models_mil)
             X_stack_mil, X_predict_mil = join_stats_mil(X_stack_mil, X_stack_player, X_predict_mil, X_predict_player)
+
+            X_stack_mil = remove_knn_rf_q(X_stack_mil)
+            X_predict_mil = remove_knn_rf_q(X_predict_mil)
 
             X_stack_mil = add_sal_columns(X_stack_mil, df_train_mil)
             X_predict_mil = add_sal_columns(X_predict_mil, df_predict_mil)
@@ -1288,7 +1306,7 @@ def navigate_folders(root_dir, search_keywords, old_filename, new_filename):
 
 run_params = {
     
-    'stack_model': 'random',
+    'stack_model': 'random_kbest',
 
     # opt params
     'opt_type': 'bayes',
@@ -1323,14 +1341,12 @@ quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
 class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
 million_ens_vers = f"{s_mod}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
 
-root_directory = '/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022_Update/'
+root_directory = '/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/'
 search_keywords = [pred_vers]
 
-#%%
-
-
-q_old = f'quantile80.0_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
-q_new = f'quantile_{quant_ens_vers}.p'
+# q_old = f'quantile80.0_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
+q_old = f'quantile_{quant_ens_vers}.p'
+q_new = f'quantile_{quant_ens_vers}_knn_q.p'
 
 c_old = f'class_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
 c_new=  f'class_{class_ens_vers}.p'
@@ -1341,52 +1357,51 @@ m_new = f'million_{million_ens_vers}.p'
 # r_old = f'reg_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
 # r_new = f'reg_{reg_ens_vers}.p'
 
-for old_filename, new_filename in zip([q_old, c_old, m_old], [q_new, c_new, m_new]):
+for old_filename, new_filename in zip([q_old], [q_new]):# zip([q_old, c_old, m_old], [q_new, c_new, m_new]):
     print(old_filename, '->', new_filename)
-
-# Call the function to navigate and copy/rename files
-# navigate_folders(root_directory, search_keywords,  old_filename, new_filename)
 
 # %%
 
-for old_filename, new_filename in zip([q_old, c_old, m_old], [q_new, c_new, m_new]):
+for old_filename, new_filename in zip([q_old], [q_new]):
     print(old_filename, '->', new_filename)
     navigate_folders(root_directory, search_keywords,  old_filename, new_filename)
-# %%
 
-df = dm.read(f'''SELECT * 
-                 FROM Predicted_Million 
-                 WHERE pred_vers='{pred_vers}' 
-                 AND million_ens_vers='{reg_ens_vers}' 
-                 ''', 'Simulation')
-print(df.head())
-df['million_ens_vers'] = million_ens_vers
-df
 #%%
-dm.delete_from_db('Simulation', 'Predicted_Million', f"pred_vers='{pred_vers}' AND million_ens_vers='{reg_ens_vers}'", create_backup=False)
-dm.delete_from_db('Simulation', 'Predicted_Million', f"pred_vers='{pred_vers}' AND million_ens_vers='{million_ens_vers}'", create_backup=False)
-dm.write_to_db(df, 'Simulation', 'Predicted_Million', 'append')
 
+def fit_and_predict(m, df_predict, X, y, proba):
+    
+    m.fit(X,y)
+
+    if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
+    else: cur_predict = m.predict(df_predict[X.columns])
+   
+
+    return cur_predict
+
+def create_stack_predict(df_predict, models, X, y, proba=False):
+
+    # create the full stack pipe with meta estimators followed by stacked model
+    X_predict = pd.DataFrame()
+    for k, ind_models in models.items():
+        predictions = []
+        for m in ind_models:
+            cur_pred = fit_and_predict(m, df_predict, X, y, proba)
+            predictions.append(cur_pred)
+        predictions = [p for p in predictions if len(p) > 0]
+        predictions = pd.Series(pd.DataFrame(predictions).T.mean(axis=1), name=k)
+        X_predict = pd.concat([X_predict, predictions], axis=1)
+
+    return X_predict
+
+def get_stack_predict_data(df_train, df_predict, df, run_params, 
+                           models_reg, models_class, models_quant):
+
+    _, X, y = get_skm(df_train, 'reg', to_drop=run_params['drop_cols'])
+    print('Predicting Regression Models')
+    X_predict = create_stack_predict(df_predict, models_reg, X, y)
+
+get_stack_predict_data(df_train, df_predict, df, run_params, models_reg, _, _)
 # %%
-df = dm.read(f'''SELECT player, week, year, model_type, pred_fp_per_game random_pred
-                 FROM Predicted_Million 
-                 WHERE pred_vers='{pred_vers}' 
-                 AND million_ens_vers='random_sera0_rsq0_mse1_include2_kfold3' 
-                 ''', 'Simulation')
-df2 = dm.read(f'''SELECT player, week, year, model_type, pred_fp_per_game kbest_pred
-                 FROM Predicted_Million 
-                 WHERE pred_vers='{pred_vers}' 
-                 AND million_ens_vers='random_sera1_rsq0_mse0_include2_kfold3' 
-                 ''', 'Simulation')
 
-pd.merge(df, df2, on=['player', 'week', 'year', 'model_type']).sort_values(by='random_pred', ascending=False).iloc[:50]
-
-# %%
-df = dm.read(f'''SELECT player, week, year, model_type, pred_fp_per_game random_pred
-                 FROM Predicted_Million 
-                 WHERE pred_vers='{pred_vers}' 
-                 AND million_ens_vers='random_sera1_rsq0_mse0_include2_kfold3' 
-                 ''', 'Simulation')
-
-df[(df.player=='Rachaad White') & (df.week==12)]
+models_reg['reg_bridge']
 # %%

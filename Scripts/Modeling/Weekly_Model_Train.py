@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [11]
+run_weeks = [1,2,3,4]
 verbosity = 50
 run_params = {
     
@@ -76,13 +76,13 @@ model_type = 'full_model'
 
 # set weights for running model
 r2_wt = 0
-sera_wt = 0
-mse_wt = 1
-matt_wt = 1
+sera_wt = 1
+mse_wt = 0
+matt_wt = 0
 brier_wt = 1
 
 # set version and iterations
-vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+vers = 'sera1_rsq0_mse0_brier1_matt0_bayes'
 
 #----------------
 # Data Loading
@@ -622,7 +622,7 @@ with keep.running() as m:
         print('Fell Asleep')
 
     run_list = [
-                # ['QB', '', 'full_model'],
+                ['QB', '', 'full_model'],
                 ['RB', '', 'full_model'],
                 ['WR', '', 'full_model'],
                 ['TE', '', 'full_model'],

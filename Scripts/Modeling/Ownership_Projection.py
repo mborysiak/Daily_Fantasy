@@ -681,6 +681,7 @@ def save_current_week_pred(ownership_vers, set_week, set_year, include_dst=True)
     sim_values['ownership_vers'] = ownership_vers
     sim_values['pred_vers'] = pred_version
     sim_values['million_ens_vers'] = million_ens_vers
+    sim_values['date_run'] = dt.datetime.now().strftime('%m-%d-%Y %H:%M')
 
     display(sim_values.sort_values(by='pred_ownership', ascending=False).iloc[:50])
     del_q = f'''year={set_year} 
@@ -799,6 +800,7 @@ for set_week, set_year in zip([1, 2, 3, 4, 5, 6, 7, 8, #9, 10, 11, 12, 13, 14, 1
             if base_place==1:
                 mean_output['pred_vers'] = pred_version
                 mean_output['million_ens_vers'] = million_ens_vers
+                mean_output['date_run'] = dt.datetime.now().strftime('%m-%d-%Y %H:%M')
                 del_q = f'''year={set_year} 
                             AND week={set_week} 
                             AND ownership_vers='{ownership_vers}'
