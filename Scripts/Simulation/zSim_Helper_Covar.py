@@ -17,8 +17,8 @@ cvxopt.glpk.options['msg_lev'] = 'GLP_MSG_OFF'
 class FootballSimulation:
 
     def __init__(self, dm, week, set_year, salary_cap, pos_require_start, num_iters, 
-                 pred_vers='standard', ensemble_vers='no_weight', std_dev_type='spline',
-                 covar_type='team_points', full_model_rel_weight=1, matchup_seed=False,
+                 pred_vers='standard', reg_ens_vers='no_weight', million_ens_vers='random_matt0_brier1_include2_kfold3',
+                 std_dev_type='spline', covar_type='team_points', full_model_rel_weight=1, matchup_seed=False,
                  use_covar=True, use_ownership=0, salary_remain_max=None, db_name='Simulation'):
 
         self.week = week
@@ -28,8 +28,9 @@ class FootballSimulation:
         self.salary_cap = salary_cap
         self.dm = dm
         self.pred_vers = pred_vers
-        self.ensemble_vers = ensemble_vers
+        self.reg_ens_vers = reg_ens_vers
         self.std_dev_type = std_dev_type
+        self.million_ens_vers = million_ens_vers
         self.covar_type = covar_type
         self.full_model_rel_weight = full_model_rel_weight
         self.use_covar = use_covar
@@ -68,7 +69,7 @@ class FootballSimulation:
                                        WHERE week={self.week}
                                              AND year={self.set_year}
                                              AND pred_vers='{self.pred_vers}'
-                                             AND ensemble_vers='{self.ensemble_vers}'
+                                             AND reg_ens_vers='{self.reg_ens_vers}'
                                              AND std_dev_type='{self.std_dev_type}'
                                              AND covar_type='{self.covar_type}' 
                                              AND full_model_rel_weight={self.full_model_rel_weight}''', 
@@ -81,7 +82,7 @@ class FootballSimulation:
                                  WHERE week={self.week}
                                        AND year={self.set_year}
                                        AND pred_vers='{self.pred_vers}'
-                                       AND ensemble_vers='{self.ensemble_vers}'
+                                       AND reg_ens_vers='{self.reg_ens_vers}'
                                        AND std_dev_type='{self.std_dev_type}'
                                        AND covar_type='{self.covar_type}'
                                        AND full_model_rel_weight={self.full_model_rel_weight} ''', 
@@ -96,12 +97,13 @@ class FootballSimulation:
                          FROM Model_Predictions
                          WHERE week={self.week}
                                AND year={self.set_year}
-                               AND version='{self.pred_vers}'
-                               AND ensemble_vers='{self.ensemble_vers}'
+                               AND pred_vers='{self.pred_vers}'
+                               AND reg_ens_vers='{self.reg_ens_vers}'
                                AND std_dev_type='{self.std_dev_type}'
                                AND pos !='K'
                                AND pos IS NOT NULL
                                AND player!='Ryan Griffin'
+                    
                                 ''', self.db_name)
         df['weighting'] = 1
         df.loc[df.model_type=='full_model', 'weighting'] = self.full_model_rel_weight
@@ -210,7 +212,7 @@ class FootballSimulation:
                                             AND week={self.week}
                                             AND ownership_vers='{self.ownership_vers}'
                                             AND pred_vers='{self.pred_vers}'
-                                            AND ensemble_vers='{self.ensemble_vers}' ''', self.db_name)
+                                            AND million_ens_vers='{self.million_ens_vers}' ''', self.db_name)
 
         if self.use_covar: df = df.drop(['pred_fp_per_game'], axis=1)
         elif self.boot: df = df.copy()
@@ -551,7 +553,7 @@ class FootballSimulation:
                                                     AND year={self.set_year}
                                                     AND ownership_vers='{self.ownership_vers}'
                                                     AND pred_vers='{self.pred_vers}'
-                                                    AND ensemble_vers='{self.ensemble_vers}'
+                                                    AND million_ens_vers='{self.million_ens_vers}'
                                         ''', self.db_name).values[0]
 
         mean_own = self.pos_or_neg * np.random.normal(mean_own, std_own, size=1).reshape(1, 1)
@@ -914,7 +916,7 @@ class FootballSimulation:
 
 
 
-#%%
+# #%%
 
 # # set the root path and database management object
 # from ff.db_operations import DataManage
@@ -928,7 +930,7 @@ class FootballSimulation:
 # adjust_select = True
 # matchup_drop = 1
 # full_model_weight = 5
-# covar_type = 'team_points_trunc'
+# covar_type = 'no_covar'
 # max_team_type = 'player_points'
 # use_covar = False
 # min_players_same_team = 'Auto'
@@ -938,24 +940,25 @@ class FootballSimulation:
 # qb_solo_start = True
 # qb_set_max_team = True
 # static_top_players = False
-# use_ownership = 0.1
+# use_ownership = 1
 # own_neg_frac = 1
 # salary_remain_max = 500
 # num_iters = 100
 
-# pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
-# ens_vers = 'random_kbest_sera1_rsq0_mse0_include2_kfold3'
-# std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
+# pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+# reg_ens_vers = 'random_sera0_rsq0_mse1_include2_kfold3'
+# million_vers = 'random_matt0_brier1_include2_kfold3'
+# std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
 # ownership_vers = 'mil_only'
 
-# week = 4
+# week = 1
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 # set_max_team = None
 
 # sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-#                          ensemble_vers=ens_vers, pred_vers=pred_vers, std_dev_type=std_dev_type,
+#                          reg_ens_vers=reg_ens_vers, pred_vers=pred_vers, million_ens_vers=million_vers,std_dev_type=std_dev_type,
 #                          full_model_rel_weight=full_model_weight, covar_type=covar_type, use_covar=use_covar, 
 #                          use_ownership=use_ownership, salary_remain_max=salary_remain_max, matchup_seed=False)
 

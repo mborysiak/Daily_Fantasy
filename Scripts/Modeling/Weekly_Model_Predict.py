@@ -34,10 +34,10 @@ set_config(display='text')
 # Data Loading Functions
 #====================
 
-def create_pkey_output_path(set_pos, run_params, model_type, vers):
+def create_pkey_output_path(set_pos, run_params, model_type):
 
 
-    pkey = f"{set_pos}_year{run_params['set_year']}_week{run_params['set_week']}_{model_type}{vers}"
+    pkey = f"{set_pos}_year{run_params['set_year']}_week{run_params['set_week']}_{model_type}{run_params['pred_vers']}"
     model_output_path = f"{root_path}/Model_Outputs/{run_params['set_year']}/{pkey}/"
     if not os.path.exists(model_output_path): os.makedirs(model_output_path)
     run_params['model_output_path'] = model_output_path
@@ -523,8 +523,15 @@ def assign_sd_max(output, df_predict, sd_df, sd_cols, sd_m, max_m, min_m, iso_sp
         output['max_score'] = max_m.predict(pred_sd_max)
         output['min_score'] = min_m.predict(pred_sd_max)
 
+    output.loc[output.std_dev < 0, 'std_dev'] = 1
+
     output.loc[(output.max_score < output.pred_fp_per_game), 'max_score'] = \
         output.loc[(output.max_score < output.pred_fp_per_game), 'pred_fp_per_game'] * 2
+    
+    output.loc[output.max_score < 0, 'max_score'] = 1
+    
+    output.loc[(output.pred_fp_per_game < output.min_score), 'min_score'] = \
+        output.loc[(output.pred_fp_per_game < output.min_score), 'pred_fp_per_game'] / 2
     
     return output
 
@@ -679,7 +686,7 @@ def save_mil_data(X_mil, y_mil, best_val_mil, df_predict_mil, best_predictions_m
                             axis=1).sort_values(by='pred_fp_per_game_class', ascending=False)
 
     save_val_to_db(X_mil, y_mil, best_val_mil, run_params, table_name='Model_Validations_Million')
-    save_prob_to_db(test_output, run_params, 'Predicted_Million')
+    save_mil_to_db(test_output, run_params, 'Predicted_Million')
 
 #-----------------------
 # Saving validations
@@ -708,60 +715,60 @@ def save_val_to_db(X, y, best_val, run_params, table_name):
 
     df = validation_compare_df(X, y, best_val)
 
+    if 'Million' in table_name: ens_vers = 'million_ens_vers'
+    else: ens_vers = 'reg_ens_vers'
+
     df['pos'] = set_pos
-    df['pred_version'] = vers
-    df['ensemble_vers'] = ensemble_vers
-    df['std_dev_type'] = std_dev_type
+    df['pred_vers'] = run_params['pred_vers']
+    df[ens_vers] = run_params[ens_vers]
     df['model_type'] = model_type
     df['set_week'] = run_params['set_week']
     df['set_year'] = run_params['set_year']
 
     df = df[['player', 'team', 'year', 'week',  'y_act', 'pred_fp_per_game', 'pos',
-             'pred_version', 'ensemble_vers', 'std_dev_type', 'model_type', 'set_week', 'set_year']]
+             'pred_vers', ens_vers, 'model_type', 'set_week', 'set_year']]
 
     del_str = f'''pos='{set_pos}' 
-                  AND pred_version='{vers}'
-                  AND ensemble_vers='{ensemble_vers}' 
-                  AND std_dev_type='{std_dev_type}'
+                  AND pred_vers='{run_params['pred_vers']}'
+                  AND {ens_vers}='{run_params[ens_vers]}' 
                   AND set_week={run_params['set_week']} 
                   AND set_year={run_params['set_year']}
                   AND model_type='{model_type}'
                 '''
     
- 
     dm.delete_from_db('Validations', table_name, del_str, create_backup=False)
     dm.write_to_db(df, 'Validations', table_name, 'append')
 
   
 
 
-def save_prob_to_db(output, run_params, table_name):
+def save_mil_to_db(output, run_params, table_name):
 
     
     df = output[['player', 'team', 'week', 'year', 'pred_fp_per_game_class']].copy()
-    df = df.rename(columns={'week': 'set_week', 'year': 'set_year', 'pred_fp_per_game_class': 'pred_fp_per_game'})
+    df = df.rename(columns={'pred_fp_per_game_class': 'pred_fp_per_game'})
     df['std_dev'] = df.pred_fp_per_game * 0.25
     df['min_score'] = 0
     df['max_score'] = df.pred_fp_per_game * 1.5
     df['max_score'] = df.max_score.apply(lambda x: np.min([x, 1]))
 
     df['pos'] = set_pos
-    df['pred_version'] = vers
-    df['ensemble_vers'] = ensemble_vers
-    df['std_dev_type'] = std_dev_type
+    df['pred_vers'] = run_params['pred_vers']
+    df['million_ens_vers'] = run_params['million_ens_vers']
     df['model_type'] = model_type
-    df['week'] = df.set_week
-    df['year'] = df.set_year
+    df['week'] = run_params['set_week']
+    df['year'] = run_params['set_year']
+    df['date_run'] = dt.datetime.now().strftime('%m-%d-%Y %H:%M')
 
-    df = df[['player', 'set_week', 'set_year', 'pos', 'pred_fp_per_game', 'std_dev', 'min_score', 'max_score',
-             'pred_version', 'ensemble_vers', 'model_type', 'std_dev_type', 'week', 'year']]
+    df = df[['player', 'week', 'year', 'pos', 'pred_fp_per_game', 
+             'std_dev', 'min_score', 'max_score',
+             'pred_vers', 'million_ens_vers', 'model_type', 'date_run']]
 
     del_str = f'''pos='{set_pos}' 
-                  AND pred_version='{vers}'
-                  AND ensemble_vers='{ensemble_vers}' 
-                  AND std_dev_type='{std_dev_type}' 
-                  AND set_week={run_params['set_week']} 
-                  AND set_year={run_params['set_year']}
+                  AND pred_vers='{run_params['pred_vers']}'
+                  AND million_ens_vers='{run_params['million_ens_vers']}' 
+                  AND week={run_params['set_week']} 
+                  AND year={run_params['set_year']}
                   AND model_type='{model_type}'
                 '''
     dm.delete_from_db('Simulation', table_name, del_str, create_backup=False)
@@ -771,26 +778,25 @@ def save_prob_to_db(output, run_params, table_name):
 def save_output_to_db(output, run_params):
 
     output['pos'] = set_pos
-    output['version'] = vers
-    output['ensemble_vers'] = ensemble_vers
+    output['pred_vers'] = run_params['pred_vers']
+    output['reg_ens_vers'] = run_params['reg_ens_vers']
     output['std_dev_type'] = std_dev_type
     output['model_type'] = model_type
     output['week'] = run_params['set_week']
     output['year'] = run_params['set_year']
-    output['rush_pass'] = run_params['rush_pass']
+    output['date_run'] = dt.datetime.now().strftime('%m-%d-%Y %H:%M')
 
     output = output[['player', 'dk_salary', 'pred_fp_per_game', 'std_dev',
-                     'dk_rank', 'pos', 'version', 'model_type', 'max_score', 'min_score',
-                      'week', 'year', 'ensemble_vers', 'std_dev_type', 'rush_pass']]
+                     'dk_rank', 'pos', 'pred_vers', 'model_type', 'max_score', 'min_score',
+                     'week', 'year', 'reg_ens_vers', 'std_dev_type', 'date_run']]
 
     del_str = f'''pos='{set_pos}' 
-                AND version='{vers}'
-                AND ensemble_vers='{ensemble_vers}' 
+                AND pred_vers='{run_params['pred_vers']}'
+                AND reg_ens_vers='{run_params['reg_ens_vers']}' 
                 AND std_dev_type='{std_dev_type}'
                 AND week={run_params['set_week']} 
                 AND year={run_params['set_year']}
                 AND model_type='{model_type}'
-                AND rush_pass="{run_params['rush_pass']}"
                 '''
     dm.delete_from_db('Simulation', 'Model_Predictions', del_str, create_backup=False)
     dm.write_to_db(output, 'Simulation', f'Model_Predictions', 'append')
@@ -824,10 +830,10 @@ def get_newest_folder_with_keywords(path, keywords, ignore_keywords=None, req_fn
     return os.path.join(path, newest_folder)
 
 
-def get_trial_times(root_path, fname, run_params, set_pos, model_type, vers):
+def get_trial_times(root_path, fname, run_params, set_pos, model_type):
 
     newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
-    keep_words = [set_pos, model_type, vers]
+    keep_words = [set_pos, model_type, run_params['pred_vers']]
     drop_words = [f"_week{run_params['set_week']}_"]
     recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
 
@@ -874,7 +880,7 @@ def get_proba_adp_coef(model_obj, final_m, run_params):
 def get_trials(fname, final_m, bayes_rand):
 
     newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
-    keep_words = [set_pos, model_type, vers]
+    keep_words = [set_pos, model_type, run_params['pred_vers']]
     drop_words = [f"_week{run_params['set_week']}_"]
     recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
 
@@ -920,15 +926,13 @@ def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_
     
     return best_model, stack_scores, stack_pred, trial
 
-def get_func_params(model_obj):
+def get_func_params(model_obj, alpha):
 
     model_list = {
         'reg': ['rf', 'gbm', 'gbmh', 'huber', 'xgb', 'lgbm', 'knn', 'ridge', 'lasso', 'bridge'],
         'class': ['rf_c', 'gbm_c', 'gbmh_c', 'xgb_c','lgbm_c', 'knn_c', 'lr_c'],
         'quantile': ['qr_q', 'gbm_q', 'lgbm_q', 'gbmh_q', 'rf_q']#, 'knn_q']
     }
-    if model_obj=='quantile': alpha=0.8
-    else: alpha=''
 
     func_params = [[m, i, model_obj, alpha] for i, m  in enumerate(model_list[model_obj])]
 
@@ -964,26 +968,34 @@ def load_stack_runs(model_output_path, fname):
     stack_in = load_pickle(model_output_path, fname)
     return stack_in['best_models'], stack_in['scores'], stack_in['stack_val_pred']
 
+def remove_knn_rf_q(X):
+    return X[[c for c in X.columns if 'knn_q' not in c and 'rf_q' not in c]]
 
 def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=None, is_million=False):
     
-    if alpha is not None: alpha_label = alpha*100
-    else: alpha_label = ''
+    if model_obj=='reg': ens_vers = run_params['reg_ens_vers']
+    elif model_obj=='class': ens_vers = run_params['class_ens_vers']
+    elif model_obj=='quantile': ens_vers = run_params['quant_ens_vers']
 
-    if is_million: model_obj_label = 'million'
-    else: model_obj_label = model_obj
+    if is_million: 
+        model_obj_label = 'million'
+        ens_vers = run_params['million_ens_vers']
+    else: 
+        model_obj_label = model_obj
 
     path = run_params['model_output_path']
-    fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"    
-    model_list, func_params = get_func_params(model_obj)
+    fname = f"{model_obj_label}_{ens_vers}"    
+    model_list, func_params = get_func_params(model_obj, alpha)
 
     try:
-        time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type, vers)
+        time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type)
         print(time_per_trial)
         num_trials = calc_num_trials(time_per_trial, run_params)
     except: 
         num_trials = {m: run_params['n_iters'] for m in model_list}
     print(num_trials)
+
+    print(path, fname)
 
     if os.path.exists(f"{path}/{fname}.p"):
         best_models, scores, stack_val_pred = load_stack_runs(path, fname)
@@ -1073,8 +1085,8 @@ dm = DataManage(db_path)
 
 def process_config(config):
     config['pred_vers'] = config['pred_vers'].format(**config['pred_params'])
-    config['ensemble_vers'] = config['ensemble_vers'].format(**config['ensemble_params'])
-    config['std_dev_type'] = config['std_dev_type'].format(**config['std_dev_params'])
+    # config['ensemble_vers'] = config['ensemble_vers'].format(**config['ensemble_params'])
+    # config['std_dev_type'] = config['std_dev_type'].format(**config['std_dev_params'])
 
     return config
 
@@ -1125,27 +1137,48 @@ run_params = {
    
 }
 
+s_mod = run_params['stack_model']
+min_inc = run_params['min_include']
+kfold = run_params['num_k_folds']
+
+# pred mse1: rand, mse=1, rsq=0, sera=0, matt=1, brier=1, class=80 CHECK
+# pred mse1: rand, mse=1, matt=0, brier=1 CHECK
+# pred mse1: kbest, mse=1, matt=1, brier=1 CHECK
+# pred mse1: kbest, mse=1, matt=0, brier=1 CHECK
+
 r2_wt = 0
 sera_wt = 1
 mse_wt = 0
 brier_wt = 1
-matt_wt = 0
+matt_wt = 1
 
-# set the model version
-# set_weeks=[8]
-# set_weeks = [1,2,3,4]
-set_weeks = [5,6,7,8]
+alpha = 80
+class_cut = 80
+
+set_weeks=[1]
+# set_weeks = [1,2,3,4,5,6,7,8]
 # set_weeks = [9,10,11,12]
 # set_weeks = [13,14,15,16]
 
-pred_versions = len(set_weeks)*['sera0_rsq0_mse1_brier1_matt1_bayes']
+pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
+reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
+quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
+class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
+million_ens_vers = f"{s_mod}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
 
-ensemble_versions = len(set_weeks)*['random_sera0_rsq0_mse1_include2_kfold3']
+run_params['pred_vers'] = pred_vers
+run_params['reg_ens_vers'] = reg_ens_vers
+run_params['quant_ens_vers'] = quant_ens_vers
+run_params['class_ens_vers'] = class_ens_vers
+run_params['million_ens_vers'] = million_ens_vers
 
-std_dev_types = ['spline_pred_class80_q80_matt0_brier1_kfold3',
-                 'spline_pred_class80_matt0_brier1_kfold3',
-                 'spline_pred_q80_matt0_brier1_kfold3',
-                 'spline_class80_q80_matt0_brier1_kfold3']
+std_dev_types = [
+    f'spline_pred_class{class_cut}_q{alpha}_matt{matt_wt}_brier{brier_wt}_kfold{kfold}',
+    f'spline_pred_class{class_cut}_matt{matt_wt}_brier{brier_wt}_kfold{kfold}',
+    f'spline_pred_q{alpha}_matt{matt_wt}_brier{brier_wt}_kfold{kfold}',
+    f'spline_class{class_cut}_q{alpha}_matt{matt_wt}_brier{brier_wt}_kfold{kfold}'
+]
+
 std_dev_type = std_dev_types[0]
 
 with keep.running() as m:
@@ -1153,10 +1186,9 @@ with keep.running() as m:
     if not m.success:
         print('Fell Asleep')
             
-    for w, vers, ensemble_vers in zip(set_weeks, pred_versions, ensemble_versions):
+    for w in set_weeks:
 
         run_params['set_week'] = w
-        run_params['ensemble_vers'] = ensemble_vers
         runs = [
             ['QB', 'full_model', ''],
             ['RB', 'full_model', ''],
@@ -1174,7 +1206,7 @@ with keep.running() as m:
             run_params['rush_pass'] = rush_pass
 
             # load data and filter down
-            pkey, run_params, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
+            pkey, run_params, model_output_path = create_pkey_output_path(set_pos, run_params, model_type)
             df, run_params = load_data(model_type, set_pos, run_params)
             df, run_params = create_game_date(df, run_params)
             df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
@@ -1189,6 +1221,10 @@ with keep.running() as m:
             # get the training data for stacking and prediction data after stacking
             X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path)
             X_predict_player, X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, models_reg, models_class, models_quant)
+            
+            X_stack = remove_knn_rf_q(X_stack)
+            X_predict = remove_knn_rf_q(X_predict)
+            X_predict_player = remove_knn_rf_q(X_predict_player)
 
             # cleanup the X and y datasets
             X_stack_player, X_stack, y_stack = cleanup_X_y(X_stack, y_stack)
@@ -1196,10 +1232,8 @@ with keep.running() as m:
 
             # run the class, quant, and reg models
             best_val_class, best_predictions_class = load_run_models(run_params, X_stack, y_stack_class, X_predict, 'class')
-            best_val_quant, best_predictions_quant = load_run_models(run_params, X_stack, y_stack, X_predict, 'quantile', alpha=0.8)
+            best_val_quant, best_predictions_quant = load_run_models(run_params, X_stack, y_stack, X_predict, 'quantile', alpha=alpha/100)
             best_val_reg, best_predictions_reg = load_run_models(run_params, X_stack, y_stack, X_predict, 'reg')
-
-            save_val_to_db(X_stack_player, y_stack_class, best_val_class, run_params, table_name='Model_Validations_Class')
             save_val_to_db(X_stack_player, y_stack, best_val_reg, run_params, table_name='Model_Validations')
 
             # create the output and add standard deviations / max score datasets
@@ -1225,13 +1259,15 @@ with keep.running() as m:
             X_predict_mil = get_stack_predict_data_mil(df_train_mil, df_predict_mil, run_params, models_mil)
             X_stack_mil, X_predict_mil = join_stats_mil(X_stack_mil, X_stack_player, X_predict_mil, X_predict_player)
 
+            X_stack_mil = remove_knn_rf_q(X_stack_mil)
+            X_predict_mil = remove_knn_rf_q(X_predict_mil)
+
             X_stack_mil = add_sal_columns(X_stack_mil, df_train_mil)
             X_predict_mil = add_sal_columns(X_predict_mil, df_predict_mil)
 
             X_predict_mil = X_predict_mil.drop(['player', 'team', 'week', 'year'], axis=1)
             X_stack_mil = X_stack_mil.drop(['player', 'team', 'week', 'year'], axis=1)
             y_stack_mil = y_stack_mil.y_act
-            # class metrics
             best_val_mil, best_predictions_mil = load_run_models(run_params, X_stack_mil, y_stack_mil, X_predict_mil, 'class', is_million=True)
 
             output_mil = create_mil_output(df_predict_mil, best_predictions_mil)
@@ -1248,6 +1284,11 @@ with keep.running() as m:
 
 #%%
 
+
+
+
+
+#%%
 import os
 import shutil
 
@@ -1259,84 +1300,108 @@ def navigate_folders(root_dir, search_keywords, old_filename, new_filename):
                 source_path = os.path.join(dirpath, old_filename)
                 destination_path = os.path.join(dirpath, new_filename)
                 shutil.copy2(source_path, destination_path)
+                os.remove(source_path)
             except:
                 print(dirpath, 'failed')
 
-root_directory = '/Users/mborysia/Documents/Github/Daily_Fantasy//Model_Outputs/2022/'
-search_keywords = ['bayes']
+run_params = {
+    
+    'stack_model': 'random_kbest',
 
-# old_filename = 'quantile80.0_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
-# new_filename = 'quantile80.0_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
+    # opt params
+    'opt_type': 'bayes',
+    'n_iters': 100,
+    'n_splits': 5,
+    'num_k_folds': 3,
+    'show_plot': True,
+    'print_coef': True,
+    'min_include': 2,
+    
+    'met': 'y_act',
 
-# old_filename = 'class_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
-# new_filename=   'class_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
+   
+}
 
-old_filename = 'million_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
-new_filename = 'million_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
+s_mod = run_params['stack_model']
+min_inc = run_params['min_include']
+kfold = run_params['num_k_folds']
 
-# Call the function to navigate and copy/rename files
-navigate_folders(root_directory, search_keywords,  old_filename, new_filename)
+r2_wt = 0
+sera_wt = 0
+mse_wt = 1
+brier_wt = 1
+matt_wt = 0
+
+alpha = 80
+class_cut = 80
+
+pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
+reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
+quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
+class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
+million_ens_vers = f"{s_mod}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
+
+root_directory = '/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/'
+search_keywords = [pred_vers]
+
+# q_old = f'quantile80.0_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
+q_old = f'quantile_{quant_ens_vers}.p'
+q_new = f'quantile_{quant_ens_vers}_knn_q.p'
+
+c_old = f'class_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
+c_new=  f'class_{class_ens_vers}.p'
+
+m_old = f'million_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
+m_new = f'million_{million_ens_vers}.p'
+
+# r_old = f'reg_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
+# r_new = f'reg_{reg_ens_vers}.p'
+
+for old_filename, new_filename in zip([q_old], [q_new]):# zip([q_old, c_old, m_old], [q_new, c_new, m_new]):
+    print(old_filename, '->', new_filename)
 
 # %%
 
-load_run_models(run_params, X_stack, y_stack, X_predict, model_obj='reg', alpha=None, is_million=False)
-
-# %%
-
-
-alpha = None
-is_million = False
-model_obj = 'reg'
-
-if alpha is not None: alpha_label = alpha*100
-else: alpha_label = ''
-
-if is_million: model_obj_label = 'million'
-else: model_obj_label = model_obj
-
-path = run_params['model_output_path']
-fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"
-
-newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
-keep_words = [set_pos, model_type, vers]
-drop_words = [f"_week{run_params['set_week']}_"]
-recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
-recent_save
-
-all_trials = load_pickle(recent_save, fname)['trials']
-
-times = []
-for k,v in all_trials.items():
-    if k!='reg_adp':
-        max_trial = len(v.trials) - 1
-        trial_times = []
-        for i in range(max_trial-100, max_trial):
-            trial_times.append(v.trials[i]['refresh_time'] - v.trials[i]['book_time'])
-        trial_time = np.mean(trial_times).seconds
-        times.append([k, np.round(trial_time / 60, 2)])
-
-time_per_trial = pd.DataFrame(times, columns=['model', 'time_per_trial']).sort_values(by='time_per_trial', ascending=False)
-time_per_trial['total_time'] = time_per_trial.time_per_trial * 100
-time_per_trial
+for old_filename, new_filename in zip([q_old], [q_new]):
+    print(old_filename, '->', new_filename)
+    navigate_folders(root_directory, search_keywords,  old_filename, new_filename)
 
 #%%
 
-alpha = None
-is_million = False
-model_obj = 'class'
+def fit_and_predict(m, df_predict, X, y, proba):
+    
+    m.fit(X,y)
 
+    if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
+    else: cur_predict = m.predict(df_predict[X.columns])
+   
 
+    return cur_predict
 
-if alpha is not None: alpha_label = alpha*100
-else: alpha_label = ''
+def create_stack_predict(df_predict, models, X, y, proba=False):
 
-if is_million: model_obj_label = 'million'
-else: model_obj_label = model_obj
+    # create the full stack pipe with meta estimators followed by stacked model
+    X_predict = pd.DataFrame()
+    for k, ind_models in models.items():
+        predictions = []
+        for m in ind_models:
+            cur_pred = fit_and_predict(m, df_predict, X, y, proba)
+            predictions.append(cur_pred)
+        predictions = [p for p in predictions if len(p) > 0]
+        predictions = pd.Series(pd.DataFrame(predictions).T.mean(axis=1), name=k)
+        X_predict = pd.concat([X_predict, predictions], axis=1)
 
-fname = f"{model_obj_label}{alpha_label}_{run_params['ensemble_vers']}"
+    return X_predict
 
+def get_stack_predict_data(df_train, df_predict, df, run_params, 
+                           models_reg, models_class, models_quant):
 
-time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type, vers)
-num_trials = calc_num_trials(time_per_trial, run_params)
-num_trials
+    _, X, y = get_skm(df_train, 'reg', to_drop=run_params['drop_cols'])
+    print('Predicting Regression Models')
+    X_predict = create_stack_predict(df_predict, models_reg, X, y)
+
+get_stack_predict_data(df_train, df_predict, df, run_params, models_reg, _, _)
+# %%
+
+models_reg['reg_bridge']
 # %%

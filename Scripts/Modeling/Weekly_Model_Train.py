@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [9,10]
+run_weeks = [1,2,3,4]
 verbosity = 50
 run_params = {
     
@@ -76,13 +76,13 @@ model_type = 'full_model'
 
 # set weights for running model
 r2_wt = 0
-sera_wt = 0
-mse_wt = 1
-matt_wt = 1
+sera_wt = 1
+mse_wt = 0
+matt_wt = 0
 brier_wt = 1
 
 # set version and iterations
-vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+vers = 'sera1_rsq0_mse0_brier1_matt0_bayes'
 
 #----------------
 # Data Loading
@@ -241,9 +241,9 @@ def get_trial_times(root_path, run_params, set_pos, model_type, vers):
 def calc_num_trials(time_per_trial, run_params):
 
     n_iters = run_params['n_iters']
-    time_per_trial['percentile_90_time'] = time_per_trial.time_per_trial.quantile(0.9)
+    time_per_trial['percentile_90_time'] = time_per_trial.time_per_trial.quantile(0.8)
     time_per_trial['num_trials'] = n_iters * time_per_trial.percentile_90_time / time_per_trial.time_per_trial
-    time_per_trial['num_trials'] = time_per_trial.num_trials.apply(lambda x: np.min([n_iters, np.max([x, n_iters/3])])).astype('int')
+    time_per_trial['num_trials'] = time_per_trial.num_trials.apply(lambda x: np.min([n_iters, np.max([x, n_iters/4])])).astype('int')
     
     return {k:v for k,v in zip(time_per_trial.model, time_per_trial.num_trials)}
 

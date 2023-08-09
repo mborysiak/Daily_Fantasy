@@ -405,7 +405,7 @@ def show_coef(all_coef, X_all):
         all_coef = pd.Series(all_coef.mean(axis=1).values, index=all_coef.metric)
         all_coef[abs(all_coef) > 0.005].sort_values().plot.barh(figsize=(10,18))
     except:
-        shap.summary_plot(all_coef.values, X_all, feature_names=X_all.columns, plot_size=(8,10), max_display=30, show=False)
+        shap.summary_plot(all_coef.values, X_all, feature_names=X_all.columns, plot_size=(18,10), max_display=30, show=False)
 
 def entry_optimize_params(df, max_adjust, model_name):
 
@@ -416,7 +416,7 @@ def entry_optimize_params(df, max_adjust, model_name):
     df.winnings = df.winnings / df.max_lineup_num
 
     df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
-    str_cols = ['week', 'year', 'pred_vers', 'ensemble_vers', 'std_dev_type']
+    str_cols = ['week', 'year', 'pred_vers', 'reg_ens_vers', 'million_ens_vers', 'std_dev_type']
     if model_name in ('enet', 'lasso',' ridge'):
         str_cols.extend( ['player_drop_multiple','top_n_choices', 'matchup_drop', 'adjust_pos_counts', 
                          'full_model_weight', 'max_lineup_num', 'use_ownership', 'own_neg_frac',
@@ -440,11 +440,11 @@ def entry_optimize_params(df, max_adjust, model_name):
 df = dm.read('''SELECT *  
                 FROM Entry_Optimize_Params_Detail 
                 JOIN (
-                     SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
+                     SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num > 162
-                      AND week <= 15
+                WHERE trial_num > 187
+                      AND week <= 8
             
                 ''', 'Results')
 
@@ -465,7 +465,7 @@ show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7, 8,  9, 10, 11, 12, 13, 14, 15]
+weeks = [1, 2, 3, 4, 5, 6, 7, 8]
 years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
 
 i=0
@@ -474,10 +474,10 @@ for w, yr in zip(weeks, years):
     df = dm.read(f'''SELECT *  
                      FROM Entry_Optimize_Params_Detail 
                      JOIN (
-                            SELECT week, year, pred_vers, ensemble_vers, std_dev_type, trial_num, repeat_num
+                            SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num > 162
+                     WHERE trial_num > 187
                            AND week = {w}
                            AND year = {yr}
                      ''', 'Results')

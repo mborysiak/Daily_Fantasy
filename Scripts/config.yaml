@@ -11,30 +11,32 @@ pred_params:
   brier_wt: 1
   matt_wt: 1
 
-pred_vers: "sera{sera_wt}_rsq{r2_wt}_brier{brier_wt}_matt{matt_wt}_bayes"
+pred_vers: "sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_brier{brier_wt}_matt{matt_wt}_bayes"
 
 # ensemble params
 ensemble_params:
+  stack_model: 'random'
   r2_wt: 0
   sera_wt: 0
   mse_wt: 1
   brier_wt: 1
   matt_wt: 0
+  class_cut: 80
+  alpha: 80
   include_models: 2
   kfolds: 3
 
-ensemble_vers: "sera{sera_wt}_rsq{r2_wt}_include{include_models}_kfold{kfolds}"
-
+reg_ens_vers: "{stack_model}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{include_models}_kfold{kfolds}"
+quant_ens_vers: "{stack_model}_q{alpha}_include{include_models}_kfold{kfolds}"
+class_ens_vers: "{stack_model}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{include_models}_kfold{kfolds}"
+million_ens_vers: "{stack_model}_matt{matt_wt}_brier{brier_wt}_include{include_models}_kfold{kfolds}"
 
 # std dev params
 std_dev_params:
   model_type: 'spline'
-  brier_wt: 1
-  matt_wt: 0
-  class: 'class80'
-  quant: 'q80'
+  class: 'class{class_cut}'
+  quant: 'q{alpha}'
   pred: 'pred'
-  kfolds: 3
 
 std_dev_type: "{model_type}_{pred}_{class}_{quant}_matt{matt_wt}_brier{brier_wt}_kfold{kfolds}"
 
