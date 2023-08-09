@@ -1147,8 +1147,8 @@ kfold = run_params['num_k_folds']
 # pred mse1: kbest, mse=1, matt=0, brier=1 CHECK
 
 r2_wt = 0
-sera_wt = 0
-mse_wt = 1
+sera_wt = 1
+mse_wt = 0
 brier_wt = 1
 matt_wt = 1
 
