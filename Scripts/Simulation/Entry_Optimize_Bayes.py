@@ -305,8 +305,9 @@ def convert_param_options(bp):
         }, 
 
         'covar_type': {
-            'no_covar': bp['covar_type_no_covar'],
-            'team_points_trunc': 1 -  bp['covar_type_no_covar']
+            'kmeans_pred_trunc': bp['covar_type_kmeans_pred_trunc'],
+            'team_points_trunc': bp['covar_type_team_points_trunc'],
+            'no_covar': 1 - bp['covar_type_team_points_trunc'] - bp['covar_type_kmeans_pred_trunc']
         }, 
 
         'max_team_type': {
@@ -452,16 +453,18 @@ def objective(bayes_params):
     million_ens_vers = bayes_params['million_ens_vers']
 
     d = convert_param_options(bayes_params)
-    total_winnings = []
-    iter_cats = zip(set_weeks, set_years)
+
+    # total_winnings = []
+    # iter_cats = zip(set_weeks, set_years)
     # for week, year in iter_cats:
-    #     winnings_week = run_week_sim(d, lineups_per_param, week, year, pred_vers, ensemble_vers, std_dev_type)
+    #     winnings_week = run_week_sim(d, lineups_per_param, week, year, pred_vers, reg_ens_vers, std_dev_type, million_ens_vers)
     #     total_winnings.append(winnings_week)
 
     total_winnings = Parallel(n_jobs=-1, verbose=0)(
                                 delayed(run_week_sim)(d, lineups_per_param, week, year, pred_vers, reg_ens_vers, std_dev_type, million_ens_vers) for
                                 week, year in zip(set_weeks, set_years)
                                 )
+    
     print('Unadjusted Winnings:', {i+1: t for i,t in zip(range(len(total_winnings)), total_winnings)})
     total_winnings = adjust_high_winnings(total_winnings, max_adjust=5000)
 
@@ -484,27 +487,33 @@ def objective(bayes_params):
 
 init_space = {
 
-       'pred_vers': hp.choice('pred_vers', ['sera0_rsq0_mse1_brier1_matt1_bayes']),
+       'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_mse0_brier1_matt0_bayes',
+                                            'sera0_rsq0_mse1_brier1_matt1_bayes']),
          
-        'reg_ens_vers':  hp.choice('reg_ens_vers', ['random_kbest_sera1_rsq0_mse0_include2_kfold3',
-                                                    'random_sera1_rsq0_mse0_include2_kfold3',
+        'reg_ens_vers':  hp.choice('reg_ens_vers', [
+                                                   'random_kbest_sera1_rsq0_mse0_include2_kfold3',
+                                                   'random_sera1_rsq0_mse0_include2_kfold3',
                                                     'random_kbest_sera0_rsq0_mse1_include2_kfold3',
                                                     'random_sera0_rsq0_mse1_include2_kfold3',
                                                      ]),
 
-        'std_dev_type':  hp.choice('std_dev_type', ['spline_pred_class80_q80_matt0_brier1_kfold3',
+        'std_dev_type':  hp.choice('std_dev_type', [
+                                                    'spline_pred_class80_q80_matt0_brier1_kfold3',
                                                     'spline_pred_class80_matt0_brier1_kfold3',
                                                     'spline_pred_q80_matt0_brier1_kfold3',
                                                     'spline_class80_q80_matt0_brier1_kfold3',
                                                     'spline_pred_class80_q80_matt1_brier1_kfold3',
                                                     'spline_pred_class80_matt1_brier1_kfold3',
                                                     'spline_pred_q80_matt1_brier1_kfold3',
-                                                    'spline_class80_q80_matt1_brier1_kfold3']),
+                                                    'spline_class80_q80_matt1_brier1_kfold3'
+                                                    ]),
 
-        'million_ens_vers':  hp.choice('million_ens_vers', ['random_kbest_matt0_brier1_include2_kfold3',
-                                                        'random_kbest_matt1_brier1_include2_kfold3',
-                                                        'random_matt0_brier1_include2_kfold3',
-                                                        'random_matt1_brier1_include2_kfold3']),
+        'million_ens_vers':  hp.choice('million_ens_vers', [
+                                                            'random_kbest_matt0_brier1_include2_kfold3',
+                                                            'random_kbest_matt1_brier1_include2_kfold3',
+                                                            'random_matt0_brier1_include2_kfold3',
+                                                            'random_matt1_brier1_include2_kfold3'
+                                                            ]),
 
         'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.5),
         'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.2),
@@ -526,7 +535,8 @@ init_space = {
 
         'full_model_weight_5': hp.uniform('full_model_weight_5', 0, 1),
 
-        'covar_type_no_covar': hp.uniform('covar_type_no_covar', 0, 1),
+        'covar_type_kmeans_pred_trunc': hp.uniform('covar_type_kmeans_pred_trunc', 0, 0.5),
+        'covar_type_team_points_trunc': hp.uniform('covar_type_team_points_trunc', 0, 0.5),
 
         'max_team_type_player_points': hp.uniform('max_team_type_player_points', 0, 0.8),
 
@@ -570,27 +580,33 @@ init_space = {
 
 full_space = {
 
-        'pred_vers': hp.choice('pred_vers', ['sera0_rsq0_mse1_brier1_matt1_bayes']),
+        'pred_vers': hp.choice('pred_vers', ['sera1_rsq0_mse0_brier1_matt0_bayes',
+                                             'sera0_rsq0_mse1_brier1_matt1_bayes']),
          
-        'reg_ens_vers':  hp.choice('reg_ens_vers', ['random_sera1_rsq0_mse0_include2_kfold3',
-                                                      'random_kbest_sera1_rsq0_mse0_include2_kfold3',
-                                                      'random_sera0_rsq0_mse1_include2_kfold3',
-                                                      'random_kbest_sera0_rsq0_mse1_include2_kfold3',
-                                                      ]),
+        'reg_ens_vers':  hp.choice('reg_ens_vers', [
+                                                   'random_kbest_sera1_rsq0_mse0_include2_kfold3',
+                                                   'random_sera1_rsq0_mse0_include2_kfold3',
+                                                    'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+                                                    'random_sera0_rsq0_mse1_include2_kfold3',
+                                                     ]),
 
-        'std_dev_type':  hp.choice('std_dev_type', ['spline_pred_class80_q80_matt0_brier1_kfold3',
+        'std_dev_type':  hp.choice('std_dev_type', [
+                                                    'spline_pred_class80_q80_matt0_brier1_kfold3',
                                                     'spline_pred_class80_matt0_brier1_kfold3',
                                                     'spline_pred_q80_matt0_brier1_kfold3',
                                                     'spline_class80_q80_matt0_brier1_kfold3',
                                                     'spline_pred_class80_q80_matt1_brier1_kfold3',
                                                     'spline_pred_class80_matt1_brier1_kfold3',
                                                     'spline_pred_q80_matt1_brier1_kfold3',
-                                                    'spline_class80_q80_matt1_brier1_kfold3']),
+                                                    'spline_class80_q80_matt1_brier1_kfold3'
+                                                    ]),
 
-        'million_ens_vers':  hp.choice('million_ens_vers', ['random_kbest_matt0_brier1_include2_kfold3',
-                                                        'random_kbest_matt1_brier1_include2_kfold3',
-                                                        'random_matt0_brier1_include2_kfold3',
-                                                        'random_matt1_brier1_include2_kfold3']),
+        'million_ens_vers':  hp.choice('million_ens_vers', [
+                                                            'random_kbest_matt0_brier1_include2_kfold3',
+                                                            'random_kbest_matt1_brier1_include2_kfold3',
+                                                            'random_matt0_brier1_include2_kfold3',
+                                                            'random_matt1_brier1_include2_kfold3'
+                                                            ]),
 
         'ownership_vers_mil_only': hp.uniform('ownership_vers_mil_only', 0, 0.5),
         'ownership_vers_mil_times_standard_ln': hp.uniform('ownership_vers_mil_times_standard_ln', 0, 0.3),
@@ -612,7 +628,8 @@ full_space = {
 
         'full_model_weight_5': hp.uniform('full_model_weight_5', 0, 1),
 
-        'covar_type_no_covar': hp.uniform('covar_type_no_covar', 0, 1),
+        'covar_type_kmeans_pred_trunc': hp.uniform('covar_type_kmeans_pred_trunc', 0, 0.5),
+        'covar_type_team_points_trunc': hp.uniform('covar_type_team_points_trunc', 0, 0.5),
 
         'max_team_type_player_points': hp.uniform('max_team_type_player_points', 0, 1),
 
@@ -697,11 +714,11 @@ full_space = {
 
 from wakepy import keep        
 
-trial_name = 'adjust5000_mean_median_week1to8_2022_newbayesmodel_mse1_newpar'
+trial_name = 'adjust5000_mean_median_week1to8_2022_newbayesmodel_mse1_fixed'
 
 with keep.running() as m:
 
-    for i in range(2,11):
+    for i in range(3,6):
 
         if os.path.exists(save_path+f'full_space_{trial_name}.p'):
 
@@ -731,14 +748,14 @@ with keep.running() as m:
     
 
 #%%
-trial_name = 'adjust5000_mean_median_week1to8_2022_newbayesmodel_mse1_newpar'
+trial_name = 'adjust5000_mean_median_week1to8_2022_newbayesmodel_mse1_fixed'
 results = results_to_df(save_path, f'full_space_{trial_name}')
 dm.delete_from_db('Results', 'Entry_Optimize_Bayes', f"trial_name='{trial_name}'", create_backup=False)
-dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'append')
+dm.write_to_db(results, 'Results', 'Entry_Optimize_Bayes', 'replace')
 
 #%%
 #%%
-trial_name = 'adjust5000_mean_median_week1to8_2022_newbayesmodel_mse1_newpar'
+trial_name = 'adjust5000_mean_median_week1to8_2022_newbayesmodel_mse1_fixed'
 # trial_name = 'adjust5000_mean_median_week1to17_2022_million_own_pct_matchupdropnew'
 show_trial_best_params('full_space_'+trial_name, 1)
 

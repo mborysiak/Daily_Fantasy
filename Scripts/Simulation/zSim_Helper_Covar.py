@@ -916,7 +916,7 @@ class FootballSimulation:
 
 
 
-# #%%
+#%%
 
 # # set the root path and database management object
 # from ff.db_operations import DataManage
@@ -929,10 +929,10 @@ class FootballSimulation:
 
 # adjust_select = True
 # matchup_drop = 1
-# full_model_weight = 5
-# covar_type = 'no_covar'
+# full_model_weight = 0.2
+# covar_type = 'kmeans_pred_trunc'
 # max_team_type = 'player_points'
-# use_covar = False
+# use_covar = True
 # min_players_same_team = 'Auto'
 # min_players_opp_team = 'Auto'
 # top_n_players = 3
@@ -946,12 +946,12 @@ class FootballSimulation:
 # num_iters = 100
 
 # pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-# reg_ens_vers = 'random_sera0_rsq0_mse1_include2_kfold3'
+# reg_ens_vers = 'random_kbest_sera0_rsq0_mse1_include2_kfold3'
 # million_vers = 'random_matt0_brier1_include2_kfold3'
-# std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
-# ownership_vers = 'mil_only'
+# std_dev_type = 'spline_pred_class80_matt0_brier1_kfold3'
+# ownership_vers = 'standard_ln'
 
-# week = 1
+# week = 2
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -963,7 +963,7 @@ class FootballSimulation:
 #                          use_ownership=use_ownership, salary_remain_max=salary_remain_max, matchup_seed=False)
 
 
-# to_add = []
+# to_add = ['Mark Andrews', 'Josh Jacobs']
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 

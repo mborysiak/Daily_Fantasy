@@ -411,11 +411,13 @@ def entry_optimize_params(df, max_adjust, model_name):
 
     adjust_winnings = df.groupby(['trial_num']).agg(max_lineup_num=('lineup_num', 'max')).reset_index()
     adjust_winnings.max_lineup_num = 30 / (adjust_winnings.max_lineup_num+1)
-
+    
     df = pd.merge(df, adjust_winnings, on='trial_num')
     df.winnings = df.winnings / df.max_lineup_num
-
     df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
+    
+    df.loc[df['max_lineup_num']==1, ['player_drop_multiple']] = 0
+
     str_cols = ['week', 'year', 'pred_vers', 'reg_ens_vers', 'million_ens_vers', 'std_dev_type']
     if model_name in ('enet', 'lasso',' ridge'):
         str_cols.extend( ['player_drop_multiple','top_n_choices', 'matchup_drop', 'adjust_pos_counts', 
@@ -426,7 +428,6 @@ def entry_optimize_params(df, max_adjust, model_name):
 
     df = df.drop(['trial_num', 'lineup_num'], axis=1)
 
-    
     df.max_salary_remain = df.max_salary_remain.fillna(5000).astype('float').astype('int').astype('str')
     for c in df.columns:
         if df.dtypes[c] == 'object': 
@@ -443,8 +444,9 @@ df = dm.read('''SELECT *
                      SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num > 187
-                      AND week <= 8
+                WHERE trial_num > 207
+                  --   AND pred_vers = 'random_sera0_rsq0_mse1_include2_kfold3'
+                     AND million_ens_vers = 'random_matt0_brier1_include2_kfold3'
             
                 ''', 'Results')
 
@@ -477,7 +479,9 @@ for w, yr in zip(weeks, years):
                             SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num > 187
+                     WHERE trial_num > 207
+                           AND reg_ens_vers = 'random_sera0_rsq0_mse1_include2_kfold3'
+                        --   AND million_ens_vers = 'random_matt0_brier1_include2_kfold3'
                            AND week = {w}
                            AND year = {yr}
                      ''', 'Results')

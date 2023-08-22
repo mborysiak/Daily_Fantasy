@@ -12,7 +12,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 
-def get_val_predictions(label, val_table, pred_version, ensemble_vers, std_dev_type, set_week, set_year):
+def get_val_predictions(label, val_table, pred_version, ensemble_vers, set_week, set_year):
 
     df = dm.read(f'''SELECT player, 
                             team,
@@ -21,13 +21,12 @@ def get_val_predictions(label, val_table, pred_version, ensemble_vers, std_dev_t
                             year, 
                             AVG(pred_fp_per_game) {label}
                      FROM {val_table}
-                     WHERE pred_version='{pred_version}'
-                              AND ensemble_vers='{ensemble_vers}' 
-                              AND std_dev_type='{std_dev_type}'
+                     WHERE pred_vers='{pred_version}'
+                              AND reg_ens_vers='{ensemble_vers}' 
                               AND set_week={set_week}
                               AND set_year={set_year}
                      GROUP BY player, team, pos, week, year
-                    ''', 'Simulation')
+                    ''', 'Validations')
     return df
 
 
@@ -88,12 +87,12 @@ def get_drop_teams(week, year):
     return drop_teams
 
 
-def get_predictions(drop_teams, pred_vers, std_dev_type, set_week, set_year, full_model_rel_weight):
+def get_predictions(drop_teams, pred_vers, reg_ens_vers, std_dev_type, set_week, set_year, full_model_rel_weight):
 
     preds = dm.read(f'''SELECT * 
                         FROM Model_Predictions 
-                        WHERE version='{pred_vers}'
-                              AND ensemble_vers='{ensemble_vers}'
+                        WHERE pred_vers='{pred_vers}'
+                              AND reg_ens_vers='{reg_ens_vers}'
                               AND std_dev_type='{std_dev_type}'
                               AND week = '{set_week}'
                               AND year = '{set_year}' 
@@ -188,10 +187,13 @@ def cleanup_pred_covar(pred_cov):
 
     pred_cov_final = pred_cov_final.assign(week=set_week, year=set_year,
                                            pred_vers=pred_vers, 
-                                           ensemble_vers=ensemble_vers,
+                                           reg_ens_vers=reg_ens_vers,
                                            std_dev_type=std_dev_type,
                                            covar_type=covar_type,
                                            full_model_rel_weight=full_model_rel_weight)
+    
+    pred_cov_final = pred_cov_final[pred_cov_final.covar != 0].reset_index(drop=True)
+
 
     return pred_cov_final
 
@@ -202,7 +204,7 @@ def get_mean_points(preds):
     mean_points = mean_points.rename(columns={'index': 'player'})
     mean_points.loc[mean_points.pos=='Defense', 'pos'] = 'DEF' 
     mean_points = mean_points.assign(week=set_week, year=set_year, 
-                                    pred_vers=pred_vers, ensemble_vers=ensemble_vers,
+                                    pred_vers=pred_vers, reg_ens_vers=reg_ens_vers,
                                     std_dev_type=std_dev_type,
                                     covar_type=covar_type,
                                     full_model_rel_weight=full_model_rel_weight,
@@ -217,7 +219,7 @@ def pivot_pos_data(df):
                                  #'OppRB0', 'OppWR0', 'OppWR1', 'OppTE0', 
                                  ])]
     df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='pred_fp_per_game')
-    df = df.reset_index().sort_values(by=['team', 'year', 'week']).ffill().set_index(['team', 'week', 'year'])
+    df = df.reset_index().sort_values(by=['team', 'year', 'week']).fillna(df.mean()).set_index(['team', 'week', 'year'])
     df = df.dropna(axis=0)
     return df
 
@@ -258,7 +260,7 @@ def get_best_clusters(df, corr_data, min_n=5, max_n=12):
     scores = []
     n_clusters = []
     for n in range(min_n, max_n):
-        km = KMeans(n_clusters=n, random_state=1234)
+        km = KMeans(n_clusters=n, random_state=1234, n_init='auto')
         km.fit(X)
 
         cur_score = np.round(davies_bouldin_score(X, km.labels_),3)
@@ -271,7 +273,7 @@ def get_best_clusters(df, corr_data, min_n=5, max_n=12):
     best_n = n_clusters[best_idx]
 
     print('Running best n:', best_n)
-    km = KMeans(n_clusters=best_n, random_state=1234)
+    km = KMeans(n_clusters=best_n, random_state=1234, n_init='auto')
     km.fit(X)
 
     df = df.reset_index()[['team', 'year', 'week']].drop_duplicates()
@@ -339,44 +341,57 @@ def pred_covar_matrix(pred_cov, matrices):
 
 #%%
 
+
+import itertools
+
 covar_type = 'kmeans_pred_trunc'
 
 # set the model version
 set_weeks = [
-   9
-        ]
+    1, 2, 3, 4, 5, 6, 7, 8,# 9, 10, 11, 12, 13, 14, 15, 16, 17
+]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022#, 2022, 2022
 ]
 
-pred_versions = [   
-                'sera1_rsq0_brier1_matt1_lowsample_perc',
-]
+pred_versions = [
+                 'sera0_rsq0_mse1_brier1_matt1_bayes',
+                 'sera1_rsq0_mse0_brier1_matt0_bayes'
+                 ]
 
-ensemble_versions = [
-                    'no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3',
-]
+reg_ens_versions = [
+                    # 'random_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+                    'random_sera1_rsq0_mse0_include2_kfold3',
+                    'random_kbest_sera1_rsq0_mse0_include2_kfold3'
+                ]
+
 
 std_dev_types = [
-                'pred_spline_class80_q80_matt1_brier1_kfold3', 
-]
+                 'spline_pred_class80_q80_matt0_brier1_kfold3',
+                 'spline_pred_class80_matt0_brier1_kfold3',
+                 'spline_pred_q80_matt0_brier1_kfold3',
+                 'spline_class80_q80_matt0_brier1_kfold3',
+                #  'spline_pred_class80_q80_matt1_brier1_kfold3',
+                #  'spline_pred_class80_matt1_brier1_kfold3',
+                #  'spline_pred_q80_matt1_brier1_kfold3',
+                #  'spline_class80_q80_matt1_brier1_kfold3'
+                 ]
+
+full_model_weights = [0.2, 5]
+
+iter_cats = list(set(itertools.product(pred_versions, reg_ens_versions, std_dev_types, full_model_weights)))
+iter_cats = pd.DataFrame(iter_cats).sort_values(by=[0, 1]).values
 
 
-sim_types = [
-             'ownership_ln_pos_fix',
-]
-
-full_model_weights = [1]#[0.2, 1, 5]
-
-i = 0
-iter_cats = zip(set_weeks, set_years, pred_versions, ensemble_versions, std_dev_types)
-for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
-
-    for full_model_rel_weight in full_model_weights:
+i = 10
+for set_week, set_year in zip(set_weeks, set_years):
+    print(set_week, set_year)
+    for pred_vers, reg_ens_vers, std_dev_type, full_model_rel_weight in iter_cats[1:]:
 
         # get the player and opposing player data to create correlation matrices
-        player_data = get_val_predictions('pred_fp_per_game', 'Model_Validations', pred_vers, ensemble_vers, std_dev_type, set_week, set_year)
+        player_data = get_val_predictions('pred_fp_per_game', 'Model_Validations', pred_vers, reg_ens_vers, set_week, set_year)
         player_data = add_actual(player_data)
         player_data = get_matchups(player_data)
 
@@ -390,13 +405,13 @@ for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         kmean_input = add_gambling_lines(kmean_input)
 
         kmeans_out, km = get_best_clusters(kmean_input, corr_data, min_n=10, max_n=20)
-        show_cluster_heatmap(kmeans_out, km)
-        show_historical_cluster_teams(kmeans_out, label=3)
+        # show_cluster_heatmap(kmeans_out, km)
+        # show_historical_cluster_teams(kmeans_out, label=3)
         matrices = get_kmeans_covar(kmeans_out)
 
         # pull in the prediction data and create player matches for position type
         drop_teams = get_drop_teams(set_week, set_year)
-        preds = get_predictions(drop_teams, pred_vers, std_dev_type, set_week, set_year, full_model_rel_weight)
+        preds = get_predictions(drop_teams, pred_vers, reg_ens_vers, std_dev_type, set_week, set_year, full_model_rel_weight)
         pred_cov = create_player_matches(preds, opponent=False)
         opp_pred_cov = create_player_matches(preds, opponent=True)
         pred_cov = pd.concat([pred_cov, opp_pred_cov], axis=0).reset_index(drop=True)
@@ -412,13 +427,23 @@ for set_week, set_year, pred_vers, ensemble_vers, std_dev_type in iter_cats:
         pred_cov_final = cleanup_pred_covar(pred_cov)        
         mean_points = get_mean_points(preds)
 
-        # if i == 0:
-        #     dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
-        #     dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
-        #     i += 1
-        # else:
-        #     dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
-        #     dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
+        if i == 0:
+            dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'replace')
+            dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
+            i += 1
+        else:
+            del_str = f'''week={set_week} 
+                          AND year={set_year} 
+                          AND pred_vers='{pred_vers}' 
+                          AND reg_ens_vers='{reg_ens_vers}' 
+                          AND std_dev_type='{std_dev_type}' 
+                          AND covar_type='{covar_type}' 
+                          AND full_model_rel_weight={full_model_rel_weight}'''
+            
+            dm.delete_from_db('Simulation', 'Covar_Means', del_str, create_backup=False)
+            dm.delete_from_db('Simulation', 'Covar_Matrix', del_str, create_backup=False)
+            dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
+            dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
 
 
 # %%
@@ -450,9 +475,12 @@ compare = compare[compare.covar!=0]
 from sklearn.metrics import mean_squared_error, r2_score
 
 print(np.sqrt(mean_squared_error(compare.y_act2, compare.covar)))
-print(np.sqrt(r2_score(compare.y_act2, compare.covar)))
+print(compare.corr()['covar']['y_act2'])
+print(r2_score(compare.y_act2, compare.covar))
 
 compare.plot.scatter(x='covar', y='y_act2')
 
 # %%
 
+compare[(compare.covar > 40)]
+# %%

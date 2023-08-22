@@ -335,21 +335,23 @@ covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
-     #1, 2, 3, 4, 5, 6,
-       7, 8#, 9, 10, 11, 12, 13, 14, 15#, 16, 17
-=
+     1, 2, 3, 4, 5, 6, 7, 8#, 9, 10, 11, 12, 13, 14, 15#, 16, 17
+]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022#, 2022, 2022
 ]
 
-pred_versions = ['sera0_rsq0_mse1_brier1_matt1_bayes']
+pred_versions = [
+                 'sera0_rsq0_mse1_brier1_matt1_bayes',
+                 'sera1_rsq0_mse0_brier1_matt0_bayes'
+                 ]
 
 reg_ens_versions = [
-                    #    'random_sera0_rsq0_mse1_include2_kfold3',
-                    #    'random_kbest_sera0_rsq0_mse1_include2_kfold3',
-                    #    'random_sera1_rsq0_mse0_include2_kfold3',
-                       'random_kbest_sera1_rsq0_mse0_include2_kfold3'
+                    # 'random_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+                    'random_sera1_rsq0_mse0_include2_kfold3',
+                    'random_kbest_sera1_rsq0_mse0_include2_kfold3'
                 ]
 
 
@@ -358,26 +360,16 @@ std_dev_types = [
                  'spline_pred_class80_matt0_brier1_kfold3',
                  'spline_pred_q80_matt0_brier1_kfold3',
                  'spline_class80_q80_matt0_brier1_kfold3',
-                 'spline_pred_class80_q80_matt1_brier1_kfold3',
-                 'spline_pred_class80_matt1_brier1_kfold3',
-                 'spline_pred_q80_matt1_brier1_kfold3',
-                 'spline_class80_q80_matt1_brier1_kfold3'
+                #  'spline_pred_class80_q80_matt1_brier1_kfold3',
+                #  'spline_pred_class80_matt1_brier1_kfold3',
+                #  'spline_pred_q80_matt1_brier1_kfold3',
+                #  'spline_class80_q80_matt1_brier1_kfold3'
                  ]
 
-full_model_weights = [0.2, 1, 5]
+full_model_weights = [0.2, 5]
 
 iter_cats = list(set(itertools.product(pred_versions, reg_ens_versions, std_dev_types, full_model_weights)))
 iter_cats = pd.DataFrame(iter_cats).sort_values(by=[0, 1]).values
-
-# # set the model version
-# set_weeks = [18]
-
-# set_years = [2022]
-
-# pred_versions = ['sera1_rsq0_brier1_matt1_lowsample_perc_ffa_fc']
-# ensemble_versions = ['no_weight_yes_kbest_randsample_sera1_rsq0_include2_kfold3val_fullstack']
-# std_dev_types = ['pred_spline_class80_q80_matt0_brier1_kfold3']
-
 
 i = 1
 for set_week, set_year in zip(set_weeks, set_years):
@@ -419,6 +411,16 @@ for set_week, set_year in zip(set_weeks, set_years):
             dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'replace')
             i += 1
         else:
+            del_str = f'''week={set_week} 
+                          AND year={set_year} 
+                          AND pred_vers='{pred_vers}' 
+                          AND reg_ens_vers='{reg_ens_vers}' 
+                          AND std_dev_type='{std_dev_type}' 
+                          AND covar_type='{covar_type}' 
+                          AND full_model_rel_weight={full_model_rel_weight}'''
+            
+            dm.delete_from_db('Simulation', 'Covar_Means', del_str, create_backup=False)
+            dm.delete_from_db('Simulation', 'Covar_Matrix', del_str, create_backup=False)
             dm.write_to_db(mean_points, 'Simulation', 'Covar_Means', 'append')
             dm.write_to_db(pred_cov_final, 'Simulation', 'Covar_Matrix', 'append')
 

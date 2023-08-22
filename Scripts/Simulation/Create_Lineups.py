@@ -99,10 +99,19 @@ def pull_best_params(best_trials):
 
     return params
 
-best_trials = (161, 161)
+def pull_params_version(best_trials):
+    vers = dm.read(f'''SELECT DISTINCT trial_num, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type
+                       FROM Entry_Optimize_Results
+                       WHERE trial_num IN {best_trials}''', 'Results')
+    return vers
+
+best_trials = (221, 221)
 
 opt_params = pull_best_params(best_trials)
 pprint.pprint(opt_params)
+
+best_vers = pull_params_version(best_trials)
+best_vers
 
 #%%
         

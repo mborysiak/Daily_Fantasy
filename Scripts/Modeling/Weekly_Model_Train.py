@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [1,2,3,4]
+run_weeks = [9]
 verbosity = 50
 run_params = {
     
@@ -76,13 +76,13 @@ model_type = 'full_model'
 
 # set weights for running model
 r2_wt = 0
-sera_wt = 1
-mse_wt = 0
-matt_wt = 0
+sera_wt = 0
+mse_wt = 1
+matt_wt = 1
 brier_wt = 1
 
 # set version and iterations
-vers = 'sera1_rsq0_mse0_brier1_matt0_bayes'
+vers = f'sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_brier{brier_wt}_matt{matt_wt}_bayes'
 
 #----------------
 # Data Loading
@@ -113,6 +113,7 @@ def load_data(model_type, set_pos, run_params):
     if model_type=='full_model': df = dm.read(f'''SELECT * 
                                                   FROM {set_pos}_Data{run_params['rush_pass']}
                                                 ''', 'Model_Features')
+        
     elif model_type=='backfill': df = dm.read(f'''SELECT * 
                                                   FROM Backfill 
                                                   WHERE pos='{set_pos}' ''', 'Model_Features')
@@ -308,7 +309,7 @@ def order_func_params(func_params, trial_times):
 def get_skm(skm_df, model_obj, to_drop):
     
     skm_options = {
-        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt),
+        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt, mse_wt=mse_wt),
         'class': SciKitModel(skm_df, model_obj='class', brier_wt=brier_wt, matt_wt=matt_wt),
         'quantile': SciKitModel(skm_df, model_obj='quantile')
     }
@@ -660,6 +661,9 @@ with keep.running() as m:
             except:
                 num_trials = None
                 trial_times = None
+                print('No Trials Exist')
+
+            _ = get_model_output('adp', 'reg', df_train, 'reg', run_params, 0, min_samples, '', 10)
 
             func_params = []
             func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples,  num_trials, run_params))
@@ -681,17 +685,6 @@ with keep.running() as m:
             save_output_dict(out_dict, 'all', model_output_path)
 
 #%%
-for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params[:2]:
-    get_model_output(m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter)
-
-#%%
-
-skm, X, y = get_skm(df_train, 'quantile', to_drop=run_params['drop_cols'])
-pipe, params = get_full_pipe(skm, 'gbmh_q', alpha=0.8, min_samples=min_samples, bayes_rand='bayes')
-pipe.fit(X,y)
-
-
-#%%
 import os
 import shutil
 
@@ -707,7 +700,7 @@ def navigate_folders(root_dir, search_keywords, old_filename, new_filename):
                 print(dirpath, 'failed')
 
 root_directory = '/Users/mborysia/Documents/Github/Daily_Fantasy//Model_Outputs/2022/'
-search_keywords = ['bayes']
+search_keywords = [f'sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_brier{brier_wt}_matt{matt_wt}_bayes']
 
 # old_filename = 'quantile80.0_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
 # new_filename = 'quantile80.0_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
@@ -715,11 +708,78 @@ search_keywords = ['bayes']
 # old_filename = 'class_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
 # new_filename=   'class_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
 
-old_filename = 'million_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
-new_filename = 'million_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
+old_filename = 'all_trials.p'
+new_filename = 'all_trials_old.p'
 
+
+navigate_folders(root_directory, search_keywords, old_filename, new_filename)
+
+#%%
+
+class_pred = 'sera1_rsq0_mse0_brier1_matt0_bayes'
+reg_pred = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+new_save = 'sera0_rsq0_mse1_brier1_matt0_bayes'
+
+pos = 'RB'
+model_type = 'full_model'
+week = 1
 filename = 'all_trials'
-all_trials = load_pickle(f'/Users/mborysia/Documents/Github/Daily_Fantasy//Model_Outputs/2022/WR_year2022_week16_backfillsera1_rsq0_brier1_matt0_bayes', filename)
 
+
+def extract_dict_data(filename):
+
+    class_data = load_pickle(f'/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/{pos}_year2022_week{week}_{model_type}{class_pred}', filename)
+    reg_data = load_pickle(f'/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/{pos}_year2022_week{week}_{model_type}{reg_pred}', filename)
+    
+    new_data = {}
+    for k,v in reg_data.items():
+        if 'class' not in k and 'million' not in k: new_data[k] = v
+
+    for k,v in class_data.items():
+        if 'class' in k or 'million' in k: new_data[k] = v
+
+    return new_data
+
+for week in range(2, 9):
+    for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+        for model_type in ['full_model', 'backfill']:
+            if pos=='Defense' and model_type=='backfill': continue
+            print(week, pos, model_type)
+            for f in ['all_trials', 'all_models', 'all_pred', 'all_actual', 'all_scores', 'all_param_scores', 'all_full_hold']:
+                new_data = extract_dict_data(f)
+                path = f'/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/{pos}_year2022_week{week}_{model_type}{new_save}'
+                if not os.path.exists(path):
+                    os.makedirs(path)
+                save_pickle(new_data, path, f)
+
+#%%
+extract_dict_data('all_trials')
+extract_dict_data('all_models')
+extract_dict_data('all_pred')
+extract_dict_data('all_actual')
+extract_dict_data('all_scores')
+extract_dict_data('all_param_scores')
+extract_dict_data('all_full_hold')
+
+# %%
+extract_dict_data('all_scores')
+# %%
+
+get_model_output('ridge', 'reg', df, 'reg', run_params, 0, min_samples, '', 5)
+# %%
+# pos='QB'
+# week=7
+# model_type='full_model'
+# pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+# import shutil
+
+# for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+#     for week in range(1, 12):
+#         print(week)
+#         for model_type in ['full_model', 'backfill']:
+#             try:
+#                 shutil.rmtree(f'/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/{pos}_year2022_week{week}_{model_type}{pred_vers}')
+#             except:
+#                 pass
 
 # %%

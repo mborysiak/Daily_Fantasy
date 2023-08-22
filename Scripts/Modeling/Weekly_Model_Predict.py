@@ -1132,35 +1132,28 @@ run_params = {
     # other parameters
     'use_sample_weight': False,
     
-    'met': 'y_act',
-
-   
+    'met': 'y_act',   
 }
 
 s_mod = run_params['stack_model']
 min_inc = run_params['min_include']
 kfold = run_params['num_k_folds']
 
-# pred mse1: rand, mse=1, rsq=0, sera=0, matt=1, brier=1, class=80 CHECK
-# pred mse1: rand, mse=1, matt=0, brier=1 CHECK
-# pred mse1: kbest, mse=1, matt=1, brier=1 CHECK
-# pred mse1: kbest, mse=1, matt=0, brier=1 CHECK
-
 r2_wt = 0
-sera_wt = 1
-mse_wt = 0
+sera_wt = 0
+mse_wt = 1
 brier_wt = 1
-matt_wt = 1
+matt_wt = 0
 
 alpha = 80
 class_cut = 80
 
-set_weeks=[1]
-# set_weeks = [1,2,3,4,5,6,7,8]
+# set_weeks=[1]
+set_weeks = [1,2,3,4,5,6,7,8]
 # set_weeks = [9,10,11,12]
 # set_weeks = [13,14,15,16]
 
-pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
+pred_vers = 'sera0_rsq0_mse1_brier1_matt0_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
 class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
