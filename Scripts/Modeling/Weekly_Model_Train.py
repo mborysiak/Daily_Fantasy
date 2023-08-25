@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [9]
+run_weeks = [11, 12, 13]
 verbosity = 50
 run_params = {
     
@@ -716,13 +716,13 @@ navigate_folders(root_directory, search_keywords, old_filename, new_filename)
 
 #%%
 
-class_pred = 'sera1_rsq0_mse0_brier1_matt0_bayes'
+class_pred = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_pred = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 new_save = 'sera0_rsq0_mse1_brier1_matt0_bayes'
 
-pos = 'RB'
-model_type = 'full_model'
-week = 1
+pos = 'TE'
+model_type = 'backfill'
+week = 9
 filename = 'all_trials'
 
 
@@ -740,17 +740,17 @@ def extract_dict_data(filename):
 
     return new_data
 
-for week in range(2, 9):
-    for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
-        for model_type in ['full_model', 'backfill']:
-            if pos=='Defense' and model_type=='backfill': continue
-            print(week, pos, model_type)
-            for f in ['all_trials', 'all_models', 'all_pred', 'all_actual', 'all_scores', 'all_param_scores', 'all_full_hold']:
-                new_data = extract_dict_data(f)
-                path = f'/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/{pos}_year2022_week{week}_{model_type}{new_save}'
-                if not os.path.exists(path):
-                    os.makedirs(path)
-                save_pickle(new_data, path, f)
+# for week in range(2, 9):
+#     for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+#         for model_type in ['full_model', 'backfill']:
+#             if pos=='Defense' and model_type=='backfill': continue
+#             print(week, pos, model_type)
+#             for f in ['all_trials', 'all_models', 'all_pred', 'all_actual', 'all_scores', 'all_param_scores', 'all_full_hold']:
+#                 new_data = extract_dict_data(f)
+#                 path = f'/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/{pos}_year2022_week{week}_{model_type}{new_save}'
+#                 if not os.path.exists(path):
+#                     os.makedirs(path)
+#                 save_pickle(new_data, path, f)
 
 #%%
 extract_dict_data('all_trials')
@@ -764,22 +764,6 @@ extract_dict_data('all_full_hold')
 # %%
 extract_dict_data('all_scores')
 # %%
-
-get_model_output('ridge', 'reg', df, 'reg', run_params, 0, min_samples, '', 5)
-# %%
-# pos='QB'
-# week=7
-# model_type='full_model'
-# pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-# import shutil
-
-# for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
-#     for week in range(1, 12):
-#         print(week)
-#         for model_type in ['full_model', 'backfill']:
-#             try:
-#                 shutil.rmtree(f'/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/{pos}_year2022_week{week}_{model_type}{pred_vers}')
-#             except:
-#                 pass
+extract_dict_data('all_models')
 
 # %%

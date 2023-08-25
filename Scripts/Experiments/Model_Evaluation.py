@@ -423,7 +423,7 @@ def entry_optimize_params(df, max_adjust, model_name):
         str_cols.extend( ['player_drop_multiple','top_n_choices', 'matchup_drop', 'adjust_pos_counts', 
                          'full_model_weight', 'max_lineup_num', 'use_ownership', 'own_neg_frac',
                          'num_top_players', 'static_top_players', 'num_iters',
-                         'qb_min_iter', 'qb_solo_start', 'qb_set_max_team'])
+                         'qb_min_iter', 'qb_solo_start', 'qb_set_max_team', 'num_avg_pts'])
     df[str_cols] = df[str_cols].astype('str')
 
     df = df.drop(['trial_num', 'lineup_num'], axis=1)
@@ -446,7 +446,7 @@ df = dm.read('''SELECT *
                       ) USING (week, year, trial_num, repeat_num)
                 WHERE trial_num > 207
                   --   AND pred_vers = 'random_sera0_rsq0_mse1_include2_kfold3'
-                     AND million_ens_vers = 'random_matt0_brier1_include2_kfold3'
+                  --   AND million_ens_vers = 'random_matt0_brier1_include2_kfold3'
             
                 ''', 'Results')
 
@@ -480,7 +480,7 @@ for w, yr in zip(weeks, years):
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
                      WHERE trial_num > 207
-                           AND reg_ens_vers = 'random_sera0_rsq0_mse1_include2_kfold3'
+                        --   AND reg_ens_vers = 'random_sera0_rsq0_mse1_include2_kfold3'
                         --   AND million_ens_vers = 'random_matt0_brier1_include2_kfold3'
                            AND week = {w}
                            AND year = {yr}
@@ -494,7 +494,7 @@ for w, yr in zip(weeks, years):
 
 show_coef(all_coef, X_all)
 
-# %%
+ # %%
 
 def entry_optimize_bayes(df):
 

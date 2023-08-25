@@ -10,6 +10,7 @@ from wakepy import keep
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
+conn = dm.db_connect('Simulation')
 
 #===============
 # Settings and User Inputs
@@ -23,14 +24,14 @@ set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,2022,2022,2022,2022
 ]
 
-lineups_per_param = 3
+lineups_per_param = 1
 
 # pred_vers = 'sera1_rsq0_mse0_brier1_matt0_bayes'
-pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+pred_vers = 'sera0_rsq0_mse1_brier1_matt0_bayes'
 
 reg_ens_vers ='random_kbest_sera0_rsq0_mse1_include2_kfold3'
-std_dev_type = 'spline_pred_class80_matt0_brier1_kfold3'
-million_ens_vers = 'random_matt0_brier1_include2_kfold3'
+std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
+million_ens_vers = 'random_kbest_matt0_brier1_include2_kfold3'
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
 trial_num = max_trial_num + 1
@@ -205,10 +206,10 @@ with keep.running() as m:
                 'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
                 'min_player_same_team': {2: 0.2, 3: 0.1, 'Auto': 0.7},
                 'num_top_players': {2: 0.5, 3: 0.5, 5: 0},
-                'ownership_vers': {'mil_only': 0.4,
-                                    'mil_times_standard_ln': 0.3,
+                'ownership_vers': {'mil_only': 0.2,
+                                    'mil_times_standard_ln': 0.4,
                                     'mil_div_standard_ln': 0,
-                                    'standard_ln': 0.3},
+                                    'standard_ln': 0.4},
                 'qb_min_iter': {0: 0.2, 2: 0, 9: 0.8},
                 'qb_set_max_team': {True: 0.4, False: 0.6},
                 'qb_solo_start': {True: 0.6, False: 0.4},
@@ -217,7 +218,7 @@ with keep.running() as m:
                 'own_neg_frac': {0.8: 0, 1: 1},
                 'max_salary_remain': {200: 0, 500: 0, 1000: 0, 1500: 1},
                 'num_iters': {150: 0.2, 100: 0.5, 50: 0.3},
-                'num_avg_pts': {2: 0, 3: 0.4, 5: 0.3, 7: 0.3, 1: 0},
+                'num_avg_pts': {2: 0, 3: 0.3, 5: 0.3, 7: 0.3, 10: 0.1},
                 'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8}}
 
             d = {k: d[k] for k in d_ordering}
@@ -259,7 +260,7 @@ with keep.running() as m:
 
                     to_add = []
 
-                    sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
+                    sim = FootballSimulation(conn, week, year, salary_cap, pos_require_start, num_iters, 
                                             pred_vers, reg_ens_vers=reg_ens_vers, million_ens_vers=million_ens_vers,
                                             std_dev_type=std_dev_type, covar_type=covar_type, 
                                             full_model_rel_weight=full_model_rel_weight, matchup_seed=matchup_seed,
@@ -272,7 +273,7 @@ with keep.running() as m:
                         to_drop = []
                         to_drop.extend(to_drop_selected)
                         
-                        results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
+                        results, _ = sim.run_sim(conn, to_add, to_drop, min_players_same_team, set_max_team, 
                                                 min_players_opp_team_input=min_players_opp_team, max_team_type=max_team_type,
                                                 adjust_select=adjust_select, num_matchup_drop=matchup_drop,
                                                 own_neg_frac=own_neg_frac, ownership_vers=ownership_vers,

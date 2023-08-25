@@ -15,6 +15,7 @@ from functools import partial
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
+conn = dm.db_connect('Simulation')
 
 #===============
 # Settings and User Inputs
@@ -215,18 +216,18 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_seed, matchup_dr
     for t in range(lineups_per_param):
 
         to_add = []
-        sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-                                     pred_vers, reg_ens_vers=reg_ens_vers,million_ens_vers=million_ens_vers, std_dev_type=std_dev_type,
-                                     covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
-                                     matchup_seed=matchup_seed, use_covar=use_covar, use_ownership=use_ownership, 
-                                     salary_remain_max=max_salary_remain)
+        sim = FootballSimulation(conn, week, year, salary_cap, pos_require_start, num_iters, 
+                                 pred_vers, reg_ens_vers=reg_ens_vers,million_ens_vers=million_ens_vers, std_dev_type=std_dev_type,
+                                 covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
+                                 matchup_seed=matchup_seed, use_covar=use_covar, use_ownership=use_ownership, 
+                                 salary_remain_max=max_salary_remain)
 
         for i in range(9):
 
             to_drop = []
             to_drop.extend(to_drop_selected)
 
-            results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
+            results, _ = sim.run_sim(conn, to_add, to_drop, min_players_same_team, set_max_team, 
                                      min_players_opp_team_input=min_players_opp_team, 
                                      adjust_select=adjust_select,max_team_type=max_team_type,
                                      num_matchup_drop=matchup_drop, ownership_vers=ownership_vers,

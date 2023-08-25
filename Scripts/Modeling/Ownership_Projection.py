@@ -16,8 +16,8 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
-pred_version = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-million_ens_vers = 'random_kbest_matt1_brier1_include2_kfold3'
+pred_version = 'sera0_rsq0_mse1_brier1_matt0_bayes'
+million_ens_vers = 'random_kbest_matt0_brier1_include2_kfold3'
 
 set_year = 2022
 set_week = 1

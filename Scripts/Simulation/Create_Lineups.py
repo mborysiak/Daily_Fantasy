@@ -9,6 +9,7 @@ from ff import general as ffgeneral
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
+conn = dm.db_connect('Simulation')
 
 #===============
 # Settings and User Inputs
@@ -17,17 +18,12 @@ dm = DataManage(db_path)
 year=2022
 week=2
 
-
-pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
-ensemble_vers = 'random_kbest_sera1_rsq0_mse0_include2_kfold3'
-std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
-ownership_vers = 'mil_only'
-
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 num_lineups = 15
 set_max_team = None
 
+pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 
 #%%
 
@@ -111,30 +107,43 @@ opt_params = pull_best_params(best_trials)
 pprint.pprint(opt_params)
 
 best_vers = pull_params_version(best_trials)
+pred_vers = best_vers.pred_vers.values[0]
+reg_ens_vers = best_vers.reg_ens_vers.values[0]
+million_ens_vers = best_vers.million_ens_vers.values[0]
+std_dev_type = best_vers.std_dev_type.values[0]
 best_vers
 
 #%%
         
-d = {'adjust_pos_counts': {False: 0.04, True: 0.96},
- 'covar_type': {'no_covar': 0.74, 'team_points_trunc': 0.26},
- 'full_model_weight': {0.2: 0.3, 5: 0.7},
- 'matchup_drop': {0: 0.6, 1: 0.3, 2: 0.1},
- 'max_salary_remain': {200: 0.05, 500: 0.3, 1000: 0.25, 1500: 0.4},
- 'max_team_type': {'player_points': 1.0},
- 'min_player_same_team': {2: 0.44, 3: 0.26, 'Auto': 0.3},
- 'min_players_opp_team': {1: 0.4, 2: 0.18, 'Auto': 0.42},
- 'num_iters': {50: 0.26, 100: 0.74},
- 'num_top_players': {2: 0.41, 3: 0.46, 5: 0.13},
- 'own_neg_frac': {0.8: 0.99, 1: 0.01},
- 'player_drop_multiple': {0: 0.38, 2: 0.32, 4: 0.3},
- 'qb_min_iter': {0: 0.96, 9: 0.04},
- 'qb_set_max_team': {0: 0.2, 1: 0.8},
- 'qb_solo_start': {False: 0.39, True: 0.61},
- 'static_top_players': {False: 0.23, True: 0.77},
- 'top_n_choices': {0: 0.65, 1: 0.24, 2: 0.11},
- 'use_ownership': {0.8: 0.14, 0.9: 0.25, 1: 0.61}}
+d = {'adjust_pos_counts': {False: 0.6, True: 0.4},
+ 'covar_type': {'kmeans_pred_trunc': 0.4,
+                'no_covar': 0.2,
+                'team_points_trunc': 0.4},
+ 'full_model_weight': {0.2: 0.5, 5: 0.5},
+ 'lineups_per_param': {1: 1.0},
+ 'matchup_drop': {0: 0.8, 1: 0.1, 2: 0.1, 3: 0.0},
+ 'matchup_seed': {0: 0.7, 1: 0.3},
+ 'max_salary_remain': {200: 0.0, 500: 0.0, 1000: 0.7, 1500: 0.3},
+ 'max_team_type': {'player_points': 0.3, 'vegas_points': 0.7},
+ 'min_player_same_team': {2: 0.5, 3: 0.1, 'Auto': 0.4},
+ 'min_players_opp_team': {1: 0.3, 2: 0.3, 'Auto': 0.4},
+ 'num_avg_pts': {1: 0.0, 2: 0.3, 3: 0.4, 5: 0.3},
+ 'num_iters': {50: 0.2, 100: 0.6, 150: 0.2},
+ 'num_top_players': {2: 0.1, 3: 0.7, 5: 0.2},
+ 'own_neg_frac': {0.8: 0.1, 1: 0.9},
+ 'ownership_vers': {'mil_div_standard_ln': 0.0,
+                    'mil_only': 0.3,
+                    'mil_times_standard_ln': 0.3,
+                    'standard_ln': 0.4},
+ 'player_drop_multiple': {0: 0.7, 2: 0.2, 4: 0.1},
+ 'qb_min_iter': {0: 0.3, 2: 0.0, 9: 0.7},
+ 'qb_set_max_team': {0: 0.7, 1: 0.3},
+ 'qb_solo_start': {False: 0.7, True: 0.3},
+ 'static_top_players': {False: 0.4, True: 0.6},
+ 'top_n_choices': {0: 0.7, 1: 0.2, 2: 0.1},
+ 'use_ownership': {0.8: 0.2, 0.9: 0.0, 1: 0.8}}
 
-lineups_per_param = 3
+lineups_per_param = 1
 
 params = []
 for i in range(int(num_lineups/lineups_per_param)):
@@ -163,7 +172,7 @@ def sim_winnings(adjust_select,covar_type, full_model_rel_weight,matchup_drop,sa
     if covar_type=='no_covar': use_covar=False
     else: use_covar=True
 
-    sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
+    sim = FootballSimulation(conn, week, year, salary_cap, pos_require_start, num_iters, 
                              pred_vers, ensemble_vers=ensemble_vers, std_dev_type=std_dev_type,
                              covar_type=covar_type, full_model_rel_weight=full_model_rel_weight, 
                              use_covar=use_covar, use_ownership=use_ownership, salary_remain_max=salary_remain_max)
@@ -178,7 +187,7 @@ def sim_winnings(adjust_select,covar_type, full_model_rel_weight,matchup_drop,sa
         to_drop.extend(to_drop_selected)
 
         for i in range(9):
-            results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, None, min_players_opp_team, adjust_select,
+            results, _ = sim.run_sim(conn, to_add, to_drop, min_players_same_team, None, min_players_opp_team, adjust_select,
                                       num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac, max_team_type=max_team_type,
                                       n_top_players=num_top_players, static_top_players=static_top_players,
                                       qb_min_iter=qb_min_iter, qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
@@ -271,9 +280,9 @@ run_params_dict = {
     'week': [week],
     'year': [year],
     'pred_vers': [pred_vers],
-    'ensemble_vers': [ensemble_vers],
+    'reg_ens_vers': [reg_ens_vers],
     'std_dev_type': [std_dev_type],
-    'ownership_vers': [ownership_vers]
+    'million_ens_vers': [million_ens_vers]
 }
 for param, param_options in d.items():
     param_vars = list(param_options.keys())
@@ -282,7 +291,7 @@ for param, param_options in d.items():
 
 run_params_df = pd.DataFrame(run_params_dict)
 
-dm_app = DataManage('c:/Users/mborysia/Documents/Github/Daily_Fantasy_App/app/')
+dm_app = DataManage('c:/Users/borys/OneDrive/Documents/Github/Daily_Fantasy_App/app/')
 dm_app.write_to_db(run_params_df, 'Simulation_App', 'Run_Params', 'replace')
 
 for t in ['Predicted_Ownership', 'Mean_Ownership', 'Gambling_Lines', 'Vegas_Points', 'Salaries', 'Player_Teams', 'Player_Ids']:
@@ -291,14 +300,12 @@ for t in ['Predicted_Ownership', 'Mean_Ownership', 'Gambling_Lines', 'Vegas_Poin
     dm_app.write_to_db(df, 'Simulation_App', t, 'replace')
 
 for t in ['Model_Predictions', 'Covar_Means', 'Covar_Matrix']:
-    if t =='Model_Predictions': pred_var = 'version'
-    else: pred_var = 'pred_vers'
     df = dm.read(f'''SELECT * 
                     FROM {t}
                     WHERE week={week}
                         AND year={year}
-                        AND {pred_var}='{pred_vers}'
-                        AND ensemble_vers='{ensemble_vers}'
+                        AND pred_vers='{pred_vers}'
+                        AND reg_ens_vers='{reg_ens_vers}'
                         AND std_dev_type='{std_dev_type}'
                         ''', 'Simulation')
     dm_app.write_to_db(df, 'Simulation_App', t, 'replace')
