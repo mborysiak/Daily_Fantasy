@@ -17,7 +17,9 @@ conn = dm.db_connect('Simulation')
 #===============
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8, #9, 10,11,12,13,14,15
+   1, 2, 3, 4, 5, 6, 7, 8, 
+   9, 10,11,12,13,
+   #14,15
 ]
 
 set_years = [
@@ -27,11 +29,11 @@ set_years = [
 lineups_per_param = 1
 
 # pred_vers = 'sera1_rsq0_mse0_brier1_matt0_bayes'
-pred_vers = 'sera0_rsq0_mse1_brier1_matt0_bayes'
+pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 
 reg_ens_vers ='random_kbest_sera0_rsq0_mse1_include2_kfold3'
 std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
-million_ens_vers = 'random_kbest_matt0_brier1_include2_kfold3'
+million_ens_vers = 'random_matt0_brier1_include2_kfold3'
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params", 'Results').values[0][0]
 trial_num = max_trial_num + 1
@@ -196,31 +198,33 @@ with keep.running() as m:
                         'static_top_players', 'use_ownership', 'own_neg_frac', 
                         'max_salary_remain', 'num_iters', 'num_avg_pts']
 
-            d ={'adjust_pos_counts': {True: 0.3, False: 0.7},
-                'player_drop_multiple': {4: 0.4, 2: 0.2, 0: 0.4},
-                'matchup_seed': {True: 0.4, False: 0.6},
-                'matchup_drop': {1: 0.1, 2: 0.2, 3: 0.0, 0: 0.7},
-                'top_n_choices': {1: 0.2, 2: 0, 0: 0.8},
-                'full_model_weight': {5: 0.3, 0.2: 0.7},
-                'covar_type': {'no_covar': 0.1, 'team_points_trunc': 0.6, 'kmeans_pred_trunc': 0.3},
+            d ={'adjust_pos_counts': {False: 0.7, True: 0.3},
+                'covar_type': {'kmeans_pred_trunc': 0.3,
+                                'no_covar': 0.1,
+                                'team_points_trunc': 0.6},
+                'full_model_weight': {0.2: 0.7, 5: 0.3},
+                'lineups_per_param': {1: 1.0},
+                'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
+                'matchup_seed': {0: 0.6, 1: 0.4},
+                'max_salary_remain': {200: 0.0, 500: 0.0, 1000: 0.0, 1500: 1.0},
                 'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
                 'min_player_same_team': {2: 0.2, 3: 0.1, 'Auto': 0.7},
-                'num_top_players': {2: 0.5, 3: 0.5, 5: 0},
-                'ownership_vers': {'mil_only': 0.2,
-                                    'mil_times_standard_ln': 0.4,
-                                    'mil_div_standard_ln': 0,
-                                    'standard_ln': 0.4},
-                'qb_min_iter': {0: 0.2, 2: 0, 9: 0.8},
-                'qb_set_max_team': {True: 0.4, False: 0.6},
-                'qb_solo_start': {True: 0.6, False: 0.4},
-                'static_top_players': {True: 0.3, False: 0.7},
-                'use_ownership': {0.9: 0, 0.8: 0.5, 1: 0.5},
-                'own_neg_frac': {0.8: 0, 1: 1},
-                'max_salary_remain': {200: 0, 500: 0, 1000: 0, 1500: 1},
-                'num_iters': {150: 0.2, 100: 0.5, 50: 0.3},
-                'num_avg_pts': {2: 0, 3: 0.3, 5: 0.3, 7: 0.3, 10: 0.1},
-                'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8}}
-
+                'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8},
+                'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.4, 5: 0.3, 7: 0.3},
+                'num_iters': {50: 0.3, 100: 0.5, 150: 0.2},
+                'num_top_players': {2: 0.5, 3: 0.5, 5: 0.0},
+                'own_neg_frac': {0.8: 0.0, 1: 1.0},
+                'ownership_vers': {'mil_div_standard_ln': 0.0,
+                                    'mil_only': 0.4,
+                                    'mil_times_standard_ln': 0.3,
+                                    'standard_ln': 0.3},
+                'player_drop_multiple': {0: 0.4, 2: 0.2, 4: 0.4},
+                'qb_min_iter': {0: 0.2, 2: 0.0, 9: 0.8},
+                'qb_set_max_team': {0: 0.6, 1: 0.4},
+                'qb_solo_start': {False: 0.4, True: 0.6},
+                'static_top_players': {False: 0.7, True: 0.3},
+                'top_n_choices': {0: 0.8, 1: 0.2, 2: 0.0},
+                'use_ownership': {0.8: 0.5, 0.9: 0.0, 1: 0.5}}
             d = {k: d[k] for k in d_ordering}
             params = []
             for i in range(int(30/lineups_per_param)):
@@ -260,7 +264,7 @@ with keep.running() as m:
 
                     to_add = []
 
-                    sim = FootballSimulation(conn, week, year, salary_cap, pos_require_start, num_iters, 
+                    sim = FootballSimulation(dm.db_connect('Simulation'), week, year, salary_cap, pos_require_start, num_iters, 
                                             pred_vers, reg_ens_vers=reg_ens_vers, million_ens_vers=million_ens_vers,
                                             std_dev_type=std_dev_type, covar_type=covar_type, 
                                             full_model_rel_weight=full_model_rel_weight, matchup_seed=matchup_seed,
@@ -273,7 +277,7 @@ with keep.running() as m:
                         to_drop = []
                         to_drop.extend(to_drop_selected)
                         
-                        results, _ = sim.run_sim(conn, to_add, to_drop, min_players_same_team, set_max_team, 
+                        results, _ = sim.run_sim(dm.db_connect('Simulation'), to_add, to_drop, min_players_same_team, set_max_team, 
                                                 min_players_opp_team_input=min_players_opp_team, max_team_type=max_team_type,
                                                 adjust_select=adjust_select, num_matchup_drop=matchup_drop,
                                                 own_neg_frac=own_neg_frac, ownership_vers=ownership_vers,
@@ -305,9 +309,9 @@ with keep.running() as m:
                 
                 return sim_results, lineup_pts
             
-            # for adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i in params:
-            #     print([adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i])
-            #     sim_winnings(adj, pdm, md, tn, fmw, ct, mtt, mpst, mpot, ntp, qmi, qsmt, qss, stp, uo, onf, msr, ni, param_i)
+            # for adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i in params:
+            #     print(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i)
+            #     sim_winnings(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i)
                 
         
             par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i) for \

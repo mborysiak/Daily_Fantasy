@@ -68,11 +68,11 @@ matchups = np.array([m for m in get_matchups() if m[0] in unique_teams and m[1] 
 
 #%%
 
-def pull_best_params(best_trials):
+def pull_best_params(best_trial):
     params = {}
     params_opt = dm.read(f'''SELECT * 
                              FROM Entry_Optimize_Params
-                             WHERE trial_num IN {best_trials}''', 'Results')
+                             WHERE trial_num = {best_trial}''', 'Results')
     params_opt = params_opt.groupby(['param', 'param_option']).agg({'option_value': 'mean'}).reset_index()
 
     for p, opt, val in params_opt.values:
@@ -95,13 +95,13 @@ def pull_best_params(best_trials):
 
     return params
 
-def pull_params_version(best_trials):
+def pull_params_version(best_trial):
     vers = dm.read(f'''SELECT DISTINCT trial_num, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type
                        FROM Entry_Optimize_Results
-                       WHERE trial_num IN {best_trials}''', 'Results')
+                       WHERE trial_num = {best_trial}''', 'Results')
     return vers
 
-best_trials = (221, 221)
+best_trials = 252
 
 opt_params = pull_best_params(best_trials)
 pprint.pprint(opt_params)

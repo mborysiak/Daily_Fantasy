@@ -960,12 +960,12 @@ class FootballSimulation:
 # num_iters = 100
 
 # pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-# reg_ens_vers = 'random_kbest_sera0_rsq0_mse1_include2_kfold3'
-# million_vers = 'random_matt0_brier1_include2_kfold3'
-# std_dev_type = 'spline_pred_class80_matt0_brier1_kfold3'
+# reg_ens_vers ='random_kbest_sera0_rsq0_mse1_include2_kfold3'
+# std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
+# million_vers = 'random_kbest_matt0_brier1_include2_kfold3'
 # ownership_vers = 'standard_ln'
 
-# week = 2
+# week = 9
 # year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -977,10 +977,10 @@ class FootballSimulation:
 #                          use_ownership=use_ownership, salary_remain_max=salary_remain_max, matchup_seed=False)
 
 
-# to_add = ['Mark Andrews', 'Josh Jacobs']
+# to_add = []
 # to_drop = []
 
-# results, max_team_cnt = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
+# results, max_team_cnt = sim.run_sim(conn, to_add, to_drop, min_players_same_team, set_max_team, 
 #                                     min_players_opp_team, adjust_select=adjust_select, max_team_type=max_team_type,
 #                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
 #                                     n_top_players=top_n_players, static_top_players=static_top_players,

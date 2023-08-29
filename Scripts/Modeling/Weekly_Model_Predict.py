@@ -1149,11 +1149,11 @@ alpha = 80
 class_cut = 80
 
 # set_weeks=[1]
-set_weeks = [1,2,3,4,5,6,7,8]
-# set_weeks = [9,10,11,12]
+# set_weeks = [1,2,3,4,5,6,7,8]
+set_weeks = [9,10,11,12,13]
 # set_weeks = [13,14,15,16]
 
-pred_vers = 'sera0_rsq0_mse1_brier1_matt0_bayes'
+pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
 class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"

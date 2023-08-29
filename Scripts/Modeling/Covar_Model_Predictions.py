@@ -335,7 +335,9 @@ covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
-     1, 2, 3, 4, 5, 6, 7, 8#, 9, 10, 11, 12, 13, 14, 15#, 16, 17
+     #1, 2, 3, 4, 5, 6, 7, 8.
+     9, 10, 11, 12, 13, 
+     #14, 15, 16, 17
 ]
 
 set_years = [
@@ -343,7 +345,7 @@ set_years = [
 ]
 
 pred_versions = [
-                 'sera0_rsq0_mse1_brier1_matt0_bayes',
+                 'sera0_rsq0_mse1_brier1_matt1_bayes',
                 #  'sera1_rsq0_mse0_brier1_matt0_bayes'
                  ]
 
