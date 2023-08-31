@@ -26,7 +26,7 @@ set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,2022,2022,2022,2022
 ]
 
-lineups_per_param = 1
+lineups_per_param = 3
 
 # pred_vers = 'sera1_rsq0_mse0_brier1_matt0_bayes'
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
@@ -199,32 +199,33 @@ with keep.running() as m:
                         'max_salary_remain', 'num_iters', 'num_avg_pts']
 
             d ={'adjust_pos_counts': {False: 0.7, True: 0.3},
-                'covar_type': {'kmeans_pred_trunc': 0.3,
-                                'no_covar': 0.1,
-                                'team_points_trunc': 0.6},
+                'covar_type': {'kmeans_pred_trunc': 0.2,
+                                'no_covar': 0.4,
+                                'team_points_trunc': 0.4},
                 'full_model_weight': {0.2: 0.7, 5: 0.3},
                 'lineups_per_param': {1: 1.0},
-                'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
-                'matchup_seed': {0: 0.6, 1: 0.4},
-                'max_salary_remain': {200: 0.0, 500: 0.0, 1000: 0.0, 1500: 1.0},
+                'matchup_drop': {0: 0.8, 1: 0.1, 2: 0.1, 3: 0.0},
+                'matchup_seed': {0: 0.8, 1: 0.2},
+                'max_salary_remain': {200: 0.0, 500: 0.2, 1000: 0.3, 1500: 0.5},
                 'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
-                'min_player_same_team': {2: 0.2, 3: 0.1, 'Auto': 0.7},
+                'min_player_same_team': {2: 0.4, 3: 0.4, 'Auto': 0.2},
                 'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8},
-                'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.4, 5: 0.3, 7: 0.3},
-                'num_iters': {50: 0.3, 100: 0.5, 150: 0.2},
+                'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.3, 5: 0.3, 7: 0.3, 10: 0.1},
+                'num_iters': {50: 0.4, 100: 0.2, 150: 0.4},
                 'num_top_players': {2: 0.5, 3: 0.5, 5: 0.0},
                 'own_neg_frac': {0.8: 0.0, 1: 1.0},
                 'ownership_vers': {'mil_div_standard_ln': 0.0,
                                     'mil_only': 0.4,
-                                    'mil_times_standard_ln': 0.3,
-                                    'standard_ln': 0.3},
+                                    'mil_times_standard_ln': 0.4,
+                                    'standard_ln': 0.2},
                 'player_drop_multiple': {0: 0.4, 2: 0.2, 4: 0.4},
-                'qb_min_iter': {0: 0.2, 2: 0.0, 9: 0.8},
+                'qb_min_iter': {0: 0.3, 2: 0, 9: 0.7},
                 'qb_set_max_team': {0: 0.6, 1: 0.4},
                 'qb_solo_start': {False: 0.4, True: 0.6},
-                'static_top_players': {False: 0.7, True: 0.3},
+                'static_top_players': {False: 0.3, True: 0.7},
                 'top_n_choices': {0: 0.8, 1: 0.2, 2: 0.0},
                 'use_ownership': {0.8: 0.5, 0.9: 0.0, 1: 0.5}}
+            
             d = {k: d[k] for k in d_ordering}
             params = []
             for i in range(int(30/lineups_per_param)):
@@ -315,7 +316,7 @@ with keep.running() as m:
                 
         
             par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i) for \
-                                                                        adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i in params)
+                                                                           adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i in params)
 
             weighted_winnings = avg_winnings_contest(par_out)
             cur_week_avg_winnings = np.sum(weighted_winnings)
@@ -346,7 +347,7 @@ with keep.running() as m:
 
 #%%
 
-to_delete_num=214
+to_delete_num=277
 df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
 dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
 

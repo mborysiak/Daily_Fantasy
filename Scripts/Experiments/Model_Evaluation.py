@@ -444,12 +444,12 @@ df = dm.read('''SELECT *
                      SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num > 207
+                WHERE trial_num >= 269
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                      -- AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
                       AND reg_ens_vers='random_kbest_sera0_rsq0_mse1_include2_kfold3'
                       AND million_ens_vers IN ('random_matt0_brier1_include2_kfold3', 'random_kbest_matt0_brier1_include2_kfold3')
-                      AND week!=8
+                    --  AND week!=8
                 ''', 'Results')
 
 model_type = {
@@ -463,13 +463,13 @@ model_type = {
 w=1
 model_name='lgbm'
 m = model_type[model_name] 
-X, y = entry_optimize_params(df, max_adjust=1000, model_name=model_name)
+X, y = entry_optimize_params(df, max_adjust=5000, model_name=model_name)
 coef_vals, X = get_model_coef(X, y, m)
 show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7,  9, 10, 11, 12, 13]
+weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
 
 i=0
@@ -481,7 +481,7 @@ for w, yr in zip(weeks, years):
                             SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num > 207
+                     WHERE trial_num >= 269
                            AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                            --AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
                            AND reg_ens_vers='random_kbest_sera0_rsq0_mse1_include2_kfold3'          
