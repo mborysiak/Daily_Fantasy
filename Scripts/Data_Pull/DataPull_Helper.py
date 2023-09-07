@@ -108,18 +108,20 @@ def year_week_to_date(x):
 
 def create_adj_ranks(df, rank_col, where_pos, table_name, dm):
     
-    all_data = dm.read(f"SELECT * FROM {table_name} {where_pos}", 'Pre_PlayerData')
+    all_data = dm.read(f"SELECT * FROM {table_name} {where_pos} AND {rank_col} < 100", 'Pre_PlayerData')
     all_data = all_data.sort_values(by=['year', 'week']).reset_index(drop=True)
     all_data['game_date'] = all_data[['year', 'week']].apply(year_week_to_date, axis=1)
 
     # get the mean rankings for past 6 weeks
     past_6_weeks = all_data.game_date.unique()[-6]
     mean_rank = all_data[all_data.game_date >= past_6_weeks].reset_index(drop=True)
+    mean_rank = pd.concat([mean_rank, df], axis=0)
     mean_rank = mean_rank.groupby('player').agg({rank_col: 'mean'}).reset_index().sort_values(by=rank_col)
     mean_rank[rank_col] = range(1, len(mean_rank)+1)
 
     # join in the current rankings and find missing players
     cur_rank = df.copy()
+    cur_rank = cur_rank.dropna(subset=[rank_col]).reset_index(drop=True)
     mean_rank = pd.merge(mean_rank, cur_rank[['player', 'week']], on=['player'], how='outer')
     mean_rank['to_add'] = np.where(mean_rank.week.isnull(), 1, 0)
     mean_rank['to_add'] = mean_rank.to_add.cumsum()
@@ -326,6 +328,7 @@ full_team_map = {'Arizona Cardinals': 'ARI',
  'Indianapolis Colts': 'IND',
  'Jacksonville Jaguars': 'JAC',
  'Kansas City Chiefs': 'KC',
+ 'Kansas City Cheifs': 'KC',
  'Los Angeles Chargers': 'LAC',
  'Los Angeles Chargers Chargers': 'LAC',
  'Los Angeles Rams Rams': 'LAR',

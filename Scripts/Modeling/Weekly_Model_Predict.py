@@ -362,7 +362,9 @@ def stack_predictions(X_predict, best_models, final_models, model_obj='reg'):
     predictions = pd.DataFrame()
     for bm, fm in zip(best_models, final_models):
 
-        start_cols = bm.steps[0][1].start_columns
+        try: start_cols = bm.steps[0][1].start_columns
+        except: start_cols = X_predict.columns
+
         X_predict = X_predict[start_cols]
         
         if model_obj in ('reg', 'quantile'): cur_prediction = np.round(bm.predict(X_predict), 2)
@@ -833,7 +835,7 @@ def get_newest_folder_with_keywords(path, keywords, ignore_keywords=None, req_fn
 def get_trial_times(root_path, fname, run_params, set_pos, model_type):
 
     newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
-    keep_words = [set_pos, model_type, run_params['pred_vers']]
+    keep_words = [set_pos, model_type, run_params['pred_vers'], '_week2_']
     drop_words = [f"_week{run_params['set_week']}_"]
     recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
 
@@ -1118,7 +1120,7 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random',
+    'stack_model': 'random_full_stack',
 
     # opt params
     'opt_type': 'bayes',
@@ -1148,10 +1150,7 @@ matt_wt = 0
 alpha = 80
 class_cut = 80
 
-# set_weeks=[1]
-# set_weeks = [1,2,3,4,5,6,7,8]
-set_weeks = [9,10,11,12,13]
-# set_weeks = [13,14,15,16]
+set_weeks = [17]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"

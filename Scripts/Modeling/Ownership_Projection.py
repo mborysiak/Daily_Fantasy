@@ -17,7 +17,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 pred_version = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-million_ens_vers = 'random_matt0_brier1_include2_kfold3'
+million_ens_vers = 'random_full_stack_matt0_brier1_include2_kfold3'
 
 set_year = 2022
 set_week = 1
@@ -609,7 +609,7 @@ def pull_ownership(ownership_table, ownership_vers, db_name):
     return pred_player_ownership
 
 
-def add_pred_values(ownership_df, prob_table, pred_version, ens_version, week, year, ownership_vers):
+def add_pred_values(ownership_df, prob_table, pred_version, ens_version, week, year, ownership_vers, full_model_rel_weight=1):
     
     if 'Validation' in prob_table: 
         db_name = 'Validations'
@@ -623,7 +623,8 @@ def add_pred_values(ownership_df, prob_table, pred_version, ens_version, week, y
     df = dm.read(f'''SELECT player, 
                             week, 
                             year, 
-                            AVG(pred_fp_per_game) pred_prob
+                            model_type,
+                            pred_fp_per_game pred_prob
                      FROM {prob_table}
                      WHERE pred_vers='{pred_version}'
                            AND million_ens_vers='{ens_version}' 
@@ -631,6 +632,14 @@ def add_pred_values(ownership_df, prob_table, pred_version, ens_version, week, y
                            AND {yr}={year}
                      GROUP BY player, week, year
                     ''', db_name)
+
+    df['weighting'] = 1
+    df.loc[df.model_type=='full_model', 'weighting'] = full_model_rel_weight
+    df['pred_prob'] = df['pred_prob'] * df.weighting
+    
+    df = df.groupby(['player', 'week', 'year'], as_index=False).agg({'pred_prob': 'sum', 
+                                                                     'weighting': 'sum'})
+    df['pred_prob'] = df['pred_prob'] / df.weighting
 
     df['min_score_mil'] = df.pred_prob / 10
     df['max_score_mil'] = np.where(df.pred_prob*2 > 1, 1, df.pred_prob*2)
@@ -698,9 +707,8 @@ def save_current_week_pred(ownership_vers, set_week, set_year, include_dst=True)
 # Predict Ownership Pct
 #================
 
-for set_week, set_year in zip([#1, 2, 3, 4, 5, 6, 7, 8, 
-                               9, 10, 11, 12, 13, 
-                               #14, 15, 16, 17
+for set_week, set_year in zip([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 
+                               #17
                                ], 
                               [
                                2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022

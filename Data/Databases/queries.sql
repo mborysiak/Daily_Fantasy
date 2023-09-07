@@ -15,17 +15,28 @@ ORDER BY sum(fantasy_pts) DESC;
 
 
 
-SELECT trial_num, AVG(winnings) AvgWinnings, MIN(winnings) MinWinnings, MAX(winnings) MaxWinnings
+SELECT trial_num, 
+	   AVG(winnings) AvgWinnings, 
+	   MIN(winnings) MinWinnings, 
+	   MAX(winnings) MaxWinnings, 
+	   AVG(non8_winnings) AvgNon8Winnings, 
+	   MIN(non8_winnings) MinNon8Winnings,
+	   MAX(non8_winnings) MaxNon8Winnings,
+	   (AVG(winnings)+AVG(non8_winnings)+MIN(winnings)+MIN(non8_winnings))/4 as BlendedAverage
 FROM (
 		SELECT trial_num, 
 			   repeat_num, 
-			   sum(CASE WHEN avg_winnings > 25000 THEN 25000 ELSE avg_winnings END) winnings 
-			   FROM Entry_Optimize_Results
-		WHERE trial_num > 161
+			   sum(CASE WHEN avg_winnings > 10000 THEN 10000 ELSE avg_winnings END) winnings,
+			   sum(CASE WHEN week=8 THEN 0 
+			            WHEN avg_winnings > 10000 THEN 10000 
+						ELSE avg_winnings END) non8_winnings 
+		FROM Entry_Optimize_Results
+		WHERE trial_num >= 269
+		      AND week < 17
 		GROUP BY trial_num, repeat_num
 )
 GROUP BY trial_num
-ORDER BY AVG(winnings) DESC;
+ORDER BY AVG(winnings)+AVG(non8_winnings)+MIN(winnings)+MIN(non8_winnings) DESC;
 
 
 

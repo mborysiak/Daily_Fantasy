@@ -1,16 +1,15 @@
 #%%
 
-YEAR = 2022
-WEEK = 18
+YEAR = 2023
+WEEK = 1
 
 #%%
+
 import pandas as pd 
-import pyarrow.parquet as pq
 import numpy as np
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
 import ff.data_clean as dc
-from scipy.stats.morestats import shapiro
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'

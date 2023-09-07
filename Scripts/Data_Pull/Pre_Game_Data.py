@@ -10,8 +10,8 @@ pd.set_option('display.max_columns', 999)
 import shutil as su
 
 # +
-set_year = 2022
-set_week = 19
+set_year = 2023
+set_week = 1
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -26,7 +26,7 @@ dm = DataManage(db_path)
 
 def move_download_to_folder(root_path, folder, fname, week=''):
     try:
-        os.replace(f"/Users/mborysia/Downloads/{fname}", 
+        os.replace(f"/Users/borys/Downloads/{fname}", 
                     f'{root_path}/Data/OtherData/{folder}/{set_year}/{week}{fname}')
     except:
         pass
@@ -133,7 +133,7 @@ def pull_fantasy_data(set_week):
 for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
 
     try:
-        os.replace(f"/Users/mborysia/Downloads/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv", 
+        os.replace(f"/Users/borys/Downloads/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv", 
                    f'{root_path}/Data/OtherData/Fantasy_Pros/{set_year}/FantasyPros_{set_year}_Week_{set_week}_{set_pos}_Rankings.csv')
     except:
         pass
@@ -175,34 +175,10 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
 #%%
 # # PFF Rankings + Projections
 
-def pff_proj(label_pre, label_post, folder, rep=True):
-    
-    try:
-        os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
-                   f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
-        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
-
-    except:
-        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
-
-    df = df.rename(columns={'teamName': 'offTeam', 'games': 'defTeam'})
-    df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
-    df.offTeam = df.offTeam.map(team_map)
-    df.defTeam = df.defTeam.map(team_map)
-
-    df['week'] = set_week
-    df['year'] = set_year
-    
-    players = df[df.position!='dst']
-    teams = df[df.position=='dst']
-    
-    return players, teams
-
-
 def pff_rank(label_pre, label_post, folder):
     
     try:
-        os.replace(f"/Users/mborysia/Downloads/{label_pre}.csv", 
+        os.replace(f"/Users/borys/Downloads/{label_pre}.csv", 
                    f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
         df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
 
@@ -223,29 +199,17 @@ def pff_rank(label_pre, label_post, folder):
     return players, teams
 
 
-proj_pl, proj_tm = pff_proj('projections', 'projections', 'pff_proj')
 rank1_pl, rank1_tm = pff_rank('week-rankings-export', 'expert_ranks', 'pff_rank')
-# rank2_pl, rank2_tm = pff_rank('week-rankings-export-2', 'vor_ranks', 'pff_rank', True)
 
-# rank1_pl = rank1_pl.drop(f'w{set_week}', axis=1)
-# rank1_tm = rank1_tm.drop(f'w{set_week}', axis=1)
+rank1_pl = rank1_pl.drop(f'w{set_week}', axis=1)
+rank1_tm = rank1_tm.drop(f'w{set_week}', axis=1)
 
-rank1_pl = rank1_pl.drop(f'w28', axis=1)
-rank1_tm = rank1_tm.drop(f'w28', axis=1)
-
-# rank2_pl = rank2_pl.drop(f'w{set_week}', axis=1)
-# rank2_tm = rank2_tm.drop(f'w{set_week}', axis=1)
-
-proj_pl.playerName = proj_pl.playerName.apply(dc.name_clean)
 rank1_pl.Name = rank1_pl.Name.apply(dc.name_clean)
-# rank2_pl.Name = rank2_pl.Name.apply(dc.name_clean)
-
-proj_pl = proj_pl.rename(columns={'playerName': 'player'})
 rank1_pl = rank1_pl.rename(columns={'Name': 'player'})
 
 all_df = pd.DataFrame()
-for p in ['QB', 'RB', 'WR', 'TE', 'K']:
-    base_df = rank1_pl[rank1_pl.Position==p].copy()
+for p in ['QB']:#, 'RB', 'WR', 'TE']:
+    base_df = rank1_pl[rank1_pl.Position==p].copy().reset_index(drop=True)
 
     for c in ['expertConsensus', 'expertNathanJahnke']:
         cur_df = create_adj_ranks(base_df, c, f"WHERE Position='{p}'", 'PFF_Expert_Ranks', dm)
@@ -253,31 +217,55 @@ for p in ['QB', 'RB', 'WR', 'TE', 'K']:
     all_df = pd.concat([all_df, base_df], axis=0)
 
 rank1_pl = all_df.copy()
-# if set_week==7 and set_year==2022:
-#     old = dm.read("SELECT * FROM PFF_Proj_Ranks", 'Pre_PlayerData')
-#     old = old[(old.player=='Sterling Shepard') & (old.week==3) & (old.year==2022)]
-#     old = old.assign(player="Wan'Dale Robinson", defTeam='JAC', week=7, year=2022, salary=4500, byeWeek=9)
-#     proj_pl = pd.concat([proj_pl, old], axis=0)
 
-    # rank1_pl.loc[rank1_pl.player=='Clyde Edwards Helaire', 'player'] = 'placehold'
-    # rank1_pl.loc[rank1_pl.player=='Jerick Mckinnon', 'player'] = 'Clyde Edwards Helaire'
-    # rank1_pl.loc[rank1_pl.player=='Isiah Pacheco', 'player'] = 'Jerick Mckinnon'
-    # rank1_pl.loc[rank1_pl.player=='placehold', 'player'] = 'Isiah Pacheco'
-
-    # proj_pl.loc[proj_pl.player=='Clyde Edwards Helaire', 'player'] = 'placehold'
-    # proj_pl.loc[proj_pl.player=='Jerick Mckinnon', 'player'] = 'Clyde Edwards Helaire'
-    # proj_pl.loc[proj_pl.player=='Isiah Pacheco', 'player'] = 'Jerick Mckinnon'
-    # proj_pl.loc[proj_pl.player=='placehold', 'player'] = 'Isiah Pacheco'
-
-#%%
-
-tables = ['Proj', 'Proj', 'Expert', 'Expert']#, 'VOR']
-dfs = [proj_pl, proj_tm, rank1_pl, rank1_tm]#, rank2_pl]
-dbs = ['Pre_PlayerData', 'Pre_TeamData', 'Pre_PlayerData', 'Pre_TeamData']
+tables = ['Expert', 'Expert']
+dfs = [rank1_pl, rank1_tm]
+dbs = ['Pre_PlayerData', 'Pre_TeamData']
 
 for t, d, db in zip(tables, dfs, dbs):
     dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}")
     dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
+
+#%%
+
+def pff_proj(label_pre, label_post, folder, rep=True):
+    
+    try:
+        os.replace(f"/Users/borys/Downloads/{label_pre}.csv", 
+                   f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+
+    except:
+        df = pd.read_csv(f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
+
+    df = df.rename(columns={'teamName': 'offTeam', 'games': 'defTeam'})
+    df.defTeam = df.defTeam.apply(lambda x: x.replace('@', ''))
+    df.offTeam = df.offTeam.map(team_map)
+    df.defTeam = df.defTeam.map(team_map)
+
+    df['week'] = set_week
+    df['year'] = set_year
+    
+    players = df[df.position!='dst']
+    teams = df[df.position=='dst']
+    
+    return players, teams
+
+
+proj_pl, proj_tm = pff_proj('projections', 'projections', 'pff_proj')
+proj_pl.playerName = proj_pl.playerName.apply(dc.name_clean)
+proj_pl = proj_pl.rename(columns={'playerName': 'player'})
+
+proj_pl
+
+# tables = ['Proj', 'Proj']
+# dfs = [proj_pl, proj_tm]
+# dbs = ['Pre_PlayerData', 'Pre_TeamData']
+
+# for t, d, db in zip(tables, dfs, dbs):
+#     dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}")
+#     dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
+
 
 #%%
 
@@ -318,6 +306,8 @@ dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData', 'append')
 #%%
 df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
 df = format_fantasy_cruncher(df, set_week, set_year)
+col = dm.read("SELECT * FROM FantasyCruncher", 'Pre_PlayerData').columns
+df = df[[c for c in df.columns if c in col]]
 
 dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
@@ -327,9 +317,10 @@ dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
 # ## PFF Matchups
 
 def pff_matchups(label):
-    
+
     try:
-        os.replace(f"/Users/mborysia/Downloads/{label}_matchup_chart.csv", 
+
+        os.replace(f"/Users/borys/Downloads/{label}_matchup_chart.csv", 
             f'{root_path}/Data/OtherData/pff_matchups/pff_{label}/{set_year}/{label}_week{set_week}.csv')
     except:
         print('No file to pull')
@@ -500,70 +491,86 @@ dm.write_to_db(data, 'Pre_TeamData', 'Gambling_Lines', if_exist='append')
 glines = dm.read("SELECT * FROM Gambling_Lines", 'Pre_TeamData')
 dm.write_to_db(glines, 'Simulation', 'Gambling_Lines', 'replace')
 
+
 #%%
-# # Weather
 
-cities = dm.read('''SELECT * FROM City_LatLon''', 'Pre_TeamData')
-city_data  = dm.read(f'''SELECT a.home_team, b.latitude, b.longitude, a.gametime_unix
-                                     FROM Gambling_Lines a
-                                     JOIN (SELECT * FROM City_LatLon) b
-                                          ON a.home_team = b.team
-                                     WHERE week={set_week} 
-                                           AND year={set_year}''', 'Pre_TeamData')
+# stadiums = dm.read("SELECT * FROM Stadium_Locations", 'Pre_TeamData')
+# location_keys = {}
+# i = 0
+# for _, row in stadiums.iterrows():
+#     team = row.Team
+#     latitude = row.Lat
+#     longitude = row.Long
 
-# +
-KEY = '6c500b03257f351161dbe1fea1aa6558'
 
-weather = []
+#     url = f'http://dataservice.accuweather.com/locations/v1/cities/geoposition/search?apikey={accu}&q={latitude}%2C%20{longitude}'
+#     location_key = requests.get(url).json()
+#     location_keys[team] = location_key['Key']
+
+# df = pd.DataFrame(location_keys, index=[0]).T.reset_index()
+# df.columns = ['team', 'location_key']
+# df.team = df.team.map(full_team_map).fillna('KC')
+# dm.write_to_db(df, 'Pre_TeamData', 'AccuWeather_Locations', 'replace')
+
+#%%  
+
+
+city_data  = dm.read(f'''SELECT a.home_team, a.gametime, a.gametime_unix, b.location_key
+                        FROM Gambling_Lines a
+                        JOIN (SELECT * FROM Accuweather_Locations) b
+                              ON a.home_team = b.team
+                        WHERE week={set_week} 
+                              AND year={set_year}''', 'Pre_TeamData')
+
+accu = '4B8LywkV5ABreulZ2f0DaXqGuuIhfJXI'
+weather_list = [] 
+
 for _, row in city_data.iterrows():
+    
     city = row.home_team
-    print(city)
-
+    location_key = row.location_key
     gt = row.gametime_unix
-    LATITUDE = row.latitude
-    LONGITUDE = row.longitude
 
-    ds = requests.get('https://api.darksky.net/forecast/{}/{},{}'.format(KEY, LATITUDE, LONGITUDE))
-    ds_data = ds.json()['daily']['data'].extend(ds.json()['hourly']['data'])
-    ds_data = ds.json()['daily']['data']
-    ds_data.extend(ds.json()['hourly']['data'])
-
+    weather_url = f'http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}?apikey={accu}&details=true'
+    weather = requests.get(weather_url).json()['DailyForecasts']
+    
     min_time_diff = 100000000
-    for d in ds_data:
-        if abs(d['time'] - gt) < min_time_diff:
-            best_t = d['time']
-            precip_prob = d['precipProbability']
-            precip_intensity = d['precipIntensity']
-            try:
-                precip_type = d['precipType']
-            except:
-                precip_type = None
-            try:
-                temp_high = d['temperatureHigh']
-                temp_low = d['temperatureLow']
-            except:
-                temp_high = d['temperature']
-                temp_low = d['temperature']
-            humidity = d['humidity']
-            wind_speed = d['windSpeed']
-            wind_gust = d['windGust']
-            uv_index = d['uvIndex']
-            min_time_diff = abs(d['time'] - gt)
+    for d in weather:
+        if abs(d['EpochDate'] - gt) < min_time_diff:
+            if abs(d['Sun']['EpochRise'] - gt) < abs(d['Sun']['EpochSet'] - gt): day_or_night = 'Day'
+            else: day_or_night = 'Night'
 
-        out = [city]
-        out.extend([best_t, precip_prob, precip_intensity, precip_type, temp_high,
-                    temp_low, humidity, wind_speed, wind_gust, uv_index])
+            best_t = d['EpochDate']
+            temp_high = d['Temperature']['Maximum']['Value']
+            temp_low = d['Temperature']['Minimum']['Value']
+            
+            rain_prob = d[day_or_night]['RainProbability']
+            snow_prob = d[day_or_night]['SnowProbability']
+            ice_prob = d[day_or_night]['IceProbability']
+            precip_prob = (rain_prob + snow_prob + ice_prob) / 100
+            precip_type = np.select([(rain_prob > snow_prob) & (rain_prob > ice_prob), 
+                                    (snow_prob > rain_prob) & (snow_prob > ice_prob),
+                                    (ice_prob > rain_prob) & (ice_prob > snow_prob)],
+                                    ['rain', 'snow', 'ice'], None
+                                    )
 
-    weather.append(out)
-# -
+            wind_speed = d[day_or_night]['Wind']['Speed']['Value']
+            wind_gust = d[day_or_night]['WindGust']['Speed']['Value']
+            uv_index = d['AirAndPollen'][-1]['Value']
 
-weather = pd.DataFrame(weather)
-weather.columns = ['team', 'gametime_unix', 'precip_prob', 'precip_intensity', 'precip_type',
+            precip_intensity = d[day_or_night]['TotalLiquid']['Value'] / (d[day_or_night]['HoursOfPrecipitation']+0.1)
+            min_time_diff = abs(d['EpochDate'] - gt)
+
+            humidity = (0.5 + ((precip_prob - 0.5)/5))
+
+    weather_list.append([city, best_t, precip_prob, precip_intensity, precip_type, temp_high,
+                         temp_low, humidity, wind_speed, wind_gust, uv_index])
+
+weather_df = pd.DataFrame(weather_list)
+weather_df.columns = ['team', 'gametime_unix', 'precip_prob', 'precip_intensity', 'precip_type',
                    'temp_high', 'temp_low', 'humidity', 'wind_speed', 'wind_gust', 'uv_index']
-weather['year'] = set_year
-weather['week'] = set_week
-
-weather
+weather_df['year'] = set_year
+weather_df['week'] = set_week
 
 #%%
 dm.delete_from_db('Pre_TeamData', 'Game_Weather', f"week={set_week} and year={set_year}")
@@ -619,7 +626,7 @@ for t, d in zip(['RB', 'WR', 'TE', 'QB'], [rb, wr, te, qb]):
 #--------------
 
 try:
-    su.copyfile(f'//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/MBorysiak/DK/Lineups/{set_year}/week{set_week}/DKSalaries.csv', 
+    su.copyfile(f'c:/Users/borys/Downloads/DKEntries.csv', 
                 f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv')   
 except:
     print('No file to move')

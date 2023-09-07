@@ -348,13 +348,12 @@ covar_type = 'kmeans_pred_trunc'
 
 # set the model version
 set_weeks = [
-    #1, 2, 3, 4, 5, 6, 7, 8,
-    9, 10, 11, 12, 13, 
-    #14, 15, 16, 17
+    # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 
+    16, 17
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022#, 2022, 2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 ]
 
 pred_versions = [
@@ -364,17 +363,19 @@ pred_versions = [
                  ]
 
 reg_ens_versions = [
-                    'random_sera0_rsq0_mse1_include2_kfold3',
-                    'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+                    'kbest_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
                     # 'random_sera1_rsq0_mse0_include2_kfold3',
                     # 'random_kbest_sera1_rsq0_mse0_include2_kfold3'
                 ]
 
 
 std_dev_types = [
-                #  'spline_pred_class80_q80_matt0_brier1_kfold3',
-                #  'spline_pred_class80_matt0_brier1_kfold3',
-                #  'spline_pred_q80_matt0_brier1_kfold3',
+                 'spline_pred_class80_q80_matt0_brier1_kfold3',
+                 'spline_pred_class80_matt0_brier1_kfold3',
+                 'spline_pred_q80_matt0_brier1_kfold3',
                  'spline_class80_q80_matt0_brier1_kfold3',
                 #  'spline_pred_class80_q80_matt1_brier1_kfold3',
                 #  'spline_pred_class80_matt1_brier1_kfold3',

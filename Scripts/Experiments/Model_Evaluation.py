@@ -446,10 +446,12 @@ df = dm.read('''SELECT *
                       ) USING (week, year, trial_num, repeat_num)
                 WHERE trial_num >= 269
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+                      AND week < 17
+                      AND week != 8
+                    --  AND week != 14
                      -- AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
-                      AND reg_ens_vers='random_kbest_sera0_rsq0_mse1_include2_kfold3'
-                      AND million_ens_vers IN ('random_matt0_brier1_include2_kfold3', 'random_kbest_matt0_brier1_include2_kfold3')
-                    --  AND week!=8
+                     AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
+                  --  AND million_ens_vers='kbest_matt0_brier1_include2_kfold3'
                 ''', 'Results')
 
 model_type = {
@@ -469,7 +471,7 @@ show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,]
 years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
 
 i=0
@@ -484,8 +486,8 @@ for w, yr in zip(weeks, years):
                      WHERE trial_num >= 269
                            AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                            --AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
-                           AND reg_ens_vers='random_kbest_sera0_rsq0_mse1_include2_kfold3'          
-                           AND million_ens_vers IN ('random_matt0_brier1_include2_kfold3', 'random_kbest_matt0_brier1_include2_kfold3')
+                           AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'          
+                           --AND million_ens_vers IN ('random_matt0_brier1_include2_kfold3', 'random_kbest_matt0_brier1_include2_kfold3')
                            AND week = {w}
                            AND year = {yr}
                      ''', 'Results')
