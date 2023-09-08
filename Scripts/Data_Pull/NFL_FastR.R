@@ -72,5 +72,5 @@ pbp[, passer_player_age:=as.numeric((as.Date(paste0(season, '-09-01'))-as.Date(p
 pbp <- pbp[play_type %in% c('run', 'pass', 'kickoff', 'punt', 'field_goal', 'extra_point')]
 
 # save out parquets of the data
-arrow::write_parquet(pbp, paste0('/Users/mborysia/Documents/Github/Daily_Fantasy/Data/OtherData/NFL_FastR/raw_data_', season_pull, '.parquet'))
-arrow::write_parquet(rosters, paste0('/Users/mborysia/Documents/Github/Daily_Fantasy/Data/OtherData/NFL_FastR/rosters_', season_pull, '.parquet'))
+arrow::write_parquet(pbp, paste0('/Users/borys/OneDrive/Documents/Github/Daily_Fantasy/Data/OtherData/NFL_FastR/raw_data_', season_pull, '.parquet'))
+arrow::write_parquet(rosters, paste0('/Users/borys/OneDrive/Documents/Github/Daily_Fantasy/Data/OtherData/NFL_FastR/rosters_', season_pull, '.parquet'))

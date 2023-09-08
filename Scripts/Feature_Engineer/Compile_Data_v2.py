@@ -83,18 +83,39 @@ def add_rolling_stats(df, gcols, rcols, perform_check=True):
     return df
 
 
+# def switch_seasons(df):
+
+#     # any seasons 2020 or earlier when it was a 17 week season, convert week 17 to the first week of the next year
+#     # note that the year is +1 and week is set to one in a single step
+#     len_ones = np.array([1]*df.loc[(df.week==17) & (df.year <= 2020)].shape[0])
+#     print(len(len_ones), len(df.loc[(df.week==17) & (df.year <= 2020), 'year']))
+#     df.loc[(df.week==17) & (df.year <= 2020), ['year', 'week']] = [df.loc[(df.week==17) & (df.year <= 2020), 'year'] + 1, len_ones]
+    
+#     # for any seasons after 2020, set week 18 to the following year first week.
+#     # however, don't do the conversion for the current year since you need to keep current week for this year's predictions
+#     len_ones = [1]*df.loc[(df.week==18) & (df.year < 2021) & (df.year != YEAR)].shape[0]
+#     df.loc[(df.week==18) & (df.year >= 2021) & (df.year != YEAR), ['year', 'week']] = \
+#         df.loc[(df.week==18) & (df.year >= 2021) & (df.year != YEAR), 'year'] + 1, len_ones
+
+#     return df
+
 def switch_seasons(df):
 
     # any seasons 2020 or earlier when it was a 17 week season, convert week 17 to the first week of the next year
     # note that the year is +1 and week is set to one in a single step
-    df.loc[(df.week==17) & (df.year <= 2020), ['year', 'week']] = [df.loc[(df.week==17) & (df.year <= 2020), 'year'] + 1, 1]
+    idx = df.loc[(df.week==17) & (df.year <= 2020)].index
+    df.loc[idx, 'year'] = df.loc[idx, 'year'] + 1
+    df.loc[idx, 'week'] = 1
     
     # for any seasons after 2020, set week 18 to the following year first week.
     # however, don't do the conversion for the current year since you need to keep current week for this year's predictions
-    df.loc[(df.week==18) & (df.year >= 2021) & (df.year != YEAR), ['year', 'week']] = \
-        [df.loc[(df.week==18) & (df.year >= 2021) & (df.year != YEAR), 'year'] + 1, 1]
+    idx = df.loc[(df.week==18) & (df.year >= 2021) & (df.year != YEAR)].index
+    df.loc[idx, 'year'] = df.loc[idx, 'year'] + 1
+    df.loc[idx, 'week'] = 1
 
     return df
+
+
 
 def forward_fill(df, cols=None):
     
@@ -942,7 +963,7 @@ def add_weather(df):
 
     weather = pd.concat([weather, away_weather], axis=0).sort_values(by=['year', 'week'])
 
-    df = pd.merge(df, weather, on=['team', 'week', 'year'])
+    df = pd.merge(df, weather, on=['team', 'week', 'year'], how='left')
 
     return df
 
