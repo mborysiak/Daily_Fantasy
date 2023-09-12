@@ -13,11 +13,11 @@ dm = DataManage(db_path)
 
 # set the filepath and name for NFL Fast R data saved from R script
 DATA_PATH = f'{root_path}/Data/OtherData/NFL_FastR/'
-FNAME = 'raw_data_2022.parquet'
+FNAME = 'raw_data_2023.parquet'
 
 pd.set_option('display.max_columns', 999)
 
-cur_season = 2022
+cur_season = 2023
 
 #---------------
 # Functions
@@ -81,7 +81,7 @@ def calc_fp_qb(df, pts_dict, rush_pass):
 #---------------
 
 # read in the data, filter to real players, and sort by value
-data = pq.read_table(f'{DATA_PATH}/{FNAME}').to_pandas()
+data = pq.read_table(f'{DATA_PATH}/{FNAME}').to_pandas().drop_duplicates()
 data = data.sort_values(by='epa', ascending=False).reset_index(drop=True)
 
 defense = data.copy()
@@ -167,8 +167,9 @@ dm.write_to_db(final_scores, 'FastR', 'Final_Scores', if_exist='append')
 rec_sum_cols = ['shotgun', 'no_huddle', 'pass_attempt', 
                 'qb_dropback', 'qb_scramble', 'penalty', 'first_down', 'first_down_pass',
                 'fourth_down_converted', 'fourth_down_failed',
-                'third_down_converted', 'goal_to_go','pass_middle',
-                'pass_outside', 'pass_touchdown',
+                'third_down_converted', 'goal_to_go',
+                'pass_middle','pass_outside',
+                'pass_touchdown',
                 'qb_hit',  'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
                 'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
                 'comp_yac_wpa', 'complete_pass', 'incomplete_pass', 'interception',
@@ -178,14 +179,14 @@ rec_sum_cols = ['shotgun', 'no_huddle', 'pass_attempt',
                 'yards_gained', 'ydstogo']
 
 rec_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
-             'grass', 'synthetic', 'indoors', 'outdoors',
-             'td_prob', 'qb_epa', 'wp', 'wpa',
-             'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
-             'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
-             'comp_yac_wpa',  'ep', 'epa', 'xyac_epa',
-             'xyac_fd', 'xyac_mean_yardage', 'xyac_median_yardage', 'xyac_success',
-             'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
-             'yards_gained', 'ydstogo', 'pos_is_home']
+              #  'grass', 'synthetic', 'indoors', 'outdoors',
+                'td_prob', 'qb_epa', 'wp', 'wpa',
+                'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
+                'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
+                'comp_yac_wpa',  'ep', 'epa', 'xyac_epa',
+                'xyac_fd', 'xyac_mean_yardage', 'xyac_median_yardage', 'xyac_success',
+                'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
+                'yards_gained', 'ydstogo', 'pos_is_home']
 
 gcols =  ['week', 'season', 'posteam', 'receiver_player_name']
 rec_sum = get_agg_stats(data, gcols, rec_sum_cols, 'sum', prefix='rec')
@@ -284,7 +285,7 @@ qb_sum_cols = ['shotgun', 'no_huddle', 'pass_attempt',
             'drive_time_of_possession']
 
 qb_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
-             'grass', 'synthetic', 'indoors', 'outdoors',
+           #  'grass', 'synthetic', 'indoors', 'outdoors',
              'td_prob', 'qb_epa', 'wp', 'wpa',
              'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
              'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',

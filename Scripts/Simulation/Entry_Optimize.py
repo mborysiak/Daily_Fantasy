@@ -12,55 +12,27 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 conn = dm.db_connect('Simulation')
 
+#%%
 #===============
 # Settings and User Inputs
 #===============
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16#, 17
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+   1
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,2022,2022,2022,2022,2022,2022,2022
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
+      2023
 ]
 
 
-# pred_vers = 'sera1_rsq0_mse0_brier1_matt0_bayes' 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
 
 reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
-million_ens_vers = 'kbest_matt0_brier1_include2_kfold3'
-
-# reg_ens_vers ='kbest_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'random_matt0_brier1_include2_kfold3'
-
-# reg_ens_vers ='random_kbest_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'kbest_matt0_brier1_include2_kfold3'
-
-# reg_ens_vers ='kbest_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'kbest_matt0_brier1_include2_kfold3'
-
-# reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'random_matt0_brier1_include2_kfold3'
-
-# reg_ens_vers ='random_kbest_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'random_full_stack_matt0_brier1_include2_kfold3'
-
-# reg_ens_vers ='random_kbest_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'random_full_stack_matt0_brier1_include2_kfold3'
-
-# reg_ens_vers ='kbest_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'kbest_matt0_brier1_include2_kfold3'
-
-# reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'random_full_stack_matt0_brier1_include2_kfold3'
-
-# reg_ens_vers ='kbest_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'random_full_stack_matt0_brier1_include2_kfold3'
-
-# reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'kbest_matt0_brier1_include2_kfold3'
+million_ens_vers = 'random_kbest_matt0_brier1_include2_kfold3'
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params_Detail", 'Results').values[0][0]
 trial_num = max_trial_num + 1
@@ -223,36 +195,37 @@ with keep.running() as m:
                         'min_player_same_team', 'min_players_opp_team', 'num_top_players', 
                         'ownership_vers', 'qb_min_iter', 'qb_set_max_team', 'qb_solo_start', 
                         'static_top_players', 'use_ownership', 'own_neg_frac', 
-                        'max_salary_remain', 'num_iters', 'num_avg_pts']
+                        'max_salary_remain', 'num_iters', 'num_avg_pts', 'qb_stack_wt']
 
             d = {'adjust_pos_counts': {False: 0.9, True: 0.1},
-                'covar_type': {'kmeans_pred_trunc': 0.5,
+                'covar_type': {'kmeans_pred_trunc': 0.0,
                                 'no_covar': 0.5,
-                                'team_points_trunc': 0},
-                'full_model_weight': {0.2: 0.7, 5: 0.3},
+                                'team_points_trunc': 0.5},
+                'full_model_weight': {0.2: 0.5, 5: 0.5},
                 'lineups_per_param': {1: 1.0},
-                'matchup_drop': {0: 0.7, 1: 0.2, 2: 0.1, 3: 0.0},
-                'matchup_seed': {0: 0.7, 1: 0.3},
-                'max_salary_remain': {300: 0, 500: 0.5, 1000: 0.5, 1500: 0},
-                'max_team_type': {'player_points': 0.4, 'vegas_points': 0.6},
-                'min_player_same_team': {2: 0.1, 3: 0.3, 'Auto': 0.6},
-                'min_players_opp_team': {1: 0.3, 2: 0.1, 'Auto': 0.6},
-                'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0, 5: 0.5, 7: 0.2, 10: 0.3},
+                'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
+                'matchup_seed': {0: 0.8, 1: 0.2},
+                'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
+                'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
+                'min_player_same_team': {2: 0.1, 3: 0.2, 'Auto': 0.7},
+                'min_players_opp_team': {1: 0.1, 2: 0.2, 'Auto': 0.7},
+                'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.3, 5: 0.3, 7: 0.0, 10: 0.4},
                 'num_iters': {50: 0.2, 100: 0.2, 150: 0.6},
-                'num_top_players': {2: 0.3, 3: 0.5, 4: 0.2, 5: 0.0},
-                'own_neg_frac': {0.8: 0.1, 1: 0.9},
-                'ownership_vers': {'mil_div_standard_ln': 0,
-                                    'mil_only': 0.7,
-                                    'mil_times_standard_ln': 0.1,
-                                    'standard_ln': 0.2},
+                'num_top_players': {2: 0.5, 3: 0.5, 5: 0.0},
+                'own_neg_frac': {0.8: 0.0, 1: 1.0},
+                'ownership_vers': {'mil_div_standard_ln': 0.0,
+                                    'mil_only': 0.5,
+                                    'mil_times_standard_ln': 0.2,
+                                    'standard_ln': 0.3},
                 'player_drop_multiple': {0: 0.4, 2: 0.2, 4: 0.4},
-                'qb_min_iter': {0: 0.2, 2: 0, 9: 0.8},
-                'qb_set_max_team': {0: 0.7, 1: 0.3},
-                'qb_solo_start': {False: 0.6, True: 0.4},
-                'static_top_players': {False: 0.7, True: 0.3},
-                'top_n_choices': {0: 0.8, 1: 0.1, 2: 0.1},
-                'use_ownership': {0.8: 0, 0.9: 0, 1: 1}}
-            
+                'qb_min_iter': {0: 0.0, 2: 0.0, 9: 1.0},
+                'qb_set_max_team': {0: 0.9, 1: 0.1},
+                'qb_solo_start': {False: 0.4, True: 0.6},
+                'qb_stack_wt': {1: 0.25, 2: 0.25, 3:0.25, 4:0.25},
+                'static_top_players': {False: 0.3, True: 0.7},
+                'top_n_choices': {0: 0.8, 1: 0.2, 2: 0.0},
+                'use_ownership': {0.8: 0.5, 0.9: 0.0, 1: 0.5}}
+                        
             lineups_per_param = int(d['lineups_per_param'][1])
 
             d = {k: d[k] for k in d_ordering}
@@ -272,7 +245,7 @@ with keep.running() as m:
                             full_model_rel_weight, covar_type, max_team_type, min_players_same_team, 
                             min_players_opp_team, num_top_players, ownership_vers, qb_min_iter, qb_set_max_team, qb_solo_start,
                             static_top_players, use_ownership, own_neg_frac, max_salary_remain, 
-                            num_iters, num_avg_pts, param_iter
+                            num_iters, num_avg_pts, qb_stack_wt, param_iter
                             ):
                 
                 try: min_players_opp_team = int(min_players_opp_team)
@@ -302,7 +275,8 @@ with keep.running() as m:
                                             salary_remain_max=max_salary_remain)
                     
 
-                    for i in range(9):
+                    i = 0  # Initialize the iteration counter
+                    while len(to_add) < 9 and i < 18:  # Use a while loop to control iterations and break if necessary
                         
                         to_drop = []
                         to_drop.extend(to_drop_selected)
@@ -313,7 +287,8 @@ with keep.running() as m:
                                                 own_neg_frac=own_neg_frac, ownership_vers=ownership_vers,
                                                 n_top_players=num_top_players, num_avg_pts=num_avg_pts,
                                                 static_top_players=static_top_players, qb_min_iter=qb_min_iter,
-                                                qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
+                                                qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start,
+                                                qb_stack_wt=qb_stack_wt)
                         
                         prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
                         try: 
@@ -321,7 +296,8 @@ with keep.running() as m:
                             to_add.append(selected_player)
                         except: 
                             pass
-                        
+
+                        i += 1  # Increment the iteration counter    
 
                     to_add.append(param_iter)
 
@@ -344,8 +320,8 @@ with keep.running() as m:
             #     sim_winnings(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i)
                 
         
-            par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i) for \
-                                                                           adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i in params)
+            par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, qbwt, param_i) for \
+                                                                           adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, qbwt, param_i in params)
 
             weighted_winnings = avg_winnings_contest(par_out)
             cur_week_avg_winnings = np.sum(weighted_winnings)
@@ -376,7 +352,7 @@ with keep.running() as m:
 
 #%%
 
-to_delete_num=291
+to_delete_num=321
 df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
 dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
 
@@ -394,7 +370,7 @@ dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 
 df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
 add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
-add_on = add_on.assign(param='num_avg_pts', param_option=1, option_value=1)
+add_on = add_on.assign(param='qb_stack_wt', param_option=2, option_value=1)
 add_on = add_on[df.columns]
 
 df = pd.concat([df, add_on], axis=0)
@@ -403,12 +379,12 @@ df = df.sort_values(by='trial_num')
 # # df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
 # dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
 
-# #%%
+#%%
 
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'Results')
-# df['num_avg_pts'] = 1
-# # df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'Results')
+df['qb_stack_wt'] = 2
+# df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
 # dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
 
 #%%

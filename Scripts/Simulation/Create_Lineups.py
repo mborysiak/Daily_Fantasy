@@ -16,12 +16,12 @@ conn = dm.db_connect('Simulation')
 # Settings and User Inputs
 #===============
 
-year=2022
-week=2
+year=2023
+week=1
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 50
+num_lineups = 150
 set_max_team = None
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
@@ -102,7 +102,7 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'Results')
     return vers
 
-best_trials = 298
+best_trials = 293
 
 opt_params = pull_best_params(best_trials)
 pprint.pprint(opt_params)
@@ -197,7 +197,8 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_seed, matchup_dr
                                 salary_remain_max=max_salary_remain)
         
 
-        for i in range(9):
+        i = 0  # Initialize the iteration counter
+        while len(to_add) < 9 and i < 18:  # Use a while loop to control iterations and break if necessary
             
             to_drop = []
             to_drop.extend(to_drop_selected)
@@ -216,6 +217,7 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_seed, matchup_dr
                 to_add.append(selected_player)
             except: 
                 pass
+            i += 1
 
         lineups.append(to_add)
         total_add.extend(to_add)
@@ -295,7 +297,10 @@ lineups = lineups.sample(frac=1)
 
 dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={week}', create_backup=False)
 for j, i in enumerate(lineups.TeamNum.unique()):
-    create_database_output(lineups[lineups.TeamNum==i], j)
+    if len(lineups[lineups.TeamNum==i]) == 9:
+        create_database_output(lineups[lineups.TeamNum==i], j)
+    else:
+        print('Incomplete Lineup')
 
 # %%
 import datetime as dt
@@ -309,6 +314,7 @@ run_params_dict = {
     'std_dev_type': [std_dev_type],
     'million_ens_vers': [million_ens_vers]
 }
+
 for param, param_options in d.items():
     param_vars = list(param_options.keys())
     param_prob = list(param_options.values())

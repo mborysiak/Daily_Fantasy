@@ -423,7 +423,8 @@ def entry_optimize_params(df, max_adjust, model_name):
         str_cols.extend( ['player_drop_multiple','top_n_choices', 'matchup_drop', 'adjust_pos_counts', 
                          'full_model_weight', 'max_lineup_num', 'use_ownership', 'own_neg_frac',
                          'num_top_players', 'static_top_players', 'num_iters',
-                         'qb_min_iter', 'qb_solo_start', 'qb_set_max_team', 'num_avg_pts'])
+                         'qb_min_iter', 'qb_solo_start', 'qb_set_max_team', 'num_avg_pts',
+                         'qb_stack_wt'])
     df[str_cols] = df[str_cols].astype('str')
 
     df = df.drop(['trial_num', 'lineup_num'], axis=1)
@@ -450,7 +451,7 @@ df = dm.read('''SELECT *
                       AND week != 8
                     --  AND week != 14
                      -- AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
-                     AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
+                     --AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
                   --  AND million_ens_vers='kbest_matt0_brier1_include2_kfold3'
                 ''', 'Results')
 
@@ -471,8 +472,12 @@ show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,]
-years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022]
+weeks = [1, 2, 3, 4, 5, 6, 7,# 8, 
+         9, 10, 11, 12, 13, 14, 15, 16,
+         1]
+years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, #2022, 
+         2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+         2023]
 
 i=0
 all_coef = None; X_all = None
@@ -486,7 +491,7 @@ for w, yr in zip(weeks, years):
                      WHERE trial_num >= 269
                            AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                            --AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
-                           AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'          
+                           --AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'          
                            --AND million_ens_vers IN ('random_matt0_brier1_include2_kfold3', 'random_kbest_matt0_brier1_include2_kfold3')
                            AND week = {w}
                            AND year = {yr}

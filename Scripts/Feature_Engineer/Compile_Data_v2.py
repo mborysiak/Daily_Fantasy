@@ -10,6 +10,8 @@ import numpy as np
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
 import ff.data_clean as dc
+import warnings
+warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -83,35 +85,25 @@ def add_rolling_stats(df, gcols, rcols, perform_check=True):
     return df
 
 
-# def switch_seasons(df):
-
-#     # any seasons 2020 or earlier when it was a 17 week season, convert week 17 to the first week of the next year
-#     # note that the year is +1 and week is set to one in a single step
-#     len_ones = np.array([1]*df.loc[(df.week==17) & (df.year <= 2020)].shape[0])
-#     print(len(len_ones), len(df.loc[(df.week==17) & (df.year <= 2020), 'year']))
-#     df.loc[(df.week==17) & (df.year <= 2020), ['year', 'week']] = [df.loc[(df.week==17) & (df.year <= 2020), 'year'] + 1, len_ones]
-    
-#     # for any seasons after 2020, set week 18 to the following year first week.
-#     # however, don't do the conversion for the current year since you need to keep current week for this year's predictions
-#     len_ones = [1]*df.loc[(df.week==18) & (df.year < 2021) & (df.year != YEAR)].shape[0]
-#     df.loc[(df.week==18) & (df.year >= 2021) & (df.year != YEAR), ['year', 'week']] = \
-#         df.loc[(df.week==18) & (df.year >= 2021) & (df.year != YEAR), 'year'] + 1, len_ones
-
-#     return df
-
 def switch_seasons(df):
 
-    # any seasons 2020 or earlier when it was a 17 week season, convert week 17 to the first week of the next year
-    # note that the year is +1 and week is set to one in a single step
-    idx = df.loc[(df.week==17) & (df.year <= 2020)].index
+    # use week 16 (adjusted to 17 prior to input) as the next season week.
+    # must switch if running week 17 of current year
+    idx = df.loc[(df.week==17) & (df.year != YEAR)].index
     df.loc[idx, 'year'] = df.loc[idx, 'year'] + 1
     df.loc[idx, 'week'] = 1
+
+    # # any seasons 2020 or earlier when it was a 17 week season, convert week 17 to the first week of the next year
+    # # note that the year is +1 and week is set to one in a single step
+    # idx = df.loc[(df.week==17) & (df.year <= 2020)].index
+    # df.loc[idx, 'year'] = df.loc[idx, 'year'] + 1
+    # df.loc[idx, 'week'] = 1
     
-    # for any seasons after 2020, set week 18 to the following year first week.
-    # however, don't do the conversion for the current year since you need to keep current week for this year's predictions
-    idx = df.loc[(df.week==18) & (df.year >= 2021) & (df.year != YEAR)].index
-    df.loc[idx, 'year'] = df.loc[idx, 'year'] + 1
-    df.loc[idx, 'week'] = 1
+    # # for any seasons after 2020, set week 18 to the following year first week.
+    # # however, don't do the conversion for the current year since you need to keep current week for this year's predictions
+    # idx = df.loc[(df.week==18) & (df.year >= 2021) & (df.year != YEAR)].index
+    # df.loc[idx, 'year'] = df.loc[idx, 'year'] + 1
+    # df.loc[idx, 'week'] = 1
 
     return df
 
@@ -141,13 +133,13 @@ def find_bye_weeks():
                        ) WHERE ranks=1
                        ''', 'Pre_PlayerData')
     
-    # fix the cancelled game due to injury
-    cin_buf_fix = pd.DataFrame({'team': ['CIN','BUF'],
-                            'week': [17, 17],
-                            'year': [2022, 2022],
-                            'next_week': [18, 18]})
-
-    return pd.concat([df, cin_buf_fix], axis=0).reset_index(drop=True)
+    # # fix the cancelled game due to injury
+    # cin_buf_fix = pd.DataFrame({'team': ['CIN','BUF'],
+    #                         'week': [17, 17],
+    #                         'year': [2022, 2022],
+    #                         'next_week': [18, 18]})
+    # df = pd.concat([df, cin_buf_fix], axis=0).reset_index(drop=True)
+    return df
 
 
 def fix_bye_week(df):
@@ -548,8 +540,7 @@ def te_matchups(df):
                            FROM PFF_TE_Matchups
     ''', 'Pre_PlayerData')
     matchups = name_cleanup(matchups)
-    matchups = matchups.sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
-    matchups = matchups.groupby('player', as_index=False).fillna(method='ffill')
+    matchups = forward_fill(matchups)
 
     for c, f in zip(['offGrade', 'defGrade'], [60, 60]):
         matchups[c] = matchups[c].fillna(f)
@@ -1069,8 +1060,9 @@ def add_next_gen(df, stat_type):
 def get_defense_stats():
     d_stats = dm.read(f'''SELECT * 
                         FROM Defense_Stats 
-                        WHERE (season = 2020 AND week != 17)
-                               OR (season >=2021 AND week != 18)
+                        WHERE week < 17
+                        --WHERE (season = 2020 AND week != 17)
+                        --       OR (season >=2021 AND week != 18)
                               ''', 'FastR')
     d_stats = d_stats.rename(columns={'season': 'year', 'defteam': 'team' })
 
@@ -1534,10 +1526,11 @@ def pff_defense_rollup():
     def_players = def_players.rename(columns={'position': 'pos'})
 
     all_cols = ['player', 'team', 'week', 'year', 'pos', 'player_game_count', 
-            'snap_counts_defense', 'snap_counts_coverage', 'snap_counts_pass_rush',
-            'grades_coverage_defense', 'grades_defense',  
-            'grades_pass_rush_defense', 'grades_run_defense', 'grades_tackle',
-            'hits', 'hurries', 'qb_rating_against', 'interceptions']
+                'snap_counts_defense', 'snap_counts_coverage', 'snap_counts_pass_rush',
+                'grades_coverage_defense', 'grades_defense',  
+                'grades_pass_rush_defense', 'grades_run_defense', 'grades_tackle',
+                'hits', 'hurries', 'qb_rating_against', 'interceptions']
+                
     def_players = def_players.loc[~def_players.pos.isnull(), all_cols].reset_index(drop=True)
     def_players = def_players.fillna(def_players.mean())
 
@@ -2016,6 +2009,7 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     if pos!= 'QB': df = pd.merge(df, team_qb, on=['team', 'week', 'year'], how='left'); print(df.shape[0])
     df = pd.merge(df, team_stats, on=['team', 'week', 'year']); print( df.shape[0])
     df = pd.merge(df, team_proj, on=['team', 'week', 'year']); print( df.shape[0])
+    
     if pos != 'QB': df = pd.merge(df, team_proj_pos, on=['pos', 'team', 'week', 'year']); print( df.shape[0])
     df = pd.merge(df, opp_defense, on=['defTeam', 'week', 'year']); print(df.shape[0])
     df = pd.merge(df, pff_oline, on=['team', 'week', 'year']); print(df.shape[0])
@@ -2129,9 +2123,9 @@ defense = remove_low_corrs(defense, corr_cut=0.02)
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 #%%
 
-chk_week = 17
+chk_week = 1
 backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={chk_week} AND year={YEAR}", 'Model_Features').player.values
-sal = dm.read(f"SELECT player, salary FROM Salaries WHERE league={chk_week} AND year={YEAR}", 'Simulation')
+sal = dm.read(f"SELECT player, salary FROM Salaries WHERE week={chk_week} AND year={YEAR}", 'Simulation')
 sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
 
 #%%

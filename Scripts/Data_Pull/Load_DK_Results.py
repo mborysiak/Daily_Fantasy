@@ -12,16 +12,19 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
-set_year = 2022
-set_week = 18
+set_year = 2023
+set_week = 1
 
-download_path = '//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/Mborysiak/DK/'
-extract_path = download_path + f'Results/{set_year}/'
+download_path = f'c:/Users/borys/Downloads/week{set_week}.csv'
+save_path = f'c:/Users/borys/OneDrive/Documents/Github/Daily_Fantasy/Data/OtherData/DK_Results/{set_year}/week{set_week}.csv'
 
+try:os.replace(download_path, save_path)
+except: print('File moved or does not exist')
 
-def read_in_csv(extract_path, contest, set_week, set_year):
+#%%
+def read_in_csv(save_path, set_week, set_year):
 
-    df = pd.read_csv(f'{extract_path}/{contest}/week{set_week}.csv', low_memory=False)
+    df = pd.read_csv(save_path, low_memory=False)
     df['week'] = set_week
     df['year'] = set_year
 
@@ -257,15 +260,17 @@ def add_actual():
 
 pts = add_actual()
 
-#%%
+##%%
 
 for contest in ['Million']:#, 'ThreePointStance', 'ScreenPass']:
-    dk_data = read_in_csv(extract_path, contest, set_week, set_year)
+    dk_data = read_in_csv(save_path, set_week, set_year)
     full_entries, player_ownership = entries_ownership(dk_data)
     prizes, num_entries = get_prizes(contest)
     
     if num_entries < full_entries.shape[0]:
-        full_entries = full_entries.sample(num_entries).sort_values(by='Points', ascending=False).reset_index(drop=True)
+        top_entries = full_entries[full_entries.Rank <= 200].copy()
+        full_entries = full_entries[full_entries.Rank > 200].sample(num_entries-200).sort_values(by='Points', ascending=False).reset_index(drop=True)
+        full_entries = pd.concat([top_entries, full_entries], axis=0).reset_index(drop=True)
 
     full_entries = add_pct_rank(full_entries)
 

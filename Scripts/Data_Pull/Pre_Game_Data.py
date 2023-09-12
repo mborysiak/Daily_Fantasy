@@ -176,7 +176,7 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
 # # PFF Rankings + Projections
 
 def pff_rank(label_pre, label_post, folder):
-    
+
     try:
         os.replace(f"/Users/borys/Downloads/{label_pre}.csv", 
                    f'{root_path}/Data/OtherData/{folder}/{set_year}/{label_post}_week{set_week}.csv')
@@ -208,7 +208,7 @@ rank1_pl.Name = rank1_pl.Name.apply(dc.name_clean)
 rank1_pl = rank1_pl.rename(columns={'Name': 'player'})
 
 all_df = pd.DataFrame()
-for p in ['QB']:#, 'RB', 'WR', 'TE']:
+for p in ['QB', 'RB', 'WR', 'TE']:
     base_df = rank1_pl[rank1_pl.Position==p].copy().reset_index(drop=True)
 
     for c in ['expertConsensus', 'expertNathanJahnke']:
@@ -256,15 +256,14 @@ proj_pl, proj_tm = pff_proj('projections', 'projections', 'pff_proj')
 proj_pl.playerName = proj_pl.playerName.apply(dc.name_clean)
 proj_pl = proj_pl.rename(columns={'playerName': 'player'})
 
-proj_pl
 
-# tables = ['Proj', 'Proj']
-# dfs = [proj_pl, proj_tm]
-# dbs = ['Pre_PlayerData', 'Pre_TeamData']
+tables = ['Proj', 'Proj']
+dfs = [proj_pl, proj_tm]
+dbs = ['Pre_PlayerData', 'Pre_TeamData']
 
-# for t, d, db in zip(tables, dfs, dbs):
-#     dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}")
-#     dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
+for t, d, db in zip(tables, dfs, dbs):
+    dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}")
+    dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
 
 
 #%%
@@ -284,8 +283,8 @@ cols = dm.read("SELECT * FROM FFA_RawStats", 'Pre_PlayerData').columns
 df = df[cols]
 dm.write_to_db(df, 'Pre_PlayerData', 'FFA_RawStats', 'append')
 
-#%%
 
+#%%
 # pull fftoday rankings
 output = pd.DataFrame()
 for pos in ['QB', 'RB', 'WR', 'TE']:
@@ -293,6 +292,8 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     output = pd.concat([output, df], axis=0, sort=False)
 output = output.fillna(0)
 output = dc.convert_to_float(output)
+output.player = output.player.apply(dc.name_clean)
+output.team = output.team.map(team_map)
 
 dm.delete_from_db('Pre_PlayerData', 'FFToday_Projections', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(output, 'Pre_PlayerData', 'FFToday_Projections', 'append')
@@ -553,7 +554,7 @@ for _, row in city_data.iterrows():
                                     (ice_prob > rain_prob) & (ice_prob > snow_prob)],
                                     ['rain', 'snow', 'ice'], None
                                     )
-
+            precip_type = np.where(precip_prob < 0.1, None, precip_type)
             wind_speed = d[day_or_night]['Wind']['Speed']['Value']
             wind_gust = d[day_or_night]['WindGust']['Speed']['Value']
             uv_index = d['AirAndPollen'][-1]['Value']
@@ -574,7 +575,7 @@ weather_df['week'] = set_week
 
 #%%
 dm.delete_from_db('Pre_TeamData', 'Game_Weather', f"week={set_week} and year={set_year}")
-dm.write_to_db(weather, 'Pre_TeamData', 'Game_Weather', if_exist='append')
+dm.write_to_db(weather_df, 'Pre_TeamData', 'Game_Weather', if_exist='append')
 
 #%%
 # # PFR Position Matchups

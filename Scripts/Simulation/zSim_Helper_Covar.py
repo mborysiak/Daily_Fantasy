@@ -271,13 +271,13 @@ class FootballSimulation:
         return matchups
 
     @staticmethod
-    def get_min_players(min_players_same_team_input):
+    def get_min_players(min_players_same_team_input, qb_stack_wt):
         if min_players_same_team_input=='Auto': 
                 min_players_same_team= np.random.choice([-1, 2, 3, 4], p=[0.1, 0.55, 0.3, 0.05])
         else:
             min_players_same_team = min_players_same_team_input
 
-        min_players_same_team += 1
+        min_players_same_team += (qb_stack_wt - 1)
 
         return min_players_same_team
 
@@ -570,10 +570,10 @@ class FootballSimulation:
         return mean_own
 
     @staticmethod
-    def create_G_team(team_map, player_map):
+    def create_G_team(team_map, player_map, qb_stack_wt):
 
         pos_wt = {
-            'QB': -2,
+            'QB': -qb_stack_wt,
             'WR': -1,
             'TE': -1,
             'RB': -0.5,
@@ -768,7 +768,7 @@ class FootballSimulation:
                 min_players_opp_team_input=0, adjust_select=False, max_team_type='player_points',
                 num_matchup_drop=0, own_neg_frac=1, n_top_players=5, ownership_vers='standard_ln',
                 static_top_players=True, qb_min_iter=9, qb_set_max_team=False, qb_solo_start=True,
-                num_avg_pts=1):
+                num_avg_pts=1, qb_stack_wt=2):
         
         # can set as argument, but static set for now
         self.conn = conn
@@ -804,7 +804,7 @@ class FootballSimulation:
 
         for i in range(self.num_iters):
 
-            min_players_same_team = self.get_min_players(min_players_same_team_input)
+            min_players_same_team = self.get_min_players(min_players_same_team_input, qb_stack_wt)
             min_player_opp_team = self.get_min_players_opp_team(min_players_opp_team_input)
             
             if i ==0:
@@ -860,7 +860,7 @@ class FootballSimulation:
                 G_players = self.create_G_players(player_idx_map)
                 h_players = self.create_h_players(player_idx_map, h_player_add)
 
-                G_teams = self.create_G_team(team_map, idx_player_map)
+                G_teams = self.create_G_team(team_map, idx_player_map, qb_stack_wt)
         
             # generate the c matrix with the point values to be optimized
             self.labels, self.c_points = self.sample_c_points(predictions, num_options, num_avg_pts)
@@ -942,17 +942,17 @@ class FootballSimulation:
 # conn = sqlite3.connect(f'c:/Users/borys/OneDrive/Documents/GitHub/Daily_Fantasy/Data/Databases/Simulation.sqlite3')
 
 # adjust_select = True
-# matchup_drop = 1
+# matchup_drop = 0
 # full_model_weight = 0.2
 # covar_type = 'kmeans_pred_trunc'
 # max_team_type = 'player_points'
 # use_covar = True
-# min_players_same_team = 'Auto'
+# min_players_same_team = 3
 # min_players_opp_team = 'Auto'
 # top_n_players = 3
 # qb_min_iter = 2
 # qb_solo_start = True
-# qb_set_max_team = True
+# qb_set_max_team = False
 # static_top_players = False
 # use_ownership = 1
 # own_neg_frac = 1
@@ -963,7 +963,7 @@ class FootballSimulation:
 # reg_ens_vers ='random_kbest_sera0_rsq0_mse1_include2_kfold3'
 # std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
 # million_vers = 'random_kbest_matt0_brier1_include2_kfold3'
-# ownership_vers = 'standard_ln'
+# ownership_vers = 'mil_only'
 
 # week = 9
 # year = 2022
@@ -977,7 +977,7 @@ class FootballSimulation:
 #                          use_ownership=use_ownership, salary_remain_max=salary_remain_max, matchup_seed=False)
 
 
-# to_add = []
+# to_add = ['Joe Burrow']
 # to_drop = []
 
 # results, max_team_cnt = sim.run_sim(conn, to_add, to_drop, min_players_same_team, set_max_team, 
@@ -985,7 +985,8 @@ class FootballSimulation:
 #                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
 #                                     n_top_players=top_n_players, static_top_players=static_top_players,
 #                                      qb_solo_start=qb_solo_start, ownership_vers=ownership_vers,
-#                                     qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter, num_avg_pts=5)
+#                                     qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter, num_avg_pts=5,
+#                                     qb_stack_wt=1)
 
 # print(max_team_cnt)
 # results

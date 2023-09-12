@@ -835,7 +835,7 @@ def get_newest_folder_with_keywords(path, keywords, ignore_keywords=None, req_fn
 def get_trial_times(root_path, fname, run_params, set_pos, model_type):
 
     newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
-    keep_words = [set_pos, model_type, run_params['pred_vers'], '_week2_']
+    keep_words = [set_pos, model_type, run_params['pred_vers']]
     drop_words = [f"_week{run_params['set_week']}_"]
     recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
 
@@ -904,7 +904,7 @@ def get_trials(fname, final_m, bayes_rand):
 
     return trials
 
-def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials):
+def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million):
 
     print(f'\n{final_m}')
 
@@ -912,7 +912,10 @@ def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_
     proba, run_adp, print_coef = get_proba_adp_coef(model_obj, final_m, run_params)
 
     skm, _, _ = get_skm(pd.concat([X_stack, y_stack], axis=1), model_obj, to_drop=[])
-    pipe, params = get_full_pipe(skm, final_m, stack_model=run_params['stack_model'], alpha=alpha, 
+
+    if is_million: sm = run_params['stack_model_million']
+    else: sm = run_params['stack_model']
+    pipe, params = get_full_pipe(skm, final_m, stack_model=sm, alpha=alpha, 
                                  min_samples=min_samples, bayes_rand=run_params['opt_type'])
     
     trials = get_trials(fname, final_m, run_params['opt_type'])
@@ -1006,7 +1009,7 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
         
         results = Parallel(n_jobs=-1, verbose=50)(
                         delayed(run_stack_models)
-                        (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials) 
+                        (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million) 
                         for final_m, i, model_obj, alpha in func_params
                         )
 
@@ -1112,7 +1115,7 @@ globals().update(config)
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2022,
+    'set_year': 2023,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -1120,7 +1123,8 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_full_stack',
+    'stack_model': 'random_kbest',
+    'stack_model_million': 'random_kbest',
 
     # opt params
     'opt_type': 'bayes',
@@ -1138,6 +1142,7 @@ run_params = {
 }
 
 s_mod = run_params['stack_model']
+mil_mod = run_params['stack_model_million']
 min_inc = run_params['min_include']
 kfold = run_params['num_k_folds']
 
@@ -1150,13 +1155,13 @@ matt_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [17]
+set_weeks = [1]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
 class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
-million_ens_vers = f"{s_mod}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
+million_ens_vers = f"{mil_mod}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
 
 run_params['pred_vers'] = pred_vers
 run_params['reg_ens_vers'] = reg_ens_vers
@@ -1256,6 +1261,15 @@ with keep.running() as m:
 
             X_stack_mil = add_sal_columns(X_stack_mil, df_train_mil)
             X_predict_mil = add_sal_columns(X_predict_mil, df_predict_mil)
+
+            # if set_pos == 'TE' and model_type == 'backfill': 
+            #     y_stack_mil = pd.merge(y_stack_mil[y_stack_mil.player!='Ryan Griffin'], 
+            #                         X_stack_mil[['player', 'week', 'year']], 
+            #                         on=['player', 'week', 'year']).reset_index(drop=True)
+                
+            #     X_stack_mil = pd.merge(X_stack_mil, 
+            #                         y_stack_mil.loc[y_stack_mil.player!='Ryan Griffin', ['player','week', 'year']], 
+            #                         on=['player', 'week', 'year']).reset_index(drop=True)
 
             X_predict_mil = X_predict_mil.drop(['player', 'team', 'week', 'year'], axis=1)
             X_stack_mil = X_stack_mil.drop(['player', 'team', 'week', 'year'], axis=1)
@@ -1397,3 +1411,61 @@ get_stack_predict_data(df_train, df_predict, df, run_params, models_reg, _, _)
 
 models_reg['reg_bridge']
 # %%
+
+model_obj ='class'
+is_million=True
+
+X_stack = X_stack_mil.copy()
+y_stack = y_stack_mil.copy()
+X_predict = X_predict_mil.copy()
+
+if model_obj=='reg': ens_vers = run_params['reg_ens_vers']
+elif model_obj=='class': ens_vers = run_params['class_ens_vers']
+elif model_obj=='quantile': ens_vers = run_params['quant_ens_vers']
+
+if is_million: 
+    model_obj_label = 'million'
+    ens_vers = run_params['million_ens_vers']
+else: 
+    model_obj_label = model_obj
+
+path = run_params['model_output_path']
+fname = f"{model_obj_label}_{ens_vers}"    
+model_list, func_params = get_func_params(model_obj, alpha)
+
+try:
+    time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type)
+    print(time_per_trial)
+    num_trials = calc_num_trials(time_per_trial, run_params)
+except: 
+    num_trials = {m: run_params['n_iters'] for m in model_list}
+print(num_trials)
+
+print(path, fname)
+
+if os.path.exists(f"{path}/{fname}.p"):
+    best_models, scores, stack_val_pred = load_stack_runs(path, fname)
+
+else:
+    
+    # results = Parallel(n_jobs=-1, verbose=50)(
+    #                 delayed(run_stack_models)
+    #                 (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials) 
+    #                 for final_m, i, model_obj, alpha in func_params
+    #                 )
+    
+    for final_m, i, model_obj, alpha in func_params:
+        print(final_m)
+        run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials) 
+                    
+                    
+
+    best_models, scores, stack_val_pred, trials = unpack_results(model_list, results)
+    save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
+    
+X_predict = X_predict[X_stack.columns]
+predictions = stack_predictions(X_predict, best_models, model_list, model_obj=model_obj)
+best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack, stack_val_pred, 
+                                                        predictions, model_obj=model_obj, 
+                                                        show_plot=run_params['show_plot'], 
+                                                        min_include=run_params['min_include'])
