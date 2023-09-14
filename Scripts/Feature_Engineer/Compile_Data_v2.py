@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2023
-WEEK = 1
+WEEK = 2
 
 #%%
 
@@ -582,8 +582,10 @@ def get_player_data(df, pos):
 
     player_data = dm.read(f'''SELECT * 
                               FROM {pos}_Stats 
-                              WHERE (season = 2020 AND week != 17)
-                                     OR (season >=2021 AND week != 18)
+                              WHERE week < 17
+                                    AND season >= 2020
+                              --WHERE (season = 2020 AND week != 17)
+                              --       OR (season >=2021 AND week != 18)
                                 ''', 'FastR')
 
     if pos=='QB':
@@ -687,8 +689,10 @@ def pos_rank_stats(df, team_pos_rank, pos):
     
     pos_stats = dm.read(f'''SELECT * 
                             FROM {pos}_Stats 
-                            WHERE (season = 2020 AND week != 17)
-                                    OR (season >=2021 AND week != 18)
+                            WHERE week < 17
+                                  AND season >= 2020
+                            --WHERE (season = 2020 AND week != 17)
+                            --        OR (season >=2021 AND week != 18)
                             ''', 'FastR')
     pos_stats = pos_stats.rename(columns={'season': 'year'})
 
@@ -2123,7 +2127,7 @@ defense = remove_low_corrs(defense, corr_cut=0.02)
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 #%%
 
-chk_week = 1
+chk_week = 2
 backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={chk_week} AND year={YEAR}", 'Model_Features').player.values
 sal = dm.read(f"SELECT player, salary FROM Salaries WHERE week={chk_week} AND year={YEAR}", 'Simulation')
 sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]

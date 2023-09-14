@@ -9,8 +9,8 @@ from DataPull_Helper import *
 pd.set_option('display.max_columns', 999)
 
 # +
-set_year = 2022
-set_week = 18
+set_year = 2023
+set_week = 1
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -236,7 +236,7 @@ qb['wins'] = qb.QBrec.apply(lambda x: float(x.split('-')[0]))
 qb['losses'] = qb.QBrec.apply(lambda x: float(x.split('-')[1]))
 qb['ties'] = qb.QBrec.apply(lambda x: float(x.split('-')[2]))
 
-qb = qb.drop('QBrec', axis=1)
+qb = qb.drop(['QBrec', 'Succ_pct'], axis=1)
 qb = qb.fillna(0)
 
 #------------
@@ -245,7 +245,7 @@ qb = qb.fillna(0)
 
 for pos in ['rb', 'wr']:
     try:
-        os.replace(f"/Users/mborysia/Downloads/{pos}_week{set_week}.csv", 
+        os.replace(f"/Users/borys/Downloads/{pos}_week{set_week}.csv", 
                 f'{root_path}/Data/OtherData/pfr_adv_stats/{set_year}/{pos}_week{set_week}.csv')
     except: 
         pass
@@ -323,7 +323,7 @@ dm.write_to_db(snaps, 'Post_PlayerData', f'Snap_Counts', 'append')
 
 #%%
 
-df = pd.read_html('https://www.fantasypros.com/nfl/reports/snap-counts/?year=2022')[0]
+df = pd.read_html(f'https://www.fantasypros.com/nfl/reports/snap-counts/?year={set_year}')[0]
 df = pd.melt(df, id_vars=['Player', 'Pos', 'Team'])
 df = df[~df.variable.isin(['AVG', 'TTL'])].dropna().reset_index(drop=True)
 df.columns = ['player', 'pos', 'team', 'week', 'snap_counts']
@@ -387,7 +387,7 @@ dm.write_to_db(qbr, 'Post_PlayerData', 'ESPN_QBR', 'append')
 #-----------
 
 try:
-    os.replace(f"/Users/mborysia/Downloads/defense_summary.csv", 
+    os.replace(f"/Users/borys/Downloads/defense_summary.csv", 
                 f'{root_path}/Data/OtherData/PFF_Defense/{set_year}/defense_summary_week{set_week}.csv')
 except: 
     pass
@@ -406,7 +406,7 @@ dm.write_to_db(df, 'Post_PlayerData', 'Defense_Players', 'append')
 # %%
 
 try:
-    os.replace(f"/Users/mborysia/Downloads/offense_blocking.csv", 
+    os.replace(f"/Users/borys/Downloads/offense_blocking.csv", 
                 f'{root_path}/Data/OtherData/PFF_Offensive_Line/{set_year}/offense_blocking_week{set_week}.csv')
 except: 
     pass
@@ -430,7 +430,7 @@ def save_pff_stats(stat_type, set_week, set_year):
     elif stat_type=='Rush': fname='rushing'
 
     try:
-        os.replace(f"/Users/mborysia/Downloads/{fname}_summary.csv", 
+        os.replace(f"/Users/borys/Downloads/{fname}_summary.csv", 
                    f'{root_path}/Data/OtherData/PFF_{stat_type}_Stats/{set_year}/{fname}_summary_week{set_week}.csv')
     except: 
         pass
@@ -451,52 +451,126 @@ for stat_type in ['QB', 'Rec', 'Rush']:
 
 # %%
 
-import requests
-import pandas as pd
-
-def get_next_gen(data_type, year, week):
-    headers = {
-        'accept': 'application/json, text/plain, */*',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
-        'referer': 'https://nextgenstats.nfl.com/',
-        'accept-language': 'en-US,en;q=0.9,hi;q=0.8',
-    }
-
-    response = requests.get(f'https://appapi.ngs.nfl.com/statboard/{data_type}?season={year}&seasonType=REG&week={week}', headers=headers)
-
-    df = pd.read_json(response.content)
-
-    return df
-
-
-
-for stat_type in ['receiving', 'rushing', 'passing']:
-
-    next_gen_data = get_next_gen(stat_type, set_year, set_week)
-
-    all_stats = []
-    if stat_type == 'receiving': ignore = ('player', 'recTouchdowns', 'receptions', 'targets', 'yards', 'teamId')
-    elif stat_type == 'rushing': ignore = ('player', 'rushTouchdowns', 'rushYards', 'rushAttempts', 'teamId')
-    elif stat_type == 'passing': ignore = ('player', 'attempts', 'gamesPlayed', 'interceptions', 'nflId', 'season', 'seasonType', 'week', 'teamId', 'completions')
-
-    for i, x in enumerate(next_gen_data.stats.values):
-        parse_dict = {k:v for k,v in x.items() if k not in ignore}
-        if i==0: 
-            cols = list(parse_dict.keys())
-            if stat_type == 'rushing': cols.append('playerName')
+for stat_type in ['passing', 'rushing', 'receiving']:
         
-        parse_list = list(parse_dict.values())
-        if stat_type == 'rushing': 
-            parse_list.append(x['player']['displayName'])
+    try:
+        os.replace(f"/Users/borys/Downloads/{stat_type}_week{set_week}.csv",
+                f'{root_path}/Data/OtherData/Next_Gen_Stats/{set_year}/{stat_type}_week{set_week}.csv')
+    except:
+        pass
 
-        all_stats.append(parse_list)
+    df = pd.read_csv(f'{root_path}/Data/OtherData/Next_Gen_Stats/{set_year}/{stat_type}_week{set_week}.csv')
 
-    next_gen = pd.DataFrame(all_stats, columns=cols).rename(columns={'playerName': 'player', 'position': 'pos'})
-    next_gen = next_gen.dropna()
-    next_gen.player = next_gen.player.apply(dc.name_clean)
-    next_gen = next_gen.assign(week=set_week, year=set_year)
+    if stat_type=='passing':
     
+        df = df.rename(columns={
+            'AGG%': 'aggressiveness',
+            'AYD': 'avgAirYardsDifferential',
+            'AYTS': 'avgAirYardsToSticks',
+            'CAY': 'avgCompletedAirYards',
+            'IAY': 'avgIntendedAirYards',
+            'TT': 'avgTimeToThrow',
+            'COMP%': 'completionPercentage',
+            'xCOMP%': 'expectedCompletionPercentage',
+            '+/-': 'completionPercentageAboveExpectation',
+            'LCAD': 'maxCompletedAirDistance',
+            'TD': 'passTouchdowns',
+            'YDS': 'passYards',
+            'RATE': 'passerRating',
+            'PLAYER NAME': 'player'
+        })
+
+        df = df.assign(pos='QB', week=set_week, year=set_year)
+        df = df.drop(['TEAM', 'ATT', 'INT'], axis=1)
+
+    elif stat_type=='rushing':
+        df = df.rename(columns={
+            'PLAYER NAME': 'player',
+            'TLOS': 'avgTimeToLos',
+            'ROE%': 'rushPctOverExpected',
+            'RYOE': 'rushYardsOverExpected',
+            'RYOE/ATT': 'rushYardsOverExpectedPerAtt',
+            'EFF': 'efficiency',
+            '8+D%': 'percentAttemptsGteEightDefenders',
+            'AVG': 'avgRushYards'
+        })
+        df['expectedRushYards'] = df.YDS - df.rushYardsOverExpected
+        df['percentAttemptsGteEightDefenders'] = df.percentAttemptsGteEightDefenders.apply(lambda x: float(str(x).replace('--', '0')))
+        df = df.assign(week=set_week, year=set_year)
+        df = df.drop(['TEAM', 'ATT', 'YDS', 'TD'], axis=1)
+
+    elif stat_type=='receiving':
+
+        df = df.rename(columns={
+            'PLAYER NAME': 'player',
+            'CUSH': 'avgCushion',
+            'xYAC/R': 'avgExpectedYAC',
+            'TAY': 'avgIntendedAirYards',
+            'SEP': 'avgSeparation',
+            'YAC/R': 'avgYAC',
+            '+/-': 'avgYACAboveExpectation',
+            'CTCH%': 'catchPercentage',
+            'TAY%': 'percentShareOfIntendedAirYards',
+            'POS': 'pos'
+        })
+        df = df.assign(week=set_week, year=set_year)
+        df = df.drop(['TEAM', 'REC', 'YDS', 'TD', 'TAR'], axis=1)
+
+
     dm.delete_from_db('Post_PlayerData', f'NextGen_{stat_type.title()}', f"year={set_year} AND week={set_week}")
-    dm.write_to_db(next_gen, 'Post_PlayerData', f'NextGen_{stat_type.title()}', 'append')
+    dm.write_to_db(df, 'Post_PlayerData', f'NextGen_{stat_type.title()}', 'append')
+
+
+
+#%%
+# import requests
+# import pandas as pd
+
+# def get_next_gen(data_type, year, week):
+#     # headers = {
+#     #     'accept': 'application/json, text/plain, */*',
+#     #     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
+#     #     'referer': 'https://nextgenstats.nfl.com/',
+#     #     'accept-language': 'en-US,en;q=0.9,hi;q=0.8',
+#     # }
+
+#     headers={"User-Agent":"Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0","Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
+
+#     response = requests.get(f'https://appapi.ngs.nfl.com/statboard/{data_type}?season={year}&seasonType=REG&week={week}', headers=headers)
+
+#     df = pd.read_json(response.content)
+
+#     return df
+
+
+
+# for stat_type in ['receiving', 'rushing', 'passing']:
+
+#     next_gen_data = get_next_gen(stat_type, set_year, set_week)
+
+#     all_stats = []
+#     if stat_type == 'receiving': ignore = ('player', 'recTouchdowns', 'receptions', 'targets', 'yards', 'teamId')
+#     elif stat_type == 'rushing': ignore = ('player', 'rushTouchdowns', 'rushYards', 'rushAttempts', 'teamId')
+#     elif stat_type == 'passing': ignore = ('player', 'attempts', 'gamesPlayed', 'interceptions', 'nflId', 'season', 'seasonType', 'week', 'teamId', 'completions')
+
+#     for i, x in enumerate(next_gen_data.stats.values):
+#         parse_dict = {k:v for k,v in x.items() if k not in ignore}
+#         if i==0: 
+#             cols = list(parse_dict.keys())
+#             if stat_type == 'rushing': cols.append('playerName')
+        
+#         parse_list = list(parse_dict.values())
+#         if stat_type == 'rushing': 
+#             parse_list.append(x['player']['displayName'])
+
+#         all_stats.append(parse_list)
+
+#     next_gen = pd.DataFrame(all_stats, columns=cols).rename(columns={'playerName': 'player', 'position': 'pos'})
+#     next_gen = next_gen.dropna()
+#     next_gen.player = next_gen.player.apply(dc.name_clean)
+#     next_gen = next_gen.assign(week=set_week, year=set_year)
+    
+#     dm.delete_from_db('Post_PlayerData', f'NextGen_{stat_type.title()}', f"year={set_year} AND week={set_week}")
+#     dm.write_to_db(next_gen, 'Post_PlayerData', f'NextGen_{stat_type.title()}', 'append')
    
 # %%

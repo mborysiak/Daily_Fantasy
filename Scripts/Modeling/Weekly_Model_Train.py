@@ -35,12 +35,12 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [16,17]
+run_weeks = [2]
 verbosity = 50
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2022,
+    'set_year': 2023,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -623,15 +623,15 @@ with keep.running() as m:
         print('Fell Asleep')
 
     run_list = [
-                ['QB', '', 'full_model'],
+                # ['QB', '', 'full_model'],
                 ['RB', '', 'full_model'],
-                ['WR', '', 'full_model'],
-                ['TE', '', 'full_model'],
-                ['Defense', '', 'full_model'],
-                ['QB', '', 'backfill'],
-                ['RB', '', 'backfill'],
-                ['WR', '', 'backfill'],
-                ['TE', '', 'backfill'],
+                # ['WR', '', 'full_model'],
+                # ['TE', '', 'full_model'],
+                # ['Defense', '', 'full_model'],
+                # ['QB', '', 'backfill'],
+                # ['RB', '', 'backfill'],
+                # ['WR', '', 'backfill'],
+                # ['TE', '', 'backfill'],
     ]
 
     for w in run_weeks:
@@ -766,4 +766,10 @@ extract_dict_data('all_scores')
 # %%
 extract_dict_data('all_models')
 
+# %%
+out = get_model_output('lr_c', 'million', func_params[2][2], 'class', run_params, 10, min_samples, None, 10)
+# %%
+out
+# %%
+out[1]['full_hold'][out[1]['full_hold'].player=='Kenneth Gainwell']
 # %%

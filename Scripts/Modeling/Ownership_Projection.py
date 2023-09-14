@@ -17,7 +17,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 pred_version = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-million_ens_vers = 'random_full_stack_matt0_brier1_include2_kfold3'
+million_ens_vers = 'random_matt0_brier1_include2_kfold3'
 
 set_year = 2023
 set_week = 1
@@ -717,60 +717,60 @@ def save_current_week_pred(ownership_vers, set_week, set_year, include_dst=True)
 print(f'Running week {set_week} year {set_year}')
 ownership_vers = 'standard_ln'
 
-if (set_year == 2022 and set_week <= 6) or (set_year<=2021):
-    back_weeks=24
-else:
-    back_weeks=32
+# if (set_year == 2022 and set_week <= 6) or (set_year<=2021):
+#     back_weeks=24
+# else:
+#     back_weeks=32
 
-player_ownership = pull_player_ownership(contest, set_week, set_year)
-current_players = pull_this_week_players(set_week, set_year)
-player_ownership = pd.concat([player_ownership, current_players])
+# player_ownership = pull_player_ownership(contest, set_week, set_year)
+# current_players = pull_this_week_players(set_week, set_year)
+# player_ownership = pd.concat([player_ownership, current_players])
 
-df = add_proj(player_ownership)
+# df = add_proj(player_ownership)
 
-df = drop_player_weeks(df)
-df = add_injuries(df)
-df = add_gambling_lines(df)
-df = feature_engineering(df)
-df = df.rename(columns={'pct_drafted': 'y_act'})
-df = filter_snap_counts(df)
-df = remove_covid_games(df)
-df = remove_duplicates(df)
+# df = drop_player_weeks(df)
+# df = add_injuries(df)
+# df = add_gambling_lines(df)
+# df = feature_engineering(df)
+# df = df.rename(columns={'pct_drafted': 'y_act'})
+# df = filter_snap_counts(df)
+# df = remove_covid_games(df)
+# df = remove_duplicates(df)
 
-for c in ['pos', 'practice_status', 'game_status', 'practice_game']:
-    df = pd.concat([df, pd.get_dummies(df[c])], axis=1).drop(c, axis=1)
+# for c in ['pos', 'practice_status', 'game_status', 'practice_game']:
+#     df = pd.concat([df, pd.get_dummies(df[c])], axis=1).drop(c, axis=1)
 
-df, cv_time_input, train_time_split = create_game_date(df, back_weeks, set_week, set_year)
-df_train, df_test = train_test_split(df, train_time_split)
+# df, cv_time_input, train_time_split = create_game_date(df, back_weeks, set_week, set_year)
+# df_train, df_test = train_test_split(df, train_time_split)
 
-df_train = adjust_ownership(df_train, 'y_act', 'ln')
-df_test = adjust_ownership(df_test, 'y_act', 'ln')
+# df_train = adjust_ownership(df_train, 'y_act', 'ln')
+# df_test = adjust_ownership(df_test, 'y_act', 'ln')
 
-val_predict_pos, test_predict_pos, best_models = run_model_mean('lgbm', df_train[df_train['DST']==0].reset_index(drop=True), 
-                                                                df_test[df_test['DST']==0].reset_index(drop=True), cv_time_input)
-val_predict_dst, test_predict_dst, best_models = run_model_mean('lgbm', df_train[df_train['DST']==1].reset_index(drop=True), 
-                                                                df_test[df_test['DST']==1].reset_index(drop=True), cv_time_input)
-val_predict = pd.concat([val_predict_pos, val_predict_dst], axis=0)
-test_predict = pd.concat([test_predict_pos, test_predict_dst], axis=0)
-mf.show_scatter_plot(val_predict.pred_ownership, val_predict.y_act)
+# val_predict_pos, test_predict_pos, best_models = run_model_mean('lgbm', df_train[df_train['DST']==0].reset_index(drop=True), 
+#                                                                 df_test[df_test['DST']==0].reset_index(drop=True), cv_time_input)
+# val_predict_dst, test_predict_dst, best_models = run_model_mean('lgbm', df_train[df_train['DST']==1].reset_index(drop=True), 
+#                                                                 df_test[df_test['DST']==1].reset_index(drop=True), cv_time_input)
+# val_predict = pd.concat([val_predict_pos, val_predict_dst], axis=0)
+# test_predict = pd.concat([test_predict_pos, test_predict_dst], axis=0)
+# mf.show_scatter_plot(val_predict.pred_ownership, val_predict.y_act)
 
 
-val_predict, test_predict = calc_std_dev(val_predict, test_predict)
-check_std_dev(val_predict)
+# val_predict, test_predict = calc_std_dev(val_predict, test_predict)
+# check_std_dev(val_predict)
 
-val_predict['error'] = val_predict.pred_ownership - val_predict.y_act
-display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
-display(val_predict.sort_values(by='error').iloc[-25:])
-display(val_predict.sort_values(by='error').iloc[:25])
+# val_predict['error'] = val_predict.pred_ownership - val_predict.y_act
+# display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
+# display(val_predict.sort_values(by='error').iloc[-25:])
+# display(val_predict.sort_values(by='error').iloc[:25])
 
-test_predict['ownership_vers'] = ownership_vers
-dm.delete_from_db('Simulation', 'Predicted_Ownership_Only', f"week={set_week} AND year={set_year} AND ownership_vers='{ownership_vers}'", create_backup=False)
-dm.write_to_db(test_predict, 'Simulation', 'Predicted_Ownership_Only', 'append')
+# test_predict['ownership_vers'] = ownership_vers
+# dm.delete_from_db('Simulation', 'Predicted_Ownership_Only', f"week={set_week} AND year={set_year} AND ownership_vers='{ownership_vers}'", create_backup=False)
+# dm.write_to_db(test_predict, 'Simulation', 'Predicted_Ownership_Only', 'append')
 
-val_predict = val_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
-val_predict['ownership_vers'] = ownership_vers
-dm.delete_from_db('Validations', 'Predicted_Ownership_Validation', f"ownership_vers='{ownership_vers}'", create_backup=False)
-dm.write_to_db(val_predict, 'Validations', 'Predicted_Ownership_Validation', 'append')
+# val_predict = val_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
+# val_predict['ownership_vers'] = ownership_vers
+# dm.delete_from_db('Validations', 'Predicted_Ownership_Validation', f"ownership_vers='{ownership_vers}'", create_backup=False)
+# dm.write_to_db(val_predict, 'Validations', 'Predicted_Ownership_Validation', 'append')
 
 #==================
 # Compare predicted ownership to past entries

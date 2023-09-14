@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2023
-set_week = 1
+set_week = 2
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -572,7 +572,7 @@ weather_df.columns = ['team', 'gametime_unix', 'precip_prob', 'precip_intensity'
                    'temp_high', 'temp_low', 'humidity', 'wind_speed', 'wind_gust', 'uv_index']
 weather_df['year'] = set_year
 weather_df['week'] = set_week
-
+weather_df
 #%%
 dm.delete_from_db('Pre_TeamData', 'Game_Weather', f"week={set_week} and year={set_year}")
 dm.write_to_db(weather_df, 'Pre_TeamData', 'Game_Weather', if_exist='append')
@@ -627,7 +627,7 @@ for t, d in zip(['RB', 'WR', 'TE', 'QB'], [rb, wr, te, qb]):
 #--------------
 
 try:
-    su.copyfile(f'c:/Users/borys/Downloads/DKEntries.csv', 
+    su.copyfile(f'c:/Users/borys/Downloads/DKSalaries.csv', 
                 f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalaries_week{set_week}.csv')   
 except:
     print('No file to move')

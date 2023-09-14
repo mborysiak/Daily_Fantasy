@@ -1123,8 +1123,8 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_kbest',
-    'stack_model_million': 'random_kbest',
+    'stack_model': 'random_full_stack',
+    'stack_model_million': 'random_full_stack',
 
     # opt params
     'opt_type': 'bayes',
@@ -1155,7 +1155,7 @@ matt_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [1]
+set_weeks = [2]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
@@ -1469,3 +1469,12 @@ best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack
                                                         predictions, model_obj=model_obj, 
                                                         show_plot=run_params['show_plot'], 
                                                         min_include=run_params['min_include'])
+
+#%%
+print(model_output_path)
+models_mil, full_hold = load_all_pickles(model_output_path, 'all')
+# %%
+
+zz = full_hold['million_gbm_c']
+zz[zz.player=='Kenneth Gainwell']
+# %%

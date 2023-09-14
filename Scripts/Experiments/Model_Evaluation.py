@@ -405,7 +405,7 @@ def show_coef(all_coef, X_all):
         all_coef = pd.Series(all_coef.mean(axis=1).values, index=all_coef.metric)
         all_coef[abs(all_coef) > 0.005].sort_values().plot.barh(figsize=(10,18))
     except:
-        shap.summary_plot(all_coef.values, X_all, feature_names=X_all.columns, plot_size=(18,10), max_display=30, show=False)
+        shap.summary_plot(all_coef.values, X_all, feature_names=X_all.columns, plot_size=(18,10), max_display=40, show=False)
 
 def entry_optimize_params(df, max_adjust, model_name):
 
@@ -472,10 +472,10 @@ show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7,# 8, 
+weeks = [1, 2, 3, 4, 5, 6, 7, #8, 
          9, 10, 11, 12, 13, 14, 15, 16,
          1]
-years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, #2022, 
+years = [2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 
          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
          2023]
 
