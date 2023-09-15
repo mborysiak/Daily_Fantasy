@@ -1124,7 +1124,7 @@ run_params = {
     'cuts': [33, 80, 95],
 
     'stack_model': 'random_full_stack',
-    'stack_model_million': 'random_full_stack',
+    'stack_model_million': 'random_kbest',
 
     # opt params
     'opt_type': 'bayes',
@@ -1262,14 +1262,13 @@ with keep.running() as m:
             X_stack_mil = add_sal_columns(X_stack_mil, df_train_mil)
             X_predict_mil = add_sal_columns(X_predict_mil, df_predict_mil)
 
-            # if set_pos == 'TE' and model_type == 'backfill': 
-            #     y_stack_mil = pd.merge(y_stack_mil[y_stack_mil.player!='Ryan Griffin'], 
-            #                         X_stack_mil[['player', 'week', 'year']], 
-            #                         on=['player', 'week', 'year']).reset_index(drop=True)
-                
-            #     X_stack_mil = pd.merge(X_stack_mil, 
-            #                         y_stack_mil.loc[y_stack_mil.player!='Ryan Griffin', ['player','week', 'year']], 
-            #                         on=['player', 'week', 'year']).reset_index(drop=True)
+            y_stack_mil = pd.merge(y_stack_mil[y_stack_mil.player!='Ryan Griffin'], 
+                                X_stack_mil[['player', 'week', 'year']], 
+                                on=['player', 'week', 'year']).reset_index(drop=True)
+            
+            X_stack_mil = pd.merge(X_stack_mil, 
+                                y_stack_mil.loc[y_stack_mil.player!='Ryan Griffin', ['player','week', 'year']], 
+                                on=['player', 'week', 'year']).reset_index(drop=True)
 
             X_predict_mil = X_predict_mil.drop(['player', 'team', 'week', 'year'], axis=1)
             X_stack_mil = X_stack_mil.drop(['player', 'team', 'week', 'year'], axis=1)

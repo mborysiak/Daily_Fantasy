@@ -131,7 +131,11 @@ data.loc[data.run_location=='middle', 'run_location'] = 'run_middle'
 data.loc[data.pass_location.isin(['left', 'right']), 'pass_location'] = 'pass_outside'
 data.loc[data.pass_location=='middle', 'pass_location'] = 'pass_middle'
 
+data.surface = data.surface.apply(lambda x: x.replace('', 'grass'))
+data.loc[0, 'surface'] = 'synthetic'
 data.loc[(data.surface != 'grass') & ~(data.surface.isnull()), 'surface'] = 'synthetic'
+
+data.loc[0, 'roof'] = 'indoors'
 data.loc[data.roof.isin(['outdoors', 'open']), 'roof'] = 'outdoors'
 data.loc[data.roof.isin(['dome', 'closed']), 'roof'] = 'indoors'
 
@@ -179,7 +183,7 @@ rec_sum_cols = ['shotgun', 'no_huddle', 'pass_attempt',
                 'yards_gained', 'ydstogo']
 
 rec_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
-              #  'grass', 'synthetic', 'indoors', 'outdoors',
+                'grass', 'synthetic', 'indoors', 'outdoors',
                 'td_prob', 'qb_epa', 'wp', 'wpa',
                 'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
                 'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
@@ -285,7 +289,7 @@ qb_sum_cols = ['shotgun', 'no_huddle', 'pass_attempt',
             'drive_time_of_possession']
 
 qb_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
-           #  'grass', 'synthetic', 'indoors', 'outdoors',
+             'grass', 'synthetic', 'indoors', 'outdoors',
              'td_prob', 'qb_epa', 'wp', 'wpa',
              'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
              'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',

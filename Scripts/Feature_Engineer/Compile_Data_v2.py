@@ -1373,7 +1373,7 @@ def get_snap_data():
     snaps['snap_pct'] = snaps.snap_counts / snaps.team_snap_count
 
     snaps = snaps[snaps.snap_counts > 0].sort_values(by=['player', 'year', 'week']).reset_index(drop=True)
-    snaps['avg_snap_pct'] = snaps.snap_pct.rolling(4).mean()
+    snaps['avg_snap_pct'] = snaps.groupby('player').snap_pct.rolling(4).mean().values
     snaps = snaps.drop(['snap_counts', 'team_snap_count'], axis=1)
 
     return snaps
@@ -1890,7 +1890,7 @@ def qb_pull(rush_or_pass):
     print('Unique player-week-years:', df[['player', 'week', 'year']].drop_duplicates().shape[0])
     print('Team Counts by Week:', df[['year', 'week', 'team']].drop_duplicates().groupby(['year', 'week'])['team'].count())
 
-    dm.write_to_db(df.iloc[:,:2000], 'Model_Features', f"QB_Data{rush_or_pass.replace('_', '')}", if_exist='replace')
+    dm.write_to_db(df.iloc[:,:2000], 'Model_Features', f"QB_Data{rush_or_pass.replace('_', '')}", if_exist='replace', create_backup=True)
     if df.shape[1] > 2000:
         dm.write_to_db(df.iloc[:,2000:], 'Model_Features', f"QB_Data{rush_or_pass.replace('_', '')}2", if_exist='replace')
 

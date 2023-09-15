@@ -623,15 +623,15 @@ with keep.running() as m:
         print('Fell Asleep')
 
     run_list = [
-                # ['QB', '', 'full_model'],
+                ['QB', '', 'full_model'],
                 ['RB', '', 'full_model'],
-                # ['WR', '', 'full_model'],
-                # ['TE', '', 'full_model'],
-                # ['Defense', '', 'full_model'],
-                # ['QB', '', 'backfill'],
-                # ['RB', '', 'backfill'],
-                # ['WR', '', 'backfill'],
-                # ['TE', '', 'backfill'],
+                ['WR', '', 'full_model'],
+                ['TE', '', 'full_model'],
+                ['Defense', '', 'full_model'],
+                ['QB', '', 'backfill'],
+                ['RB', '', 'backfill'],
+                ['WR', '', 'backfill'],
+                ['TE', '', 'backfill'],
     ]
 
     for w in run_weeks:
