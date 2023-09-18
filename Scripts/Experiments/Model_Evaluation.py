@@ -13,8 +13,9 @@ import sklearn
 from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import StandardScaler
 from lightgbm import LGBMRegressor
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, brier_score_loss
 import zModel_Functions as mf
+import matplotlib.pyplot as plt
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -129,6 +130,38 @@ def get_class_data(df, cut, run_params):
 
     return df_train_class, df_predict_class
 
+def add_sal_columns(df):
+
+    for c in df.columns:
+        if 'expert' in c: df[c+'_salary'] = df[c] * df.dk_salary
+        if 'rank' in c: df[c+'_salary'] = df[c] * df.dk_salary
+        if 'proj' in c: df[c+'_salary'] = df[c] / df.dk_salary
+        if 'ffa' in c: df[c+'_salary'] = df[c] / df.dk_salary
+    
+    return df
+
+def show_calibration_curve(y_true, y_pred, n_bins=10):
+
+    from sklearn.calibration import calibration_curve
+
+    # Plot perfectly calibrated
+    plt.plot([0, 1], [0, 1], linestyle = '--', label = 'Ideally Calibrated')
+    
+    # Plot model's calibration curve
+    x, y = calibration_curve(y_true, y_pred, n_bins=n_bins, strategy='quantile')
+    plt.plot(y, x, marker = '.', label = 'Quantile')
+
+    # Plot model's calibration curve
+    x, y = calibration_curve(y_true, y_pred, n_bins=n_bins, strategy='uniform')
+    plt.plot(y, x, marker = '+', label = 'Uniform')
+    
+    leg = plt.legend(loc = 'upper left')
+    plt.xlabel('Average Predicted Probability in each bin')
+    plt.ylabel('Ratio of positives')
+    plt.show()
+
+    print('Brier Score:', brier_score_loss(y_true, y_pred))
+
 #%%
 
 #======================================================================================================================
@@ -142,18 +175,18 @@ def get_class_data(df, cut, run_params):
 
 
 # set the model version
-model_type ='full_model'
-set_pos = 'Defense'
+model_type ='backfill'
+set_pos = 'RB'
 
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2022,
-    'set_week': 16,
+    'set_year': 2023,
+    'set_week': 2,
 
     # set beginning of validation period
-    'val_year_min': 2020,
-    'val_week_min': 14,
+    'val_year_min': 2021,
+    'val_week_min': 2,
 
     # opt params
     'n_iters': 25,
@@ -184,19 +217,24 @@ run_params = {
 
 df, run_params = load_data(model_type, set_pos, run_params)
 df, run_params = create_game_date(df, run_params)
-df['y_act'] = df.y_act# 1000*df.y_act / df.dk_salary
 
+y_act = dm.read('''SELECT player, week, year, 
+                          CASE WHEN prize_return_pct > 0 THEN 1 ELSE 0 END y_act 
+                   FROM Top_Players_ROI WHERE total_lineups > 1000''', 'DK_Results')
+
+df = pd.merge(df.drop('y_act', axis=1), y_act, on=['player', 'week', 'year'])
 df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
+# df_train = add_sal_columns(df_train)
 
 cut = 95
 df_train_class, df_predict_class = get_class_data(df, cut, run_params)
 
-skm = SciKitModel(df_train, model_obj='reg', sera_wt=1, r2_wt=1)
-X_all, y = skm.Xy_split('y_act', run_params['drop_cols'])
+skm = SciKitModel(df_train, model_obj='class', brier_wt=1, matt_wt=0)
+X, y = skm.Xy_split('y_act', run_params['drop_cols'])
 
-X = X_all.sample(frac=1, axis=1)
-if 'game_date' not in X.columns:
-    X['game_date'] = X_all.game_date
+# X = X_all.sample(frac=1, axis=1)
+# if 'game_date' not in X.columns:
+#     X['game_date'] = X_all.game_date
 
 #------------
 # Get Regression Data
@@ -206,19 +244,19 @@ from sklearn.pipeline import Pipeline
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import LassoLars,HuberRegressor, QuantileRegressor
 from sklearn_quantile import RandomForestQuantileRegressor, KNeighborsQuantileRegressor, SampleRandomForestQuantileRegressor
-from category_encoders.cat_boost import CatBoostEncoder
+# from category_encoders.cat_boost import CatBoostEncoder
 
 pipe = skm.model_pipe([ #('cbe', CatBoostEncoder()),
                         skm.piece('random_sample'),
                         skm.piece('std_scale'), 
-                         skm.piece('select_perc'),
+                        skm.piece('select_perc_c'),
                         skm.feature_union([
                                         skm.piece('agglomeration'), 
-                                        skm.piece('k_best'),
+                                        skm.piece('k_best_c'),
                                         skm.piece('pca')
                                         ]),
-                        skm.piece('k_best'),
-                        skm.piece('enet')
+                        skm.piece('k_best_c'),
+                        skm.piece('lr_c')
                         
                      ])
 
@@ -243,22 +281,28 @@ params = skm.default_params(pipe, 'rand')
 
 
 # run the model with parameter search
-best_models, oof_data, param_scores = skm.time_series_cv(pipe, X, y, params, n_iter=25,
+best_models, oof_data, param_scores, _ = skm.time_series_cv(pipe, X, y, params, n_iter=25,
                                                         col_split='game_date',n_splits=5,
                                                         time_split=run_params['cv_time_input'],
-                                                        bayes_rand='custom_rand',
+                                                        bayes_rand='rand', proba=True,
                                                         sample_weight=False,
                                                         random_seed=12345)
 
-
 mf.show_scatter_plot(oof_data['full_hold']['pred'], oof_data['full_hold']['y_act'])
+show_calibration_curve(oof_data['full_hold']['y_act'], oof_data['full_hold']['pred'])
+
+best_models[i].fit(X,y)
+pd.concat([
+           df_predict[['player', 'week', 'year', 'y_act']],
+           pd.Series(best_models[i].predict_proba(df_predict[X.columns])[:,1], name='pred')
+          ], axis=1).sort_values(by='pred', ascending=False).head(50)
 
 #%%
 i=2
 best_models[i].fit(X,y)
 skm.print_coef(best_models[i])
 
-#%%
+ #%%
 
 df = param_scores.copy()
 
@@ -448,7 +492,7 @@ df = dm.read('''SELECT *
                 WHERE trial_num >= 269
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
-                    --  AND week != 8
+                      AND week != 8
                     --  AND week != 14
                      -- AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
                      --AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
@@ -466,16 +510,16 @@ model_type = {
 w=1
 model_name='lgbm'
 m = model_type[model_name] 
-X, y = entry_optimize_params(df, max_adjust=5000, model_name=model_name)
+X, y = entry_optimize_params(df, max_adjust=10000, model_name=model_name)
 coef_vals, X = get_model_coef(X, y, m)
 show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7, 8, 
+weeks = [1, 2, 3, 4, 5, 6, 7, #8, 
          9, 10, 11, 12, 13, 14, 15, 16,
          1]
-years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+years = [2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 
          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
          2023]
 
@@ -499,7 +543,7 @@ for w, yr in zip(weeks, years):
 
     model_name = 'enet'
     m = model_type[model_name]
-    X, y = entry_optimize_params(df, max_adjust=5000, model_name=model_name)
+    X, y = entry_optimize_params(df, max_adjust=10000, model_name=model_name)
     coef_vals, X = get_model_coef(X, y, m)
     all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1
 
