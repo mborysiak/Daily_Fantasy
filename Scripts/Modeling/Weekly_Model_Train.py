@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [2]
+run_weeks = [3]
 verbosity = 50
 run_params = {
     
@@ -378,9 +378,9 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
     params = skm.default_params(pipe, bayes_rand, min_samples=min_samples)
     if m=='adp': 
         params['feature_select__cols'] = [
-                                            ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
-                                            ['year', 'week',  'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
-                                            [ 'ProjPts', 'dk_salary', 'fd_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank']
+                                            ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
+                                            ['year', 'week',  'ProjPts', 'dk_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
+                                            [ 'ProjPts', 'dk_salary','projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank']
                                         ]
         params['k_best__k'] = range(1, 14)
     
@@ -477,7 +477,7 @@ def get_model_output(model_name, label, cur_df, model_obj, run_params, i, min_sa
                                                                      time_split=run_params['cv_time_input'],
                                                                      bayes_rand=bayes_rand, proba=proba, trials=trials,
                                                                      random_seed=(i+7)*19+(i*12)+6, alpha=alpha)
-
+    best_models = [bm.fit(X,y) for bm in best_models]
     print('Time Elapsed:', np.round((time.time()-start)/60,1), 'Minutes')
     
     return best_models, oof_data, param_scores, trials

@@ -200,8 +200,10 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
         elif m in ('rf_q', 'knn_q'): pipe.steps[-1][-1].q = alpha
         else: pipe.steps[-1][-1].alpha = alpha
 
-    if stack_model=='random_full_stack': 
+    if stack_model=='random_full_stack' and run_params['opt_type']=='bayes': 
         params['random_sample__frac'] = hp.uniform('random_sample__frac', 0.5, 1)
+    elif stack_model=='random_full_stack' and run_params['opt_type']=='rand':
+        params['random_sample__frac'] = np.arange(0.5, 1, 0.05)
         # params['select_perc__percentile'] = hp.uniform('percentile', 0.5, 1)
         # params['feature_union__agglomeration__n_clusters'] = scope.int(hp.quniform('n_clusters', 2, 10, 1))
         # params['feature_union__pca__n_components'] = scope.int(hp.quniform('n_components', 2, 10, 1))
@@ -834,7 +836,8 @@ def get_newest_folder_with_keywords(path, keywords, ignore_keywords=None, req_fn
 
 def get_trial_times(root_path, fname, run_params, set_pos, model_type):
 
-    newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
+    # newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/{run_params['set_year']}")
+    newest_folder = f"{root_path}/Model_Outputs/{run_params['set_year']}"
     keep_words = [set_pos, model_type, run_params['pred_vers']]
     drop_words = [f"_week{run_params['set_week']}_"]
     recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
@@ -881,7 +884,8 @@ def get_proba_adp_coef(model_obj, final_m, run_params):
 
 def get_trials(fname, final_m, bayes_rand):
 
-    newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
+    # newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/{run_params['set_year']}")
+    newest_folder = f"{root_path}/Model_Outputs/{run_params['set_year']}"
     keep_words = [set_pos, model_type, run_params['pred_vers']]
     drop_words = [f"_week{run_params['set_week']}_"]
     recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
@@ -1007,15 +1011,25 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
     
     else:
         
-        results = Parallel(n_jobs=-1, verbose=50)(
-                        delayed(run_stack_models)
-                        (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million) 
-                        for final_m, i, model_obj, alpha in func_params
-                        )
+        if run_params['opt_type']=='bayes':
+            results = Parallel(n_jobs=-1, verbose=50)(
+                            delayed(run_stack_models)
+                            (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million) 
+                            for final_m, i, model_obj, alpha in func_params
+                            )
+            best_models, scores, stack_val_pred, trials = unpack_results(model_list, results)
+            save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
 
-        best_models, scores, stack_val_pred, trials = unpack_results(model_list, results)
-        save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
-        
+        elif run_params['opt_type']=='rand':
+            best_models = []; scores = []; stack_val_pred = pd.DataFrame()
+            for final_m, i, model_obj, alpha in func_params:
+                best_model, stack_scores, stack_pred, trials = run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million)
+                best_models.append(best_model)
+                scores.append(stack_scores['stack_score'])
+                stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
+            
+            save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
+
     X_predict = X_predict[X_stack.columns]
     predictions = stack_predictions(X_predict, best_models, model_list, model_obj=model_obj)
     best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack, stack_val_pred, 
@@ -1123,12 +1137,13 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_full_stack',
-    'stack_model_million': 'random_full_stack',
+    'stack_model': 'random_kbest',
+    'stack_model_million': 'random_kbest',
 
     # opt params
     'opt_type': 'bayes',
     'n_iters': 100,
+    
     'n_splits': 5,
     'num_k_folds': 3,
     'show_plot': True,
@@ -1155,7 +1170,7 @@ matt_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [2]
+set_weeks = [3]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
@@ -1468,12 +1483,3 @@ best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack
                                                         predictions, model_obj=model_obj, 
                                                         show_plot=run_params['show_plot'], 
                                                         min_include=run_params['min_include'])
-
-#%%
-print(model_output_path)
-models_mil, full_hold = load_all_pickles(model_output_path, 'all')
-# %%
-
-zz = full_hold['million_gbm_c']
-zz[zz.player=='Kenneth Gainwell']
-# %%

@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2023
-WEEK = 2
+WEEK = 3
 
 #%%
 
@@ -403,6 +403,8 @@ def get_salaries(df, pos):
                     WHERE Position='{pos}'
                     ''', 'Pre_PlayerData')
     df = pd.merge(df, sal, on=['player', 'week', 'year'])
+    df.loc[(df.fd_salary < 100) | (df.fd_salary > 10000), 'fd_salary'] = np.nan
+
 
     return df
 
@@ -1460,7 +1462,7 @@ def remove_low_corrs(df, corr_cut=0.015):
                          index=[c for c in df.columns if c not in obj_cols])
     corrs = corrs['y_act']
     low_corrs = list(corrs[abs(corrs) < corr_cut].index)
-    low_corrs = [c for c in low_corrs if c not in ('week', 'year')]
+    low_corrs = [c for c in low_corrs if c not in ('week', 'year', 'fd_salary')]
     df = df.drop(low_corrs, axis=1)
     print(f'Removed {len(low_corrs)}/{df.shape[1]} columns')
     
@@ -2004,7 +2006,7 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     df, _ = add_injuries(df, pos); print(df.shape[0])
 
     df = get_salaries(df, pos); print(df.shape[0])
-    df.loc[df.fd_salary < 100, 'fd_salary'] = np.nan
+    df.loc[(df.fd_salary < 100) | (df.fd_salary > 10000), 'fd_salary'] = np.nan
 
     df = add_weather(df); print(df.shape[0])
     df = add_gambling_lines(df); print(df.shape[0])
@@ -2127,7 +2129,7 @@ defense = remove_low_corrs(defense, corr_cut=0.02)
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 #%%
 
-chk_week = 2
+chk_week = 3
 backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={chk_week} AND year={YEAR}", 'Model_Features').player.values
 sal = dm.read(f"SELECT player, salary FROM Salaries WHERE week={chk_week} AND year={YEAR}", 'Simulation')
 sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]

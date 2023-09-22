@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2023
-set_week = 2
+set_week = 3
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -388,8 +388,12 @@ def cleanup_sal(df, name):
     df['player'] = df.Player.apply(lambda x: x.split('(')[0].strip(' '))
     df['team'] = df.Player.apply(lambda x: x.split('(')[1].split('-')[0].strip(' '))
     df['position'] = df.Player.apply(lambda x: x.split('(')[1].split('-')[1].strip(' ').strip(')'))
-    df = df.rename(columns={'This Week': name})
+    df = df.rename(columns={'This Week': name, 'Last Week': 'last_week'})
     df[name] = df[name].apply(lambda x: x.replace('$', '').replace(',', '')).astype('int')
+    df['last_week'] = df['last_week'].apply(lambda x: x.replace('$', '').replace(',', '').replace('-', '0')).astype('int')
+    if name == 'fd_salary': 
+        df.loc[(df.fd_salary < 100) | (df.fd_salary > 10000), 'fd_salary'] = df.loc[(df.fd_salary < 100) | (df.fd_salary > 10000), 'last_week']
+        df.loc[(df.fd_salary < 100) | (df.fd_salary > 10000), 'fd_salary'] = np.nan
     df = df[['player', 'team', 'position', name]]
     
     return df
