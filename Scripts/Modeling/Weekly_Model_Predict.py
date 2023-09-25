@@ -1129,7 +1129,7 @@ globals().update(config)
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2023,
+    'set_year': 2022,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -1141,8 +1141,8 @@ run_params = {
     'stack_model_million': 'random_kbest',
 
     # opt params
-    'opt_type': 'bayes',
-    'n_iters': 100,
+    'opt_type': 'rand',
+    'n_iters': 50,
     
     'n_splits': 5,
     'num_k_folds': 3,
@@ -1170,13 +1170,13 @@ matt_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [3]
+set_weeks = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
-quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
-class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
-million_ens_vers = f"{mil_mod}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
+reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}_rand"
+quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}_rand"
+class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}_rand"
+million_ens_vers = f"{mil_mod}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}_rand"
 
 run_params['pred_vers'] = pred_vers
 run_params['reg_ens_vers'] = reg_ens_vers
