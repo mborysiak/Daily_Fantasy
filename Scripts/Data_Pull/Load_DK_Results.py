@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2023
-set_week = 2
+set_week = 3
 
 download_path = f'c:/Users/borys/Downloads/week{set_week}.csv'
 save_path = f'c:/Users/borys/OneDrive/Documents/Github/Daily_Fantasy/Data/OtherData/DK_Results/{set_year}/week{set_week}.csv'
@@ -363,3 +363,5 @@ df_lineups_roi['prize_return_pct'] = (df_lineups_roi.total_prize - (df_lineups_r
 
 dm.delete_from_db('DK_Results', 'Top_Players_ROI', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df_lineups_roi, 'DK_Results', 'Top_Players_ROI', 'append')
+
+# %%

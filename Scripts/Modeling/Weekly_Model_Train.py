@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [3]
+run_weeks = [4]
 verbosity = 50
 run_params = {
     
@@ -653,6 +653,7 @@ with keep.running() as m:
             df, run_params = create_game_date(df, run_params)
 
             df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
+            print(df_train.loc[-10:, ['player', 'week', 'year', 'y_act']])
 
             try:
                 trial_times = get_trial_times(root_path, run_params, set_pos, model_type, vers)

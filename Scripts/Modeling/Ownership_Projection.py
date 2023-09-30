@@ -17,10 +17,10 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 pred_version = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-million_ens_vers = 'random_full_stack_matt1_brier5_include2_kfold3'
+million_ens_vers = 'random_matt0_brier1_include2_kfold3'
 
 set_year = 2023
-set_week = 3
+set_week = 4
 contest = 'Million'
 include_dst = True
 run_owner_model = False
@@ -708,121 +708,121 @@ def save_current_week_pred(ownership_vers, set_week, set_year, include_dst=True)
 # Predict Ownership Pct
 #================
 
-for set_week, set_year in zip([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 
-                               #1, 2, 3
-                               ], 
-                              [
-                               2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-                               #2023, 2023, 2023
-                               ]):
+# for set_week, set_year in zip([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 
+#                                #1, 2, 3
+#                                ], 
+#                               [
+#                                2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+#                                #2023, 2023, 2023
+#                                ]):
 
-    print(f'Running week {set_week} year {set_year}')
-    ownership_vers = 'standard_ln'
+print(f'Running week {set_week} year {set_year}')
+ownership_vers = 'standard_ln'
 
-    if run_owner_model:
+if run_owner_model:
 
-        if (set_year == 2022 and set_week <= 6) or (set_year<=2021):
-            back_weeks=24
-        else:
-            back_weeks=32
+    if (set_year == 2022 and set_week <= 6) or (set_year<=2021):
+        back_weeks=24
+    else:
+        back_weeks=32
 
-        player_ownership = pull_player_ownership(contest, set_week, set_year)
-        current_players = pull_this_week_players(set_week, set_year)
-        player_ownership = pd.concat([player_ownership, current_players])
+    player_ownership = pull_player_ownership(contest, set_week, set_year)
+    current_players = pull_this_week_players(set_week, set_year)
+    player_ownership = pd.concat([player_ownership, current_players])
 
-        df = add_proj(player_ownership)
+    df = add_proj(player_ownership)
 
-        df = drop_player_weeks(df)
-        df = add_injuries(df)
-        df = add_gambling_lines(df)
-        df = feature_engineering(df)
-        df = df.rename(columns={'pct_drafted': 'y_act'})
-        df = filter_snap_counts(df)
-        df = remove_covid_games(df)
-        df = remove_duplicates(df)
+    df = drop_player_weeks(df)
+    df = add_injuries(df)
+    df = add_gambling_lines(df)
+    df = feature_engineering(df)
+    df = df.rename(columns={'pct_drafted': 'y_act'})
+    df = filter_snap_counts(df)
+    df = remove_covid_games(df)
+    df = remove_duplicates(df)
 
-        for c in ['pos', 'practice_status', 'game_status', 'practice_game']:
-            df = pd.concat([df, pd.get_dummies(df[c])], axis=1).drop(c, axis=1)
+    for c in ['pos', 'practice_status', 'game_status', 'practice_game']:
+        df = pd.concat([df, pd.get_dummies(df[c])], axis=1).drop(c, axis=1)
 
-        df, cv_time_input, train_time_split = create_game_date(df, back_weeks, set_week, set_year)
-        df_train, df_test = train_test_split(df, train_time_split)
+    df, cv_time_input, train_time_split = create_game_date(df, back_weeks, set_week, set_year)
+    df_train, df_test = train_test_split(df, train_time_split)
 
-        df_train = adjust_ownership(df_train, 'y_act', 'ln')
-        df_test = adjust_ownership(df_test, 'y_act', 'ln')
+    df_train = adjust_ownership(df_train, 'y_act', 'ln')
+    df_test = adjust_ownership(df_test, 'y_act', 'ln')
 
-        val_predict_pos, test_predict_pos, best_models = run_model_mean('lgbm', df_train[df_train['DST']==0].reset_index(drop=True), 
-                                                                        df_test[df_test['DST']==0].reset_index(drop=True), cv_time_input)
-        val_predict_dst, test_predict_dst, best_models = run_model_mean('lgbm', df_train[df_train['DST']==1].reset_index(drop=True), 
-                                                                        df_test[df_test['DST']==1].reset_index(drop=True), cv_time_input)
-        val_predict = pd.concat([val_predict_pos, val_predict_dst], axis=0)
-        test_predict = pd.concat([test_predict_pos, test_predict_dst], axis=0)
-        mf.show_scatter_plot(val_predict.pred_ownership, val_predict.y_act)
-
-
-        val_predict, test_predict = calc_std_dev(val_predict, test_predict)
-        check_std_dev(val_predict)
-
-        val_predict['error'] = val_predict.pred_ownership - val_predict.y_act
-        display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
-        display(val_predict.sort_values(by='error').iloc[-25:])
-        display(val_predict.sort_values(by='error').iloc[:25])
-
-        test_predict['ownership_vers'] = ownership_vers
-        dm.delete_from_db('Simulation', 'Predicted_Ownership_Only', f"week={set_week} AND year={set_year} AND ownership_vers='{ownership_vers}'", create_backup=False)
-        dm.write_to_db(test_predict, 'Simulation', 'Predicted_Ownership_Only', 'append')
-
-        val_predict = val_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
-        val_predict['ownership_vers'] = ownership_vers
-        dm.delete_from_db('Validations', 'Predicted_Ownership_Validation', f"ownership_vers='{ownership_vers}'", create_backup=False)
-        dm.write_to_db(val_predict, 'Validations', 'Predicted_Ownership_Validation', 'append')
-
-    #==================
-    # Compare predicted ownership to past entries
-    #==================
-
-    full_entries = dm.read(f'''SELECT * 
-                                FROM Contest_Results 
-                                WHERE Contest='{contest}' 
-                                        AND ((week <= 17 AND year < {set_year})
-                                            OR (week < {set_week} AND year = {set_year})) 
-                                        ''', 'DK_Results')
-
-    player_ownership = dm.read(f"SELECT * FROM Contest_Ownership WHERE Contest='{contest}'", 'DK_Results')
+    val_predict_pos, test_predict_pos, best_models = run_model_mean('lgbm', df_train[df_train['DST']==0].reset_index(drop=True), 
+                                                                    df_test[df_test['DST']==0].reset_index(drop=True), cv_time_input)
+    val_predict_dst, test_predict_dst, best_models = run_model_mean('lgbm', df_train[df_train['DST']==1].reset_index(drop=True), 
+                                                                    df_test[df_test['DST']==1].reset_index(drop=True), cv_time_input)
+    val_predict = pd.concat([val_predict_pos, val_predict_dst], axis=0)
+    test_predict = pd.concat([test_predict_pos, test_predict_dst], axis=0)
+    mf.show_scatter_plot(val_predict.pred_ownership, val_predict.y_act)
 
 
-    for ownership_vers in ['standard_ln', 'mil_times_standard_ln', 'mil_div_standard_ln', 'mil_only']:
+    val_predict, test_predict = calc_std_dev(val_predict, test_predict)
+    check_std_dev(val_predict)
 
-        pred_player_ownership = pull_ownership('Predicted_Ownership_Validation', 'standard_ln', 'Validations')
-        pred_player_ownership = add_pred_values(pred_player_ownership, 'Model_Validations_Million', pred_version, 
-                                                million_ens_vers, set_week, set_year, ownership_vers, full_model_rel_weight=1)
+    val_predict['error'] = val_predict.pred_ownership - val_predict.y_act
+    display(test_predict.sort_values(by='pred_ownership', ascending=False).iloc[:50])
+    display(val_predict.sort_values(by='error').iloc[-25:])
+    display(val_predict.sort_values(by='error').iloc[:25])
 
-        mean_var = []
-        full_dist = {}
-        base_places = [1, 10000, 25000, 50000, 75000, 100000, 150000]
-        for base_place, places in zip(base_places, [50, 1000, 1000, 1000, 1000, 1000, 1000]):
-            print(f'\nPlaces {base_place}-{places+base_place}\n==================')
+    test_predict['ownership_vers'] = ownership_vers
+    dm.delete_from_db('Simulation', 'Predicted_Ownership_Only', f"week={set_week} AND year={set_year} AND ownership_vers='{ownership_vers}'", create_backup=False)
+    dm.write_to_db(test_predict, 'Simulation', 'Predicted_Ownership_Only', 'append')
 
-            df_lineups = create_millions_lineups(full_entries, base_place, places)
-            df_lineups = add_pos_to_million(df_lineups)
-            df_lineups = add_team_to_million(df_lineups)
+    val_predict = val_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
+    val_predict['ownership_vers'] = ownership_vers
+    dm.delete_from_db('Validations', 'Predicted_Ownership_Validation', f"ownership_vers='{ownership_vers}'", create_backup=False)
+    dm.write_to_db(val_predict, 'Validations', 'Predicted_Ownership_Validation', 'append')
 
-            df_lineups = pd.merge(df_lineups, player_ownership, on=['player', 'week', 'year'], how='left')
-            df_lineups = pd.merge(df_lineups, pred_player_ownership, on=['player', 'week', 'year'])
-            full_dist, mean_output = agg_ownership_group(df_lineups, full_dist, include_dst)
+#==================
+# Compare predicted ownership to past entries
+#==================
 
-            if base_place==1:
-                mean_output['pred_vers'] = pred_version
-                mean_output['million_ens_vers'] = million_ens_vers
-                mean_output['date_run'] = dt.datetime.now().strftime('%m-%d-%Y %H:%M')
-                del_q = f'''year={set_year} 
-                            AND week={set_week} 
-                            AND ownership_vers='{ownership_vers}'
-                            AND pred_vers='{pred_version}'
-                            AND million_ens_vers='{million_ens_vers}' 
-                            '''
-                dm.delete_from_db('Simulation', 'Mean_Ownership', del_q, create_backup=False)
-                dm.write_to_db(mean_output, 'Simulation', 'Mean_Ownership', 'append')
+full_entries = dm.read(f'''SELECT * 
+                            FROM Contest_Results 
+                            WHERE Contest='{contest}' 
+                                    AND ((week <= 17 AND year < {set_year})
+                                        OR (week < {set_week} AND year = {set_year})) 
+                                    ''', 'DK_Results')
 
-        run_ttest(full_dist, greater_or_less='greater')
-        save_current_week_pred(ownership_vers, set_week, set_year, include_dst)
+player_ownership = dm.read(f"SELECT * FROM Contest_Ownership WHERE Contest='{contest}'", 'DK_Results')
+
+
+for ownership_vers in ['standard_ln', 'mil_times_standard_ln', 'mil_div_standard_ln', 'mil_only']:
+
+    pred_player_ownership = pull_ownership('Predicted_Ownership_Validation', 'standard_ln', 'Validations')
+    pred_player_ownership = add_pred_values(pred_player_ownership, 'Model_Validations_Million', pred_version, 
+                                            million_ens_vers, set_week, set_year, ownership_vers, full_model_rel_weight=1)
+
+    mean_var = []
+    full_dist = {}
+    base_places = [1, 10000, 25000, 50000, 75000, 100000, 150000]
+    for base_place, places in zip(base_places, [50, 1000, 1000, 1000, 1000, 1000, 1000]):
+        print(f'\nPlaces {base_place}-{places+base_place}\n==================')
+
+        df_lineups = create_millions_lineups(full_entries, base_place, places)
+        df_lineups = add_pos_to_million(df_lineups)
+        df_lineups = add_team_to_million(df_lineups)
+
+        df_lineups = pd.merge(df_lineups, player_ownership, on=['player', 'week', 'year'], how='left')
+        df_lineups = pd.merge(df_lineups, pred_player_ownership, on=['player', 'week', 'year'])
+        full_dist, mean_output = agg_ownership_group(df_lineups, full_dist, include_dst)
+
+        if base_place==1:
+            mean_output['pred_vers'] = pred_version
+            mean_output['million_ens_vers'] = million_ens_vers
+            mean_output['date_run'] = dt.datetime.now().strftime('%m-%d-%Y %H:%M')
+            del_q = f'''year={set_year} 
+                        AND week={set_week} 
+                        AND ownership_vers='{ownership_vers}'
+                        AND pred_vers='{pred_version}'
+                        AND million_ens_vers='{million_ens_vers}' 
+                        '''
+            dm.delete_from_db('Simulation', 'Mean_Ownership', del_q, create_backup=False)
+            dm.write_to_db(mean_output, 'Simulation', 'Mean_Ownership', 'append')
+
+    run_ttest(full_dist, greater_or_less='greater')
+    save_current_week_pred(ownership_vers, set_week, set_year, include_dst)
 # %%

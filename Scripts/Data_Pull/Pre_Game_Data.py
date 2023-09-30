@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2023
-set_week = 3
+set_week = 4
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -577,6 +577,7 @@ weather_df.columns = ['team', 'gametime_unix', 'precip_prob', 'precip_intensity'
 weather_df['year'] = set_year
 weather_df['week'] = set_week
 weather_df
+
 #%%
 dm.delete_from_db('Pre_TeamData', 'Game_Weather', f"week={set_week} and year={set_year}")
 dm.write_to_db(weather_df, 'Pre_TeamData', 'Game_Weather', if_exist='append')
