@@ -20,6 +20,7 @@ from hyperopt import Trials, hp
 from hyperopt.pyll import scope
 import yaml
 from wakepy import keep
+from sklearn.pipeline import Pipeline
 
 pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', None)
@@ -302,12 +303,35 @@ def load_all_stack_pred_million(model_output_path):
 
 
 
+# def fit_and_predict(m, df_predict, X, y, proba):
+#     try:
+#         m.fit(X,y)
+
+#         if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
+#         else: cur_predict = m.predict(df_predict[X.columns])
+#     except:
+#         cur_predict = []
+
+#     return cur_predict
+
 def fit_and_predict(m, df_predict, X, y, proba):
+
+    # if m.steps[0][1]=='random_sample':
+    try:
+        cols = m.steps[0][-1].columns
+        cols = [c for c in cols if c in X.columns]
+        X = X[cols]
+        X_predict = df_predict[cols]
+        m = Pipeline(m.steps[1:])
+    except:
+        X_predict = df_predict[X.columns]
+        
     try:
         m.fit(X,y)
 
-        if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
-        else: cur_predict = m.predict(df_predict[X.columns])
+        if proba: cur_predict = m.predict_proba(X_predict)[:,1]
+        else: cur_predict = m.predict(X_predict)
+    
     except:
         cur_predict = []
 
@@ -354,7 +378,7 @@ def get_stack_predict_data_mil(df_train, df_predict, run_params, models_mil):
 
     _, X, y = get_skm(df_train, 'class', to_drop=run_params['drop_cols'])
     print('Predicting Million Models')
-    X_predict = create_stack_predict(df_predict, models_mil, X, y)
+    X_predict = create_stack_predict(df_predict, models_mil, X, y, proba=True)
     X_predict = pd.concat([df_predict[['player', 'team', 'week', 'year']], X_predict], axis=1)
     return X_predict
 
@@ -1137,8 +1161,8 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random',
-    'stack_model_million': 'random',
+    'stack_model': 'random_full_stack',
+    'stack_model_million': 'random_kbest',
 
     # opt params
     'opt_type': 'bayes',
@@ -1303,183 +1327,3 @@ with keep.running() as m:
         print('All Runs Finished')
 
 #%%
-
-
-
-
-
-#%%
-import os
-import shutil
-
-
-def navigate_folders(root_dir, search_keywords, old_filename, new_filename):
-    for dirpath, _, _ in os.walk(root_dir):
-        if all(keyword in dirpath for keyword in search_keywords):
-            try:
-                source_path = os.path.join(dirpath, old_filename)
-                destination_path = os.path.join(dirpath, new_filename)
-                shutil.copy2(source_path, destination_path)
-                os.remove(source_path)
-            except:
-                print(dirpath, 'failed')
-
-run_params = {
-    
-    'stack_model': 'random_kbest',
-
-    # opt params
-    'opt_type': 'bayes',
-    'n_iters': 100,
-    'n_splits': 5,
-    'num_k_folds': 3,
-    'show_plot': True,
-    'print_coef': True,
-    'min_include': 2,
-    
-    'met': 'y_act',
-
-   
-}
-
-s_mod = run_params['stack_model']
-min_inc = run_params['min_include']
-kfold = run_params['num_k_folds']
-
-r2_wt = 0
-sera_wt = 0
-mse_wt = 1
-brier_wt = 1
-matt_wt = 0
-
-alpha = 80
-class_cut = 80
-
-pred_vers = 'sera1_rsq0_brier1_matt0_bayes'
-reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
-quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
-class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
-million_ens_vers = f"{s_mod}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
-
-root_directory = '/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/'
-search_keywords = [pred_vers]
-
-# q_old = f'quantile80.0_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
-q_old = f'quantile_{quant_ens_vers}.p'
-q_new = f'quantile_{quant_ens_vers}_knn_q.p'
-
-c_old = f'class_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
-c_new=  f'class_{class_ens_vers}.p'
-
-m_old = f'million_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
-m_new = f'million_{million_ens_vers}.p'
-
-# r_old = f'reg_{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include2_kfold3.p'
-# r_new = f'reg_{reg_ens_vers}.p'
-
-for old_filename, new_filename in zip([q_old], [q_new]):# zip([q_old, c_old, m_old], [q_new, c_new, m_new]):
-    print(old_filename, '->', new_filename)
-
-# %%
-
-for old_filename, new_filename in zip([q_old], [q_new]):
-    print(old_filename, '->', new_filename)
-    navigate_folders(root_directory, search_keywords,  old_filename, new_filename)
-
-#%%
-
-def fit_and_predict(m, df_predict, X, y, proba):
-    
-    m.fit(X,y)
-
-    if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
-    else: cur_predict = m.predict(df_predict[X.columns])
-   
-
-    return cur_predict
-
-def create_stack_predict(df_predict, models, X, y, proba=False):
-
-    # create the full stack pipe with meta estimators followed by stacked model
-    X_predict = pd.DataFrame()
-    for k, ind_models in models.items():
-        predictions = []
-        for m in ind_models:
-            cur_pred = fit_and_predict(m, df_predict, X, y, proba)
-            predictions.append(cur_pred)
-        predictions = [p for p in predictions if len(p) > 0]
-        predictions = pd.Series(pd.DataFrame(predictions).T.mean(axis=1), name=k)
-        X_predict = pd.concat([X_predict, predictions], axis=1)
-
-    return X_predict
-
-def get_stack_predict_data(df_train, df_predict, df, run_params, 
-                           models_reg, models_class, models_quant):
-
-    _, X, y = get_skm(df_train, 'reg', to_drop=run_params['drop_cols'])
-    print('Predicting Regression Models')
-    X_predict = create_stack_predict(df_predict, models_reg, X, y)
-
-get_stack_predict_data(df_train, df_predict, df, run_params, models_reg, _, _)
-# %%
-
-models_reg['reg_bridge']
-# %%
-
-model_obj ='class'
-is_million=True
-
-X_stack = X_stack_mil.copy()
-y_stack = y_stack_mil.copy()
-X_predict = X_predict_mil.copy()
-
-if model_obj=='reg': ens_vers = run_params['reg_ens_vers']
-elif model_obj=='class': ens_vers = run_params['class_ens_vers']
-elif model_obj=='quantile': ens_vers = run_params['quant_ens_vers']
-
-if is_million: 
-    model_obj_label = 'million'
-    ens_vers = run_params['million_ens_vers']
-else: 
-    model_obj_label = model_obj
-
-path = run_params['model_output_path']
-fname = f"{model_obj_label}_{ens_vers}"    
-model_list, func_params = get_func_params(model_obj, alpha)
-
-try:
-    time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type)
-    print(time_per_trial)
-    num_trials = calc_num_trials(time_per_trial, run_params)
-except: 
-    num_trials = {m: run_params['n_iters'] for m in model_list}
-print(num_trials)
-
-print(path, fname)
-
-if os.path.exists(f"{path}/{fname}.p"):
-    best_models, scores, stack_val_pred = load_stack_runs(path, fname)
-
-else:
-    
-    # results = Parallel(n_jobs=-1, verbose=50)(
-    #                 delayed(run_stack_models)
-    #                 (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials) 
-    #                 for final_m, i, model_obj, alpha in func_params
-    #                 )
-    
-    for final_m, i, model_obj, alpha in func_params:
-        print(final_m)
-        run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials) 
-                    
-                    
-
-    best_models, scores, stack_val_pred, trials = unpack_results(model_list, results)
-    save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
-    
-X_predict = X_predict[X_stack.columns]
-predictions = stack_predictions(X_predict, best_models, model_list, model_obj=model_obj)
-best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack, stack_val_pred, 
-                                                        predictions, model_obj=model_obj, 
-                                                        show_plot=run_params['show_plot'], 
-                                                        min_include=run_params['min_include'])

@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2023
-set_week = 3
+set_week = 4
 
 download_path = f'c:/Users/borys/Downloads/week{set_week}.csv'
 save_path = f'c:/Users/borys/OneDrive/Documents/Github/Daily_Fantasy/Data/OtherData/DK_Results/{set_year}/week{set_week}.csv'

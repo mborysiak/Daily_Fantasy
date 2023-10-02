@@ -19,18 +19,18 @@ conn = dm.db_connect('Simulation')
 # set the model version
 set_weeks = [
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
- #  1, 2
+   1, 2, 3
 ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
-   #   2023, 2023
+      2023, 2023, 2023
 ]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 
-reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3_rand'
-million_ens_vers = 'random_kbest_matt0_brier1_include2_kfold3_rand'
+reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
+million_ens_vers = 'random_kbest_matt0_brier1_include2_kfold3'
 std_dev_type = 'spline_pred_class80_q80_matt0_brier1_kfold3'
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params_Detail", 'Results').values[0][0]
@@ -202,7 +202,7 @@ with keep.running() as m:
                                 'team_points_trunc': 0.5},
                 'full_model_weight': {0.2: 0.5, 5: 0.5},
                 'lineups_per_param': {1: 1.0},
-                'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
+                'matchup_drop': {0: 0.6, 1: 0.2, 2: 0.2, 3: 0.0},
                 'matchup_seed': {0: 0.8, 1: 0.2},
                 'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
                 'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
@@ -211,13 +211,13 @@ with keep.running() as m:
                 'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.3, 5: 0.3, 7: 0.0, 10: 0.4},
                 'num_iters': {50: 0.2, 100: 0.2, 150: 0.6},
                 'num_top_players': {2: 0.5, 3: 0.5, 5: 0.0},
-                'own_neg_frac': {0.8: 0.0, 1: 1.0},
+                'own_neg_frac': {0.8: 0.1, 1: 0.9},
                 'ownership_vers': {'mil_div_standard_ln': 0.0,
                                     'mil_only': 0.5,
                                     'mil_times_standard_ln': 0.2,
                                     'standard_ln': 0.3},
                 'player_drop_multiple': {0: 0.4, 2: 0.2, 4: 0.4},
-                'qb_min_iter': {0: 0.0, 2: 0.0, 9: 1.0},
+                'qb_min_iter': {0: 0.2, 2: 0.0, 9: 0.8},
                 'qb_set_max_team': {0: 0.9, 1: 0.1},
                 'qb_solo_start': {False: 0.4, True: 0.6},
                 'qb_stack_wt': {1: 0.25, 2: 0.25, 3: 0.25, 4: 0.25},
