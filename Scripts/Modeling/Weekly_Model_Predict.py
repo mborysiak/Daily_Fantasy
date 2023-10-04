@@ -1161,7 +1161,7 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_full_stack',
+    'stack_model': 'random_kbest',
     'stack_model_million': 'random_kbest',
 
     # opt params
@@ -1194,7 +1194,7 @@ matt_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [4]
+set_weeks = [3, 4]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"

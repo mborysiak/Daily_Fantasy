@@ -25,7 +25,7 @@ SELECT reg_ens_vers,
 	   AVG(non8_winnings) AvgNon8Winnings, 
 	   MIN(non8_winnings) MinNon8Winnings,
 	   MAX(non8_winnings) MaxNon8Winnings,
-	   (AVG(winnings)+AVG(non8_winnings)+MIN(winnings)+MIN(non8_winnings)+MAX(winnings)+MAX(non8_winnings))/6 as BlendedAverage
+	   (AVG(winnings)+AVG(non8_winnings)+MIN(winnings)+MIN(non8_winnings)+(MAX(winnings)/2)+(MAX(non8_winnings)/2))/6 as BlendedAverage
 FROM (
 		SELECT reg_ens_vers,
 		       million_ens_vers,
@@ -45,7 +45,7 @@ GROUP BY trial_num,
 	     reg_ens_vers,
 	     million_ens_vers,
 	     std_dev_type
-ORDER BY (AVG(winnings)+AVG(non8_winnings)+MIN(winnings)+MIN(non8_winnings)+MAX(winnings)+MAX(non8_winnings))/6 DESC
+ORDER BY (AVG(winnings)+AVG(non8_winnings)+MIN(winnings)+MIN(non8_winnings)+(MAX(winnings)/2)+(MAX(non8_winnings)/2))/6 DESC
 
 
 

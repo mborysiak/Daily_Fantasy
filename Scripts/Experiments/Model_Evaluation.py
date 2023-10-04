@@ -175,14 +175,14 @@ def show_calibration_curve(y_true, y_pred, n_bins=10):
 
 
 # set the model version
-model_type ='backfill'
-set_pos = 'RB'
+model_type ='full_model'
+set_pos = 'WR'
 
 run_params = {
     
     # set year and week to analyze
     'set_year': 2023,
-    'set_week': 2,
+    'set_week': 4,
 
     # set beginning of validation period
     'val_year_min': 2021,
@@ -282,7 +282,7 @@ params = skm.default_params(pipe, 'rand')
 
 # run the model with parameter search
 best_models, oof_data, param_scores, _ = skm.time_series_cv(pipe, X, y, params, n_iter=25,
-                                                        col_split='game_date',n_splits=5,
+                                                        col_split='game_date',n_splits=4,
                                                         time_split=run_params['cv_time_input'],
                                                         bayes_rand='rand', proba=True,
                                                         sample_weight=False,
@@ -291,6 +291,7 @@ best_models, oof_data, param_scores, _ = skm.time_series_cv(pipe, X, y, params, 
 mf.show_scatter_plot(oof_data['full_hold']['pred'], oof_data['full_hold']['y_act'])
 show_calibration_curve(oof_data['full_hold']['y_act'], oof_data['full_hold']['pred'])
 
+i=0
 best_models[i].fit(X,y)
 pd.concat([
            df_predict[['player', 'week', 'year', 'y_act']],
@@ -489,7 +490,7 @@ df = dm.read('''SELECT *
                      SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num >= 269
+                WHERE trial_num >= 300
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
                     --  AND week != 8
@@ -498,6 +499,8 @@ df = dm.read('''SELECT *
                      --AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
                   --  AND million_ens_vers='kbest_matt0_brier1_include2_kfold3'
                 ''', 'Results')
+
+df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
 
 model_type = {
  'enet': ElasticNet(alpha=1, l1_ratio=0.1),
@@ -518,10 +521,10 @@ show_coef(coef_vals, X)
 
 weeks = [1, 2, 3, 4, 5, 6, 7, 8, 
          9, 10, 11, 12, 13, 14, 15, 16,
-         1, 2]
+         1, 2, 3, 4]
 years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-         2023, 2023]
+         2023, 2023, 2023, 2023]
 
 i=0
 all_coef = None; X_all = None
@@ -532,7 +535,7 @@ for w, yr in zip(weeks, years):
                             SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num >= 269
+                     WHERE trial_num >= 300
                            AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                            --AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
                            --AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'          
@@ -540,6 +543,7 @@ for w, yr in zip(weeks, years):
                            AND week = {w}
                            AND year = {yr}
                      ''', 'Results')
+    df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
 
     model_name = 'enet'
     m = model_type[model_name]
