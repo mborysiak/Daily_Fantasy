@@ -493,8 +493,8 @@ df = dm.read('''SELECT *
                 WHERE trial_num >= 300
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
-                    --  AND week != 8
-                    --  AND week != 14
+                      AND week != 8
+                      AND week != 13
                      -- AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
                      --AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
                   --  AND million_ens_vers='kbest_matt0_brier1_include2_kfold3'
@@ -519,8 +519,9 @@ show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7, 8, 
-         9, 10, 11, 12, 13, 14, 15, 16,
+weeks = [1, 2, 3, 4, 5, 6, 7, #8, 
+         9, 10, 11, 12, #13, 
+         14, 15, 16,
          1, 2, 3, 4]
 years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 

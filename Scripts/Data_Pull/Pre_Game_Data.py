@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2023
-set_week = 4
+set_week = 5
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -303,6 +303,29 @@ dm.write_to_db(output, 'Pre_PlayerData', 'FFToday_Projections', 'append')
 df = pull_fantasy_data(set_week)
 dm.delete_from_db('Pre_PlayerData', 'FantasyData', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData', 'append')
+
+#%%
+
+try:
+    os.replace(f"/Users/borys/Downloads/draftkings.csv", 
+                f'{root_path}/Data/OtherData/projected_ownership/FantasyData/{set_year}/week{set_week}.csv')
+except:
+    pass
+
+df = pd.read_csv(f'{root_path}/Data/OtherData/projected_ownership/FantasyData/{set_year}/week{set_week}.csv')
+
+df = df[['Name', 'Position', 'Team', 'Week', 'ProjectedOwnershipPercentage']]
+df.columns = ['player', 'position', 'team', 'week', 'ownership']
+
+df = df.assign(year=set_year, ownership_type='FantasyData')
+df.player = df.player.apply(dc.name_clean)
+df.team = df.team.map(team_map)
+df.loc[df.position=='DST', 'player'] = df.loc[df.position=='DST', 'team']
+
+df = df[['player', 'position', 'team', 'week', 'year', 'ownership_type', 'ownership']]
+
+dm.delete_from_db('Pre_PlayerData', 'Projected_Ownership', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'Projected_Ownership', 'append')
 
 #%%
 df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
@@ -691,8 +714,8 @@ dm.delete_from_db('Pre_PlayerData', 'PlayerInjuries', f"week={set_week} AND year
 dm.write_to_db(df, 'Pre_PlayerData', 'PlayerInjuries', 'append')
 
 
-# %%
 
+#%%
 try:
     os.replace(f"/Users/mborysia/Downloads/dk-ownership.csv", 
                 f'{root_path}/Data/OtherData/projected_ownership/{set_year}/week{set_week}.csv')

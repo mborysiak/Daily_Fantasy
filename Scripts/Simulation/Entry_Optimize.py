@@ -29,9 +29,9 @@ set_years = [
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 
-reg_ens_vers ='random_kbest_sera0_rsq0_mse1_include2_kfold3'
+reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
 million_ens_vers = 'random_kbest_matt0_brier1_include2_kfold3'
-std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
+std_dev_type = 'spline_pred_q80_matt0_brier1_kfold3'
 
 # reg_ens_vers ='random_full_stack_sera0_rsq1_mse0_include2_kfold3'
 # million_ens_vers = 'random_kbest_matt0_brier1_include2_kfold3'
@@ -200,34 +200,34 @@ with keep.running() as m:
                         'static_top_players', 'use_ownership', 'own_neg_frac', 
                         'max_salary_remain', 'num_iters', 'num_avg_pts', 'qb_stack_wt']
 
-            d = {'adjust_pos_counts': {False: 0.8, True: 0.2},
-                'covar_type': {'kmeans_pred_trunc': 0.4,
-                                'no_covar': 0.4,
-                                'team_points_trunc': 0.2},
-                'full_model_weight': {0.2: 0.8, 5: 0.2},
+            d = {'adjust_pos_counts': {False: 0.5, True: 0.5},
+                'covar_type': {'kmeans_pred_trunc': 0.0,
+                                'no_covar': 0.5,
+                                'team_points_trunc': 0.5},
+                'full_model_weight': {0.2: 0.6, 5: 0.4},
                 'lineups_per_param': {1: 1.0},
                 'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
-                'matchup_seed': {0: 0.6, 1: 0.4},
-                'max_salary_remain': {200: 0.0, 500: 0.5, 1000: 0.0, 1500: 0.5},
+                'matchup_seed': {0: 0.8, 1: 0.2},
+                'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
                 'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
-                'min_player_same_team': {2: 0.2, 3: 0.1, 'Auto': 0.7},
-                'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8},
-                'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.4, 5: 0.3, 7: 0.3},
-                'num_iters': {50: 0.3, 100: 0.5, 150: 0.2},
+                'min_player_same_team': {2: 0.1, 3: 0.2, 'Auto': 0.7},
+                'min_players_opp_team': {1: 0.1, 2: 0.2, 'Auto': 0.7},
+                'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.3, 7: 0.3, 10: 0.4},
+                'num_iters': {50: 0.2, 100: 0.2, 150: 0.6},
                 'num_top_players': {2: 0.5, 3: 0.5, 5: 0.0},
-                'own_neg_frac': {0.8: 0.0, 0.9: 0, 1: 1},
+                'own_neg_frac': {0.8: 0.0, 1: 1.0},
                 'ownership_vers': {'mil_div_standard_ln': 0.0,
-                                    'mil_only': 0.4,
+                                    'mil_only': 0,
                                     'mil_times_standard_ln': 0.3,
-                                    'standard_ln': 0.3},
+                                    'standard_ln': 0.7},
                 'player_drop_multiple': {0: 0.4, 2: 0.2, 4: 0.4},
-                'qb_min_iter': {0: 0.2, 2: 0.0, 9: 0.8},
-                'qb_set_max_team': {0: 0.6, 1: 0.4},
-                'qb_solo_start': {False: 0.4, True: 0.6},
-                'qb_stack_wt': {2: 0.5, 4:0.5},
-                'static_top_players': {False: 0.7, True: 0.3},
-                'top_n_choices': {0: 0.8, 1: 0.2, 2: 0.0},
-                'use_ownership': {0.8: 0.5, 0.9: 0.0, 1: 0.5}}
+                'qb_min_iter': {0: 0.1, 2: 0.3, 9: 0.6},
+                'qb_set_max_team': {0: 0.7, 1: 0.3},
+                'qb_solo_start': {False: 1, True: 0},
+                'qb_stack_wt': {1: 0.0, 2: 0.25, 3: 0.25, 4: 0.5},
+                'static_top_players': {False: 0.3, True: 0.7},
+                'top_n_choices': {0: 0.6, 1: 0.2, 2: 0.2},
+                'use_ownership': {0.8: 0.4, 0.9: 0.0, 1: 0.6}}
             
             lineups_per_param = int(d['lineups_per_param'][1])
 
@@ -355,7 +355,7 @@ with keep.running() as m:
 
 #%%
 
-to_delete_num=347
+to_delete_num=368
 df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
 dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
 

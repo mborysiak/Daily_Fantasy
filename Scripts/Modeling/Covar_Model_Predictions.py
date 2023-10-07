@@ -11,6 +11,9 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
+#%%
+
+
 def create_sd_max_metrics(df):
  
     df['sd_metric'] = (df.fantasyPoints + df.ProjPts + \
@@ -342,7 +345,7 @@ covar_type = 'team_points_trunc'
 #       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022
 # ]
 
-set_weeks = [3,4]
+set_weeks = [5]
 set_years = [2023,2023]
 
 pred_versions = [
@@ -354,7 +357,7 @@ reg_ens_versions = [
                     # 'random_sera0_rsq0_mse1_include2_kfold3',
                     'random_kbest_sera0_rsq0_mse1_include2_kfold3',
                     # 'kbest_sera0_rsq0_mse1_include2_kfold3',
-                    # 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
+                    'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
                     # 'random_sera1_rsq0_mse0_include2_kfold3',
                     # 'random_kbest_sera1_rsq0_mse0_include2_kfold3',
                     # 'random_full_stack_sera0_rsq1_mse0_include2_kfold3',
