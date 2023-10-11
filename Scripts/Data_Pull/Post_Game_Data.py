@@ -574,10 +574,3 @@ for stat_type in ['receiving', 'rushing', 'passing']:
     # dm.delete_from_db('Post_PlayerData', f'NextGen_{stat_type.title()}', f"year={set_year} AND week={set_week}")
     # dm.write_to_db(next_gen, 'Post_PlayerData', f'NextGen_{stat_type.title()}', 'append')
    
-# %%
-
-for stat in ['Passing', 'Rushing', 'Receiving']:
-    df = dm.read(f"SELECT * FROM NextGen_{stat}", 'Post_PlayerData')
-    df.player = df.player.apply(dc.name_clean)
-    dm.write_to_db(df, 'Post_PlayerData', f'NextGen_{stat}', 'replace')
-# %%

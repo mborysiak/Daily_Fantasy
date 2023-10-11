@@ -23,7 +23,7 @@ set_year = 2023
 set_week = 5
 contest = 'Million'
 include_dst = True
-run_owner_model = True
+run_owner_model = False
 
 #%%
 

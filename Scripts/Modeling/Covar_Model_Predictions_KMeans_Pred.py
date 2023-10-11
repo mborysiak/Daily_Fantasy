@@ -370,7 +370,7 @@ reg_ens_versions = [
                     # 'random_sera0_rsq0_mse1_include2_kfold3',
                     'random_kbest_sera0_rsq0_mse1_include2_kfold3',
                     # 'kbest_sera0_rsq0_mse1_include2_kfold3',
-                    'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
                     # 'random_sera1_rsq0_mse0_include2_kfold3',
                     # 'random_kbest_sera1_rsq0_mse0_include2_kfold3',
                     # 'random_full_stack_sera0_rsq1_mse0_include2_kfold3',

@@ -14,7 +14,8 @@ GROUP BY week, year, trial_num, repeat_num, lineup_num, unique_lineup_num
 ORDER BY sum(fantasy_pts) DESC;
 
 
-
+SELECT * 
+FROM (
 SELECT reg_ens_vers,
 	   million_ens_vers,
 	   std_dev_type,
@@ -25,7 +26,8 @@ SELECT reg_ens_vers,
 	   AVG(non8_winnings) AvgNon8Winnings, 
 	   MIN(non8_winnings) MinNon8Winnings,
 	   MAX(non8_winnings) MaxNon8Winnings,
-	   (AVG(winnings)+AVG(non8_winnings)+MIN(winnings)+MIN(non8_winnings))/6 as BlendedAverage
+	   ROUND((AVG(winnings)+AVG(non8_winnings)+MIN(winnings)+MIN(non8_winnings))/4,1) as BlendedAvgMin,
+	   ROUND((AVG(winnings)+AVG(non8_winnings)+MIN(winnings)+MIN(non8_winnings)+(MAX(winnings)/2)+(MAX(non8_winnings)/2))/6,1) as BlendedAvgMinMax
 FROM (
 		SELECT reg_ens_vers,
 		       million_ens_vers,
@@ -45,7 +47,8 @@ GROUP BY trial_num,
 	     reg_ens_vers,
 	     million_ens_vers,
 	     std_dev_type
-ORDER BY (AVG(winnings)+AVG(non8_winnings)+MIN(winnings)+MIN(non8_winnings))/6 DESC
+)
+ORDER BY BlendedAvgMin DESC
 
 
 

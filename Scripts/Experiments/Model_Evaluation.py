@@ -487,14 +487,15 @@ def entry_optimize_params(df, max_adjust, model_name):
 df = dm.read('''SELECT *  
                 FROM Entry_Optimize_Params_Detail 
                 JOIN (
-                     SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, trial_num, repeat_num
+                     SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, entry_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
                 WHERE trial_num >= 300
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
-                      AND week != 8
-                      AND week != 13
+                    --  AND week != 8
+                    --  AND week != 13
+                    --  AND year=2023
                      -- AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
                      --AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
                   --  AND million_ens_vers='kbest_matt0_brier1_include2_kfold3'
@@ -519,13 +520,15 @@ show_coef(coef_vals, X)
 
 #%%
 
-weeks = [1, 2, 3, 4, 5, 6, 7, #8, 
-         9, 10, 11, 12, #13, 
-         14, 15, 16,
-         1, 2, 3, 4]
-years = [2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-         2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-         2023, 2023, 2023, 2023]
+weeks = [
+         1, 2, 3, 4, 5, 6, 7, 8, 
+          9, 10, 11, 12, 13, 
+          14, 15, 16,
+         1, 2, 3, 4, 5]
+years = [
+          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+         2023, 2023, 2023, 2023, 2023]
 
 i=0
 all_coef = None; X_all = None
@@ -533,7 +536,7 @@ for w, yr in zip(weeks, years):
     df = dm.read(f'''SELECT *  
                      FROM Entry_Optimize_Params_Detail 
                      JOIN (
-                            SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, trial_num, repeat_num
+                            SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, entry_type, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
                      WHERE trial_num >= 300
@@ -548,7 +551,9 @@ for w, yr in zip(weeks, years):
 
     model_name = 'enet'
     m = model_type[model_name]
-    X, y = entry_optimize_params(df, max_adjust=10000, model_name=model_name)
+    if w in (8,13) and yr==2022: max_adjust = 300
+    else: max_adjust = 10000
+    X, y = entry_optimize_params(df, max_adjust=max_adjust, model_name=model_name)
     coef_vals, X = get_model_coef(X, y, m)
     all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1
 

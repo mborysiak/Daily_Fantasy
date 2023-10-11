@@ -900,7 +900,10 @@ def get_proba_adp_coef(model_obj, final_m, run_params):
     if model_obj in ('class', 'quantile'): run_adp = False
     else: run_adp = True
 
-    if 'gbmh' in final_m or 'knn' in final_m or 'full_stack' in run_params['stack_model']: print_coef = False
+    if ('gbmh' in final_m 
+        or 'knn' in final_m 
+        or 'full_stack' in run_params['stack_model'] 
+        or run_params['opt_type']=='bayes'): print_coef = False
     else: print_coef = run_params['print_coef']
 
     return proba, run_adp, print_coef
@@ -1162,7 +1165,7 @@ run_params = {
     'cuts': [33, 80, 95],
 
     'stack_model': 'random_kbest',
-    'stack_model_million': 'random_kbest',
+    'stack_model_million': 'random_full_stack',
 
     # opt params
     'opt_type': 'bayes',
@@ -1327,3 +1330,86 @@ with keep.running() as m:
         print('All Runs Finished')
 
 #%%
+
+
+
+
+
+
+
+
+
+
+
+#%%
+
+model_obj = 'class'
+is_million = True
+X_stack = X_stack_mil.copy()
+y_stack = y_stack_mil.copy()
+
+
+if model_obj=='reg': ens_vers = run_params['reg_ens_vers']
+elif model_obj=='class': ens_vers = run_params['class_ens_vers']
+elif model_obj=='quantile': ens_vers = run_params['quant_ens_vers']
+
+if is_million: 
+    model_obj_label = 'million'
+    ens_vers = run_params['million_ens_vers']
+else: 
+    model_obj_label = model_obj
+
+path = run_params['model_output_path']
+fname = f"{model_obj_label}_{ens_vers}"    
+model_list, func_params = get_func_params(model_obj, alpha)
+
+try:
+    time_per_trial = get_trial_times(root_path, fname, run_params, set_pos, model_type)
+    print(time_per_trial)
+    num_trials = calc_num_trials(time_per_trial, run_params)
+except: 
+    num_trials = {m: run_params['n_iters'] for m in model_list}
+print(num_trials)
+
+print(path, fname)
+
+if os.path.exists(f"{path}/{fname}.p"):
+    best_models, scores, stack_val_pred = load_stack_runs(path, fname)
+
+# else:
+    
+#     if run_params['opt_type']=='bayes':
+#         results = Parallel(n_jobs=-1, verbose=50)(
+#                         delayed(run_stack_models)
+#                         (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million) 
+#                         for final_m, i, model_obj, alpha in func_params
+#                         )
+#         best_models, scores, stack_val_pred, trials = unpack_results(model_list, results)
+#         save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
+
+#     elif run_params['opt_type']=='rand':
+#         best_models = []; scores = []; stack_val_pred = pd.DataFrame()
+#         for final_m, i, model_obj, alpha in func_params:
+#             best_model, stack_scores, stack_pred, trials = run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million)
+#             best_models.append(best_model)
+#             scores.append(stack_scores['stack_score'])
+#             stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
+        
+#         save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
+
+# X_predict = X_predict[X_stack.columns]
+# predictions = stack_predictions(X_predict, best_models, model_list, model_obj=model_obj)
+# best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack, stack_val_pred, 
+#                                                         predictions, model_obj=model_obj, 
+#                                                         show_plot=run_params['show_plot'], 
+#                                                         min_include=run_params['min_include'])
+
+
+# %%
+best_model, stack_scores, stack_pred, trials = run_stack_models(fname, 'lr_c', i, model_obj, None, X_stack, y_stack, run_params, 5, is_million)
+# %%
+
+len(best_model.steps[0][-1].columns)
+# %%
+X_stack_mil.shape
+# %%
