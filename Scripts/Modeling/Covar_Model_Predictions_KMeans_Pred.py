@@ -214,9 +214,8 @@ def get_mean_points(preds):
 
 def pivot_pos_data(df):
 
-    df = df[df['pos_rank'].isin(['QB0', 'RB0', 'RB1', 'WR0', 'WR1', 'WR2', 'TE0', 'Defense0', 
-                                'OppQB0', 'OppDefense0', 'OppWR1'
-                                 #'OppRB0', 'OppWR0', 'OppWR1', 'OppTE0', 
+    df = df[df['pos_rank'].isin(['QB0', 'RB0', 'WR0', 'WR1', 'TE0', 'Defense0', 'OppQB0', 
+                                #'OppDefense0', 'OppWR1', 'OppRB0', 'OppWR0', 'OppWR1', 'OppTE0', 
                                  ])]
     df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='pred_fp_per_game')
     df = df.reset_index().sort_values(by=['team', 'year', 'week']).fillna(df.mean()).set_index(['team', 'week', 'year'])
@@ -418,7 +417,7 @@ for set_week, set_year in zip(set_weeks, set_years):
         kmean_input = pivot_pos_data(corr_data)
         kmean_input = add_gambling_lines(kmean_input)
 
-        kmeans_out, km = get_best_clusters(kmean_input, corr_data, min_n=10, max_n=20)
+        kmeans_out, km = get_best_clusters(kmean_input, corr_data, min_n=8, max_n=16)
         # show_cluster_heatmap(kmeans_out, km)
         # show_historical_cluster_teams(kmeans_out, label=3)
         matrices = get_kmeans_covar(kmeans_out)

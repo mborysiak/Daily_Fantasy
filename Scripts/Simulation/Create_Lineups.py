@@ -102,7 +102,7 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'Results')
     return vers
 
-best_trials = 384
+best_trials = 399
 
 opt_params = pull_best_params(best_trials)
 pprint.pprint(opt_params)
@@ -212,9 +212,11 @@ def sim_winnings(adjust_select, player_drop_multiplier, matchup_seed, matchup_dr
                                     static_top_players=static_top_players, qb_min_iter=qb_min_iter,
                                     qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
             
-            prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
+            results = results[~results.player.isin(to_add)].reset_index(drop=True)
+            prob = results.loc[:top_n_choices, 'SelectionCounts'] / results.loc[:top_n_choices, 'SelectionCounts'].sum()
+            
             try: 
-                selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
+                selected_player = np.random.choice(results.loc[:top_n_choices, 'player'], p=prob)
                 to_add.append(selected_player)
             except: 
                 pass

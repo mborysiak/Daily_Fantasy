@@ -454,13 +454,21 @@ def show_coef(all_coef, X_all):
 
 def entry_optimize_params(df, max_adjust, model_name):
 
-    adjust_winnings = df.groupby(['trial_num']).agg(max_lineup_num=('lineup_num', 'max')).reset_index()
-    adjust_winnings.max_lineup_num = 30 / (adjust_winnings.max_lineup_num+1)
+    adjust_winnings = df.groupby(['trial_num', 'entry_type']).agg(max_lineup_num=('lineup_num', 'max')).reset_index()
+
+    adjust_winnings.loc[adjust_winnings.entry_type=='millions_only', 'max_lineup_num'] = \
+        13 / (adjust_winnings.loc[adjust_winnings.entry_type=='millions_only', 'max_lineup_num'] + 1)
     
-    df = pd.merge(df, adjust_winnings, on='trial_num')
+    adjust_winnings.loc[adjust_winnings.entry_type=='millions_playaction', 'max_lineup_num'] = \
+        30 / (adjust_winnings.loc[adjust_winnings.entry_type=='millions_playaction', 'max_lineup_num'] + 1)
+    
+    df = pd.merge(df, adjust_winnings.drop('entry_type', axis=1), on='trial_num')
     df.winnings = df.winnings / df.max_lineup_num
-    df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
     
+    df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
+    df.loc[(df.winnings >= 1000) & (df.week==8) & (df.year==2022), 'winnings'] = 1000
+    df.loc[(df.winnings >= 1000) & (df.week==13) & (df.year==2022), 'winnings'] = 1000
+
     df.loc[df['max_lineup_num']==1, ['player_drop_multiple']] = 0
 
     str_cols = ['week', 'year', 'pred_vers', 'reg_ens_vers', 'million_ens_vers', 'std_dev_type']
@@ -490,10 +498,10 @@ df = dm.read('''SELECT *
                      SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, entry_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num >= 300
+                WHERE trial_num >= 380
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
-                    --  AND week != 8
+                      AND week != 8
                     --  AND week != 13
                     --  AND year=2023
                      -- AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
@@ -521,12 +529,12 @@ show_coef(coef_vals, X)
 #%%
 
 weeks = [
-         1, 2, 3, 4, 5, 6, 7, 8, 
-          9, 10, 11, 12, 13, 
-          14, 15, 16,
+         1, 2, 3, 4, 5, 6, 7,#$ 8, 
+         9, 10, 11, 12, 13, 
+         14, 15, 16,
          1, 2, 3, 4, 5]
 years = [
-          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+          2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
          2023, 2023, 2023, 2023, 2023]
 
@@ -539,7 +547,7 @@ for w, yr in zip(weeks, years):
                             SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, entry_type, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num >= 300
+                     WHERE trial_num >= 380
                            AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                            --AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
                            --AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'          
@@ -551,7 +559,7 @@ for w, yr in zip(weeks, years):
 
     model_name = 'enet'
     m = model_type[model_name]
-    if w in (8,13) and yr==2022: max_adjust = 300
+    if w == 8 and yr==2022: max_adjust = 500
     else: max_adjust = 10000
     X, y = entry_optimize_params(df, max_adjust=max_adjust, model_name=model_name)
     coef_vals, X = get_model_coef(X, y, m)

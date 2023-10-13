@@ -30,8 +30,8 @@ set_years = [
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 
 reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
-million_ens_vers = 'random_kbest_matt0_brier1_include2_kfold3'
-std_dev_type = 'spline_pred_q80_matt0_brier1_kfold3'
+million_ens_vers = 'random_full_stack_matt0_brier1_include2_kfold3'
+std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
 
 entry_type = 'millions_only'
 if entry_type == 'millions_playaction': total_lineups = 30
@@ -201,9 +201,9 @@ with keep.running() as m:
                         'max_salary_remain', 'num_iters', 'num_avg_pts', 'qb_stack_wt']
 
             d = {'adjust_pos_counts': {False: 0.4, True: 0.6},
-                'covar_type': {'kmeans_pred_trunc': 0.0,
-                                'no_covar': 0.3,
-                                'team_points_trunc': 0.7},
+                'covar_type': {'kmeans_pred_trunc': 0.25,
+                                'no_covar': 0.25,
+                                'team_points_trunc': 0.5},
                 'full_model_weight': {0.2: 0.5, 5: 0.5},
                 'lineups_per_param': {1: 1.0},
                 'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
@@ -217,18 +217,18 @@ with keep.running() as m:
                 'num_top_players': {2: 0.5, 3: 0.5, 5: 0.0},
                 'own_neg_frac': {0.8: 0.0, 1: 1.0},
                 'ownership_vers': {'mil_div_standard_ln': 0.0,
-                                    'mil_only': 0.0,
-                                    'mil_times_standard_ln': 0.3,
-                                    'standard_ln': 0.7},
+                                    'mil_only': 0.4,
+                                    'mil_times_standard_ln': 0.0,
+                                    'standard_ln': 0.6},
                 'player_drop_multiple': {0: 0.4, 2: 0.2, 4: 0.4},
-                'qb_min_iter': {0: 0.2, 2: 0.4, 9: 0.4},
+                'qb_min_iter': {0: 0.4, 2: 0.3, 4: 0.2, 9: 0.1},
                 'qb_set_max_team': {0: 0.7, 1: 0.3},
                 'qb_solo_start': {False: 1.0, True: 0.0},
-                'qb_stack_wt': {1: 0.0, 2: 0, 3: 0.5, 4: 0.5},
+                'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.5, 4: 0.5},
                 'static_top_players': {False: 0.3, True: 0.7},
                 'top_n_choices': {0: 0.6, 1: 0.2, 2: 0.2},
                 'use_ownership': {0.8: 0.4, 0.9: 0.0, 1: 0.6}}
-                                            
+            
             lineups_per_param = int(d['lineups_per_param'][1])
 
             d = {k: d[k] for k in d_ordering}
