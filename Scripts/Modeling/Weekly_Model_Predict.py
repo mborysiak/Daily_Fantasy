@@ -1164,8 +1164,8 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_full_stack',
-    'stack_model_million': 'random_full_stack',
+    'stack_model': 'random_kbest',
+    'stack_model_million': 'random_kbest',
 
     # opt params
     'opt_type': 'bayes',

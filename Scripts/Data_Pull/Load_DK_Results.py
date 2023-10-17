@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2023
-set_week = 5
+set_week = 6
 
 download_path = f'c:/Users/borys/Downloads/week{set_week}.csv'
 save_path = f'c:/Users/borys/OneDrive/Documents/Github/Daily_Fantasy/Data/OtherData/DK_Results/{set_year}/week{set_week}.csv'
@@ -338,6 +338,8 @@ df_lineups_top.loc[(df_lineups_top.counts >= 5) & (df_lineups_top.value > 3), 'y
 
 dm.delete_from_db('DK_Results', 'Top_Players', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df_lineups_top, 'DK_Results', 'Top_Players', 'append')
+
+df_lineups_top[df_lineups_top.y_act==1]
 
 # %%
 

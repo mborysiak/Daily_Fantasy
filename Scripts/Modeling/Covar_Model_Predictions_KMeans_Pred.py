@@ -214,9 +214,11 @@ def get_mean_points(preds):
 
 def pivot_pos_data(df):
 
-    df = df[df['pos_rank'].isin(['QB0', 'RB0', 'WR0', 'WR1', 'TE0', 'Defense0', 'OppQB0', 
-                                #'OppDefense0', 'OppWR1', 'OppRB0', 'OppWR0', 'OppWR1', 'OppTE0', 
-                                 ])]
+    # df = df[df['pos_rank'].isin(['QB0', 'RB0', 'RB1', 'WR0', 'WR1', 'WR2', 'TE0', 'Defense0', 
+    #                             'OppQB0', 'OppDefense0', 'OppWR1'
+    #                              #'OppRB0', 'OppWR0', 'OppWR1', 'OppTE0', 
+    #                              ])]
+    df = df[df['pos_rank'].isin(['QB0', 'RB0', 'WR0', 'WR1', 'TE0', 'Defense0', 'OppQB0' ])]
     df = df.pivot_table(index=['team', 'week', 'year'], columns='pos_rank', values='pred_fp_per_game')
     df = df.reset_index().sort_values(by=['team', 'year', 'week']).fillna(df.mean()).set_index(['team', 'week', 'year'])
     df = df.dropna(axis=0)
@@ -343,20 +345,20 @@ def pred_covar_matrix(pred_cov, matrices):
 
 import itertools
 
-covar_type = 'kmeans_pred_trunc'
+covar_type = 'kmeans_pred_trunc_new'
 
 # # set the model version
 # set_weeks = [
 #     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 
-#  #   1, 2, 3
+#     1, 2, 3, 4, 5, 6
 # ]
 
 # set_years = [
 #       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-#   #    2023, 2023, 2023
+#       2023, 2023, 2023, 2023, 2023, 2023
 # ]
 
-set_weeks = [5]
+set_weeks = [6]
 set_years = [2023,2023]
 
 pred_versions = [
@@ -495,5 +497,5 @@ compare.plot.scatter(x='covar', y='y_act2')
 
 # %%
 
-compare[(compare.covar > 40)]
+compare[(compare.covar > 20)]
 # %%

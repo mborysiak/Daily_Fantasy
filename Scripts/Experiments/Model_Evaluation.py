@@ -448,6 +448,7 @@ def join_coef(i, all_coef, coef_vals, X_all, X, m):
 def show_coef(all_coef, X_all):
     try:
         all_coef = pd.Series(all_coef.mean(axis=1).values, index=all_coef.metric)
+        all_coef = all_coef[~all_coef.index.str.contains('entry_type')]
         all_coef[abs(all_coef) > 0.005].sort_values().plot.barh(figsize=(10,18))
     except:
         shap.summary_plot(all_coef.values, X_all, feature_names=X_all.columns, plot_size=(18,10), max_display=40, show=False)
@@ -466,8 +467,8 @@ def entry_optimize_params(df, max_adjust, model_name):
     df.winnings = df.winnings / df.max_lineup_num
     
     df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
-    df.loc[(df.winnings >= 1000) & (df.week==8) & (df.year==2022), 'winnings'] = 1000
-    df.loc[(df.winnings >= 1000) & (df.week==13) & (df.year==2022), 'winnings'] = 1000
+    df.loc[(df.winnings >= 500) & (df.week==8) & (df.year==2022), 'winnings'] = 500
+    df.loc[(df.winnings >= 500) & (df.week==13) & (df.year==2022), 'winnings'] = 500
 
     df.loc[df['max_lineup_num']==1, ['player_drop_multiple']] = 0
 
@@ -501,12 +502,6 @@ df = dm.read('''SELECT *
                 WHERE trial_num >= 380
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
-                      AND week != 8
-                    --  AND week != 13
-                    --  AND year=2023
-                     -- AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
-                     --AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
-                  --  AND million_ens_vers='kbest_matt0_brier1_include2_kfold3'
                 ''', 'Results')
 
 df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
@@ -529,7 +524,7 @@ show_coef(coef_vals, X)
 #%%
 
 weeks = [
-         1, 2, 3, 4, 5, 6, 7,#$ 8, 
+         1, 2, 3, 4, 5, 6, 7,# 8, 
          9, 10, 11, 12, 13, 
          14, 15, 16,
          1, 2, 3, 4, 5]
