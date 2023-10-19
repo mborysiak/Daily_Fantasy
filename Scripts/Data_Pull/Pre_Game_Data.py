@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2023
-set_week = 6
+set_week = 7
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -305,6 +305,15 @@ dm.delete_from_db('Pre_PlayerData', 'FantasyData', f"week={set_week} AND year={s
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData', 'append')
 
 #%%
+df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
+df = format_fantasy_cruncher(df, set_week, set_year)
+col = dm.read("SELECT * FROM FantasyCruncher", 'Pre_PlayerData').columns
+df = df[[c for c in df.columns if c in col]]
+
+dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
+
+#%%
 
 try:
     os.replace(f"/Users/borys/Downloads/draftkings.csv", 
@@ -326,15 +335,6 @@ df = df[['player', 'position', 'team', 'week', 'year', 'ownership_type', 'owners
 
 dm.delete_from_db('Pre_PlayerData', 'Projected_Ownership', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'Projected_Ownership', 'append')
-
-#%%
-df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
-df = format_fantasy_cruncher(df, set_week, set_year)
-col = dm.read("SELECT * FROM FantasyCruncher", 'Pre_PlayerData').columns
-df = df[[c for c in df.columns if c in col]]
-
-dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
-dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
 
 
 #%%

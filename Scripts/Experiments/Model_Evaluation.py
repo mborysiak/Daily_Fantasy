@@ -468,7 +468,6 @@ def entry_optimize_params(df, max_adjust, model_name):
     
     df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
     df.loc[(df.winnings >= 500) & (df.week==8) & (df.year==2022), 'winnings'] = 500
-    df.loc[(df.winnings >= 500) & (df.week==13) & (df.year==2022), 'winnings'] = 500
 
     df.loc[df['max_lineup_num']==1, ['player_drop_multiple']] = 0
 
@@ -524,12 +523,12 @@ show_coef(coef_vals, X)
 #%%
 
 weeks = [
-         1, 2, 3, 4, 5, 6, 7,# 8, 
+         1, 2, 3, 4, 5, 6, 7, 8, 
          9, 10, 11, 12, 13, 
          14, 15, 16,
          1, 2, 3, 4, 5]
 years = [
-          2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 
+          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
          2023, 2023, 2023, 2023, 2023]
 

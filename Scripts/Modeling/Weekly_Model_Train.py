@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [6]
+run_weeks = [7]
 verbosity = 50
 run_params = {
     
@@ -378,8 +378,8 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
     params = skm.default_params(pipe, bayes_rand, min_samples=min_samples)
     if m=='adp': 
         params['feature_select__cols'] = [
-                                            ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
-                                            ['year', 'week',  'ProjPts', 'dk_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
+                                           ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
+                                           ['year', 'week',  'ProjPts', 'dk_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
                                             [ 'ProjPts', 'dk_salary','projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank']
                                         ]
         params['k_best__k'] = range(1, 14)
@@ -623,8 +623,8 @@ with keep.running() as m:
         print('Fell Asleep')
 
     run_list = [
-                ['QB', '', 'full_model'],
-                ['RB', '', 'full_model'],
+                # ['QB', '', 'full_model'],
+                # ['RB', '', 'full_model'],
                 ['WR', '', 'full_model'],
                 ['TE', '', 'full_model'],
                 ['Defense', '', 'full_model'],
@@ -664,7 +664,8 @@ with keep.running() as m:
                 trial_times = None
                 print('No Trials Exist')
 
-            _ = get_model_output('adp', 'reg', df_train, 'reg', run_params, 0, min_samples, '', 10)
+            adp_result = get_model_output('adp', 'reg', df_train, 'reg', run_params, 0, min_samples, '', run_params['n_iters'])
+            adp_result = list(adp_result)
 
             func_params = []
             func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples,  num_trials, run_params))
@@ -677,13 +678,17 @@ with keep.running() as m:
             results = Parallel(n_jobs=-1, verbose=verbosity)(
                             delayed(get_model_output)
                             (m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
-                                for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params
+                                for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params[1:] # skip ADP to append due to Scaler error
                             )
-            
+            all_results = []
+            all_results.append(adp_result)
+            all_results.extend(results)
+
             # save output for all models
             out_dict = output_dict()
-            out_dict = unpack_results(out_dict, func_params, results)
+            out_dict = unpack_results(out_dict, func_params, all_results)
             save_output_dict(out_dict, 'all', model_output_path)
+
 
 #%%
 import os

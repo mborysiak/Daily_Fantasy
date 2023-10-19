@@ -953,6 +953,7 @@ def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_
     try: n_iter = num_trials[final_m]
     except: n_iter = run_params['n_iters']
 
+    if trials is not None: trials = update_trials_params(trials, final_m, params, pipe)
     best_model, stack_scores, stack_pred, trial = skm.best_stack(pipe, params, X_stack, y_stack, 
                                                                 n_iter=n_iter, alpha=alpha,
                                                                 trials=trials, bayes_rand=run_params['opt_type'],
@@ -1169,7 +1170,7 @@ run_params = {
 
     # opt params
     'opt_type': 'bayes',
-    'n_iters': 50,
+    'n_iters': 100,
     
     'n_splits': 5,
     'num_k_folds': 3,
@@ -1197,7 +1198,7 @@ matt_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [6]
+set_weeks = [7]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
@@ -1230,14 +1231,14 @@ with keep.running() as m:
         run_params['set_week'] = w
         runs = [
             ['QB', 'full_model', ''],
-            ['RB', 'full_model', ''],
-            ['WR', 'full_model', ''],
-            ['TE', 'full_model', ''],
-            ['Defense', 'full_model', ''],
-            ['QB', 'backfill', ''],
-            ['RB', 'backfill', ''],
-            ['WR', 'backfill', ''],
-            ['TE', 'backfill', '']
+            # ['RB', 'full_model', ''],
+            # ['WR', 'full_model', ''],
+            # ['TE', 'full_model', ''],
+            # ['Defense', 'full_model', ''],
+            # ['QB', 'backfill', ''],
+            # ['RB', 'backfill', ''],
+            # ['WR', 'backfill', ''],
+            # ['TE', 'backfill', '']
         ]
 
         for set_pos, model_type, rush_pass in runs:
