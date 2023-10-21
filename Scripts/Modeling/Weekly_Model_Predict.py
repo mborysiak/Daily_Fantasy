@@ -203,6 +203,8 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
 
     if stack_model=='random_full_stack' and run_params['opt_type']=='bayes': 
         params['random_sample__frac'] = hp.uniform('random_sample__frac', 0.5, 1)
+        # params['feature_union__pca__n_components'] = scope.int(hp.quniform('feature_union__pca__n_components', 2, 15, 1))
+        
     elif stack_model=='random_full_stack' and run_params['opt_type']=='rand':
         params['random_sample__frac'] = np.arange(0.5, 1, 0.05)
         # params['select_perc__percentile'] = hp.uniform('percentile', 0.5, 1)
@@ -1165,12 +1167,12 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_kbest',
+    'stack_model': 'random_full_stack',
     'stack_model_million': 'random_kbest',
 
     # opt params
     'opt_type': 'bayes',
-    'n_iters': 100,
+    'n_iters': 50,
     
     'n_splits': 5,
     'num_k_folds': 3,
@@ -1231,14 +1233,14 @@ with keep.running() as m:
         run_params['set_week'] = w
         runs = [
             ['QB', 'full_model', ''],
-            # ['RB', 'full_model', ''],
-            # ['WR', 'full_model', ''],
-            # ['TE', 'full_model', ''],
-            # ['Defense', 'full_model', ''],
-            # ['QB', 'backfill', ''],
-            # ['RB', 'backfill', ''],
-            # ['WR', 'backfill', ''],
-            # ['TE', 'backfill', '']
+            ['RB', 'full_model', ''],
+            ['WR', 'full_model', ''],
+            ['TE', 'full_model', ''],
+            ['Defense', 'full_model', ''],
+            ['QB', 'backfill', ''],
+            ['RB', 'backfill', ''],
+            ['WR', 'backfill', ''],
+            ['TE', 'backfill', '']
         ]
 
         for set_pos, model_type, rush_pass in runs:
