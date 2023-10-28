@@ -17,7 +17,7 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2023
-week=7
+week=8
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -102,7 +102,7 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'Results')
     return vers
 
-best_trials = 421
+best_trials = 429
 
 opt_params = pull_best_params(best_trials)
 pprint.pprint(opt_params)

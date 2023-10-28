@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [7]
+run_weeks = [8]
 verbosity = 50
 run_params = {
     
@@ -623,8 +623,8 @@ with keep.running() as m:
         print('Fell Asleep')
 
     run_list = [
-                # ['QB', '', 'full_model'],
-                # ['RB', '', 'full_model'],
+                ['QB', '', 'full_model'],
+                ['RB', '', 'full_model'],
                 ['WR', '', 'full_model'],
                 ['TE', '', 'full_model'],
                 ['Defense', '', 'full_model'],

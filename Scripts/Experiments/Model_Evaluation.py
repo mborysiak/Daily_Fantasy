@@ -189,7 +189,7 @@ run_params = {
     'val_week_min': 2,
 
     # opt params
-    'n_iters': 25,
+    'n_iters': 5,
     'n_splits': 5,
 
     # other parameters
@@ -226,10 +226,10 @@ df = pd.merge(df.drop('y_act', axis=1), y_act, on=['player', 'week', 'year'])
 df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 # df_train = add_sal_columns(df_train)
 
-cut = 95
-df_train_class, df_predict_class = get_class_data(df, cut, run_params)
+# cut = 95
+# df_train_class, df_predict_class = get_class_data(df, cut, run_params)
 
-skm = SciKitModel(df_train, model_obj='class', brier_wt=1, matt_wt=0)
+skm = SciKitModel(df_train, model_obj='reg', mse_wt=1)
 X, y = skm.Xy_split('y_act', run_params['drop_cols'])
 
 # X = X_all.sample(frac=1, axis=1)
@@ -256,7 +256,7 @@ pipe = skm.model_pipe([ #('cbe', CatBoostEncoder()),
                                         skm.piece('pca')
                                         ]),
                         skm.piece('k_best_c'),
-                        skm.piece('lr_c')
+                        skm.piece('gbm')
                         
                      ])
 
@@ -282,11 +282,11 @@ params = skm.default_params(pipe, 'rand')
 
 # run the model with parameter search
 best_models, oof_data, param_scores, _ = skm.time_series_cv(pipe, X, y, params, n_iter=25,
-                                                        col_split='game_date',n_splits=4,
-                                                        time_split=run_params['cv_time_input'],
-                                                        bayes_rand='rand', proba=True,
-                                                        sample_weight=False,
-                                                        random_seed=12345)
+                                                            col_split='game_date',n_splits=4,
+                                                            time_split=run_params['cv_time_input'],
+                                                            bayes_rand='rand', proba=True,
+                                                            sample_weight=False,
+                                                            random_seed=12345)
 
 mf.show_scatter_plot(oof_data['full_hold']['pred'], oof_data['full_hold']['y_act'])
 show_calibration_curve(oof_data['full_hold']['y_act'], oof_data['full_hold']['pred'])
@@ -510,11 +510,11 @@ model_type = {
  'lasso': Lasso(alpha=0.1),
  'ridge': Ridge(alpha=100),
  'rf': RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1),
- 'lgbm': LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=5, n_jobs=-1)
+ 'lgbm': LGBMRegressor(n_estimators=50, max_depth=5, learning_rate=0.05, min_samples_leaf=5, n_jobs=-1)
 
 }
 w=1
-model_name='lgbm'
+model_name='enet'
 m = model_type[model_name] 
 X, y = entry_optimize_params(df, max_adjust=10000, model_name=model_name)
 coef_vals, X = get_model_coef(X, y, m)
@@ -526,11 +526,11 @@ weeks = [
          1, 2, 3, 4, 5, 6, 7, 8, 
          9, 10, 11, 12, 13, 
          14, 15, 16,
-         1, 2, 3, 4, 5]
+         1, 2, 3, 4, 5, 6, 7]
 years = [
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-         2023, 2023, 2023, 2023, 2023]
+          2023, 2023, 2023, 2023, 2023, 2023, 2023]
 
 i=0
 all_coef = None; X_all = None

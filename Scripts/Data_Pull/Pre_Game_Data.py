@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2023
-set_week = 7
+set_week = 8
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -270,6 +270,7 @@ for t, d, db in zip(tables, dfs, dbs):
 
 df = move_download_to_folder(root_path, 'FFA', f'projections_{set_year}_wk{set_week}.csv')
 df = format_ffa(df, 'Projections', set_week, set_year)
+df = df[~df.team.isnull()].reset_index(drop=True)
 
 dm.delete_from_db('Pre_PlayerData', 'FFA_Projections', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FFA_Projections', 'append')
@@ -277,6 +278,7 @@ dm.write_to_db(df, 'Pre_PlayerData', 'FFA_Projections', 'append')
 
 df = move_download_to_folder(root_path, 'FFA', f'raw_stats_{set_year}_wk{set_week}.csv')
 df = format_ffa(df, 'RawStats', set_week, set_year)
+df = df[~df.team.isnull()].reset_index(drop=True)
 
 dm.delete_from_db('Pre_PlayerData', 'FFA_RawStats', f"week={set_week} AND year={set_year}", create_backup=False)
 cols = dm.read("SELECT * FROM FFA_RawStats", 'Pre_PlayerData').columns
