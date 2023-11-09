@@ -358,7 +358,7 @@ covar_type = 'kmeans_pred_trunc_new'
 #       2023, 2023, 2023, 2023, 2023, 2023
 # ]
 
-set_weeks = [8]
+set_weeks = [9]
 set_years = [2023,2023]
 
 pred_versions = [

@@ -17,19 +17,19 @@ conn = dm.db_connect('Simulation')
 # Settings and User Inputs
 #===============
 
-# # set the model version
-# set_weeks = [
-#    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-#    1, 2, 3, 4, 5, 6, 7
-# ]
+# set the model version
+set_weeks = [
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+   1, 2, 3, 4, 5, 6, 7, 8
+]
 
-# set_years = [
-#       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
-#       2023, 2023, 2023, 2023, 2023, 2023, 2023
-# ]
+set_years = [
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
+      2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
+]
 
-set_weeks=[8]
-set_years=[2023]
+# set_weeks=[8]
+# set_years=[2023]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 
@@ -204,35 +204,35 @@ with keep.running() as m:
                         'static_top_players', 'use_ownership', 'own_neg_frac', 
                         'max_salary_remain', 'num_iters', 'num_avg_pts', 'qb_stack_wt']
 
-            d = {'adjust_pos_counts': {False: 0.4, True: 0.6},
- 'covar_type': {'kmeans_pred_trunc': 0.0,
-                'no_covar': 0.3,
-                'team_points_trunc': 0.7},
- 'full_model_weight': {0.2: 0.4, 5: 0.6},
- 'lineups_per_param': {1: 1.0},
- 'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
- 'matchup_seed': {0: 0.8, 1: 0.2},
- 'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
- 'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
- 'min_player_same_team': {2: 0.1, 3: 0.2, 'Auto': 0.7},
- 'min_players_opp_team': {1: 0.1, 2: 0.2, 'Auto': 0.7},
- 'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.3, 7: 0.3, 10: 0.4},
- 'num_iters': {50: 0.3, 100: 0.0, 150: 0.7},
- 'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
- 'own_neg_frac': {0.8: 0.0, 1: 1.0},
- 'ownership_vers': {'mil_div_standard_ln': 0.0,
-                    'mil_only': 0.2,
-                    'mil_times_standard_ln': 0.0,
-                    'standard_ln': 0.8},
- 'player_drop_multiple': {0: 0.4, 2: 0.2, 4: 0.4},
- 'qb_min_iter': {0: 0.6, 2: 0.4, 9: 0.0},
- 'qb_set_max_team': {0: 0.7, 1: 0.3},
- 'qb_solo_start': {False: 1.0, True: 0.0},
- 'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.5, 4: 0.5},
- 'static_top_players': {False: 0.3, True: 0.7},
- 'top_n_choices': {0: 0.6, 1: 0.2, 2: 0.2},
- 'use_ownership': {0.8: 0.4, 0.9: 0.0, 1: 0.6}}
-                                                
+            d = {'adjust_pos_counts': {False: 0.6, True: 0.4},
+                'covar_type': {'kmeans_pred_trunc': 0.0,
+                                'no_covar': 0,
+                                'team_points_trunc': 1},
+                'full_model_weight': {0.2: 0.5, 5: 0.5},
+                'lineups_per_param': {1: 1.0},
+                'matchup_drop': {0: 0.6, 1: 0.2, 2: 0.2, 3: 0.0},
+                'matchup_seed': {0: 0.3, 1: 0.7},
+                'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
+                'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
+                'min_player_same_team': {2: 0.2, 3: 0.2, 'Auto': 0.6},
+                'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8},
+                'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0, 7: 0.5, 10: 0.5},
+                'num_iters': {50: 0, 100: 0.0, 150: 1},
+                'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
+                'own_neg_frac': {0.8: 0.0, 1: 1.0},
+                'ownership_vers': {'mil_div_standard_ln': 0.0,
+                                    'mil_only': 0,
+                                    'mil_times_standard_ln': 0.0,
+                                    'standard_ln': 1},
+                'player_drop_multiple': {0: 0.4, 2: 0.2, 4: 0.4},
+                'qb_min_iter': {0: 0.6, 2: 0.4, 4: 0, 9: 0.0},
+                'qb_set_max_team': {0: 0.7, 1: 0.3},
+                'qb_solo_start': {False: 1, True: 0},
+                'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
+                'static_top_players': {False: 0.3, True: 0.7},
+                'top_n_choices': {0: 1, 1: 0, 2: 0},
+                'use_ownership': {0.8: 1, 0.9: 0.0, 1: 0}}
+                                                                
             lineups_per_param = int(d['lineups_per_param'][1])
 
             d = {k: d[k] for k in d_ordering}

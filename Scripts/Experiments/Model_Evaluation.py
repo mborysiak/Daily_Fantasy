@@ -514,7 +514,7 @@ model_type = {
 
 }
 w=1
-model_name='enet'
+model_name='lgbm'
 m = model_type[model_name] 
 X, y = entry_optimize_params(df, max_adjust=10000, model_name=model_name)
 coef_vals, X = get_model_coef(X, y, m)
@@ -523,14 +523,14 @@ show_coef(coef_vals, X)
 #%%
 
 weeks = [
-         1, 2, 3, 4, 5, 6, 7, 8, 
+         1, 2, 3, 4, 5, 6, 7, #8, 
          9, 10, 11, 12, 13, 
          14, 15, 16,
-         1, 2, 3, 4, 5, 6, 7]
+         1, 2, 3, 4, 5, 6, 7, 8]
 years = [
+          2022, 2022, 2022, 2022, 2022, 2022, 2022, #2022, 
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-          2023, 2023, 2023, 2023, 2023, 2023, 2023]
+          2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023]
 
 i=0
 all_coef = None; X_all = None
