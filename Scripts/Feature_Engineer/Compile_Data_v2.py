@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2023
-WEEK = 10
+WEEK = 11
 
 #%%
 
@@ -2129,7 +2129,7 @@ defense = remove_low_corrs(defense, corr_cut=0.02)
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
 #%%
 
-chk_week = 10
+chk_week = 11
 backfill_chk = dm.read(f"SELECT player FROM Backfill WHERE week={chk_week} AND year={YEAR}", 'Model_Features').player.values
 sal = dm.read(f"SELECT player, salary FROM Salaries WHERE week={chk_week} AND year={YEAR}", 'Simulation')
 sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]
