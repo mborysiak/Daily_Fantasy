@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2023
-set_week = 10
+set_week = 11
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -57,13 +57,10 @@ rush_rz_df = rush_rz_df.drop(['link'], axis=1)
 rec_rz_df = rec_rz_df.drop(['link'], axis=1)
 pass_rz_df = pass_rz_df.drop(['link'], axis=1)
 
-trade_fix = [['James Robinson', 'NYJ'],
-             ['Jeff Wilson', 'MIA'],
-             ['Christian McCaffrey', 'SF'],
-             ['Latavius Murray', 'BUF'],
-             ['TJ Hockenson', 'MIN'],
-             ['Nyheim Hines', 'BUF']]
+trade_fix = [['Joshua Dobbs', 'MIN'],
+             ['Cam Akers','MIN']]
 for p, t in trade_fix:
+    pass_rz_df.loc[pass_rz_df.player==p, 'team'] = t
     rush_rz_df.loc[rush_rz_df.player==p, 'team'] = t
     rec_rz_df.loc[rec_rz_df.player==p, 'team'] = t
 
@@ -275,13 +272,15 @@ rec.columns = rec_cols
 rec = rec.drop(['position', 'rec_td', 'adot', 'targ_int', 'targ_rating'], axis=1).fillna(0)
 
 
-trade_fix = [['James Robinson', 'NYJ'],
-             ['Jeff Wilson', 'MIA'],
-             ['Christian McCaffrey', 'SF'],
-             ['Latavius Murray', 'BUF'],
-             ['TJ Hockenson', 'MIN']]
+trade_fix = [['Joshua Dobbs', 'MIN'],
+             ['Cam Akers','MIN']]
 
 for p, t in trade_fix:
+    qb.loc[qb.player==p, 'team'] = t
+    qb_ay.loc[qb_ay.player==p, 'team'] = t
+    qb_acc.loc[qb_acc.player==p, 'team'] = t
+    qb_pres.loc[qb_pres.player==p, 'team'] = t
+    qb_pt.loc[qb_pt.player==p, 'team'] = t
     rb.loc[rb.player==p, 'team'] = t
     rec.loc[rec.player==p, 'team'] = t
 

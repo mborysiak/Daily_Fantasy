@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [11]
+run_weeks = [12]
 verbosity = 50
 run_params = {
     
@@ -184,7 +184,7 @@ def train_predict_split(df, run_params):
     output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
-    min_samples = int(df_train[df_train.game_date < run_params['cv_time_input']].shape[0] / 2)  
+    min_samples = int(df_train[df_train.game_date < run_params['cv_time_input']].shape[0] / 4)  
     print('Shape of Train Set', df_train.shape)
 
     return df_train, df_predict, output_start, min_samples

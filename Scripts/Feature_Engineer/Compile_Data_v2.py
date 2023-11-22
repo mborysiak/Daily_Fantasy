@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2023
-WEEK = 11
+WEEK = 12
 
 #%%
 
@@ -1816,7 +1816,7 @@ create_scores_lines_table(WEEK, YEAR)
 
 # get datasets that will be used across positions
 opp_defense = defense_for_pos()
-team_proj, team_proj_pos = get_team_projections()
+team_proj, team_proj_pos = get_team_projections() # add injury removal here in the future
 team_stats = get_team_stats()
 team_qb = get_max_qb()
 team_pos_rank = non_qb_team_pos_rank()
