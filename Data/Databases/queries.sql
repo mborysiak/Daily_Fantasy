@@ -35,7 +35,7 @@ FROM (
 			   trial_num, 
 			   repeat_num, 
 			   sum(CASE WHEN avg_winnings > 10000 THEN 10000 ELSE avg_winnings END) winnings,
-			   sum(CASE WHEN week=8 THEN 0 
+			   sum(CASE WHEN week=8 and year=2022 THEN 0 
 			            WHEN avg_winnings > 10000 THEN 10000 
 						ELSE avg_winnings END) non8_winnings 
 		FROM Entry_Optimize_Results
@@ -48,9 +48,91 @@ GROUP BY trial_num,
 	     million_ens_vers,
 	     std_dev_type
 )
+ORDER BY BlendedAvgMin DESC;
+
+
+
+WITH all_winnings_tbl AS (
+
+		SELECT reg_ens_vers,
+			   million_ens_vers,
+			   std_dev_type,
+			   trial_num, 
+			   AVG(winnings) AvgWinnings, 
+			   MIN(winnings) MinWinnings, 
+			   MAX(winnings) MaxWinnings
+		FROM (
+				SELECT reg_ens_vers,
+					   million_ens_vers,
+					   std_dev_type,
+					   trial_num, 
+					   repeat_num, 
+					   sum(CASE WHEN avg_winnings > 10000 THEN 10000 ELSE avg_winnings END) winnings,
+					   row_number() OVER (PARTITION BY trial_num ORDER BY sum(CASE WHEN avg_winnings > 10000 THEN 10000 ELSE avg_winnings END) DESC) rn_with
+				FROM Entry_Optimize_Results
+				WHERE trial_num >= 269
+					  AND week < 17
+				GROUP BY trial_num, repeat_num
+		)
+		WHERE rn_with > 1 AND rn_with < 10
+		GROUP BY trial_num,
+				 reg_ens_vers,
+				 million_ens_vers,
+				 std_dev_type
+
+),
+non8_winnings_tbl 
+AS (
+		SELECT trial_num, 
+			   AVG(non8_winnings) AvgNon8Winnings, 
+			   MIN(non8_winnings) MinNon8Winnings,
+			   MAX(non8_winnings) MaxNon8Winnings
+		FROM (
+				SELECT trial_num, 
+					   repeat_num, 
+					   sum(CASE WHEN week=8 and year=2022 THEN 0 
+								WHEN avg_winnings > 10000 THEN 10000 
+								ELSE avg_winnings END) non8_winnings ,
+					   row_number() OVER (PARTITION BY trial_num ORDER BY sum(CASE WHEN week=8 and year=2022 THEN 0 
+																				   WHEN avg_winnings > 10000 THEN 10000 
+																				   ELSE avg_winnings END) DESC) rn_non8
+				FROM Entry_Optimize_Results
+				WHERE trial_num >= 269
+					  AND week < 17
+				GROUP BY trial_num, repeat_num
+			)
+		WHERE rn_non8 > 1 AND rn_non8 < 10
+		GROUP BY trial_num
+)
+SELECT *,
+	   ROUND((AvgWinnings+AvgNon8Winnings+MinWinnings+MinNon8Winnings)/4,1) as BlendedAvgMin,
+	   ROUND((AvgWinnings+AvgNon8Winnings+MinWinnings+MinNon8Winnings+MaxNon8Winnings+MaxWinnings)/6,1) as BlendedAvgMinMax
+FROM all_winnings_tbl
+JOIN (
+	  SELECT * 
+	  FROM non8_winnings_tbl
+	  ) USING (trial_num)
 ORDER BY BlendedAvgMin DESC
 
 
+
+SELECT reg_ens_vers,
+		       million_ens_vers,
+			   std_dev_type,
+			   trial_num, 
+			   repeat_num, 
+			   sum(CASE WHEN avg_winnings > 10000 THEN 10000 ELSE avg_winnings END) winnings,
+			   sum(CASE WHEN week=8 and year=2022 THEN 0 
+			            WHEN avg_winnings > 10000 THEN 10000 
+						ELSE avg_winnings END) non8_winnings,
+			   row_number() OVER (PARTITION BY trial_num ORDER BY sum(CASE WHEN avg_winnings > 10000 THEN 10000 ELSE avg_winnings END) DESC) rn_with,	
+			   row_number() OVER (PARTITION BY trial_num ORDER BY sum(CASE WHEN week=8 and year=2022 THEN 0 
+																			WHEN avg_winnings > 10000 THEN 10000 
+																			ELSE avg_winnings END) DESC) rn_non8
+		FROM Entry_Optimize_Results
+		WHERE trial_num >= 269
+		      AND week < 17
+		GROUP BY trial_num, repeat_num;
 
 SELECT trial_num, SUM(WeekTrialRank) as AvgRank
 FROM (

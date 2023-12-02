@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [12]
+run_weeks = [13]
 verbosity = 50
 run_params = {
     
