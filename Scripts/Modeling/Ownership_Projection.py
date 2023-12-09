@@ -20,7 +20,7 @@ pred_version = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 million_ens_vers = 'random_kbest_matt0_brier1_include2_kfold3'
 
 set_year = 2023
-set_week = 13
+set_week = 14
 contest = 'Million'
 include_dst = True
 run_owner_model = True
@@ -448,6 +448,8 @@ def calc_std_dev(val_predict, test_predict):
     test_predict = test_predict[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
     test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'max_score'] = \
         test_predict.loc[test_predict.max_score < test_predict.pred_ownership, 'pred_ownership'] * 1.5
+    
+    test_predict.loc[test_predict.max_score > 0, 'max_score'] = -0.01
 
     return val_predict, test_predict
 

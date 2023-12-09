@@ -11,7 +11,7 @@ import shutil as su
 
 # +
 set_year = 2023
-set_week = 13
+set_week = 14
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
