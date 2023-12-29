@@ -20,7 +20,7 @@ pred_version = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 million_ens_vers = 'random_kbest_matt0_brier1_include2_kfold3'
 
 set_year = 2023
-set_week = 15
+set_week = 16
 contest = 'Million'
 include_dst = True
 run_owner_model = True
