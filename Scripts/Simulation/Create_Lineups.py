@@ -17,11 +17,11 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2023
-week=16
+week=17
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 50
+num_lineups = 5
 set_max_team = None
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
