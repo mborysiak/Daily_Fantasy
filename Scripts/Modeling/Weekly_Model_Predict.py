@@ -197,9 +197,9 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
     params = skm.default_params(pipe, bayes_rand=bayes_rand, min_samples=min_samples)
     
     if skm.model_obj == 'quantile':
-        if m in ('qr_q', 'gbmh_q'): pipe.steps[-1][-1].quantile = alpha
-        elif m in ('rf_q', 'knn_q'): pipe.steps[-1][-1].q = alpha
-        else: pipe.steps[-1][-1].alpha = alpha
+        if m in ('qr_q', 'gbmh_q'): pipe.set_params(**{f'{m}__quantile': alpha})
+        elif m in ('rf_q', 'knn_q'): pipe.set_params(**{f'{m}__q': alpha})
+        else: pipe.set_params(**{f'{m}__alpha': alpha})
 
     if stack_model=='random_full_stack' and run_params['opt_type']=='bayes': 
         params['random_sample__frac'] = hp.uniform('random_sample__frac', 0.5, 1)
@@ -316,9 +316,43 @@ def load_all_stack_pred_million(model_output_path):
 
 #     return cur_predict
 
-def fit_and_predict(m, df_predict, X, y, proba):
+# def fit_and_predict(m, df_predict, X, y, proba):
 
-    # if m.steps[0][1]=='random_sample':
+#     # if m.steps[0][1]=='random_sample':
+#     try:
+#         cols = m.steps[0][-1].columns
+#         cols = [c for c in cols if c in X.columns]
+#         X = X[cols]
+#         X_predict = df_predict[cols]
+#         m = Pipeline(m.steps[1:])
+#     except:
+#         X_predict = df_predict[X.columns]
+        
+#     try:
+#         m.fit(X,y)
+
+#         if proba: cur_predict = m.predict_proba(X_predict)[:,1]
+#         else: cur_predict = m.predict(X_predict)
+    
+#     except:
+#         cur_predict = []
+
+#     return cur_predict
+
+# def create_stack_predict(df_predict, models, X, y, proba=False):
+
+#     # create the full stack pipe with meta estimators followed by stacked model
+#     X_predict = pd.DataFrame()
+#     for k, ind_models in models.items():
+#         predictions = Parallel(n_jobs=-1, verbose=0)(delayed(fit_and_predict)(m, df_predict, X, y, proba) for m in ind_models)
+#         predictions = [p for p in predictions if len(p) > 0]
+#         predictions = pd.Series(pd.DataFrame(predictions).T.mean(axis=1), name=k)
+#         X_predict = pd.concat([X_predict, predictions], axis=1)
+
+#     return X_predict
+
+def fit_and_predict(m_label, m, df_predict, X, y, proba):
+
     try:
         cols = m.steps[0][-1].columns
         cols = [c for c in cols if c in X.columns]
@@ -337,19 +371,27 @@ def fit_and_predict(m, df_predict, X, y, proba):
     except:
         cur_predict = []
 
+    cur_predict = pd.DataFrame(cur_predict, columns=['pred'])
+    cur_predict['model'] = m_label
+
     return cur_predict
 
-def create_stack_predict(df_predict, models, X, y, proba=False):
 
+
+def create_stack_predict(df_predict, models, X, y, proba=False):
     # create the full stack pipe with meta estimators followed by stacked model
-    X_predict = pd.DataFrame()
+    all_models = []
     for k, ind_models in models.items():
-        predictions = Parallel(n_jobs=-1, verbose=0)(delayed(fit_and_predict)(m, df_predict, X, y, proba) for m in ind_models)
-        predictions = [p for p in predictions if len(p) > 0]
-        predictions = pd.Series(pd.DataFrame(predictions).T.mean(axis=1), name=k)
-        X_predict = pd.concat([X_predict, predictions], axis=1)
+        for m in ind_models:
+            all_models.append([k, m])
+
+    predictions = Parallel(n_jobs=-1, verbose=0)(delayed(fit_and_predict)(model_name, m, df_predict, X, y, proba) for model_name, m in all_models)
+    preds = pd.concat([p for p in predictions], axis=0)
+    X_predict = pd.pivot_table(preds, values='pred', index=preds.index,columns='model', aggfunc='mean')
+    X_predict = X_predict.rename_axis(None, axis=1)
 
     return X_predict
+
 
 def get_stack_predict_data(df_train, df_predict, df, run_params, 
                            models_reg, models_class, models_quant):
@@ -1010,6 +1052,39 @@ def load_stack_runs(model_output_path, fname):
 def remove_knn_rf_q(X):
     return X[[c for c in X.columns if 'knn_q' not in c and 'rf_q' not in c]]
 
+
+def remove_low_preds(predictions, stack_val_pred, model_list, scores):
+    
+    preds_mean_check = pd.DataFrame(predictions.median(), columns=['preds'])
+    val_mean_check = pd.DataFrame(stack_val_pred.median(), columns=['vals'])
+    mean_checks = pd.merge(preds_mean_check, val_mean_check, left_index=True, right_index=True)
+    mean_checks['pct_diff'] = (mean_checks.preds - mean_checks.vals) / (mean_checks.vals + 0.01)
+    
+    print(mean_checks)
+    models_pre = mean_checks.index
+    for cut in np.arange(0.2, 2, 0.2):
+        mean_checks_idx = mean_checks[abs(mean_checks.pct_diff) <= cut].index
+        if len(mean_checks_idx) >= run_params['min_include']: break
+
+    print("models removed:", [m for m in models_pre if m not in mean_checks_idx])
+
+    # auto remove any predictions that are negative or 0
+    good_col = []
+    good_idx = []
+
+    for i, col in enumerate(predictions.columns):
+        if col in mean_checks_idx:
+            good_col.append(col)
+            good_idx.append(i)
+
+    predictions = predictions[good_col]
+    stack_val_pred = stack_val_pred[good_col]
+    model_list = list(np.array(model_list)[good_idx])
+    scores = list(np.array(scores)[good_idx])
+
+    return predictions, stack_val_pred, model_list, scores
+
+
 def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=None, is_million=False):
     
     if model_obj=='reg': ens_vers = run_params['reg_ens_vers']
@@ -1062,6 +1137,8 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
 
     X_predict = X_predict[X_stack.columns]
     predictions = stack_predictions(X_predict, best_models, model_list, model_obj=model_obj)
+    predictions, stack_val_pred, model_list, scores = remove_low_preds(predictions, stack_val_pred, model_list, scores)
+    
     best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack, stack_val_pred, 
                                                          predictions, model_obj=model_obj, 
                                                          show_plot=run_params['show_plot'], 
@@ -1167,7 +1244,7 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_full_stack',
+    'stack_model': 'random_full_stack_team_stats',
     'stack_model_million': 'random_kbest',
 
     # opt params
@@ -1200,7 +1277,7 @@ matt_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [17]
+set_weeks = [16]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
@@ -1229,8 +1306,59 @@ with keep.running() as m:
         print('Fell Asleep')
             
     for w in set_weeks:
-
         run_params['set_week'] = w
+
+        if 'team_stats' in run_params['stack_model']:
+
+            model_type = 'backfill'
+            run_params['rush_pass'] = ''
+
+            backfill_runs = {}
+            for set_pos in ['QB', 'RB', 'WR', 'TE']:
+
+                # load data and filter down
+                pkey, run_params, model_output_path = create_pkey_output_path(set_pos, run_params, model_type)
+                df, run_params = load_data(model_type, set_pos, run_params)
+                df, run_params = create_game_date(df, run_params)
+                df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
+
+                # set up blank dictionaries for all metrics
+                out_reg, out_class, out_quant, out_million = {}, {}, {}, {}
+
+                #------------
+                # Run the Stacking Models and Generate Output
+                #------------
+
+                # get the training data for stacking and prediction data after stacking
+                X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path)
+                X_predict_player, X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, models_reg, models_class, models_quant)
+                
+                X_stack = remove_knn_rf_q(X_stack)
+                X_predict = remove_knn_rf_q(X_predict)
+                X_predict_player = remove_knn_rf_q(X_predict_player)
+
+                # cleanup the X and y datasets
+                X_stack_player, X_stack, y_stack = cleanup_X_y(X_stack, y_stack)
+                _, _, y_stack_class = cleanup_X_y(X_stack_player, y_stack_class)
+
+                backfill_runs[set_pos] = {'X_stack_player': X_stack_player, 'X_stack': X_stack, 'y_stack': y_stack, 
+                                          'y_stack_class': y_stack_class, 'X_predict': X_predict, 'X_predict_player': X_predict_player}
+            
+            team_data = pd.DataFrame()
+            for pos in backfill_runs.keys():
+                team_data = pd.concat([team_data, backfill_runs[pos]['X_stack_player'].assign(pos=pos)], axis=0)
+
+            team_data = team_data.sort_values(by=['team', 'year', 'week', 'reg_adp'],
+                        ascending=[True, True, True, False]).reset_index(drop=True)
+            team_data['team_rank'] = team_data.groupby(['team', 'year', 'week']).cumcount().apply(lambda x: str(x))
+            team_data['team_pos_rank'] = team_data.groupby(['team', 'pos', 'year', 'week']).cumcount().apply(lambda x: str(x))
+
+            ignore_cols = ['player', 'team', 'week', 'year', 'pos', 'team_rank', 'team_pos_rank']
+            team_sum = team_data.groupby(['team', 'year', 'week']).agg({c:'sum' for c in team_data.columns if c not in ignore_cols})
+            team_sum.columns = ['team_sum' + c for c in team_sum.columns]
+            team_data = pd.merge(team_data, team_sum.reset_index(), on=['team', 'year', 'week'], how='left')
+            
+#%%
         runs = [
             ['QB', 'full_model', ''],
             ['RB', 'full_model', ''],

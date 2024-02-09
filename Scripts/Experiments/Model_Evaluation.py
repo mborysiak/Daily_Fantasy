@@ -16,7 +16,9 @@ from lightgbm import LGBMRegressor
 from sklearn.metrics import r2_score, brier_score_loss
 import zModel_Functions as mf
 import matplotlib.pyplot as plt
-
+from hyperopt import Trials
+from warnings import simplefilter 
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
@@ -102,7 +104,8 @@ def train_predict_split(df, run_params):
     df_train = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 
-    df_predict = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
+    df_predict = df[(df.game_date >= run_params['train_time_split']) & \
+                    (df.week < 17)].reset_index(drop=True)
     output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
@@ -165,7 +168,83 @@ def show_calibration_curve(y_true, y_pred, n_bins=10):
 #%%
 
 #======================================================================================================================
+def select_main_slate_teams(df):
 
+    import datetime as dt
+
+    good_teams = dm.read(f'''
+                    SELECT away_team team, gametime, week, year 
+                    FROM Gambling_Lines 
+                    WHERE year >= 2020
+                    UNION
+                    SELECT home_team team, gametime, week, year 
+                    FROM Gambling_Lines
+                    WHERE year >= 2020
+                ''', 'Pre_TeamData')
+
+
+    good_teams.gametime = pd.to_datetime(good_teams.gametime)
+    good_teams['day_of_week'] = good_teams.gametime.apply(lambda x: x.weekday())
+    good_teams['hour_in_day'] = good_teams.gametime.apply(lambda x: x.hour)
+
+    good_teams = good_teams[(good_teams.day_of_week==6) & (good_teams.hour_in_day <= 17) & (good_teams.hour_in_day > 10)]
+    good_teams = good_teams[['team', 'week', 'year']]
+
+    if set_pos == 'Defense': 
+        good_teams = good_teams.rename(columns={'team': 'player'})
+        df = pd.merge(df, good_teams, on=['player', 'week', 'year'])
+
+    else:
+        df = pd.merge(df, good_teams, on=['team', 'week', 'year'])
+
+    return df
+
+def add_sal_columns(df):
+
+    new_df = pd.DataFrame()
+    for c in df.columns:
+        try:
+            if 'expert' in c: new_df[c+'_salary'] = df[c] * df.dk_salary
+            if 'rank' in c: new_df[c+'_salary'] = df[c] * df.dk_salary
+            if 'proj' in c: new_df[c+'_salary'] = df[c] / df.dk_salary
+            if 'ffa' in c: new_df[c+'_salary'] = df[c] / df.dk_salary
+        except:
+            pass
+
+    df = pd.concat([df, new_df], axis=1)
+    
+    return df
+
+def predict_million_df(df, run_params):
+
+    df = select_main_slate_teams(df)
+
+    df = df.drop('y_act', axis=1)
+    top_players = dm.read("SELECT player, week, year, y_act FROM Top_Players", "DK_Results")
+
+    df = pd.merge(df, top_players, on=['player', 'week', 'year'], how='left')
+    df = df.fillna({'y_act': 0})
+
+    df_train_mil, df_predict_mil, _, min_samples_mil = train_predict_split(df, run_params)
+
+    return df_train_mil, df_predict_mil, min_samples_mil
+
+
+def predict_million_df_roi(df, run_params):
+
+    df = select_main_slate_teams(df)
+
+    df = df.drop('y_act', axis=1)
+    top_players = dm.read('''SELECT player, week, year, CASE WHEN prize_return_pct > 0 THEN 1 ELSE 0 END y_act 
+                             FROM Top_Players_ROI
+                             WHERE total_lineups > 250
+                          ''', "DK_Results")
+
+    df = pd.merge(df, top_players, on=['player', 'week', 'year'], how='inner')
+
+    df_train_mil, df_predict_mil, _, min_samples_mil = train_predict_split(df, run_params)
+
+    return df_train_mil, df_predict_mil, min_samples_mil, run_params
 
 #==================================================================
 # SHAP Plots for Best Models
@@ -176,20 +255,19 @@ def show_calibration_curve(y_true, y_pred, n_bins=10):
 
 # set the model version
 model_type ='full_model'
-set_pos = 'WR'
 
 run_params = {
     
     # set year and week to analyze
     'set_year': 2023,
-    'set_week': 4,
+    'set_week': 12,
 
     # set beginning of validation period
     'val_year_min': 2021,
     'val_week_min': 2,
 
     # opt params
-    'n_iters': 5,
+    'n_iters': 10,
     'n_splits': 5,
 
     # other parameters
@@ -200,16 +278,18 @@ run_params = {
 
     # set number of weeks back to begin validation
     'back_weeks': {
-        'QB': 28,
+        'QB': 32,
         'RB': 32,
-        'WR': 24,
-        'TE': 28,
-        'Defense': 28
+        'WR': 32,
+        'TE': 32,
+        'Defense': 32
     },
 
     'rush_pass': ''
 }
 
+set_pos = 'QB'
+is_million = False
 
 #==========
 # Pull and clean compiled data
@@ -217,114 +297,138 @@ run_params = {
 
 df, run_params = load_data(model_type, set_pos, run_params)
 df, run_params = create_game_date(df, run_params)
+if is_million: 
+    df_train, df_predict, min_samples = predict_million_df(df, run_params)
+    df_train = add_sal_columns(df_train)
+    df_predict = add_sal_columns(df_predict)
+else:
+    df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
-y_act = dm.read('''SELECT player, week, year, 
-                          CASE WHEN prize_return_pct > 0 THEN 1 ELSE 0 END y_act 
-                   FROM Top_Players_ROI WHERE total_lineups > 1000''', 'DK_Results')
-
-df = pd.merge(df.drop('y_act', axis=1), y_act, on=['player', 'week', 'year'])
-df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
-# df_train = add_sal_columns(df_train)
-
-# cut = 95
-# df_train_class, df_predict_class = get_class_data(df, cut, run_params)
-
-skm = SciKitModel(df_train, model_obj='reg', mse_wt=1)
-X, y = skm.Xy_split('y_act', run_params['drop_cols'])
-
-# X = X_all.sample(frac=1, axis=1)
-# if 'game_date' not in X.columns:
-#     X['game_date'] = X_all.game_date
-
-#------------
-# Get Regression Data
-#------------
-
-from sklearn.pipeline import Pipeline
-from sklearn.ensemble import HistGradientBoostingRegressor
-from sklearn.linear_model import LassoLars,HuberRegressor, QuantileRegressor
-from sklearn_quantile import RandomForestQuantileRegressor, KNeighborsQuantileRegressor, SampleRandomForestQuantileRegressor
-# from category_encoders.cat_boost import CatBoostEncoder
-
-pipe = skm.model_pipe([ #('cbe', CatBoostEncoder()),
-                        skm.piece('random_sample'),
-                        skm.piece('std_scale'), 
-                        skm.piece('select_perc_c'),
-                        skm.feature_union([
-                                        skm.piece('agglomeration'), 
-                                        skm.piece('k_best_c'),
-                                        skm.piece('pca')
-                                        ]),
-                        skm.piece('k_best_c'),
-                        skm.piece('gbm')
-                        
-                     ])
-
-# pipe.steps[-1][-1].quantile = 0.95
-# pipe.steps[-1][-1].q = 0.8
-# set params
-params = skm.default_params(pipe, 'rand')
+if is_million: 
+    models_test = ['lr_c', 'lgbm_c', 'mlp_c']
+    model_obj = 'class'
+else: 
+    models_test = ['ridge', 'lgbm', 'mlp']
+    model_obj = 'reg'
 
 
-# params = {'random_sample__frac': np.array([0.25, 0.27, 0.29, 0.31, 0.33, 0.35, 0.37, 0.39, 0.41, 0.43, 0.45,
-#         0.47, 0.49, 0.51, 0.53, 0.55, 0.57, 0.59, 0.61, 0.63, 0.65, 0.67,
-#         0.69]),
-#  'random_sample__seed': range(0, 10000, 1000),
-#  'select_perc__percentile': range(20, 61, 5),
-#  'feature_union__agglomeration__n_clusters': range(2, 25, 2),
-#  'feature_union__k_best__k': range(20, 125, 5),
-#  'feature_union__pca__n_components': range(2, 20, 2),
-#  'k_best__k': range(20, 125, 5),
-#  'knn__n_neighbors': range(20, 80),
-#  'knn__weights': [ 'uniform'],
-#  'knn__algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute']}
+param_scores_all = {}
+for model_name in models_test:
 
+    skm = SciKitModel(df_train, model_obj=model_obj, matt_wt=0, brier_wt=0, mse_wt=1, sera_wt=0, mae_wt=0, rsq_wt=0, logloss_wt=1)
+    X, y = skm.Xy_split('y_act', run_params['drop_cols'])
+    model_type = 'bayes'
+    param_scores_all[model_name] = {}
 
-# run the model with parameter search
-best_models, oof_data, param_scores, _ = skm.time_series_cv(pipe, X, y, params, n_iter=25,
-                                                            col_split='game_date',n_splits=4,
-                                                            time_split=run_params['cv_time_input'],
-                                                            bayes_rand='rand', proba=True,
-                                                            sample_weight=False,
-                                                            random_seed=12345)
+    #------------
+    # Get Regression Data
+    #------------
 
-mf.show_scatter_plot(oof_data['full_hold']['pred'], oof_data['full_hold']['y_act'])
-show_calibration_curve(oof_data['full_hold']['y_act'], oof_data['full_hold']['pred'])
+    if model_obj == 'class': 
+        proba=True
+        sperc = 'select_perc_c'
+        kbest = 'k_best_c'
+        sfm = 'select_from_model_c'
+    else: 
+        proba=False
+        sperc = 'select_perc'
+        kbest = 'k_best'
+        sfm = 'select_from_model'
 
-i=0
-best_models[i].fit(X,y)
-pd.concat([
-           df_predict[['player', 'week', 'year', 'y_act']],
-           pd.Series(best_models[i].predict_proba(df_predict[X.columns])[:,1], name='pred')
-          ], axis=1).sort_values(by='pred', ascending=False).head(50)
+    pipe = skm.model_pipe([ skm.piece('random_sample'),
+                            skm.piece('std_scale'), 
+                            skm.piece(sperc),
+                            skm.feature_union([
+                                            skm.piece('agglomeration'), 
+                                            skm.piece(kbest),
+                                          #  skm.piece(sfm),
+                                            skm.piece('pca')
+                                            ]),
+                            skm.piece(kbest),
+                           # skm.piece(sfm),
+                            skm.piece(model_name)
+                        ])
+    # pipe = skm.model_pipe([ skm.piece('random_sample'),
+    #                        skm.piece('corr_collinear'),
+    #                         skm.piece('std_scale'), 
+    #                         skm.feature_union([
+    #                                         skm.piece('agglomeration'), 
+    #                                         skm.piece(kbest),
+    #                                         skm.piece('pca')
+    #                                         ]),
+    #                         skm.piece(kbest),
+    #                         skm.piece(model_name)
+    #                     ])
+    params = skm.default_params(pipe, model_type)
+
+    print('Running Model:', model_name)
+    # run the model with parameter search
+    best_models, oof_data, param_scores, _ = skm.time_series_cv(pipe, X, y, params, n_iter=20,
+                                                                col_split='game_date',n_splits=5,
+                                                                time_split=run_params['cv_time_input'],
+                                                                bayes_rand=model_type, proba=proba,
+                                                                sample_weight=False, trials=Trials(),
+                                                                random_seed=12345)
+    param_scores_all[model_name] = param_scores
+    mf.show_scatter_plot(oof_data['full_hold']['pred'], oof_data['full_hold']['y_act'])
+
+    if model_obj == 'class':
+        show_calibration_curve(oof_data['full_hold']['y_act'], oof_data['full_hold']['pred'])
+
+    i=0
+    best_models[i].fit(X,y)
+    if model_obj == 'class':
+        pred = pd.Series(best_models[i].predict_proba(df_predict[X.columns])[:,1], name='pred')
+        print(r2_score(df_predict.y_act, pred))
+        print(pd.concat([
+            df_predict[['player', 'week', 'year', 'y_act']],
+            pred], axis=1).sort_values(by='pred', ascending=False).head(50))
+    else:
+        pred = pd.Series(best_models[i].predict(df_predict[X.columns]), name='pred')
+        print(r2_score(df_predict.y_act, pred))
+        print(pd.concat([
+            df_predict[['player', 'week', 'year', 'y_act']],
+            pred], axis=1).sort_values(by='pred', ascending=False).head(50))
 
 #%%
-i=2
-best_models[i].fit(X,y)
-skm.print_coef(best_models[i])
 
- #%%
+cc = skm.piece('corr_collinear')[1]
+cc.set_params(corr_percentile=75, collinear_threshold=0.7, corr_type='pearson', abs_collinear=True)
+cc.fit(X,y).transform(X).shape
 
-df = param_scores.copy()
+#%%
+df = param_scores_all['mlp'].copy()
 
-df['input_features'] = df.feature_union__k_best__k + df.feature_union__agglomeration__n_clusters
+for c in df.columns:
+    if 'perc__score_func' in c: df[c] = df[c].apply(lambda x: 'perc_r_regression' if 'r_regression' in str(x) else 'perc_f_regression')
+    if 'k_best__score_func' in c and 'feature_union__k_best__score_func' not in c: 
+        df[c] = df[c].apply(lambda x: 'kb_r_regression' if 'r_regression' in str(x) else 'kb_f_regression')
+
+    if 'feature_union__k_best__score_func' in c: df[c] = df[c].apply(lambda x: 'fu_kb_r_regression' if 'r_regression' in str(x) else 'fu_kb_f_regression')
+    if 'select_from_model' in c: df[c] = df[c].apply(lambda x: str(x))
+
+df['input_features'] = df.feature_union__k_best__k + df.feature_union__agglomeration__n_clusters + df.feature_union__pca__n_components
 df.loc[df.k_best__k < df.input_features, 'k_best__k'] = df.loc[df.k_best__k < df.input_features, 'input_features']
-df.select_perc__percentile = df.select_perc__percentile.fillna(100)
+# df.select_perc__percentile = df.select_perc__percentile.fillna(100)
 
-X = df.drop('scores', axis=1)
+X = df.drop('score', axis=1)
+for c in X.columns:
+    try: X[c] = X[c].astype('float')
+    except: pass
 
 for c in X.dtypes[X.dtypes=='object'].index:
-    X = pd.concat([X, pd.get_dummies(X)], axis=1).drop(c, axis=1)
-y = -df.scores
+    print(c)
+    X = pd.concat([X, pd.get_dummies(X[c])], axis=1).drop(c, axis=1)
+y = -df.score.astype('float')
 
 # m = ElasticNet(alpha=0.01, l1_ratio=0.05)
 # m = RandomForestRegressor(n_estimators=100, max_depth=3, min_samples_leaf=2)
-m = LGBMRegressor(n_estimators=50, max_depth=5, min_samples_leaf=1)
+m = LGBMRegressor()
 
-if type(m) == sklearn.linear_model._ridge.Ridge or type(m)==sklearn.linear_model._coordinate_descent.ElasticNet:
-    sc = StandardScaler()
-    sc.fit(X)
-    X = pd.DataFrame(sc.transform(X), columns=X.columns)
+# if type(m) == sklearn.linear_model._ridge.Ridge or type(m)==sklearn.linear_model._coordinate_descent.ElasticNet:
+sc = StandardScaler()
+sc.fit(X)
+X = pd.DataFrame(sc.transform(X), columns=X.columns)
 
 scores = cross_val_score(m, X, y, cv=5, scoring='neg_mean_squared_error')
 scores = np.sqrt(-np.mean(scores))

@@ -368,11 +368,10 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
                                 skm.piece(m)
                                 ])
 
-        if m in ('qr_q', 'gbmh_q'): pipe.steps[-1][-1].quantile = alpha
-        elif m in ('rf_q', 'knn_q'): pipe.steps[-1][-1].q = alpha
-        else: pipe.steps[-1][-1].alpha = alpha
+        if m in ('qr_q', 'gbmh_q'): pipe.set_params(**{f'{m}__quantile': alpha})
+        elif m in ('rf_q', 'knn_q'): pipe.set_params(**{f'{m}__q': alpha})
+        else: pipe.set_params(**{f'{m}__alpha': alpha})
     
-
 
     # get the params for the current pipe and adjust if needed
     params = skm.default_params(pipe, bayes_rand, min_samples=min_samples)

@@ -1390,14 +1390,15 @@ def attach_y_act(df, pos, defense=False, rush_or_pass=''):
     
         df = pd.merge(df, y_act, on=['player',  'week', 'year'], how='left')
     
-    elif pos=='QB':
-        y_act = dm.read(f'''SELECT player, team, week, season year,
-                                   fantasy_pts{rush_or_pass} y_act
-                            FROM {pos}_Stats
-                            WHERE season >= 2020
-                                  AND pass_pass_attempt_sum > 15''', 'FastR')
+    # elif pos=='QB':
+    #     y_act = dm.read(f'''SELECT player, team, week, season year,
+    #                                fantasy_pts{rush_or_pass} y_act
+    #                         FROM {pos}_Stats
+    #                         WHERE season >= 2020
+    #                               AND pass_pass_attempt_sum > 15''', 'FastR')
+        
     
-        df = pd.merge(df, y_act, on=['player', 'team', 'week', 'year'], how='left')
+    #     df = pd.merge(df, y_act, on=['player', 'team', 'week', 'year'], how='left')
     
     else:
         y_act = dm.read(f'''SELECT player, team, week, season year, fantasy_pts y_act
