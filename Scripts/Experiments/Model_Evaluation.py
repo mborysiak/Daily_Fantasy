@@ -555,6 +555,8 @@ def show_coef(all_coef, X_all):
         all_coef = all_coef[~all_coef.index.str.contains('entry_type')]
         all_coef[abs(all_coef) > 0.005].sort_values().plot.barh(figsize=(10,18))
     except:
+        all_coef = all_coef[[c for c in all_coef.columns if 'week' not in c]]
+        X_all = X_all[[c for c in X_all.columns if 'week' not in c]]
         shap.summary_plot(all_coef.values, X_all, feature_names=X_all.columns, plot_size=(18,10), max_display=40, show=False)
 
 def entry_optimize_params(df, max_adjust, model_name):
@@ -602,9 +604,10 @@ df = dm.read('''SELECT *
                      SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, entry_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num >= 400
+                WHERE trial_num >= 430
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
+                      AND NOT (week=8 AND year=2022)
                 ''', 'Results')
 
 df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
@@ -627,13 +630,15 @@ show_coef(coef_vals, X)
 #%%
 
 weeks = [
-         1, 2, 3, 4, 5, 6, 7, 8, 
+         1, 2, 3, 4, 5, 6, 7, #8, 
          9, 10, 11, 12, 13, 14, 15, 16,
-         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
+         11, 12, 13, 14, 15, 16]
 years = [
+          2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-          2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023]
+          2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
+          2023, 2023, 2023, 2023, 2023, 2023]
 
 i=0
 all_coef = None; X_all = None

@@ -304,53 +304,6 @@ def load_all_stack_pred_million(model_output_path):
     return X_mil, X_mil, y_mil, models_mil
 
 
-
-# def fit_and_predict(m, df_predict, X, y, proba):
-#     try:
-#         m.fit(X,y)
-
-#         if proba: cur_predict = m.predict_proba(df_predict[X.columns])[:,1]
-#         else: cur_predict = m.predict(df_predict[X.columns])
-#     except:
-#         cur_predict = []
-
-#     return cur_predict
-
-# def fit_and_predict(m, df_predict, X, y, proba):
-
-#     # if m.steps[0][1]=='random_sample':
-#     try:
-#         cols = m.steps[0][-1].columns
-#         cols = [c for c in cols if c in X.columns]
-#         X = X[cols]
-#         X_predict = df_predict[cols]
-#         m = Pipeline(m.steps[1:])
-#     except:
-#         X_predict = df_predict[X.columns]
-        
-#     try:
-#         m.fit(X,y)
-
-#         if proba: cur_predict = m.predict_proba(X_predict)[:,1]
-#         else: cur_predict = m.predict(X_predict)
-    
-#     except:
-#         cur_predict = []
-
-#     return cur_predict
-
-# def create_stack_predict(df_predict, models, X, y, proba=False):
-
-#     # create the full stack pipe with meta estimators followed by stacked model
-#     X_predict = pd.DataFrame()
-#     for k, ind_models in models.items():
-#         predictions = Parallel(n_jobs=-1, verbose=0)(delayed(fit_and_predict)(m, df_predict, X, y, proba) for m in ind_models)
-#         predictions = [p for p in predictions if len(p) > 0]
-#         predictions = pd.Series(pd.DataFrame(predictions).T.mean(axis=1), name=k)
-#         X_predict = pd.concat([X_predict, predictions], axis=1)
-
-#     return X_predict
-
 def fit_and_predict(m_label, m, df_predict, X, y, proba):
 
     try:
@@ -1277,7 +1230,7 @@ matt_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [16]
+set_weeks = [10]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
@@ -1436,8 +1389,8 @@ with keep.running() as m:
             X_predict_mil = add_sal_columns(X_predict_mil, df_predict_mil)
 
             y_stack_mil = pd.merge(y_stack_mil[y_stack_mil.player!='Ryan Griffin'], 
-                                X_stack_mil[['player', 'week', 'year']], 
-                                on=['player', 'week', 'year']).reset_index(drop=True)
+                                    X_stack_mil[['player', 'week', 'year']], 
+                                    on=['player', 'week', 'year']).reset_index(drop=True)
             
             X_stack_mil = pd.merge(X_stack_mil, 
                                 y_stack_mil.loc[y_stack_mil.player!='Ryan Griffin', ['player','week', 'year']], 

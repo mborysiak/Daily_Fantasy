@@ -102,7 +102,7 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'Results')
     return vers
 
-best_trials = 447
+best_trials = 453
 
 opt_params = pull_best_params(best_trials)
 pprint.pprint(opt_params)
@@ -129,20 +129,20 @@ d = {'adjust_pos_counts': {False: 0.7, True: 0.3},
                 'team_points_trunc': 1.0},
  'full_model_weight': {0.2: 0.4, 5: 0.6},
  'lineups_per_param': {1: 1.0},
- 'matchup_drop': {0: 0.5, 1: 0.5, 2: 0.0, 3: 0.0},
+ 'matchup_drop': {0: 0.3, 1: 0.7, 2: 0.0, 3: 0.0},
  'matchup_seed': {0: 0.3, 1: 0.7},
  'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
- 'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
+ 'max_team_type': {'player_points': 0.6, 'vegas_points': 0.4},
  'min_player_same_team': {2: 0.2, 3: 0.2, 'Auto': 0.6},
  'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8},
- 'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.5, 10: 0.5},
+ 'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.0, 10: 1.0},
  'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
- 'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
+ 'num_top_players': {2: 0.3, 3: 0.7, 5: 0.0},
  'own_neg_frac': {0.8: 0.0, 1: 1.0},
  'ownership_vers': {'mil_div_standard_ln': 0.0,
                     'mil_only': 0.0,
-                    'mil_times_standard_ln': 0.2,
-                    'standard_ln': 0.8},
+                    'mil_times_standard_ln': 0.25,
+                    'standard_ln': 0.75},
  'player_drop_multiple': {0: 0.4, 2: 0.2, 4: 0.4},
  'qb_min_iter': {0: 0.6, 2: 0.4, 4: 0.0, 9: 0.0},
  'qb_set_max_team': {0: 0.7, 1: 0.3},
@@ -150,7 +150,7 @@ d = {'adjust_pos_counts': {False: 0.7, True: 0.3},
  'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
  'static_top_players': {False: 0.3, True: 0.7},
  'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
- 'use_ownership': {0.7: 0.5, 0.8: 0.5, 0.9: 0.0, 1: 0.0}}
+ 'use_ownership': {0.7: 1.0, 0.8: 0.0, 0.9: 0.0, 1: 0.0}}
 
 lineups_per_param = int(d['lineups_per_param'][1])
 
