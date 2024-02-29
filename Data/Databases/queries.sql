@@ -48,7 +48,7 @@ GROUP BY trial_num,
 	     million_ens_vers,
 	     std_dev_type
 )
-ORDER BY BlendedAvgMin DESC;
+ORDER BY BlendedAvgMinMax DESC;
 
 
 
@@ -161,6 +161,8 @@ GROUP BY trial_num
 ORDER BY SUM(WeekTrialRank) ASC;
 
 
-SELECT DISTINCT version, ensemble_vers, std_dev_type 
+SELECT DISTINCT reg_ens_vers, std_dev_type, week, year
 FROM Model_Predictions 
-WHERE week=3 and year=2022;
+WHERE pred_vers='sera0_rsq0_mse1_brier1_matt1_bayes'
+      and reg_ens_vers = 'random_kbest_team_stats_sera0_rsq0_mse1_include2_kfold3'
+ORDER BY year, week

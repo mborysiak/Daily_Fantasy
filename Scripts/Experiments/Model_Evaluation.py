@@ -272,7 +272,7 @@ run_params = {
 
     # other parameters
     'use_sample_weight': False,
-    'opt_type': 'custom_rand',
+    'opt_type': 'bayes',
     'cuts': [33, 80, 95],
     'met': 'y_act',
 
@@ -335,12 +335,12 @@ for model_name in models_test:
         kbest = 'k_best'
         sfm = 'select_from_model'
 
-    pipe = skm.model_pipe([ skm.piece('random_sample'),
+    pipe = skm.model_pipe([ #skm.piece('random_sample'),
                             skm.piece('std_scale'), 
                             skm.piece(sperc),
                             skm.feature_union([
                                             skm.piece('agglomeration'), 
-                                            skm.piece(kbest),
+                                            skm.piece(f'{kbest}_fu'),
                                           #  skm.piece(sfm),
                                             skm.piece('pca')
                                             ]),
@@ -607,7 +607,7 @@ df = dm.read('''SELECT *
                 WHERE trial_num >= 430
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
-                      AND NOT (week=8 AND year=2022)
+                     -- AND NOT (week=8 AND year=2022)
                 ''', 'Results')
 
 df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
@@ -630,12 +630,12 @@ show_coef(coef_vals, X)
 #%%
 
 weeks = [
-         1, 2, 3, 4, 5, 6, 7, #8, 
+         1, 2, 3, 4, 5, 6, 7, 8, 
          9, 10, 11, 12, 13, 14, 15, 16,
          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
          11, 12, 13, 14, 15, 16]
 years = [
-          2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 
+          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
           2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
           2023, 2023, 2023, 2023, 2023, 2023]
@@ -669,7 +669,133 @@ for w, yr in zip(weeks, years):
 
 show_coef(all_coef, X_all)
 
- # %%
+#%%
+
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import KFold
+
+def save_pickle(obj, path, fname, protocol=-1):
+    with gzip.open(f"{path}/{fname}.p", 'wb') as f:
+        pickle.dump(obj, f, protocol)
+
+    print(f'Saved {fname} to path {path}')
+
+class FoldPredict:
+
+    def __init__(self, save_path, retrain=True):
+        self.save_path = save_path
+        self.retrain = retrain
+
+    def cross_fold_train(self, model_type, model, params, X, y, n_iter=10):
+
+        for i, (train_idx, test_idx) in enumerate(KFold(n_splits=4, shuffle=True).split(X)):
+            print(f'Fold {i+1}')
+            X_train, _ = X.iloc[train_idx], X.iloc[test_idx]
+            y_train, _ = y.iloc[train_idx], y.iloc[test_idx]
+
+            grid = RandomizedSearchCV(model, params, n_iter=n_iter, scoring='neg_mean_squared_error', n_jobs=2, cv=4)
+            grid.fit(X_train,y_train)
+            
+            scores = pd.concat([pd.DataFrame(grid.cv_results_['params']), 
+                                pd.DataFrame(np.sqrt(grid.cv_results_['mean_test_score']))], axis=1).sort_values(by=0)
+            print(scores)
+
+            best_model = grid.best_estimator_
+    
+            if not os.path.exists(self.save_path): os.makedirs(self.save_path)
+            save_pickle(best_model, self.save_path, f'{model_type}_fold{i}')
+
+    def cross_fold_predict(self, model_type, X, y):
+
+        predictions = pd.DataFrame()
+        for _, (train_idx, test_idx) in enumerate(KFold(n_splits=4, shuffle=True).split(X)):
+
+            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+            y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+
+            cur_predict = pd.DataFrame()
+            for i in range(4):
+                model = load_pickle(self.save_path, f'{model_type}_fold{i}')
+                if self.retrain: model.fit(X_train, y_train)
+                model_i_predict = pd.DataFrame(model.predict(X_test), index=test_idx, columns=[f'score_{i}'])
+                cur_predict = pd.concat([cur_predict, model_i_predict], axis=1)
+            
+            cur_predict = pd.DataFrame(cur_predict.mean(axis=1), columns=[f'{model_type}_pred'])
+            print('MAE:', np.round(np.mean(np.abs(cur_predict[f'{model_type}_pred'] - y_test)), 5))
+            cur_predict = pd.concat([cur_predict, y_test], axis=1)
+            predictions = pd.concat([predictions, cur_predict], axis=0)
+                
+        predictions = pd.merge(predictions, X,left_index=True, right_index=True)
+
+        return predictions
+
+
+#%%
+
+params = dm.read('''SELECT *
+                    FROM Entry_Optimize_Params
+                    WHERE trial_num >= 393
+                    ''', 'Results')
+params['param'] = params.param.astype('str') + '_' + params.param_option.astype('str')
+params = params.pivot_table(index=['trial_num'], columns='param', values='option_value').reset_index().fillna(0)
+
+results = dm.read('''SELECT *
+                    FROM Entry_Optimize_Results
+                    WHERE trial_num >= 393
+                       --   AND NOT (week=8 AND year=2022)
+                    ''', 'Results')
+
+results = pd.merge(results, params, on='trial_num')
+results = results.drop(['trial_num', 'repeat_num'], axis=1)
+for c in results.columns:
+    if results.dtypes[c] == 'object': 
+        results[c] = results[c].astype('category')
+
+results.week = results.week.astype('category')
+results.year = results.year.astype('category')
+
+X = results.drop('avg_winnings', axis=1)
+y = results.avg_winnings
+
+#%%
+
+
+params = {
+    'n_estimators': range(50, 400, 20),
+    'num_leaves': range(100, 500, 20),
+    'min_child_samples': range(10, 200, 10),
+    'learning_rate': np.arange(0.05, 0.25, 0.02),
+    'subsample': np.arange(0.8, 1, 0.02)
+}
+
+
+
+lgbm = LGBMRegressor(n_jobs=16)
+fp = FoldPredict(f'{root_path}/Model_Outputs/Final_LGBM/', retrain=False)
+fp.cross_fold_train('winnings', lgbm, params, X, y, n_iter=20)
+
+#%%
+base_cols = ['week', 'year', 'pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers']
+X_predict = X[base_cols].drop_duplicates()
+X_predict['cross_idx'] = 1
+for c in X.drop(base_cols, axis=1).columns:
+    cur_col = pd.DataFrame(X[c].value_counts()[X[c].value_counts()>5800].index, columns=[c])
+    cur_col['cross_idx'] = 1
+    X_predict = pd.merge(X_predict, cur_col, on='cross_idx')
+
+X_predict = X_predict.drop('cross_idx', axis=1)
+
+#%%
+winnings_pr = fp.cross_fold_predict('winnings', X_predict, y=pd.Series(np.array([260]*len(X_predict)), name='entry'))
+grp_cols = [c for c in winnings_pr.columns if c not in ('winnings_pred', 'avg_winnings', 'week', 'year')]
+for c in grp_cols:
+    winnings_pr[c] = winnings_pr[c].astype('str')
+
+winnings_pr = winnings_pr.groupby(grp_cols).agg({'winnings_pred': 'sum'}).reset_index()
+winnings_pr['winnings_pred'] = winnings_pr['winnings_pred']
+winnings_pr.sort_values(by='winnings_pred', ascending=False).iloc[0].to_dict()
+
+# %%
 
 def entry_optimize_bayes(df):
 

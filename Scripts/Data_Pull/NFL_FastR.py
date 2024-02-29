@@ -158,6 +158,9 @@ data = data.drop('temp', axis=1)
 final_scores = data.groupby(['home_team', 'away_team', 'week', 'season']).agg({ 'home_score': 'max', 'away_score': 'max'}).reset_index()
 final_scores = final_scores.sort_values(by=['season', 'week', 'home_team'])
 final_scores = final_scores.rename(columns={'season': 'year'})
+final_scores.home_team = final_scores.home_team.map(team_map)
+final_scores.away_team = final_scores.away_team.map(team_map)
+
 dm.delete_from_db('FastR', 'Final_Scores', f"year={cur_season}")
 dm.write_to_db(final_scores, 'FastR', 'Final_Scores', if_exist='append')
 

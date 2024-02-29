@@ -94,7 +94,7 @@ def train_predict_split(df, run_params):
     df_train = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 
-    df_predict = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
+    df_predict = df[(df.game_date == run_params['train_time_split']) & (df.week<17)].reset_index(drop=True)
     output_start = df_predict[['player', 'team', 'week', 'year', 'dk_salary']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
@@ -108,7 +108,7 @@ def get_class_data(df, cut, run_params):
 
     # set up the training and prediction datasets for the classification 
     df_train_class = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
-    df_predict_class = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
+    df_predict_class = df[(df.game_date == run_params['train_time_split']) & (df.week<17)].reset_index(drop=True)
 
     # set up the target variable to be categorical based on Xth percentile
     cut_perc = df_train_class.groupby('game_date')['y_act'].apply(lambda x: np.percentile(x, cut))
@@ -132,7 +132,7 @@ def get_class_data(df, cut, run_params):
 def get_skm(skm_df, model_obj, to_drop):
     
     skm_options = {
-        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt, mse_wt=mse_wt),
+        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt, mse_wt=mse_wt, logloss_wt=log_wt),
         'class': SciKitModel(skm_df, model_obj='class', brier_wt=brier_wt, matt_wt=matt_wt),
         'quantile': SciKitModel(skm_df, model_obj='quantile')
     }
@@ -145,16 +145,23 @@ def get_skm(skm_df, model_obj, to_drop):
 
 def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_rand='rand'):
 
-    if skm.model_obj=='class': kb = 'k_best_c'
-    else: kb = 'k_best'
+    if skm.model_obj=='class': 
+        kb = 'k_best_c'
+        sp = 'select_perc_c'
+    else: 
+        kb = 'k_best'
+        sp = 'select_perc'
+
+    if 'team_stats' in stack_model: stack_model = stack_model.replace('_team_stats', '')
 
     stack_models = {
 
         'full_stack': skm.model_pipe([
-                                      skm.piece('std_scale'), 
+                                      skm.piece('std_scale'),
+                                      skm.piece(sp), 
                                       skm.feature_union([
                                                     skm.piece('agglomeration'), 
-                                                    skm.piece(kb),
+                                                    skm.piece(f'{kb}'),
                                                     skm.piece('pca')
                                                     ]),
                                       skm.piece(kb),
@@ -166,7 +173,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
                                       skm.piece('std_scale'), 
                                       skm.feature_union([
                                                     skm.piece('agglomeration'), 
-                                                    skm.piece(kb),
+                                                    skm.piece(f'{kb}'),
                                                     skm.piece('pca')
                                                     ]),
                                       skm.piece(kb),
@@ -190,7 +197,14 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
                                         skm.piece('std_scale'),
                                         skm.piece(kb),
                                         skm.piece(m)
-                                        ])
+                                        ]),
+
+        'corr_collinear': skm.model_pipe([
+                                 skm.piece('corr_collinear'),
+                                #  skm.piece('std_scale'),
+                                 skm.piece(m)
+                                 ]),
+
     }
 
     pipe = stack_models[stack_model]
@@ -204,7 +218,11 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
     if stack_model=='random_full_stack' and run_params['opt_type']=='bayes': 
         params['random_sample__frac'] = hp.uniform('random_sample__frac', 0.5, 1)
         # params['feature_union__pca__n_components'] = scope.int(hp.quniform('feature_union__pca__n_components', 2, 15, 1))
-        
+    
+    if stack_model=='full_stack' and run_params['opt_type']=='bayes': 
+        params[f'{sp}__percentile'] = hp.uniform(f'{sp}__percentile', 50, 100)
+        # params[f'{sp}__percentile'] = skm.param_range('int', 20, 100, 5, bayes_rand, sp),
+    
     elif stack_model=='random_full_stack' and run_params['opt_type']=='rand':
         params['random_sample__frac'] = np.arange(0.5, 1, 0.05)
         # params['select_perc__percentile'] = hp.uniform('percentile', 0.5, 1)
@@ -450,11 +468,33 @@ def best_average_models(scores, final_models, y_stack, stack_val_pred, predictio
     return best_val, best_predictions, best_score
 
 
-def average_stack_models(scores, final_models, y_stack, stack_val_pred, predictions, model_obj, show_plot=True, min_include=3):
+def weighted_average_models(scores, y_stack, stack_val_pred, predictions, model_obj):
     
+    skm, _, _ = get_skm(df_train, model_obj=model_obj, to_drop=[])
+    # scores = np.argsort(np.argsort([-s for s in scores]))
+    scores = np.array(scores)
+    scores = -(scores - np.max(scores))
+    
+    print(scores)
+    best_val =(stack_val_pred*scores).sum(axis=1)/np.sum(scores)
+    best_predictions = (predictions*scores).sum(axis=1)/np.sum(scores)
+    best_score = skm.custom_score(y_stack, best_val.values)
+    print(best_score)
+
+    best_val =  pd.DataFrame(best_val, columns=['wt_avg'])
+    best_predictions =  pd.DataFrame(best_predictions, columns=['wt_avg_pred'])
+
+    return best_val, best_predictions, best_score
+
+
+
+def average_stack_models(scores, final_models, y_stack, stack_val_pred, predictions, model_obj, show_plot=True, min_include=3):
+
+    # best_val, best_predictions, best_score = weighted_average_models(scores, y_stack, stack_val_pred, predictions, model_obj)
+
     best_val, best_predictions, best_score = best_average_models(scores, final_models, y_stack, stack_val_pred, predictions, 
                                                                  model_obj=model_obj, min_include=min_include)
-    
+
     if show_plot:
         mf.show_scatter_plot(best_val.mean(axis=1), y_stack, r2=True)
         if model_obj == 'class':
@@ -612,6 +652,7 @@ def vegas_points(run_params, metrics={'implied_points_for': 1}, show_plot=False)
     output['max_score'] = max_m(sd_max_met)
     output['min_score'] = min_m(sd_max_met)
     output = output.rename(columns={'player': 'team'})
+
     return output
 
 
@@ -674,8 +715,11 @@ def select_main_slate_teams(df):
     return df
 
 
-def add_sal_columns(df, df_sal):
-    
+def add_sal_columns(df, df_sal, run_params):
+
+    if 'team_stats' in run_params['million_ens_vers']: sal_multiply = 1000
+    else: sal_multiply = 1
+
     df = pd.merge(df, df_sal[['player', 'week', 'year', 'dk_salary']], on=['player', 'week', 'year'])
 
     for c in df.columns:
@@ -683,8 +727,9 @@ def add_sal_columns(df, df_sal):
         if 'rank' in c: df[c+'_salary'] = df[c] * df.dk_salary
         if 'proj' in c: df[c+'_salary'] = df[c] / df.dk_salary
         if 'ffa' in c: df[c+'_salary'] = df[c] / df.dk_salary
-        if 'reg' in c: df[c+'_salary'] = df[c] / df.dk_salary
-        if 'quant' in c: df[c+'_salary'] = df[c] / df.dk_salary
+        if 'reg' in c: df[c+'_salary'] = sal_multiply*df[c] / df.dk_salary
+        if 'quant' in c: df[c+'_salary'] = sal_multiply*df[c] / df.dk_salary
+        if 'implied' in c: df[c+'_salary'] = sal_multiply*df[c] / df.dk_salary
     
     return df
 
@@ -857,11 +902,16 @@ def get_newest_folder_with_keywords(path, keywords, ignore_keywords=None, req_fn
 
 def get_trial_times(root_path, fname, run_params, set_pos, model_type):
 
-    # newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/{run_params['set_year']}")
-    newest_folder = f"{root_path}/Model_Outputs/{run_params['set_year']}"
-    keep_words = [set_pos, model_type, run_params['pred_vers']]
-    drop_words = [f"_week{run_params['set_week']}_"]
-    recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
+    yr = run_params['set_year']
+    wk = run_params['set_week']
+    if wk == 1: 
+        wk = 16
+        yr -= 1
+    else:
+        wk -= 1
+
+    pred_vers = run_params['pred_vers']
+    recent_save = f"{root_path}/Model_Outputs/{yr}/{set_pos}_year{yr}_week{wk}_{model_type}{pred_vers}"
 
     all_trials = load_pickle(recent_save, fname)['trials']
 
@@ -908,11 +958,15 @@ def get_proba_adp_coef(model_obj, final_m, run_params):
 
 def get_trials(fname, final_m, bayes_rand):
 
-    # newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/{run_params['set_year']}")
-    newest_folder = f"{root_path}/Model_Outputs/{run_params['set_year']}"
-    keep_words = [set_pos, model_type, run_params['pred_vers']]
-    drop_words = [f"_week{run_params['set_week']}_"]
-    recent_save = get_newest_folder_with_keywords(newest_folder, keep_words, drop_words, f'{fname}.p')
+    yr = run_params['set_year']
+    wk = run_params['set_week']
+    if wk == 1: 
+        wk = 16
+        yr -= 1
+    else:
+        wk -= 1
+    pred_vers = run_params['pred_vers']
+    recent_save = f"{root_path}/Model_Outputs/{yr}/{set_pos}_year{yr}_week{wk}_{model_type}{pred_vers}"
 
     if recent_save is not None and bayes_rand=='bayes': 
         try:
@@ -963,8 +1017,8 @@ def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_
 def get_func_params(model_obj, alpha):
 
     model_list = {
-        'reg': ['rf', 'gbm', 'gbmh', 'huber', 'xgb', 'lgbm', 'knn', 'ridge', 'lasso', 'bridge'],
-        'class': ['rf_c', 'gbm_c', 'gbmh_c', 'xgb_c','lgbm_c', 'knn_c', 'lr_c'],
+        'reg': ['rf', 'gbm', 'gbmh', 'huber', 'xgb', 'lgbm', 'knn', 'ridge', 'lasso', 'bridge', 'mlp'],
+        'class': ['rf_c', 'gbm_c', 'gbmh_c', 'xgb_c','lgbm_c', 'knn_c', 'lr_c', 'mlp_c'],
         'quantile': ['qr_q', 'gbm_q', 'lgbm_q', 'gbmh_q', 'rf_q']#, 'knn_q']
     }
 
@@ -1011,11 +1065,11 @@ def remove_low_preds(predictions, stack_val_pred, model_list, scores):
     preds_mean_check = pd.DataFrame(predictions.median(), columns=['preds'])
     val_mean_check = pd.DataFrame(stack_val_pred.median(), columns=['vals'])
     mean_checks = pd.merge(preds_mean_check, val_mean_check, left_index=True, right_index=True)
-    mean_checks['pct_diff'] = (mean_checks.preds - mean_checks.vals) / (mean_checks.vals + 0.01)
+    mean_checks['pct_diff'] = (mean_checks.preds - mean_checks.vals) / (mean_checks.vals + 0.1)
     
     print(mean_checks)
     models_pre = mean_checks.index
-    for cut in np.arange(0.2, 2, 0.2):
+    for cut in np.arange(0.2, 20, 0.2):
         mean_checks_idx = mean_checks[abs(mean_checks.pct_diff) <= cut].index
         if len(mean_checks_idx) >= run_params['min_include']: break
 
@@ -1090,7 +1144,7 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
 
     X_predict = X_predict[X_stack.columns]
     predictions = stack_predictions(X_predict, best_models, model_list, model_obj=model_obj)
-    predictions, stack_val_pred, model_list, scores = remove_low_preds(predictions, stack_val_pred, model_list, scores)
+    # predictions, stack_val_pred, model_list, scores = remove_low_preds(predictions, stack_val_pred, model_list, scores)
     
     best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack, stack_val_pred, 
                                                          predictions, model_obj=model_obj, 
@@ -1126,6 +1180,7 @@ def create_mil_output(df_predict_mil, best_predictions_mil):
         print('Showing Actual Results')
         display(mil_results.sort_values(by='pred_mil', ascending=False).iloc[:50])
         show_calibration_curve(mil_results['y_act'], mil_results['pred_mil'], n_bins=5)
+        display(mf.show_scatter_plot(mil_results['pred_mil'], mil_results['y_act'], r2=True))
     except:
         display(output_mil.sort_values(by='pred_mil', ascending=False).iloc[:50])
 
@@ -1136,7 +1191,7 @@ def display_output(output, show_plot=True):
      
     try:  
         output = add_actual(output)
-        output = output[output.week!=18].reset_index(drop=True)
+        output = output[~output.week.isin([17,18])].reset_index(drop=True)
         print('Showing Actual Results')
         print(output.loc[:50, ['player', 'week', 'year', 'dk_salary', 'dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class',
                                 'pred_fp_per_game_quantile', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
@@ -1150,6 +1205,47 @@ def display_output(output, show_plot=True):
     except:
         print(output.loc[:50, ['player', 'dk_salary','dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class', 
                             'pred_fp_per_game_quantile', 'std_dev', 'min_score', 'max_score']])
+        
+#----------------
+# Team Functions
+#----------------
+        
+def concatenate_team_data(backfill_runs):
+    team_data = pd.DataFrame()
+    for pos in backfill_runs.keys():
+        team_data = pd.concat([team_data, backfill_runs[pos]['X_stack_player'].assign(pos=pos)], axis=0)
+        team_data = pd.concat([team_data, backfill_runs[pos]['X_predict_player'].assign(pos=pos)], axis=0)
+    return team_data
+
+def sort_and_rank_team_data(team_data):
+    team_data = team_data.sort_values(by=['team', 'year', 'week', 'reg_adp'],
+                                      ascending=[True, True, True, False]).reset_index(drop=True)
+    team_data['team_rank'] = team_data.groupby(['team', 'year', 'week']).cumcount()
+    team_data['team_pos_rank'] = team_data.groupby(['team', 'pos', 'year', 'week']).cumcount()
+    return team_data
+
+def summarize_team_data(team_data):
+    ignore_cols = ['player', 'team', 'week', 'year', 'pos', 'team_rank', 'team_pos_rank']
+    team_sum = team_data[team_data.team_rank <= 5].groupby(['team', 'year', 'week']).agg({c:'sum' for c in team_data.columns if c not in ignore_cols})
+    
+    for model_stat in ['reg', 'class_95', 'class_80', 'class_33', 'quant_0.8', 'quant_0.95']:
+        stat_cols = [c for c in team_sum.columns if model_stat in c]
+        team_sum[f'team_sum_{model_stat}'] = team_sum[stat_cols].mean(axis=1)
+        team_sum = team_sum.drop(stat_cols, axis=1)
+        
+    return team_sum.reset_index()
+
+def merge_team_sum(X, team_sum):
+    X = pd.merge(X, team_sum, on=['team','week','year'],how='left')
+    X = X.sort_values(by=['team', 'year', 'week']).reset_index(drop=True)
+    X = X.groupby(['team']).apply(lambda x: x.ffill()).reset_index(drop=True)
+    return X
+
+def calc_team_frac(X):
+    for model_stat in ['reg', 'class_95', 'class_80', 'class_33', 'quant_0.8', 'quant_0.95']:
+        stat_cols = [c for c in X.columns if model_stat in c and 'team_sum' not in c]
+        X[f'team_frac_{model_stat}'] = X[stat_cols].mean(axis=1) / X[f'team_sum_{model_stat}']
+    return X
 
 #%%
 #==========
@@ -1198,7 +1294,7 @@ run_params = {
     'cuts': [33, 80, 95],
 
     'stack_model': 'random_full_stack_team_stats',
-    'stack_model_million': 'random_kbest',
+    'stack_model_million': 'random_full_stack_team_stats',
 
     # opt params
     'opt_type': 'bayes',
@@ -1226,12 +1322,12 @@ sera_wt = 0
 mse_wt = 1
 brier_wt = 1
 matt_wt = 0
+log_wt = 0
 
 alpha = 80
 class_cut = 80
 
-set_weeks = [10]
-
+set_weeks = [11]
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
@@ -1262,6 +1358,8 @@ with keep.running() as m:
         run_params['set_week'] = w
 
         if 'team_stats' in run_params['stack_model']:
+            vegas_scores = dm.read("SELECT * FROM Scores_Lines", 'Model_Features')
+            vegas_scores = vegas_scores[['team', 'week', 'year', 'over_under', 'implied_points_for', 'implied_points_against', 'is_home']]
 
             model_type = 'backfill'
             run_params['rush_pass'] = ''
@@ -1294,24 +1392,21 @@ with keep.running() as m:
                 X_stack_player, X_stack, y_stack = cleanup_X_y(X_stack, y_stack)
                 _, _, y_stack_class = cleanup_X_y(X_stack_player, y_stack_class)
 
-                backfill_runs[set_pos] = {'X_stack_player': X_stack_player, 'X_stack': X_stack, 'y_stack': y_stack, 
-                                          'y_stack_class': y_stack_class, 'X_predict': X_predict, 'X_predict_player': X_predict_player}
-            
-            team_data = pd.DataFrame()
-            for pos in backfill_runs.keys():
-                team_data = pd.concat([team_data, backfill_runs[pos]['X_stack_player'].assign(pos=pos)], axis=0)
+                backfill_runs[set_pos] = {
+                                          'X_stack_player': X_stack_player, 
+                                          'X_stack': X_stack, 
+                                          'y_stack': y_stack, 
+                                          'y_stack_class': y_stack_class, 
+                                          'X_predict': X_predict, 
+                                          'X_predict_player': X_predict_player
+                                          }
 
-            team_data = team_data.sort_values(by=['team', 'year', 'week', 'reg_adp'],
-                        ascending=[True, True, True, False]).reset_index(drop=True)
-            team_data['team_rank'] = team_data.groupby(['team', 'year', 'week']).cumcount().apply(lambda x: str(x))
-            team_data['team_pos_rank'] = team_data.groupby(['team', 'pos', 'year', 'week']).cumcount().apply(lambda x: str(x))
+            # Example usage:
+            team_data = concatenate_team_data(backfill_runs)
+            team_data = sort_and_rank_team_data(team_data)
+            team_sum = summarize_team_data(team_data)
+            team_pos_rank = team_data[['player', 'team', 'week', 'year',  'team_rank', 'team_pos_rank']]
 
-            ignore_cols = ['player', 'team', 'week', 'year', 'pos', 'team_rank', 'team_pos_rank']
-            team_sum = team_data.groupby(['team', 'year', 'week']).agg({c:'sum' for c in team_data.columns if c not in ignore_cols})
-            team_sum.columns = ['team_sum' + c for c in team_sum.columns]
-            team_data = pd.merge(team_data, team_sum.reset_index(), on=['team', 'year', 'week'], how='left')
-            
-#%%
         runs = [
             ['QB', 'full_model', ''],
             ['RB', 'full_model', ''],
@@ -1345,6 +1440,27 @@ with keep.running() as m:
             X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path)
             X_predict_player, X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, models_reg, models_class, models_quant)
             
+            if 'team_stats' in run_params['stack_model']:      
+                X_stack = merge_team_sum(X_stack, team_sum)
+                X_predict_player = merge_team_sum(X_predict_player, team_sum)
+                X_stack = calc_team_frac(X_stack)
+                X_predict_player = calc_team_frac(X_predict_player)
+
+                # X_stack = pd.merge(X_stack, team_pos_rank, on=['player', 'team', 'week', 'year'], how='left').fillna(5)
+                # X_predict_player = pd.merge(X_predict_player, team_pos_rank, on=['player', 'team', 'week', 'year'], how='left').fillna(5)
+
+                # X_stack = pd.merge(X_stack, vegas_scores, on=['team', 'week', 'year'], how='left').fillna(X_stack.mean())
+                # X_predict_player = pd.merge(X_predict_player, vegas_scores, on=['team', 'week', 'year'], how='left').fillna(X_predict_player.mean())
+
+                X_predict = X_predict_player.drop(['player', 'team', 'week', 'year'], axis=1).copy()
+
+                y_stack = pd.merge(X_stack[['player', 'week', 'year']], y_stack, 
+                                   on=['player', 'week', 'year']).reset_index(drop=True)
+                y_stack_class = pd.merge(X_stack[['player', 'week', 'year']], y_stack_class, 
+                                   on=['player', 'week', 'year']).reset_index(drop=True)
+                
+                output_start = pd.merge(X_predict_player[['player', 'team', 'week', 'year']], output_start, on=['player', 'team', 'week', 'year'], how='left')
+
             X_stack = remove_knn_rf_q(X_stack)
             X_predict = remove_knn_rf_q(X_predict)
             X_predict_player = remove_knn_rf_q(X_predict_player)
@@ -1352,6 +1468,7 @@ with keep.running() as m:
             # cleanup the X and y datasets
             X_stack_player, X_stack, y_stack = cleanup_X_y(X_stack, y_stack)
             _, _, y_stack_class = cleanup_X_y(X_stack_player, y_stack_class)
+
 
             # run the class, quant, and reg models
             best_val_class, best_predictions_class = load_run_models(run_params, X_stack, y_stack_class, X_predict, 'class')
@@ -1385,16 +1502,17 @@ with keep.running() as m:
             X_stack_mil = remove_knn_rf_q(X_stack_mil)
             X_predict_mil = remove_knn_rf_q(X_predict_mil)
 
-            X_stack_mil = add_sal_columns(X_stack_mil, df_train_mil)
-            X_predict_mil = add_sal_columns(X_predict_mil, df_predict_mil)
+            X_stack_mil = add_sal_columns(X_stack_mil, df_train_mil, run_params)
+            X_predict_mil = add_sal_columns(X_predict_mil, df_predict_mil, run_params)
 
-            y_stack_mil = pd.merge(y_stack_mil[y_stack_mil.player!='Ryan Griffin'], 
-                                    X_stack_mil[['player', 'week', 'year']], 
-                                    on=['player', 'week', 'year']).reset_index(drop=True)
+            X_stack_mil = X_stack_mil.dropna(axis=0).reset_index(drop=True)
+            y_stack_mil = pd.merge(X_stack_mil[['player', 'week', 'year']], 
+                                   y_stack_mil[y_stack_mil.player!='Ryan Griffin'], 
+                                   on=['player', 'week', 'year']).reset_index(drop=True)
             
             X_stack_mil = pd.merge(X_stack_mil, 
-                                y_stack_mil.loc[y_stack_mil.player!='Ryan Griffin', ['player','week', 'year']], 
-                                on=['player', 'week', 'year']).reset_index(drop=True)
+                                   y_stack_mil.loc[y_stack_mil.player!='Ryan Griffin', ['player','week', 'year']], 
+                                   on=['player', 'week', 'year']).reset_index(drop=True)
 
             X_predict_mil = X_predict_mil.drop(['player', 'team', 'week', 'year'], axis=1)
             X_stack_mil = X_stack_mil.drop(['player', 'team', 'week', 'year'], axis=1)
@@ -1416,21 +1534,85 @@ with keep.running() as m:
 #%%
 
 
+from sklearn.linear_model import Ridge
+from sklearn.preprocessing import StandardScaler
+
+df = pd.read_csv("C:/Users/borys/OneDrive/Desktop/Model Tracking Ens Reg.csv").dropna()
+df = df[df.Week==7].reset_index(drop=True)
+X = df[['POS', 'UseTeamStats', 'EnsVers', 'Type', 'Week', 'Include Pos Rank',# 'Remove Bad', 
+        'Include Vegas', 'Models Include', 'Opt', 'UseKBestFU', 'UseRandom']]
 
 
 
+for c in ['POS', 'UseTeamStats', 'Opt', 'EnsVers', 'Type', 'Week']:
+    X = pd.concat([X, pd.get_dummies(X[c], prefix=c)], axis=1).drop(c, axis=1)
 
-
-
-
+y = df[['Val', 'Test']].mean(axis=1)
+X = pd.DataFrame(StandardScaler().fit_transform(X), columns=X.columns)
+lr = Ridge()
+lr.fit(X, y)
+pd.Series(lr.coef_, index=X.columns).sort_values(ascending=False)
 
 
 #%%
 
+model_obj = 'reg'
+is_million=False
+final_m = 'knn_c'
+y_stack = y_stack.copy()
+fname = 'full_stack_sera0_rsq0_mse1_include2_kfold3'
+
+min_samples = int(len(y_stack)/10)
+proba, run_adp, print_coef = get_proba_adp_coef(model_obj, final_m, run_params)
+
+skm, _, _ = get_skm(pd.concat([X_stack, y_stack], axis=1), model_obj, to_drop=[])
+
+if is_million: sm = run_params['stack_model_million']
+else: sm = run_params['stack_model']
+pipe, params = get_full_pipe(skm, final_m, stack_model='corr_collinear', alpha=alpha, 
+                                min_samples=min_samples, bayes_rand=run_params['opt_type'])
+# trials = get_trials(fname, final_m, 'bayes')
+
+# pipe_params = {'__'.join(p.split('__')[:-1]): p.split('__')[-1] for p in params.keys()}
+# pipe_params
+# hyper_params = {}
+# for pipe_step, hyperparam in pipe_params.items():
+#     if 'feature_union' not in pipe_step:
+#         hyper_params[hyperparam] = pipe.named_steps[pipe_step].get_params()[hyperparam]
+#     else:
+#         for fu_step in pipe.named_steps['feature_union'].transformer_list:
+#             if fu_step[0] in pipe_step:
+#                 hyperparam = pipe_params[pipe_step]
+#                 hyper_params[hyperparam] = fu_step[1].get_params()[hyperparam]
+        
+
+
+# for trial in trials:
+#     # Update each trial with the new hyperparameters
+#     for k,v in hyper_params.items():
+#         if k not in trial['misc']['vals']:
+#             trial['misc']['vals'][k] = [v]
+#             trial['misc']['idxs'][k] = [trial['tid']]
+
+# trials.trials[0]
+
+# n_iter = run_params['n_iters']
+i=20
+# # if trials is not None: trials = update_trials_params(trials, final_m, params, pipe)
+best_model, stack_scores, stack_pred, trial = skm.best_stack(pipe, params, X_stack, y_stack, 
+                                                            n_iter=50, alpha=alpha,
+                                                            trials=Trials(), bayes_rand=run_params['opt_type'],
+                                                            run_adp=run_adp, print_coef=print_coef,
+                                                            proba=proba, num_k_folds=run_params['num_k_folds'],
+                                                            random_state=(i*2)+(i*7))
+#
+
+#%%
+
 model_obj = 'class'
-is_million = True
-X_stack = X_stack_mil.copy()
-y_stack = y_stack_mil.copy()
+is_million = False
+X_stack = X_stack.copy()
+y_stack = y_stack.copy()
 
 
 if model_obj=='reg': ens_vers = run_params['reg_ens_vers']
@@ -1460,33 +1642,33 @@ print(path, fname)
 if os.path.exists(f"{path}/{fname}.p"):
     best_models, scores, stack_val_pred = load_stack_runs(path, fname)
 
-# else:
+else:
     
-#     if run_params['opt_type']=='bayes':
-#         results = Parallel(n_jobs=-1, verbose=50)(
-#                         delayed(run_stack_models)
-#                         (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million) 
-#                         for final_m, i, model_obj, alpha in func_params
-#                         )
-#         best_models, scores, stack_val_pred, trials = unpack_results(model_list, results)
-#         save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
+    if run_params['opt_type']=='bayes':
+        results = Parallel(n_jobs=-1, verbose=50)(
+                        delayed(run_stack_models)
+                        (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million) 
+                        for final_m, i, model_obj, alpha in func_params
+                        )
+        best_models, scores, stack_val_pred, trials = unpack_results(model_list, results)
+        save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
 
-#     elif run_params['opt_type']=='rand':
-#         best_models = []; scores = []; stack_val_pred = pd.DataFrame()
-#         for final_m, i, model_obj, alpha in func_params:
-#             best_model, stack_scores, stack_pred, trials = run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million)
-#             best_models.append(best_model)
-#             scores.append(stack_scores['stack_score'])
-#             stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
+    elif run_params['opt_type']=='rand':
+        best_models = []; scores = []; stack_val_pred = pd.DataFrame()
+        for final_m, i, model_obj, alpha in func_params:
+            best_model, stack_scores, stack_pred, trials = run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million)
+            best_models.append(best_model)
+            scores.append(stack_scores['stack_score'])
+            stack_val_pred = pd.concat([stack_val_pred, pd.Series(stack_pred['stack_pred'], name=final_m)], axis=1)
         
-#         save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
+        save_stack_runs(path, fname, best_models, scores, stack_val_pred, trials)
 
-# X_predict = X_predict[X_stack.columns]
-# predictions = stack_predictions(X_predict, best_models, model_list, model_obj=model_obj)
-# best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack, stack_val_pred, 
-#                                                         predictions, model_obj=model_obj, 
-#                                                         show_plot=run_params['show_plot'], 
-#                                                         min_include=run_params['min_include'])
+X_predict = X_predict[X_stack.columns]
+predictions = stack_predictions(X_predict, best_models, model_list, model_obj=model_obj)
+best_val, best_predictions, _ = average_stack_models(scores, model_list, y_stack, stack_val_pred, 
+                                                        predictions, model_obj=model_obj, 
+                                                        show_plot=run_params['show_plot'], 
+                                                        min_include=run_params['min_include'])
 
 
 # %%
