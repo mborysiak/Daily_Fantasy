@@ -1327,7 +1327,7 @@ log_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [11]
+set_weeks = [12,13,14,15,16]
 pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"

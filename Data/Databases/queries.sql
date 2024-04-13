@@ -74,7 +74,7 @@ WITH all_winnings_tbl AS (
 					  AND week < 17
 				GROUP BY trial_num, repeat_num
 		)
-		WHERE rn_with > 1 AND rn_with < 10
+		WHERE rn_with > 2 AND rn_with < 8
 		GROUP BY trial_num,
 				 reg_ens_vers,
 				 million_ens_vers,
@@ -101,7 +101,7 @@ AS (
 					  AND week < 17
 				GROUP BY trial_num, repeat_num
 			)
-		WHERE rn_non8 > 1 AND rn_non8 < 10
+		WHERE rn_non8<=5
 		GROUP BY trial_num
 )
 SELECT *,
@@ -164,5 +164,18 @@ ORDER BY SUM(WeekTrialRank) ASC;
 SELECT DISTINCT reg_ens_vers, std_dev_type, week, year
 FROM Model_Predictions 
 WHERE pred_vers='sera0_rsq0_mse1_brier1_matt1_bayes'
-      and reg_ens_vers = 'random_kbest_team_stats_sera0_rsq0_mse1_include2_kfold3'
-ORDER BY year, week
+     and reg_ens_vers = 'random_kbest_sera0_rsq0_mse1_include2_kfold3'
+ORDER BY year, week;
+
+SELECT DISTINCT reg_ens_vers, covar_type, week, year
+FROM Covar_Means 
+WHERE pred_vers='sera0_rsq0_mse1_brier1_matt1_bayes'
+   --  and reg_ens_vers = 'random_kbest_sera0_rsq0_mse1_include2_kfold3'
+ORDER BY reg_ens_vers, covar_type, year, week;
+
+
+SELECT DISTINCT million_ens_vers,  week, year
+FROM Predicted_Million 
+WHERE pred_vers='sera0_rsq0_mse1_brier1_matt1_bayes'
+     and million_ens_vers = 'random_full_stack_matt0_brier1_include2_kfold3'
+ORDER BY year, week;

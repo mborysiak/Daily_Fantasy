@@ -8,6 +8,12 @@ from collections import Counter
 import contextlib
 import sqlite3
 
+from ff import general as ffgeneral
+from ff.db_operations import DataManage
+root_path = ffgeneral.get_main_path('Daily_Fantasy')
+db_path = f'{root_path}/Data/Databases/'
+dm = DataManage(db_path)
+
 # linear optimization
 from cvxopt import matrix
 from cvxopt.glpk import ilp
@@ -925,129 +931,307 @@ class FootballSimulation:
 
         return results, team_cnts
 
+ # %%
+
+
+from joblib import Parallel, delayed
+
+class RunSim:
+
+    def __init__(self, dm, week, year, salary_cap, pos_require_start,
+                 pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups_to_run):
+        
+        self.dm = dm
+        self.week = week
+        self.year = year
+        self.salary_cap = salary_cap
+        self.pos_require_start = pos_require_start
+        self.pred_vers = pred_vers
+        self.reg_ens_vers = reg_ens_vers
+        self.million_ens_vers = million_ens_vers
+        self.std_dev_type = std_dev_type
+        self.total_lineups_to_run = total_lineups_to_run
+        self.col_ordering = ['adjust_pos_counts', 'player_drop_multiple', 'matchup_seed', 'matchup_drop', 
+                             'top_n_choices', 'full_model_weight', 'covar_type', 'max_team_type',
+                             'min_player_same_team', 'min_players_opp_team', 'num_top_players', 
+                             'ownership_vers', 'qb_min_iter', 'qb_set_max_team', 'qb_solo_start', 'qb_stack_wt',
+                             'static_top_players', 'use_ownership', 'own_neg_frac', 'max_salary_remain', 
+                             'num_iters', 'num_avg_pts', 'use_unique_players']
+        
+        self.player_stats = self.pull_past_points(week, year)
+        self.prizes = self.get_past_prizes(week, year)
+        
+    @staticmethod
+    def get_past_stats(pos, week, year):
+        if pos=='Defense': colname='defTeam'
+        else: colname='player'
+        return dm.read(f'''SELECT {colname} AS player, fantasy_pts
+                                FROM {pos}_Stats
+                                WHERE week={week}
+                                    AND season={year}''', 'FastR')
+
+
+    def pull_past_points(self, week, year):
+
+        points = pd.DataFrame()
+        for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
+            points = pd.concat([points, self.get_past_stats(pos, week, year)])
+
+        return points
+
+    def calc_winnings(self, to_add):
+        results = pd.DataFrame(to_add, columns=['player'])
+        results = pd.merge(results, self.player_stats, on='player')
+        total_pts = results.fantasy_pts.sum()
+        idx_match = np.argmin(abs(self.prizes.Points - total_pts))
+        prize_money = self.prizes.loc[idx_match, 'prize']
+
+        return prize_money, results
+
+    @staticmethod
+    def get_past_prizes(week, year):
+        prizes = dm.read(f'''SELECT Rank, Points, prize
+                             FROM Contest_Results
+                             WHERE week={week}
+                                   AND year={year}
+                                   AND Contest='Million' ''', 'DK_Results')
+        return prizes
+        
+    @staticmethod
+    def rand_drop_selected(total_add, drop_multiplier, lineups_per_param):
+        to_drop = []
+        total_selections = dict(Counter(total_add))
+        for k, v in total_selections.items():
+            prob_drop = (v * drop_multiplier) / lineups_per_param
+            drop_val = np.random.uniform() * prob_drop
+            if  drop_val >= 0.5:
+                to_drop.append(k)
+        return to_drop
+    
+    @staticmethod
+    def adjust_high_winnings(tw, max_adjust=10000):
+        tw = np.array(tw)
+        tw[tw>max_adjust] = max_adjust
+        return list(tw)
+    
+    def generate_param_list(self, d):
+    
+        extra_keys = [k for k,_ in d.items() if k not in self.col_ordering]
+        missing_keys = [k for k in self.col_ordering if k not in d.keys()]
+
+        if len(extra_keys) > 0:
+            raise ValueError(f'Extra keys: {extra_keys}')
+        if len(missing_keys) > 0:
+            raise ValueError(f'Missing keys: {missing_keys}')
+
+        d = {k: d[k] for k in self.col_ordering}
+        params = []
+        for i in range(self.total_lineups_to_run):
+            cur_params = []
+            for _, param_options in d.items():
+                param_vars = list(param_options.keys())
+                param_prob = list(param_options.values())
+                cur_params.append(np.random.choice(param_vars, p=param_prob))
+
+            cur_params.append(i)
+            params.append(cur_params)
+
+        return params
+                    
+    def run_full_lineup(self, params, existing_players=[], set_max_team=None):
+
+        p = {k: v for k,v in zip(self.col_ordering, params)}
+        conn = self.dm.db_connect('Simulation')
+                
+        try: p['min_players_opp_team'] = int(p['min_players_opp_team'])
+        except: pass
+
+        try: p['min_player_same_team'] = float(p['min_player_same_team'])
+        except: pass
+
+        if p['covar_type']=='no_covar': p['use_covar']=False
+        else: p['use_covar']=True
+
+        if p['use_unique_players']: drop_length = len(set(existing_players)) + 5
+        else: drop_length = self.total_lineups_to_run + 5
+        to_drop_selected = self.rand_drop_selected(existing_players, p['player_drop_multiple'], drop_length)
+
+        to_add = []
+        sim = FootballSimulation(conn, self.week, self.year, self.salary_cap, self.pos_require_start, p['num_iters'], 
+                                 self.pred_vers, self.reg_ens_vers, self.million_ens_vers, self.std_dev_type, 
+                                 p['covar_type'], p['full_model_weight'], p['matchup_seed'], p['use_covar'], p['use_ownership'], 
+                                 p['max_salary_remain'])
+
+        i = 0  # Initialize the iteration counter
+        while len(to_add) < 9 and i < 18:  # Use a while loop to control iterations and break if necessary
+
+            to_drop = []
+            to_drop.extend(to_drop_selected)
+
+            results, _ = sim.run_sim(conn, to_add, to_drop, p['min_player_same_team'], set_max_team, 
+                                     p['min_players_opp_team'], p['adjust_pos_counts'], p['max_team_type'],
+                                     p['matchup_drop'], p['own_neg_frac'], p['num_top_players'], p['ownership_vers'],
+                                     p['static_top_players'], p['qb_min_iter'], p['qb_set_max_team'], p['qb_solo_start'],
+                                     p['num_avg_pts'], p['qb_stack_wt'],)
+            
+            results = results[~results.player.isin(to_add)].reset_index(drop=True)
+            prob = results.loc[:p['top_n_choices'], 'SelectionCounts'] / results.loc[:p['top_n_choices'], 'SelectionCounts'].sum()
+            
+            try: 
+                selected_player = np.random.choice(results.loc[:p['top_n_choices'], 'player'], p=prob)
+                to_add.append(selected_player)
+            except: 
+                pass
+
+            i += 1  # Increment the iteration counter    
+
+        return to_add
+    
+    def run_multiple_lineups(self, params, calc_winnings=False, parallelize=False, n_jobs=-1, verbose=0):
+        
+        existing_players =[]
+        if parallelize:
+            all_lineups = Parallel(n_jobs=n_jobs, verbose=verbose)(
+                                delayed(self.run_full_lineup)(cur_param, existing_players)
+                                for cur_param in params
+                                )
+                                
+        else:
+            all_lineups = []
+            for cur_params in params:
+                to_add = self.run_full_lineup(cur_params, existing_players)
+                existing_players.extend(to_add)
+                all_lineups.append(to_add)
+
+        if calc_winnings:
+            total_winnings = 0
+            winnings_list = []
+            player_results = pd.DataFrame()
+            for i, lineup in enumerate(all_lineups):
+  
+                winnings, player_results_cur = self.calc_winnings(lineup)
+                total_winnings += winnings
+                winnings_list.append(winnings)
+
+                player_results_cur = player_results_cur.assign(lineup_num=i, week=self.week, year=self.year)
+                player_results = pd.concat([player_results, player_results_cur])
+
+            return total_winnings, player_results, winnings_list
+        
+        else: 
+            pass
+
+        return all_lineups
 
 
 #%%
+    
+# week = 13
+# year = 2023
 
-# # set the root path and database management object
-# from ff.db_operations import DataManage
-# from ff import general as ffgeneral
-
-# root_path = ffgeneral.get_main_path('Daily_Fantasy')
-# db_path = f'{root_path}/Data/Databases/'
-# dm = DataManage(db_path)
-
-
-
-# conn = sqlite3.connect(f'c:/Users/borys/OneDrive/Documents/GitHub/Daily_Fantasy/Data/Databases/Simulation.sqlite3')
-
-# adjust_select = True
-# matchup_drop = 0
-# full_model_weight = 0.2
-# covar_type = 'kmeans_pred_trunc'
-# max_team_type = 'player_points'
-# use_covar = True
-# min_players_same_team = 3
-# min_players_opp_team = 'Auto'
-# top_n_players = 3
-# qb_min_iter = 2
-# qb_solo_start = True
-# qb_set_max_team = False
-# static_top_players = False
-# use_ownership = 1
-# own_neg_frac = 1
-# salary_remain_max = 500
-# num_iters = 100
-
-# pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-# reg_ens_vers ='random_kbest_sera0_rsq0_mse1_include2_kfold3'
-# std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
-# million_vers = 'random_kbest_matt0_brier1_include2_kfold3'
-# ownership_vers = 'mil_only'
-
-# week = 9
-# year = 2022
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-# set_max_team = None
 
-# sim = FootballSimulation(conn, week, year, salary_cap, pos_require_start, num_iters, 
-#                          reg_ens_vers=reg_ens_vers, pred_vers=pred_vers, million_ens_vers=million_vers,std_dev_type=std_dev_type,
-#                          full_model_rel_weight=full_model_weight, covar_type=covar_type, use_covar=use_covar, 
-#                          use_ownership=use_ownership, salary_remain_max=salary_remain_max, matchup_seed=False)
+# pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+# reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
+# million_ens_vers = 'random_full_stack_team_stats_matt0_brier1_include2_kfold3'
+# std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
+# total_lineups = 2
+
+# d = {'adjust_pos_counts': {False: 0.7, True: 0.3},
+#  'covar_type': {'kmeans_pred_trunc': 0.0,
+#                 'no_covar': 0.0,
+#                 'team_points_trunc': 1.0},
+#  'full_model_weight': {0.2: 0.3, 5: 0.7},
+#  'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
+#  'matchup_seed': {0: 0.3, 1: 0.7},
+#  'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
+#  'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
+#  'min_player_same_team': {2: 0.2, 3: 0.2, 'Auto': 0.6},
+#  'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8},
+#  'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
+#  'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
+#  'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
+#  'own_neg_frac': {0.8: 0.0, 1: 1.0},
+#  'ownership_vers': {'mil_div_standard_ln': 0.0,
+#                     'mil_only': 0.0,
+#                     'mil_times_standard_ln': 0.3,
+#                     'standard_ln': 0.7},
+#  'player_drop_multiple': {0: 0.5, 10: 0.5, 20:0},
+#  'qb_min_iter': {0: 0.6, 2: 0.4, 4: 0.0, 9: 0.0},
+#  'qb_set_max_team': {0: 0.7, 1: 0.3},
+#  'qb_solo_start': {False: 1.0, True: 0.0},
+#  'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
+#  'static_top_players': {False: 0.3, True: 0.7},
+#  'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
+#  'use_ownership': {0.7: 0.0, 0.8: 0.2, 0.9: 0.0, 1: 0.8},
+#  'use_unique_players': {True: 0.5, False: 0.5}
+#  }
+
+# rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
+# params = rs.generate_param_list(d)
+# rs.run_full_lineup(params, existing_players=[], set_max_team=None)
+
+#%%
+
+# winnings, player_results = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=True, n_jobs=-1, verbose=0)
+# print(winnings)
+# player_results.groupby('player').size().sort_values(ascending=False)
+
+# #%%
+
+# winnings, player_results = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=False, n_jobs=-1, verbose=0)
+# print(winnings)
+# player_results.groupby('player').size().sort_values(ascending=False)
+
+#%%
+
+# # set the model version
+# set_weeks = [
+#    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+#    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+
+# ]
+
+# set_years = [
+#       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+#       2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
+# ]
+
+# def objective(d, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups):
+
+#     rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
+#     params = rs.generate_param_list(d)
+#     winnings, player_results = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=False)
+
+#     return winnings, player_results, params
 
 
-# to_add = ['Joe Burrow']
-# to_drop = []
+# output = Parallel(n_jobs=-1, verbose=1)(
+#                                 delayed(objective)(d, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, 
+#                                                    million_ens_vers, std_dev_type, total_lineups) for
+#                                 week, year in zip(set_weeks, set_years)
+#                                 )
 
-# results, max_team_cnt = sim.run_sim(conn, to_add, to_drop, min_players_same_team, set_max_team, 
-#                                     min_players_opp_team, adjust_select=adjust_select, max_team_type=max_team_type,
-#                                     num_matchup_drop=matchup_drop, own_neg_frac=own_neg_frac,
-#                                     n_top_players=top_n_players, static_top_players=static_top_players,
-#                                      qb_solo_start=qb_solo_start, ownership_vers=ownership_vers,
-#                                     qb_set_max_team=qb_set_max_team, qb_min_iter=qb_min_iter, num_avg_pts=5,
-#                                     qb_stack_wt=1)
-
-# print(max_team_cnt)
-# results
-
- # %%
-
-# def calc_winnings(to_add, points, prizes):
-#     results = pd.DataFrame(to_add, columns=['player'])
-#     results = pd.merge(results, points, on='player')
-#     total_pts = results.fantasy_pts.sum()
-#     idx_match = np.argmin(abs(prizes.Points - total_pts))
-#     prize_money = prizes.loc[idx_match, 'prize']
-
-#     return prize_money
-
-# def rand_drop_selected(total_add, drop_multiplier, lineups_per_param):
-#     to_drop = []
-#     total_selections = dict(Counter(total_add))
-#     for k, v in total_selections.items():
-#         prob_drop = (v * drop_multiplier) / lineups_per_param
-#         drop_val = np.random.uniform() * prob_drop
-#         if  drop_val >= 0.5:
-#             to_drop.append(k)
-#     return to_drop
-
-# lineups_per_param = 3
-# top_n_choices = 1
-
-# winnings = []        
-# total_add = []
-# to_drop_selected = []
-# for t in range(lineups_per_param):
-
-#     to_add = []
-#     print('drop_players:', to_drop)
-#     sim = FootballSimulation(dm, week, year, salary_cap, pos_require_start, num_iters, 
-#                         pred_vers, ensemble_vers=ens_vers, std_dev_type=std_dev_type,
-#                         covar_type=covar_type,  full_model_rel_weight=full_model_weight, 
-#                         use_covar=use_covar, use_ownership=use_ownership, 
-#                         salary_remain_max=salary_remain_max, matchup_seed=True)
+# total_winnings = []
+# player_results = pd.DataFrame()
+# ran_params = []
+# for w, l, p in output:
+#     total_winnings.append(w)
+#     player_results = pd.concat([player_results, l])
+#     ran_params.append(p)
     
-#     for i in range(9):
-      
-#         to_drop = []
-#         to_drop.extend(to_drop_selected)
-#         results, _ = sim.run_sim(to_add, to_drop, min_players_same_team, set_max_team, 
-#                                 min_players_opp_team_input=min_players_opp_team, 
-#                                 adjust_select=adjust_select,max_team_type=max_team_type,
-#                                 num_matchup_drop=matchup_drop,ownership_vers=ownership_vers,
-#                                 own_neg_frac=own_neg_frac, n_top_players=top_n_players,
-#                                 static_top_players=static_top_players, qb_min_iter=qb_min_iter,
-#                                 qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
-        
-#         prob = results.loc[i:i+top_n_choices, 'SelectionCounts'] / results.loc[i:i+top_n_choices, 'SelectionCounts'].sum()
-        
-#         selected_player = np.random.choice(results.loc[i:i+top_n_choices, 'player'], p=prob)
-#         to_add.append(selected_player)
-    
-#         print('add players:', to_add)
+# print('Unadjusted Winnings:', {i+1: t for i,t in zip(range(len(total_winnings)), total_winnings)})
+# total_winnings = rs.adjust_high_winnings(total_winnings, max_adjust=15000)
+# print(np.sum(total_winnings))
 
-#     total_add.extend(to_add)
-#     to_drop_selected = rand_drop_selected(total_add, 4, 2)
-#     print('player_drop_multiple:', to_drop_selected)
+# #%%
+
+# mean_loss = -np.mean(total_winnings)
+# median_loss = -np.percentile(total_winnings, 80)
+# var_loss = np.var(total_winnings)
+# loss = mean_loss + median_loss
+
+# print('Total Winnings:', np.sum(total_winnings), 'Mean Loss:', np.round(mean_loss,1), 
+#           'Median Loss (80th perc):', np.round(median_loss,1), ' Current Loss:', np.round(loss,1), 'Variance Loss:', np.round(np.sqrt(var_loss),1))
 # %%

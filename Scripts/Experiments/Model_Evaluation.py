@@ -575,7 +575,7 @@ def entry_optimize_params(df, max_adjust, model_name):
     df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
     df.loc[(df.winnings >= 500) & (df.week==8) & (df.year==2022), 'winnings'] = 500
 
-    df.loc[df['max_lineup_num']==1, ['player_drop_multiple']] = 0
+    df.loc[df.trial_num < 520, 'player_drop_multiple'] = 0
 
     str_cols = ['week', 'year', 'pred_vers', 'reg_ens_vers', 'million_ens_vers', 'std_dev_type']
     if model_name in ('enet', 'lasso',' ridge'):
@@ -604,13 +604,16 @@ df = dm.read('''SELECT *
                      SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, entry_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num >= 430
+                WHERE trial_num >= 460
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
-                     -- AND NOT (week=8 AND year=2022)
+                      AND NOT (week=8 AND year=2022)
+                    --  AND (reg_ens_vers LIKE '%team_stats%' OR million_ens_vers LIKE '%team_stats%')
+             
                 ''', 'Results')
 
 df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
+df.loc[df.week!='8_2022', 'winnings'] = df.loc[df.week!='8_2022', 'winnings']*2
 
 model_type = {
  'enet': ElasticNet(alpha=1, l1_ratio=0.1),
@@ -630,12 +633,12 @@ show_coef(coef_vals, X)
 #%%
 
 weeks = [
-         1, 2, 3, 4, 5, 6, 7, 8, 
+         1, 2, 3, 4, 5, 6, 7, #8, 
          9, 10, 11, 12, 13, 14, 15, 16,
          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
          11, 12, 13, 14, 15, 16]
 years = [
-          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+          2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
           2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
           2023, 2023, 2023, 2023, 2023, 2023]
@@ -649,15 +652,14 @@ for w, yr in zip(weeks, years):
                             SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, entry_type, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num >= 400
+                     WHERE trial_num >= 460
                            AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-                           --AND reg_ens_vers IN ('random_kbest_sera0_rsq0_mse1_include2_kfold3', 'random_sera0_rsq0_mse1_include2_kfold3')
-                           --AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'          
-                           --AND million_ens_vers IN ('random_matt0_brier1_include2_kfold3', 'random_kbest_matt0_brier1_include2_kfold3')
+                        --   AND (reg_ens_vers LIKE '%team_stats%' OR million_ens_vers LIKE '%team_stats%')
                            AND week = {w}
                            AND year = {yr}
                      ''', 'Results')
     df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
+    df.loc[df.week!='8_2022', 'winnings'] = df.loc[df.week!='8_2022', 'winnings']*2
 
     model_name = 'enet'
     m = model_type[model_name]
@@ -697,10 +699,11 @@ class FoldPredict:
             grid.fit(X_train,y_train)
             
             scores = pd.concat([pd.DataFrame(grid.cv_results_['params']), 
-                                pd.DataFrame(np.sqrt(grid.cv_results_['mean_test_score']))], axis=1).sort_values(by=0)
+                                pd.DataFrame(np.sqrt(-grid.cv_results_['mean_test_score']))], axis=1).sort_values(by=0, ascending=False)
             print(scores)
 
             best_model = grid.best_estimator_
+            print(best_model)
     
             if not os.path.exists(self.save_path): os.makedirs(self.save_path)
             save_pickle(best_model, self.save_path, f'{model_type}_fold{i}')
@@ -734,16 +737,23 @@ class FoldPredict:
 
 params = dm.read('''SELECT *
                     FROM Entry_Optimize_Params
-                    WHERE trial_num >= 393
+                    WHERE trial_num >= 460
                     ''', 'Results')
+param_vars = list(params.param.unique())
 params['param'] = params.param.astype('str') + '_' + params.param_option.astype('str')
+
 params = params.pivot_table(index=['trial_num'], columns='param', values='option_value').reset_index().fillna(0)
 
 results = dm.read('''SELECT *
                     FROM Entry_Optimize_Results
-                    WHERE trial_num >= 393
-                       --   AND NOT (week=8 AND year=2022)
+                    WHERE trial_num >= 460
+                          AND NOT (week=8 AND year=2022)
                     ''', 'Results')
+
+# results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] = results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] * 2
+
+results = results.groupby(['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers', 
+                           'ownership_vers', 'entry_type', 'trial_num', 'repeat_num']).agg({'avg_winnings': 'sum'}).reset_index()
 
 results = pd.merge(results, params, on='trial_num')
 results = results.drop(['trial_num', 'repeat_num'], axis=1)
@@ -751,8 +761,8 @@ for c in results.columns:
     if results.dtypes[c] == 'object': 
         results[c] = results[c].astype('category')
 
-results.week = results.week.astype('category')
-results.year = results.year.astype('category')
+# results.week = results.week.astype('category')
+# results.year = results.year.astype('category')
 
 X = results.drop('avg_winnings', axis=1)
 y = results.avg_winnings
@@ -761,39 +771,144 @@ y = results.avg_winnings
 
 
 params = {
-    'n_estimators': range(50, 400, 20),
-    'num_leaves': range(100, 500, 20),
-    'min_child_samples': range(10, 200, 10),
-    'learning_rate': np.arange(0.05, 0.25, 0.02),
+    'n_estimators': range(100, 400, 10),
+    'num_leaves': range(20, 300, 10),
+    'min_child_samples': range(1, 50, 2),
+    'learning_rate': np.arange(0.05, 0.35, 0.02),
     'subsample': np.arange(0.8, 1, 0.02)
 }
 
+# for c in X.columns:
+#     if X[c].dtype.name == 'category':
+#         X = pd.concat([X, pd.get_dummies(X[c], prefix=c)], axis=1).drop(c, axis=1)
 
+# params = {
+#     'alpha': np.arange(0.1, 10, 0.1),
+#     'l1_ratio': np.arange(0.1, 1, 0.1)
+# }
 
-lgbm = LGBMRegressor(n_jobs=16)
-fp = FoldPredict(f'{root_path}/Model_Outputs/Final_LGBM/', retrain=False)
-fp.cross_fold_train('winnings', lgbm, params, X, y, n_iter=20)
+retrain = False
+model = LGBMRegressor(n_jobs=16)
+# model = ElasticNet()
+fp = FoldPredict(f'{root_path}/Model_Outputs/Final_Enet/', retrain=retrain)
+fp.cross_fold_train('winnings', model, params, X, y, n_iter=20)
 
 #%%
-base_cols = ['week', 'year', 'pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers']
+
+counts_base = 0
+while counts_base < 1000000:
+    for cnt_cutoff in range(-200, -50, 10):
+        cnt_cutoff = abs(cnt_cutoff)
+
+        drop_cols = []
+        for pv in param_vars:
+            for c in X.columns:
+                if pv in c:
+                    drop_cols.append(c)
+        base_cols = [c for c in X.columns if c not in drop_cols]
+        counts_base = len(X[base_cols].drop_duplicates())
+
+        for pv in param_vars:
+            cur_cols = [c for c in X.columns if pv in c]
+
+            if X[cur_cols].value_counts().max() < cnt_cutoff:
+                cur_cnt_cutoff = X[cur_cols].value_counts().max()
+            else:
+                cur_cnt_cutoff = cnt_cutoff
+
+            cur_cnts = X[cur_cols].value_counts()
+            c_multiplier = len(cur_cnts[cur_cnts>=cur_cnt_cutoff])
+            counts_base = counts_base * c_multiplier
+        print(cnt_cutoff, counts_base)
+
+        if counts_base > 1000000: break
+
+
+cnt_cutoff = cnt_cutoff + 10
+
+#%%
+
+drop_cols = []
+for pv in param_vars:
+    for c in X.columns:
+        if pv in c:
+            drop_cols.append(c)
+base_cols = [c for c in X.columns if c not in drop_cols]
 X_predict = X[base_cols].drop_duplicates()
 X_predict['cross_idx'] = 1
-for c in X.drop(base_cols, axis=1).columns:
-    cur_col = pd.DataFrame(X[c].value_counts()[X[c].value_counts()>5800].index, columns=[c])
+
+for pv in param_vars:
+    cur_cols = [c for c in X.columns if pv in c]
+    cur_cnts = X[cur_cols].value_counts()
+    if X[cur_cols].value_counts().max() < cnt_cutoff:
+        cur_cnt_cutoff = X[cur_cols].value_counts().max()
+    else:
+        cur_cnt_cutoff = cnt_cutoff
+
+    cur_col = X[cur_cols].value_counts()[X[cur_cols].value_counts()>=cur_cnt_cutoff].reset_index().drop(0, axis=1)
     cur_col['cross_idx'] = 1
     X_predict = pd.merge(X_predict, cur_col, on='cross_idx')
+    print(pv, X_predict.shape)
 
 X_predict = X_predict.drop('cross_idx', axis=1)
 
+
+# for c in X_predict.columns:
+#     if X_predict[c].dtype.name == 'category':
+#         X_predict = pd.concat([X_predict, pd.get_dummies(X_predict[c], prefix=c)], axis=1).drop(c, axis=1)
+
+X_predict = X_predict[X.columns]
+
 #%%
-winnings_pr = fp.cross_fold_predict('winnings', X_predict, y=pd.Series(np.array([260]*len(X_predict)), name='entry'))
+winnings_pr = fp.cross_fold_predict('winnings', X_predict, y=pd.Series(np.array([260*32]*len(X_predict)), name='entry'))
 grp_cols = [c for c in winnings_pr.columns if c not in ('winnings_pred', 'avg_winnings', 'week', 'year')]
 for c in grp_cols:
     winnings_pr[c] = winnings_pr[c].astype('str')
 
-winnings_pr = winnings_pr.groupby(grp_cols).agg({'winnings_pred': 'sum'}).reset_index()
-winnings_pr['winnings_pred'] = winnings_pr['winnings_pred']
-winnings_pr.sort_values(by='winnings_pred', ascending=False).iloc[0].to_dict()
+display(winnings_pr.sort_values(by='winnings_pred', ascending=False).iloc[:25])
+
+#%%
+top_settings = winnings_pr.sort_values(by='winnings_pred', ascending=False).iloc[0].to_dict()
+
+pred_params = {}
+for k, v in top_settings.items():
+    if k in ['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers']:
+        pred_params[k] = v
+
+other_params = {}
+for k,v in top_settings.items():
+    if k not in ['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers', 'entry', 'winnings_pred', 'ownership_vers', 'entry_type']:
+        
+        if 'covar_type' in k:
+            p = 'covar_type'
+            opt = k.split('covar_type_')[-1]
+        elif 'ownership_vers' in k:
+            p = 'ownership_vers'
+            opt = k.split('ownership_vers_')[-1]
+        elif 'max_team_type' in k:
+            p = 'max_team_type'
+            opt = k.split('max_team_type_')[-1]
+        else:
+            p = '_'.join(k.split('_')[:-1])
+            opt = k.split('_')[-1]
+        
+        if p not in other_params.keys(): other_params[p] = {}
+        if p in ('adjust_pos_counts', 'static_top_players', 'qb_set_max_max', 'qb_solo_start'):
+            if opt=='0': opt=False
+            if opt=='1': opt=True
+        else:
+            try: opt = int(opt)
+            except: 
+                try: opt = float(opt)
+                except: pass
+
+        other_params[p][opt] = np.round(float(v),2)
+
+import pprint
+
+pprint.pprint(pred_params)
+print('\n')
+pprint.pprint(other_params)
 
 # %%
 

@@ -102,7 +102,7 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'Results')
     return vers
 
-best_trials = 453
+best_trials = 499
 
 opt_params = pull_best_params(best_trials)
 pprint.pprint(opt_params)
