@@ -747,10 +747,10 @@ params = params.pivot_table(index=['trial_num'], columns='param', values='option
 results = dm.read('''SELECT *
                     FROM Entry_Optimize_Results
                     WHERE trial_num >= 460
-                          AND NOT (week=8 AND year=2022)
+                        --  AND NOT (week=8 AND year=2022)
                     ''', 'Results')
 
-# results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] = results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] * 2
+results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] = results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] * 3
 
 results = results.groupby(['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers', 
                            'ownership_vers', 'entry_type', 'trial_num', 'repeat_num']).agg({'avg_winnings': 'sum'}).reset_index()
@@ -778,18 +778,8 @@ params = {
     'subsample': np.arange(0.8, 1, 0.02)
 }
 
-# for c in X.columns:
-#     if X[c].dtype.name == 'category':
-#         X = pd.concat([X, pd.get_dummies(X[c], prefix=c)], axis=1).drop(c, axis=1)
-
-# params = {
-#     'alpha': np.arange(0.1, 10, 0.1),
-#     'l1_ratio': np.arange(0.1, 1, 0.1)
-# }
-
 retrain = False
 model = LGBMRegressor(n_jobs=16)
-# model = ElasticNet()
 fp = FoldPredict(f'{root_path}/Model_Outputs/Final_Enet/', retrain=retrain)
 fp.cross_fold_train('winnings', model, params, X, y, n_iter=20)
 
@@ -851,12 +841,6 @@ for pv in param_vars:
     print(pv, X_predict.shape)
 
 X_predict = X_predict.drop('cross_idx', axis=1)
-
-
-# for c in X_predict.columns:
-#     if X_predict[c].dtype.name == 'category':
-#         X_predict = pd.concat([X_predict, pd.get_dummies(X_predict[c], prefix=c)], axis=1).drop(c, axis=1)
-
 X_predict = X_predict[X.columns]
 
 #%%
@@ -865,50 +849,18 @@ grp_cols = [c for c in winnings_pr.columns if c not in ('winnings_pred', 'avg_wi
 for c in grp_cols:
     winnings_pr[c] = winnings_pr[c].astype('str')
 
-display(winnings_pr.sort_values(by='winnings_pred', ascending=False).iloc[:25])
+winnings_pr = winnings_pr.sort_values(by='winnings_pred', ascending=False).drop_duplicates().reset_index(drop=True)
+winnings_pr = winnings_pr.reset_index().rename(columns={'index': 'param_rank'})
+
+model_notes = 'all_weeks_non8_times_3'
+date_run = dt.datetime.now().strftime('%Y-%m-%d')
+winnings_pr = winnings_pr.assign(model_notes=model_notes, date_run=date_run)
+
 
 #%%
-top_settings = winnings_pr.sort_values(by='winnings_pred', ascending=False).iloc[0].to_dict()
 
-pred_params = {}
-for k, v in top_settings.items():
-    if k in ['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers']:
-        pred_params[k] = v
-
-other_params = {}
-for k,v in top_settings.items():
-    if k not in ['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers', 'entry', 'winnings_pred', 'ownership_vers', 'entry_type']:
-        
-        if 'covar_type' in k:
-            p = 'covar_type'
-            opt = k.split('covar_type_')[-1]
-        elif 'ownership_vers' in k:
-            p = 'ownership_vers'
-            opt = k.split('ownership_vers_')[-1]
-        elif 'max_team_type' in k:
-            p = 'max_team_type'
-            opt = k.split('max_team_type_')[-1]
-        else:
-            p = '_'.join(k.split('_')[:-1])
-            opt = k.split('_')[-1]
-        
-        if p not in other_params.keys(): other_params[p] = {}
-        if p in ('adjust_pos_counts', 'static_top_players', 'qb_set_max_max', 'qb_solo_start'):
-            if opt=='0': opt=False
-            if opt=='1': opt=True
-        else:
-            try: opt = int(opt)
-            except: 
-                try: opt = float(opt)
-                except: pass
-
-        other_params[p][opt] = np.round(float(v),2)
-
-import pprint
-
-pprint.pprint(pred_params)
-print('\n')
-pprint.pprint(other_params)
+dm.delete_from_db('Results', 'Entry_Optimize_Hyperparams', f"model_notes='{model_notes}' AND date_run='{date_run}'")
+dm.write_to_db(winnings_pr, 'Results','Entry_Optimize_Hyperparams', 'append')
 
 # %%
 

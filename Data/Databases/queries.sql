@@ -39,7 +39,7 @@ FROM (
 			            WHEN avg_winnings > 10000 THEN 10000 
 						ELSE avg_winnings END) non8_winnings 
 		FROM Entry_Optimize_Results
-		WHERE trial_num >= 269
+		WHERE trial_num >= 460
 		      AND week < 17
 		GROUP BY trial_num, repeat_num
 )
@@ -70,7 +70,7 @@ WITH all_winnings_tbl AS (
 					   sum(CASE WHEN avg_winnings > 10000 THEN 10000 ELSE avg_winnings END) winnings,
 					   row_number() OVER (PARTITION BY trial_num ORDER BY sum(CASE WHEN avg_winnings > 10000 THEN 10000 ELSE avg_winnings END) DESC) rn_with
 				FROM Entry_Optimize_Results
-				WHERE trial_num >= 269
+				WHERE trial_num >= 520
 					  AND week < 17
 				GROUP BY trial_num, repeat_num
 		)
@@ -97,11 +97,11 @@ AS (
 																				   WHEN avg_winnings > 10000 THEN 10000 
 																				   ELSE avg_winnings END) DESC) rn_non8
 				FROM Entry_Optimize_Results
-				WHERE trial_num >= 269
+				WHERE trial_num >= 520
 					  AND week < 17
 				GROUP BY trial_num, repeat_num
 			)
-		WHERE rn_non8<=5
+		WHERE rn_non8>2 AND rn_non8<8
 		GROUP BY trial_num
 )
 SELECT *,
