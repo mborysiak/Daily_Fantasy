@@ -35,7 +35,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [17]
+run_weeks = [6]
 verbosity = 50
 run_params = {
     
@@ -65,7 +65,9 @@ run_params = {
         'Defense': 32
     },
 
-    'rush_pass': ''
+    'rush_pass': '',
+
+    'hp_algo': 'atpe',
 }
 
 n_splits = run_params['n_splits']
@@ -82,7 +84,7 @@ matt_wt = 1
 brier_wt = 1
 
 # set version and iterations
-vers = f'sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_brier{brier_wt}_matt{matt_wt}_bayes'
+vers = f"sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_brier{brier_wt}_matt{matt_wt}_bayes"#_{run_params['hp_algo']}"
 
 #----------------
 # Data Loading
@@ -217,12 +219,22 @@ def get_class_data(df, cut, run_params):
 def output_dict():
     return {'pred': {}, 'actual': {}, 'scores': {}, 'models': {}, 'full_hold':{}, 'param_scores': {}, 'trials': {}}
 
+def get_last_run_week(w, run_params):
+    if w == 1: 
+        run_params['last_run_year'] = run_params['set_year'] - 1
+        run_params['last_run_week'] = 16
+    else: 
+        run_params['last_run_year'] = run_params['set_year']
+        run_params['last_run_week'] = w - 1
+    
+    return run_params
+
 
 def get_trial_times(root_path, run_params, set_pos, model_type, vers):
 
-    newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
-    recent_save = get_newest_folder_with_keywords(newest_folder, [set_pos, model_type, vers], [f"_week{run_params['set_week']}_"])
-
+    yr = run_params['last_run_year']
+    wk = run_params['last_run_week']
+    recent_save = f"{root_path}/Model_Outputs/{yr}/{set_pos}_year{yr}_week{wk}_{model_type}{vers}"
     all_trials = load_pickle(recent_save, 'all_trials')
 
     times = []
@@ -249,7 +261,7 @@ def calc_num_trials(time_per_trial, run_params):
     return {k:v for k,v in zip(time_per_trial.model, time_per_trial.num_trials)}
 
 def reg_params(df_train, min_samples, num_trials, run_params):
-    model_list = ['adp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'knn','xgb']
+    model_list = ['adp', 'cb', 'mlp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'knn','xgb']
     label = 'reg'
     func_params_reg = []
     for i, m  in enumerate(model_list):
@@ -260,7 +272,7 @@ def reg_params(df_train, min_samples, num_trials, run_params):
     return func_params_reg
 
 def class_params(df, min_samples, num_trials, run_params):
-    model_list = ['gbm_c', 'rf_c','gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c']
+    model_list = ['gbm_c', 'cb_c', 'mlp_c', 'rf_c','gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c']
     func_params_c = []
     for cut in run_params['cuts']:
         label = f'class_{cut}'
@@ -285,7 +297,7 @@ def quant_params(df_train, alphas, min_samples, num_trials, run_params):
     return func_params_q
 
 def million_params(df, num_trials, run_params):
-    model_list = ['gbm_c', 'rf_c', 'gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c' ]
+    model_list = ['gbm_c', 'cb_c', 'mlp_c', 'rf_c', 'gbmh_c', 'lgbm_c', 'lr_c', 'knn_c', 'xgb_c' ]
     label = 'million'
     df_train_mil, _, min_samples_mil = predict_million_df(df, run_params)
 
@@ -306,12 +318,12 @@ def order_func_params(func_params, trial_times):
 
     return func_params
 
-def get_skm(skm_df, model_obj, to_drop):
+def get_skm(skm_df, model_obj, to_drop, hp_algo):
     
     skm_options = {
-        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt, mse_wt=mse_wt),
-        'class': SciKitModel(skm_df, model_obj='class', brier_wt=brier_wt, matt_wt=matt_wt),
-        'quantile': SciKitModel(skm_df, model_obj='quantile')
+        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt, mse_wt=mse_wt, hp_algo=hp_algo),
+        'class': SciKitModel(skm_df, model_obj='class', brier_wt=brier_wt, matt_wt=matt_wt, hp_algo=hp_algo),
+        'quantile': SciKitModel(skm_df, model_obj='quantile', hp_algo=hp_algo)
     }
     
     skm = skm_options[model_obj]
@@ -387,18 +399,20 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
 
 def update_trials_params(trials, m, params, pipe):
 
-    m_params = [p.split('__')[1] for p in params.keys() if m in p]
+    if m not in ('cb', 'cb_c'):
+        
+        m_params = [p.split('__')[1] for p in params.keys() if m in p]
 
-    hyper_params = {
-        p: pipe.steps[-1][1].get_params()[p] for p in m_params
-    }
+        hyper_params = {
+            p: pipe.steps[-1][1].get_params()[p] for p in m_params
+        }
 
-    for trial in trials:
-        # Update each trial with the new hyperparameters
-        for k,v in hyper_params.items():
-            if k not in trial['misc']['vals']:
-                trial['misc']['vals'][k] = [v]
-                trial['misc']['idxs'][k] = [trial['tid']]
+        for trial in trials:
+            # Update each trial with the new hyperparameters
+            for k,v in hyper_params.items():
+                if k not in trial['misc']['vals']:
+                    trial['misc']['vals'][k] = [v]
+                    trial['misc']['idxs'][k] = [trial['tid']]
 
     return trials
 
@@ -465,7 +479,7 @@ def get_model_output(model_name, label, cur_df, model_obj, run_params, i, min_sa
     proba = get_proba(model_obj)
     trials = get_trials(label, model_name, bayes_rand)
 
-    skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'])
+    skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'], hp_algo=run_params['hp_algo'])
     pipe, params = get_full_pipe(skm, model_name, alpha, min_samples=min_samples, bayes_rand=bayes_rand)
     if trials is not None: trials = update_trials_params(trials, model_name, params, pipe)
 
@@ -613,7 +627,6 @@ def save_output_dict(out_dict, label, model_output_path):
     save_pickle(out_dict['trials'], model_output_path, f'{label}_trials')
 
 
-
 #%%
 
 
@@ -622,19 +635,20 @@ with keep.running() as m:
         print('Fell Asleep')
 
     run_list = [
-                ['QB', '', 'full_model'],
+                # ['QB', '', 'full_model'],
                 ['RB', '', 'full_model'],
-                ['WR', '', 'full_model'],
-                ['TE', '', 'full_model'],
-                ['Defense', '', 'full_model'],
-                ['QB', '', 'backfill'],
-                ['RB', '', 'backfill'],
-                ['WR', '', 'backfill'],
-                ['TE', '', 'backfill'],
+                # ['WR', '', 'full_model'],
+                # ['TE', '', 'full_model'],
+                # ['Defense', '', 'full_model'],
+                # ['QB', '', 'backfill'],
+                # ['RB', '', 'backfill'],
+                # ['WR', '', 'backfill'],
+                # ['TE', '', 'backfill'],
     ]
 
     for w in run_weeks:
         run_params['set_week'] = w
+        run_params = get_last_run_week(w, run_params)
 
         for set_pos, rush_pass, model_type in run_list:
 
@@ -673,21 +687,30 @@ with keep.running() as m:
             func_params.extend(million_params(df, num_trials, run_params))
             func_params = order_func_params(func_params, trial_times)
             
-            # run all models in parallel
-            results = Parallel(n_jobs=-1, verbose=verbosity)(
-                            delayed(get_model_output)
-                            (m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
-                                for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params[1:] # skip ADP to append due to Scaler error
-                            )
-            all_results = []
-            all_results.append(adp_result)
-            all_results.extend(results)
+            # # run all models in parallel
+            # results = Parallel(n_jobs=-1, verbose=verbosity)(
+            #                 delayed(get_model_output)
+            #                 (m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
+            #                     for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params[1:] # skip ADP to append due to Scaler error
+            #                 )
+            # all_results = []
+            # all_results.append(adp_result)
+            # all_results.extend(results)
 
-            # save output for all models
-            out_dict = output_dict()
-            out_dict = unpack_results(out_dict, func_params, all_results)
-            save_output_dict(out_dict, 'all', model_output_path)
+            # # save output for all models
+            # out_dict = output_dict()
+            # out_dict = unpack_results(out_dict, func_params, all_results)
+            # save_output_dict(out_dict, 'all', model_output_path)
 
+            
+#%%
+
+num_trials
+
+
+#%%
+for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params[1:]:
+    results = get_model_output('cb', 'reg', df_train, 'reg', run_params, 0, min_samples, '', run_params['n_iters'])
 
  #%%
 import os

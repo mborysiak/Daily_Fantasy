@@ -8,10 +8,11 @@ import sqlite3
 from DataPull_Helper import *
 pd.set_option('display.max_columns', 999)
 import shutil as su
+import lxml
 
 # +
-set_year = 2023
-set_week = 17
+set_year = 2024
+set_week = 1
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -125,7 +126,6 @@ def pull_fantasy_data(set_week):
 
 
 #%%
-
 #=============
 # Fantasy Pros
 #=============
@@ -314,6 +314,29 @@ df = df[[c for c in df.columns if c in col]]
 
 dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
+
+#%%
+
+nf = pd.read_html('https://www.numberfire.com/nfl/fantasy/fantasy-football-projections')
+
+stats = nf[1]
+stats.columns = [f"{c[0].lower()}_{c[1].lower().replace('.', '')}" for c in nf[1].columns]
+
+players = nf[0]
+players = players.T.reset_index().T.reset_index(drop=True)
+players.columns = ['player']
+players.player = players.player.apply(lambda x: x.split(' ')[0] + ' ' + x.split(' ')[1])
+
+nf_data = pd.concat([players, stats], axis=1)
+for c in ['opp_rank', 'ranks_ovr', 'ranks_pos']:
+    nf_data[c] = nf_data[c].apply(lambda x: x.replace('#', '')).astype('int')
+nf_data.columns = [f'nf_{c}' if c!='player' else c for c in nf_data.columns]
+nf_data['week'] = set_week
+nf_data['year'] = set_year
+nf_data = nf_data.drop('nf_opp_team', axis=1)
+
+dm.delete_from_db('Pre_PlayerData', 'NumberFire', f"week={set_week} AND year={set_year}")
+dm.write_to_db(nf_data, 'Pre_PlayerData', 'NumberFire', 'append')
 
 #%%
 

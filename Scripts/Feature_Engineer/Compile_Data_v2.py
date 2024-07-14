@@ -72,9 +72,9 @@ def add_rolling_stats(df, gcols, rcols, perform_check=True):
     rolls8_max = rolling_stats(df, gcols, rcols, 8, agg_type='max')
     rolls8_std = rolling_stats(df, gcols, rcols, 8, agg_type='std')
 
-    hist_mean = rolling_expand(df, gcols, rcols, agg_type='mean')
-    hist_std = rolling_expand(df, gcols, rcols, agg_type='std')
-    hist_p80 = rolling_expand(df, gcols, rcols, agg_type='p95')
+    # hist_mean = rolling_expand(df, gcols, rcols, agg_type='mean')
+    # hist_std = rolling_expand(df, gcols, rcols, agg_type='std')
+    # hist_p80 = rolling_expand(df, gcols, rcols, agg_type='p95')
 
     df = pd.concat([df, 
                     rolls8_mean, rolls8_max, rolls8_std,
@@ -643,7 +643,15 @@ def calc_market_share(df):
                    'rec_first_down_sum', 'rec_epa_sum', 'rec_qb_epa_sum', 'rec_cp_sum','rec_xyac_epa_sum', 
                    'rec_pass_attempt_sum', 'rec_xyac_success_sum', 'rec_comp_air_epa_sum',
                    'rec_air_yards_sum', 'rec_touchdown_sum', 'rec_xyac_median_yardage_sum',
-                   'rec_complete_pass_sum', 'rec_qb_dropback_sum']
+                   'rec_complete_pass_sum', 'rec_qb_dropback_sum',
+                   
+                   'rush_red_zone_rush_attempt_sum', 'rush_red_zone_yards_gained_sum',
+                   'rush_goalline_rush_attempt_sum', 'rush_goalline_ep_sum',
+                   'rush_third_fourth_rush_attempt_sum', 'rush_third_fourth_yards_gained_sum',
+                   'rec_red_zone_pass_attempt_sum', 'rec_red_zone_ep_sum', 'rec_red_zone_complete_pass_sum',
+                   'rec_third_fourth_pass_attempt_sum', 'rec_third_fourth_complete_pass_sum', 'rec_third_fourth_yards_gained_sum',
+                   'rec_goalline_pass_attempt_sum'
+                   ]
 
     team_cols = ['team_' + c for c in player_cols]
 
@@ -1456,6 +1464,16 @@ def one_qb_per_week(df):
     return df
 
 
+def replace_inf_values(df):
+    for c in df.columns:
+        try:
+            if len(df[df[c]==np.inf])>0:
+                print('Infinite Value:', c)
+                df.loc[df[c]==np.inf, c] = df.loc[df[c]!=np.inf, c].mean()
+        except:
+            pass
+    return df
+
 def remove_low_corrs(df, corr_cut=0.015):
     obj_cols = df.dtypes[df.dtypes=='object'].index
     corrs = pd.DataFrame(np.corrcoef(df.drop(obj_cols, axis=1).values, rowvar=False), 
@@ -1470,10 +1488,10 @@ def remove_low_corrs(df, corr_cut=0.015):
     corrs = corrs.dropna().sort_values()
     display(corrs.iloc[:20])
     display(corrs.iloc[-20:])
-    display(corrs[~corrs.index.str.contains('ffa|proj|expert|rank|Proj|fc|salary|Points|Rank|fdta|fft') | \
+    display(corrs[~corrs.index.str.contains('ffa|proj|expert|rank|Proj|fc|salary|Points|Rank|fdta|fft|proj') | \
                    corrs.index.str.contains('team') | \
                    corrs.index.str.contains('qb')].iloc[:20])
-    display(corrs[~corrs.index.str.contains('ffa|proj|expert|rank|Proj|fc|salary|Points|Rank|fdta|fft') | \
+    display(corrs[~corrs.index.str.contains('ffa|proj|expert|rank|Proj|fc|salary|Points|Rank|fdta|fft|proj') | \
                    corrs.index.str.contains('team') | \
                    corrs.index.str.contains('qb')].iloc[-20:])
     return df
@@ -1880,13 +1898,14 @@ def qb_pull(rush_or_pass):
 
     # fill in missing data and drop any remaining rows
     df = forward_fill(df)
-    df = df.dropna().reset_index(drop=True); print(df.shape[0])
+    df = df.dropna(axis=1, thresh=df.shape[0]-100).dropna().reset_index(drop=True); print(df.shape[0])
 
     df = one_qb_per_week(df); print(df.shape[0])
 
     df = remove_non_uniques(df)
     df = df[(df.ProjPts > 10) & (df.projected_points > 10)].reset_index(drop=True)
     df = drop_duplicate_players(df)
+    df = replace_inf_values(df)
     df = remove_low_corrs(df, corr_cut=0.03)
 
     print('Total Rows:', df.shape[0])
@@ -1975,9 +1994,10 @@ for pos in ['RB', 'WR', 'TE']:
 
     # fill in missing data and drop any remaining rows
     df = forward_fill(df)
-    df = df.dropna().reset_index(drop=True); print(df.shape[0])
+    df =  df.dropna(axis=1, thresh=df.shape[0]-100).dropna().reset_index(drop=True); print(df.shape[0])
     df = remove_non_uniques(df)
     df = drop_duplicate_players(df)
+    df = replace_inf_values(df)
     df = remove_low_corrs(df, corr_cut=0.03)
 
     print('Total Rows:', df.shape[0])
@@ -1987,6 +2007,7 @@ for pos in ['RB', 'WR', 'TE']:
     dm.write_to_db(df.iloc[:, :2000], 'Model_Features', f'{pos}_Data', if_exist='replace')
     if df.shape[1] > 2000:
         dm.write_to_db(df.iloc[:, 2000:], 'Model_Features', f'{pos}_Data2', if_exist='replace')
+
 
 #%%
 
@@ -2031,12 +2052,13 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
 
     # fill in missing data and drop any remaining rows
     df = forward_fill(df)
-    df = df.dropna().reset_index(drop=True); print(df.shape[0])
+    df =  df.dropna(axis=1, thresh=df.shape[0]-100).dropna().reset_index(drop=True); print(df.shape[0])
 
     df['pos'] = pos
     if pos=='QB': df = one_qb_per_week(df); print(df.shape[0])
     
     df = drop_duplicate_players(df)
+    df = replace_inf_values(df)
     df = remove_low_corrs(df, corr_cut=0.03)
 
     print('Data Size:', df.shape[0])
@@ -2118,7 +2140,7 @@ defense = forward_fill(defense)
 
 defense = attach_y_act(defense, pos='Defense', defense=True)
 defense = drop_y_act_except_current(defense, WEEK, YEAR); print(defense.shape[0])
-defense = defense.dropna(); print(defense.shape[0])
+defense = defense.dropna(axis=1, thresh=defense.shape[0]-100).dropna(); print(defense.shape[0])
 
 print('Unique player-week-years:', defense[['player', 'week', 'year']].drop_duplicates().shape[0])
 print('Team Counts by Week:', defense[['year', 'week', 'player']].drop_duplicates().groupby(['year', 'week'])['player'].count())
@@ -2128,6 +2150,8 @@ defense = remove_non_uniques(defense)
 defense = remove_low_corrs(defense, corr_cut=0.02)
 
 dm.write_to_db(defense, 'Model_Features', f'Defense_Data', if_exist='replace')
+
+
 #%%
 
 chk_week = 17

@@ -18,6 +18,7 @@ import zModel_Functions as mf
 import matplotlib.pyplot as plt
 from hyperopt import Trials
 from warnings import simplefilter 
+from joblib import Parallel, delayed
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -28,6 +29,12 @@ def load_pickle(path, fname):
         with gzip.open(f"{path}/{fname}.p", 'rb') as f:
             loaded_object = pickle.load(f)
             return loaded_object
+        
+def save_pickle(obj, path, fname, protocol=-1):
+    with gzip.open(f"{path}/{fname}.p", 'wb') as f:
+        pickle.dump(obj, f, protocol)
+
+    print(f'Saved {fname} to path {path}')
 
 def load_all_pickles(model_output_path, label):
     pred = load_pickle(model_output_path, f'{label}_pred')
@@ -39,20 +46,20 @@ def load_all_pickles(model_output_path, label):
     return pred, actual, models, scores, full_hold
 
 
-def load_data(model_type, set_pos, run_params):
+def load_data(model_type, set_pos, run_params, model_feature_db):
 
     # load data and filter down
     if model_type=='full_model': df = dm.read(f'''SELECT * 
                                                   FROM {set_pos}_Data{run_params['rush_pass']}
-                                                ''', 'Model_Features')
+                                                ''', model_feature_db)
     elif model_type=='backfill': df = dm.read(f'''SELECT * 
                                                   FROM Backfill 
-                                                  WHERE pos='{set_pos}' ''', 'Model_Features')
+                                                  WHERE pos='{set_pos}' ''', model_feature_db)
 
     if df.shape[1]==2000:
         df2 = dm.read(f'''SELECT * 
                           FROM {set_pos}_Data{run_params['rush_pass']}2
-                       ''', 'Model_Features')
+                       ''', model_feature_db)
         df = pd.concat([df, df2], axis=1)
 
     df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
@@ -165,7 +172,61 @@ def show_calibration_curve(y_true, y_pred, n_bins=10):
 
     print('Brier Score:', brier_score_loss(y_true, y_pred))
 
-#%%
+def output_test_results(oof_data, df_predict, pred, run_params, model_name, model_obj, test_settings):
+
+    from sklearn.metrics import mean_squared_error, r2_score, brier_score_loss
+
+    if model_obj == 'reg':
+        val_score = mean_squared_error(oof_data['full_val'].y_act, oof_data['full_val'].pred)
+        test_score = mean_squared_error(oof_data['full_hold'].y_act, oof_data['full_hold'].pred)
+        pred_score = mean_squared_error(df_predict.y_act, pred)
+
+    elif model_obj == 'class':
+        val_score = brier_score_loss(oof_data['full_val'].y_act, oof_data['full_val'].pred)
+        test_score = brier_score_loss(oof_data['full_hold'].y_act, oof_data['full_hold'].pred)
+        pred_score = brier_score_loss(df_predict.y_act, pred)
+
+    val_r2 = r2_score(oof_data['full_val'].y_act, oof_data['full_val'].pred)
+    test_r2 = r2_score(oof_data['full_hold'].y_act, oof_data['full_hold'].pred)
+    pred_r2 = r2_score(df_predict.y_act, pred)
+
+
+    output = pd.DataFrame({
+        'Pos': [set_pos],
+        'ModelObj': [model_obj],
+        'ModelName': [model_name],
+        'TestWeekStart': [run_params['set_week']],
+        'TestYear': [run_params['set_year']],
+        'Experiment': [test_settings['Experiment']],
+        'TrialsObj': [test_settings['TrialsObj']],
+        'HyperOptAlgo': [test_settings['HyperOptAlgo']],
+        'NumTrials': [test_settings['NumTrials']],
+        'LearningRate': [test_settings['LearningRate']],
+        'ValScore': [val_score],
+        'TestScore': [test_score],
+        'PredScore': [pred_score],
+        'ValR2': [val_r2],
+        'TestR2': [test_r2],
+        'PredR2': [pred_r2],
+        'DateRun': [dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+    })
+
+    for c in ['ValScore', 'TestScore', 'PredScore', 'ValR2', 'TestR2', 'PredR2']:
+        output[c] = output[c].round(3)
+
+    del_str = f'''Pos='{set_pos}' 
+                AND ModelObj='{model_obj}' 
+                AND ModelName='{model_name}'
+                AND TestWeekStart='{run_params['set_week']}'
+                AND Experiment='{test_settings['Experiment']}'
+                AND TrialsObj='{test_settings['TrialsObj']}'
+                AND HyperOptAlgo='{test_settings['HyperOptAlgo']}'
+                AND NumTrials='{test_settings['NumTrials']}'
+                AND LearningRate='{test_settings['LearningRate']}'
+                '''
+    dm.delete_from_db('Results', 'Model_Evaluations', del_str, create_backup=False)
+    dm.write_to_db(output, 'Results', 'Model_Evaluations', 'append')
+
 
 #======================================================================================================================
 def select_main_slate_teams(df):
@@ -246,12 +307,29 @@ def predict_million_df_roi(df, run_params):
 
     return df_train_mil, df_predict_mil, min_samples_mil, run_params
 
+
+def get_recent_trials(trials, n=200):
+    # Sort trials based on 'tid'
+    sorted_trials = sorted(trials.trials, key=lambda trial: trial['tid'], reverse=True)
+    # Get the most recent 'n' trials
+    recent_trials = sorted_trials[:n]
+
+    # Create a new Trials object and add the recent trials to it
+    new_trials = Trials()
+    for trial in recent_trials:
+        new_trials.insert_trial_docs([trial])
+        new_trials.refresh()
+    return new_trials
+
 #==================================================================
 # SHAP Plots for Best Models
 #==================================================================
-
+#%%
 # set year to analyze
 
+from hyperopt import fmin, hp, atpe, tpe, Trials, space_eval
+from catboost import CatBoostRegressor, CatBoostClassifier
+from hyperopt.pyll import scope
 
 # set the model version
 model_type ='full_model'
@@ -260,7 +338,7 @@ run_params = {
     
     # set year and week to analyze
     'set_year': 2023,
-    'set_week': 12,
+    'set_week': 8,
 
     # set beginning of validation period
     'val_year_min': 2021,
@@ -287,16 +365,35 @@ run_params = {
 
     'rush_pass': ''
 }
+print('Running Model for Year:', run_params['set_year'], 'Week:', run_params['set_week'])
+
 
 set_pos = 'QB'
 is_million = False
+model_feature_db = 'Model_Features'
+# model_feature_db = 'Model_Features - Copy'
+
 
 #==========
 # Pull and clean compiled data
 #==========
+#%%
+if model_feature_db=='Model_Features':
+    
+    df2, _ = load_data(model_type, set_pos, {'rush_pass': ''}, "Model_Features - Copy")
+    
+    df, run_params = load_data(model_type, set_pos, run_params, "Model_Features")
+    df, run_params = create_game_date(df, run_params)
 
-df, run_params = load_data(model_type, set_pos, run_params)
-df, run_params = create_game_date(df, run_params)
+    df = pd.merge(df, df2[['player', 'week', 'year']], on=['player', 'week', 'year'])
+else:
+    df, run_params = load_data(model_type, set_pos, run_params, model_feature_db)
+    df, run_params = create_game_date(df, run_params)
+
+for c in df.columns:
+    if len(df[df[c]==np.inf]) >0:
+        df = df.drop(c, axis=1)
+
 if is_million: 
     df_train, df_predict, min_samples = predict_million_df(df, run_params)
     df_train = add_sal_columns(df_train)
@@ -304,20 +401,16 @@ if is_million:
 else:
     df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
 
-if is_million: 
-    models_test = ['lr_c', 'lgbm_c', 'mlp_c']
-    model_obj = 'class'
-else: 
-    models_test = ['ridge', 'lgbm', 'mlp']
-    model_obj = 'reg'
 
-
-param_scores_all = {}
-for model_name in models_test:
-
-    skm = SciKitModel(df_train, model_obj=model_obj, matt_wt=0, brier_wt=0, mse_wt=1, sera_wt=0, mae_wt=0, rsq_wt=0, logloss_wt=1)
+def run_model(model_name, df_train, df_predict, run_params, model_obj, test_settings):
+    
+    param_scores_all = {}
+    
+    hp_algo = test_settings['HyperOptAlgo']
+    skm = SciKitModel(df_train, model_obj=model_obj, hp_algo=hp_algo, 
+                      matt_wt=0, brier_wt=1, mse_wt=1, sera_wt=0, mae_wt=0, rsq_wt=0, logloss_wt=0)
     X, y = skm.Xy_split('y_act', run_params['drop_cols'])
-    model_type = 'bayes'
+    opt_type = run_params['opt_type']
     param_scores_all[model_name] = {}
 
     #------------
@@ -335,39 +428,71 @@ for model_name in models_test:
         kbest = 'k_best'
         sfm = 'select_from_model'
 
-    pipe = skm.model_pipe([ #skm.piece('random_sample'),
+
+    if model_obj == 'class': 
+        pipe = skm.model_pipe([ skm.piece('random_sample'),
                             skm.piece('std_scale'), 
                             skm.piece(sperc),
                             skm.feature_union([
                                             skm.piece('agglomeration'), 
-                                            skm.piece(f'{kbest}_fu'),
-                                          #  skm.piece(sfm),
-                                            skm.piece('pca')
+                                            skm.piece(f'{kbest}'),
                                             ]),
                             skm.piece(kbest),
-                           # skm.piece(sfm),
                             skm.piece(model_name)
                         ])
-    # pipe = skm.model_pipe([ skm.piece('random_sample'),
-    #                        skm.piece('corr_collinear'),
-    #                         skm.piece('std_scale'), 
-    #                         skm.feature_union([
-    #                                         skm.piece('agglomeration'), 
-    #                                         skm.piece(kbest),
-    #                                         skm.piece('pca')
-    #                                         ]),
-    #                         skm.piece(kbest),
-    #                         skm.piece(model_name)
-    #                     ])
-    params = skm.default_params(pipe, model_type)
+    else: 
+        pipe = skm.model_pipe([ skm.piece('random_sample'),
+                                skm.piece('std_scale'), 
+                                skm.piece(sperc),
+                                skm.feature_union([
+                                                skm.piece('agglomeration'), 
+                                                skm.piece(f'{kbest}'),
+                                                skm.piece('pca')
+                                                ]),
+                                skm.piece(kbest),
+                                skm.piece(model_name)
+                            ])
+
+    params = skm.default_params(pipe, opt_type)
+
+    if model_name in ('lgbm', 'xgb', 'gbmh', 'cb', 'gbm', 'lgbm_c', 'xgb_c', 'gbmh_c', 'cb_c', 'gbm_c') and \
+        test_settings['LearningRate'] == 'learning_rate=loguniform(-5, -0.5)':
+        params[f'{model_name}__learning_rate'] = hp.loguniform(f'learning_rate', -5, -0.5)
+    
+
+    if is_million: trial_label = 'million'
+    else: trial_label = 'reg'
+
+    models_path = f'C:/Users/borys/OneDrive/Documents/GitHub/Daily_Fantasy/Model_Outputs'
+    trials_path = f"{models_path}/{run_params['set_year']}/{set_pos}_year{run_params['set_year']}_week{run_params['set_week']}_{model_type}sera0_rsq0_mse1_brier1_matt1_bayes/"
+    trials = load_pickle(trials_path, 'all_trials')
+
+    try:
+        if test_settings['TrialsObj'] == 'Cumulative': 
+            cur_trial = trials[f'{trial_label}_{model_name}']
+        elif test_settings['TrialsObj'] == 'Recent': 
+            cur_trial = trials[f'{trial_label}_{model_name}']
+            cur_trial = get_recent_trials(cur_trial, test_settings['NumTrials'])
+        else: 
+            cur_trial = Trials()
+    except:
+        cur_trial = Trials()
+
+    # trials_path = f'C:/Users/borys/OneDrive/Documents/GitHub/Daily_Fantasy/Model_Outputs/Model_Evaluations/{hp_algo}/{set_pos}/'
+    # trials = load_pickle(trials_path, 'reg_trials_week7')
+    # if test_settings['TrialsObj'] == 'Recent':
+    #     cur_trial = trials[f"{model_name}_{test_settings['LearningRate']}"]
+    #     cur_trial = get_recent_trials(cur_trial, test_settings['NumTrials'])
+    # else:
+    #     cur_trial = Trials()
 
     print('Running Model:', model_name)
     # run the model with parameter search
-    best_models, oof_data, param_scores, _ = skm.time_series_cv(pipe, X, y, params, n_iter=20,
+    best_models, oof_data, param_scores, trials = skm.time_series_cv(pipe, X, y, params, n_iter=20,
                                                                 col_split='game_date',n_splits=5,
                                                                 time_split=run_params['cv_time_input'],
-                                                                bayes_rand=model_type, proba=proba,
-                                                                sample_weight=False, trials=Trials(),
+                                                                bayes_rand=opt_type, proba=proba,
+                                                                sample_weight=False, trials=cur_trial,
                                                                 random_seed=12345)
     param_scores_all[model_name] = param_scores
     mf.show_scatter_plot(oof_data['full_hold']['pred'], oof_data['full_hold']['y_act'])
@@ -389,15 +514,113 @@ for model_name in models_test:
         print(pd.concat([
             df_predict[['player', 'week', 'year', 'y_act']],
             pred], axis=1).sort_values(by='pred', ascending=False).head(50))
+        
+    output_test_results(oof_data, df_predict, pred, run_params, model_name, model_obj, test_settings)
+
+    return trials
+
+
+if is_million: 
+    # models_test = ['lgbm_c', 'xgb_c', 'gbmh_c', 'cb_c', 'gbm_c']
+    models_test = ['cb_c', 'mlp_c', 'lr_c', 'lgbm_c', 'xgb_c', 'gbmh_c', 'rf_c', 'gbm_c', 'knn_c']
+    model_obj = 'class'
+else: 
+    models_test = ['ridge', 'enet', 'bridge', 'lasso', 'lgbm', 'xgb', 'bridge', 'knn', 'gbm', 'gbmh', 'cb', 'rf', 'mlp']
+    # models_test = ['lgbm', 'xgb', 'gbmh', 'cb', 'gbm']
+    model_obj = 'reg'
+
+
+# test_settings = {
+#     'Experiment': 'Week7 Create Trials', 
+#     'TrialsObj': 'Recent', 
+#     'HyperOptAlgo': 'atpe', 
+#     'NumTrials': 100, 
+#     'LearningRate': 'loguniform(-5, -0.5)'
+#     }
+
+
+# param_scores_all = {}
+# for model_name in models_test:
+#     run_model(model_name, df_train, df_predict, run_params, model_obj, test_settings)
+
+
+
+results = []
+for trials_obj in [ 'Cumulative']:
+    for hp_algo in ['atpe', 'tpe']:
+        for learning_rate in ['loguniform(-3, -0.5)', 'loguniform(-5, -0.5)']:
+            if trials_obj == 'New': num_trials = 0
+            elif trials_obj == 'Cumulative': num_trials = 2500
+            else: num_trials = 100
+
+            test_settings = {
+                'Experiment': 'Reg, Week7 Create Trials',
+                'TrialsObj': trials_obj,
+                'HyperOptAlgo': hp_algo,
+                'NumTrials': num_trials,
+                'LearningRate': learning_rate
+            }
+            print(test_settings)
+
+            output_trials = Parallel(n_jobs=-1, verbose=1)(
+                delayed(run_model)
+                (model_name, df_train, df_predict, run_params, model_obj, test_settings) \
+                for model_name in models_test 
+                )
+            test_settings['TrialsOutput'] = output_trials
+            results.append(test_settings)
 
 #%%
 
-cc = skm.piece('corr_collinear')[1]
-cc.set_params(corr_percentile=75, collinear_threshold=0.7, corr_type='pearson', abs_collinear=True)
-cc.fit(X,y).transform(X).shape
+# trials_out_tpe = {}
+# trials_out_atpe = {}
+
+# for r in results:
+#     trials = r['TrialsOutput']
+#     learning_rate = r['LearningRate']
+#     hp_algo = r['HyperOptAlgo']
+
+#     for m, trials in zip(models_test, trials):
+#         if hp_algo == 'tpe': trials_out_tpe[f'{m}_{learning_rate}'] = trials
+#         else: trials_out_atpe[f'{m}_{learning_rate}'] = trials
+
+# models_path = f'C:/Users/borys/OneDrive/Documents/GitHub/Daily_Fantasy/Model_Outputs/Model_Evaluations/tpe/{set_pos}/'
+# if not os.path.exists(models_path): os.makedirs(models_path)
+# save_pickle(trials_out_tpe, models_path, 'reg_trials_week7')
+
+# models_path = f'C:/Users/borys/OneDrive/Documents/GitHub/Daily_Fantasy/Model_Outputs/Model_Evaluations/atpe/{set_pos}/'
+# if not os.path.exists(models_path): os.makedirs(models_path)
+# save_pickle(trials_out_atpe, models_path, 'reg_trials_week7')
 
 #%%
-df = param_scores_all['mlp'].copy()
+
+# df = dm.read('''SELECT * FROM Model_Evaluations ''', 'Results')
+# df['Experiment'] = 'Hyperopt Setting'
+# df = df[['Pos', 'ModelObj', 'ModelName', 'TestWeekStart', 'TestYear', 'Experiment', 'TrialsObj', 'HyperOptAlgo', 'NumTrials', 'LearningRate', 
+#          'ValScore', 'TestScore', 'PredScore', 'ValR2', 'TestR2', 'PredR2', 'DateRun']]
+# dm.write_to_db(df, 'Results', 'Model_Evaluations', 'replace')
+
+#%%
+df = dm.read('''SELECT * FROM Model_Evaluations ''', 'Results')
+xx = (
+    df
+    .groupby(['Experiment', 'Pos', 'ModelObj', 'TrialsObj', 'HyperOptAlgo', 'NumTrials', 'LearningRate'])
+    .agg({'PredR2': 'mean', 'TestR2': 'mean'})
+    .reset_index()
+)
+xx['MeanScore'] = (xx.PredR2 + xx.TestR2) / 2
+xx.sort_values(by=['Experiment', 'ModelObj', 'Pos', 'MeanScore'], ascending=[True, True, True, False])
+
+
+#%%
+
+
+
+
+#%%
+
+
+df = param_scores_all['cb'].copy()
 
 for c in df.columns:
     if 'perc__score_func' in c: df[c] = df[c].apply(lambda x: 'perc_r_regression' if 'r_regression' in str(x) else 'perc_f_regression')
@@ -607,7 +830,7 @@ df = dm.read('''SELECT *
                 WHERE trial_num >= 460
                       AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
-                      AND NOT (week=8 AND year=2022)
+                    --  AND NOT (week=8 AND year=2022)
                     --  AND (reg_ens_vers LIKE '%team_stats%' OR million_ens_vers LIKE '%team_stats%')
              
                 ''', 'Results')
@@ -633,12 +856,12 @@ show_coef(coef_vals, X)
 #%%
 
 weeks = [
-         1, 2, 3, 4, 5, 6, 7, #8, 
+         1, 2, 3, 4, 5, 6, 7, 8, 
          9, 10, 11, 12, 13, 14, 15, 16,
          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
          11, 12, 13, 14, 15, 16]
 years = [
-          2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 
+          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
           2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
           2023, 2023, 2023, 2023, 2023, 2023]
@@ -663,7 +886,7 @@ for w, yr in zip(weeks, years):
 
     model_name = 'enet'
     m = model_type[model_name]
-    if w == 8 and yr==2022: max_adjust = 500
+    if w == 8 and yr==2022: max_adjust = 1000
     else: max_adjust = 10000
     X, y = entry_optimize_params(df, max_adjust=max_adjust, model_name=model_name)
     coef_vals, X = get_model_coef(X, y, m)
@@ -731,7 +954,86 @@ class FoldPredict:
         predictions = pd.merge(predictions, X,left_index=True, right_index=True)
 
         return predictions
+    
 
+#%%
+
+df = dm.read('''SELECT * FROM Model_Evaluations WHERE ModelObj='reg' ''', 'Results')
+df['Score'] = df.PredR2 + df.TestR2
+y = df.Score
+X = df.drop(['Score', 'ModelName', 'DateRun', 'ValScore', 'TestScore','PredScore','ValR2', 'PredR2', 'TestR2'], axis=1)
+
+for c in X.columns:
+    X = pd.concat([X, pd.get_dummies(X[c], prefix=c)], axis=1).drop(c, axis=1)
+
+X.columns = [c.replace('(', '').replace(')','').replace('-','_').replace(',','') for c in X.columns]
+
+params = {
+    'n_estimators': range(100, 400, 10),
+    'num_leaves': range(20, 300, 10),
+    'min_child_samples': range(10, 70, 2),
+    'learning_rate': np.arange(0.01, 0.35, 0.02),
+    'subsample': np.arange(0.8, 1, 0.02)
+}
+
+retrain = False
+model = LGBMRegressor(n_jobs=16)
+fp = FoldPredict(f'{root_path}/Model_Outputs/Model_Evaluations/LGBM/', retrain=retrain)
+fp.cross_fold_train('winnings', model, params, X, y, n_iter=20)
+
+model = load_pickle(fp.save_path, 'winnings_fold1')
+import shap
+shap_values = shap.TreeExplainer(model).shap_values(X)
+shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(8,10), max_display=30, show=False)
+
+
+
+#%%
+
+best_trials = dm.read('''SELECT *
+                         FROM Entry_Optimize_Results
+                         WHERE trial_num >= 460
+                         ''', 'Results')
+
+best_trials.loc[best_trials.avg_winnings > 10000, 'avg_winnings'] = 10000
+
+best_trials['non8_winnings'] = best_trials.avg_winnings
+best_trials.loc[(best_trials.week == 8) & (best_trials.year==2022), 'non8_winnings'] = 0 
+
+best_trials['avg_winnings_sqrt_pre'] = best_trials.avg_winnings ** 0.5
+
+best_trials = (
+    best_trials
+    .groupby(['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers',
+              'model_notes', 'manual_adjust', 'trial_num', 'week', 'year'])
+    .agg({'avg_winnings': 'mean',
+          'avg_winnings_sqrt_pre': 'mean',
+          'non8_winnings': 'mean',
+          #'perc80': lambda x: np.percentile(x, 80)
+          })
+    .reset_index()
+)
+
+best_trials['avg_winnings_sqrt_post'] = best_trials.avg_winnings ** 0.5
+best_trials = (
+    best_trials
+    .groupby(['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers', 'model_notes', 'manual_adjust', 'trial_num'])
+    .agg({'avg_winnings': 'sum',
+          'avg_winnings_sqrt_pre': 'sum',
+          'avg_winnings_sqrt_post': 'sum',
+          'non8_winnings': 'sum'})
+)
+
+winnings_cols = ['avg_winnings', 'avg_winnings_sqrt_pre', 'avg_winnings_sqrt_post', 'non8_winnings']
+for c in winnings_cols:
+    best_trials[c+'_rank'] = best_trials[c].rank(ascending=False)
+
+winnings_cols = [c+'_rank' for c in winnings_cols]
+best_trials['avg_rank'] = best_trials[winnings_cols].mean(axis=1)
+best_trials = best_trials.sort_values(by='avg_rank').reset_index()
+# best_trials['avg_winnings'] = best_trials.avg_winnings ** 2
+
+best_trials.iloc[:25]
 
 #%%
 
@@ -747,10 +1049,22 @@ params = params.pivot_table(index=['trial_num'], columns='param', values='option
 results = dm.read('''SELECT *
                     FROM Entry_Optimize_Results
                     WHERE trial_num >= 460
-                        --  AND NOT (week=8 AND year=2022)
+                         -- AND NOT (week=8 AND year=2022)
+                          AND reg_ens_vers = 'random_full_stack_sera0_rsq0_mse1_include2_kfold3'
+                          AND million_ens_vers IN (
+                                                   'random_full_stack_team_stats_matt0_brier1_include2_kfold3',
+                                                   'random_kbest_team_stats_matt0_brier1_include2_kfold3',
+                                                   'random_kbest_matt0_brier1_include2_kfold3'
+                          )
+                          AND std_dev_type iN (
+                                                    'spline_class80_q80_matt0_brier1_kfold3',
+                                                    'spline_pred_class80_q80_matt0_brier1_kfold3',
+                                                    'spline_pred_class80_matt0_brier1_kfold3'
+                          )
                     ''', 'Results')
 
-results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] = results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] * 3
+results.loc[results.avg_winnings > 10000, 'avg_winnings'] = 10000
+results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] = results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] * 5
 
 results = results.groupby(['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers', 
                            'ownership_vers', 'entry_type', 'trial_num', 'repeat_num']).agg({'avg_winnings': 'sum'}).reset_index()
@@ -773,21 +1087,41 @@ y = results.avg_winnings
 params = {
     'n_estimators': range(100, 400, 10),
     'num_leaves': range(20, 300, 10),
-    'min_child_samples': range(1, 50, 2),
-    'learning_rate': np.arange(0.05, 0.35, 0.02),
+    'min_child_samples': range(10, 70, 2),
+    'learning_rate': np.arange(0.01, 0.35, 0.02),
     'subsample': np.arange(0.8, 1, 0.02)
 }
 
 retrain = False
 model = LGBMRegressor(n_jobs=16)
-fp = FoldPredict(f'{root_path}/Model_Outputs/Final_Enet/', retrain=retrain)
+fp = FoldPredict(f'{root_path}/Model_Outputs/Final_LGBM/', retrain=retrain)
 fp.cross_fold_train('winnings', model, params, X, y, n_iter=20)
 
 #%%
 
+model = load_pickle(fp.save_path, 'winnings_fold1')
+import shap
+shap_values = shap.TreeExplainer(model).shap_values(X)
+shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(8,10), max_display=30, show=False)
+
+#%%
+more_opt_columns = [ 'qb_min_iter', 'matchup_seed', 'max_team_type', 'matchup_drop', 'qb_set_max_team', 'ownership_vers', 'use_ownership']
+X[[c for c in X.columns if 'max_team_type' in c]].value_counts()
+
+#%%
+
+shap.dependence_plot("ownership_vers_standard_ln", shap_values, X)
+
+
+
+
+#%%
+
+extra_cutoff_val = -20
+
 counts_base = 0
-while counts_base < 1000000:
-    for cnt_cutoff in range(-200, -50, 10):
+while counts_base < 7 * 1000000:
+    for cnt_cutoff in range(-200, -30, 10):
         cnt_cutoff = abs(cnt_cutoff)
 
         drop_cols = []
@@ -801,17 +1135,27 @@ while counts_base < 1000000:
         for pv in param_vars:
             cur_cols = [c for c in X.columns if pv in c]
 
+            for moc in more_opt_columns:
+                if moc in cur_cols[0]: 
+                    extra_cutoff = extra_cutoff_val
+                    break
+                else: 
+                    extra_cutoff = 0
+
             if X[cur_cols].value_counts().max() < cnt_cutoff:
                 cur_cnt_cutoff = X[cur_cols].value_counts().max()
             else:
                 cur_cnt_cutoff = cnt_cutoff
 
             cur_cnts = X[cur_cols].value_counts()
-            c_multiplier = len(cur_cnts[cur_cnts>=cur_cnt_cutoff])
+            # num_above_cutoff = len(cur_cnts[cur_cnts>=(cur_cnt_cutoff+extra_cutoff)])
+            # if num_above_cutoff > 3: c_multiplier = 3
+            # else: c_multiplier = len(cur_cnts[cur_cnts>=(cur_cnt_cutoff+extra_cutoff)])
+            c_multiplier = len(cur_cnts[cur_cnts>=(cur_cnt_cutoff+extra_cutoff)])
             counts_base = counts_base * c_multiplier
-        print(cnt_cutoff, counts_base)
+        print(cnt_cutoff, counts_base/1000000)
 
-        if counts_base > 1000000: break
+        if counts_base > 7 * 1000000: break
 
 
 cnt_cutoff = cnt_cutoff + 10
@@ -830,12 +1174,21 @@ X_predict['cross_idx'] = 1
 for pv in param_vars:
     cur_cols = [c for c in X.columns if pv in c]
     cur_cnts = X[cur_cols].value_counts()
+
+    for moc in more_opt_columns:
+        if moc in cur_cols[0]: 
+            extra_cutoff = extra_cutoff_val
+            break
+        else: 
+            extra_cutoff = 0
+
     if X[cur_cols].value_counts().max() < cnt_cutoff:
         cur_cnt_cutoff = X[cur_cols].value_counts().max()
     else:
         cur_cnt_cutoff = cnt_cutoff
 
-    cur_col = X[cur_cols].value_counts()[X[cur_cols].value_counts()>=cur_cnt_cutoff].reset_index().drop(0, axis=1)
+    cur_col = X[cur_cols].value_counts()[X[cur_cols].value_counts()>=(cur_cnt_cutoff+extra_cutoff)].reset_index().drop(0, axis=1)
+    print(cur_col)
     cur_col['cross_idx'] = 1
     X_predict = pd.merge(X_predict, cur_col, on='cross_idx')
     print(pv, X_predict.shape)
@@ -852,17 +1205,69 @@ for c in grp_cols:
 winnings_pr = winnings_pr.sort_values(by='winnings_pred', ascending=False).drop_duplicates().reset_index(drop=True)
 winnings_pr = winnings_pr.reset_index().rename(columns={'index': 'param_rank'})
 
-model_notes = 'all_weeks_non8_times_3'
+model_notes = 'only_reg_full_stack_non8_times_5_more_options'
 date_run = dt.datetime.now().strftime('%Y-%m-%d')
 winnings_pr = winnings_pr.assign(model_notes=model_notes, date_run=date_run)
 
+#%%
+
+winnings_pr.loc[:500, [c for c in winnings_pr.columns if 'covar_type' in c]].value_counts()
 
 #%%
 
-dm.delete_from_db('Results', 'Entry_Optimize_Hyperparams', f"model_notes='{model_notes}' AND date_run='{date_run}'")
-dm.write_to_db(winnings_pr, 'Results','Entry_Optimize_Hyperparams', 'append')
+try:
+    dm.delete_from_db('SimParams', 'Entry_Optimize_Hyperparams', f"model_notes='{model_notes}' AND date_run='{date_run}'", create_backup=False)
+    dm.write_to_db(winnings_pr, 'SimParams','Entry_Optimize_Hyperparams', 'append')
+
+except:
+    old_df = dm.read('''SELECT * FROM Entry_Optimize_Hyperparams''', 'SimParams')
+    winnings_pr = pd.concat([ winnings_pr, old_df], axis=0).reset_index(drop=True)
+    winnings_pr = winnings_pr.fillna(0)
+    dm.write_to_db(winnings_pr, 'SimParams','Entry_Optimize_Hyperparams', 'replace')
 
 # %%
+
+from sklearn.neighbors import KernelDensity
+
+params = dm.read('''SELECT *
+                    FROM Entry_Optimize_Params
+                    WHERE trial_num >= 460
+                    ''', 'Results')
+param_vars = list(params.param.unique())
+params['param'] = params.param.astype('str') + '_' + params.param_option.astype('str')
+
+params = params.pivot_table(index=['trial_num'], columns='param', values='option_value').reset_index().fillna(0)
+
+results = dm.read('''SELECT *
+                    FROM Entry_Optimize_Results
+                    WHERE trial_num >= 460
+                         -- AND NOT (week=8 AND year=2022)
+                          AND reg_ens_vers = 'random_full_stack_sera0_rsq0_mse1_include2_kfold3'
+                          AND million_ens_vers IN ('random_full_stack_team_stats_matt0_brier1_include2_kfold3',
+                                                   'random_kbest_team_stats_matt0_brier1_include2_kfold3',
+                                                   'random_kbest_matt0_brier1_include2_kfold3')
+                          AND std_dev_type NOT IN (
+                                                   'spline_pred_class80_matt0_brier1_kfold3', 
+                                                   'spline_pred_q80_matt0_brier1_kfold3'
+                                                  )
+                    ''', 'Results')
+
+results.loc[results.avg_winnings > 10000, 'avg_winnings'] = 10000
+results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] = results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] * 5
+
+results = results.groupby(['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers', 
+                           'ownership_vers', 'entry_type', 'trial_num', 'repeat_num']).agg({'avg_winnings': 'sum'}).reset_index()
+
+results = pd.merge(results, params, on='trial_num')
+results = results.drop(['trial_num', 'repeat_num'], axis=1)
+for c in results.columns:
+    if results.dtypes[c] == 'object': 
+        results = pd.concat([results, pd.get_dummies(results[c], prefix=c)], axis=1).drop(c, axis=1)
+
+
+results
+
+#%%
 
 def entry_optimize_bayes(df):
 

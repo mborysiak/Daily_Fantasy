@@ -7,6 +7,8 @@ __pycache__/
 *.ipynb
 *.zip
 
+*catboost*
+
 *Model_Features.sqlite3
 Backups/
 Archive/
@@ -157,3 +159,5 @@ Data/Databases/Model_Features.sqlite3
 Data/Databases/Simulation.sqlite3
 Data/Databases/Simulation.sqlite3
 Data/OtherData/DK_Results*
+Data/Databases/SimParams.sqlite3
+Data/Databases/Model_Features - Copy.sqlite3

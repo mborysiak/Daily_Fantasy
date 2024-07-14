@@ -13,11 +13,12 @@ dm = DataManage(db_path)
 
 # set the filepath and name for NFL Fast R data saved from R script
 DATA_PATH = f'{root_path}/Data/OtherData/NFL_FastR/'
-FNAME = 'raw_data_2023.parquet'
-
 pd.set_option('display.max_columns', 999)
 
 cur_season = 2023
+FNAME = f'raw_data_{cur_season}.parquet'
+
+dbname = 'FastR_Beta'
 
 #---------------
 # Functions
@@ -131,9 +132,9 @@ data.loc[data.run_location=='middle', 'run_location'] = 'run_middle'
 data.loc[data.pass_location.isin(['left', 'right']), 'pass_location'] = 'pass_outside'
 data.loc[data.pass_location=='middle', 'pass_location'] = 'pass_middle'
 
-data.surface = data.surface.apply(lambda x: x.replace('', 'grass'))
-data.loc[0, 'surface'] = 'synthetic'
-data.loc[(data.surface != 'grass') & ~(data.surface.isnull()), 'surface'] = 'synthetic'
+# data.surface = data.surface.apply(lambda x: x.replace('', 'grass'))
+# data.loc[0, 'surface'] = 'synthetic'
+# data.loc[(data.surface != 'grass') & ~(data.surface.isnull()), 'surface'] = 'synthetic'
 
 data.loc[0, 'roof'] = 'indoors'
 data.loc[data.roof.isin(['outdoors', 'open']), 'roof'] = 'outdoors'
@@ -161,9 +162,25 @@ final_scores = final_scores.rename(columns={'season': 'year'})
 final_scores.home_team = final_scores.home_team.map(team_map)
 final_scores.away_team = final_scores.away_team.map(team_map)
 
-dm.delete_from_db('FastR', 'Final_Scores', f"year={cur_season}")
-dm.write_to_db(final_scores, 'FastR', 'Final_Scores', if_exist='append')
+dm.delete_from_db(dbname, 'Final_Scores', f"year={cur_season}")
+dm.write_to_db(final_scores, dbname, 'Final_Scores', if_exist='append')
 
+
+data['red_zone'] = np.where(data.yardline_100 <= 20, 1, 0)
+data['goal_to_go'] = np.where(data.yardline_100 <= 10, 1, 0)
+data['goalline'] = np.where(data.yardline_100 <= 5, 1, 0)
+data['third_fourth'] = np.where(data.down.isin([3, 4]), 1, 0)
+
+defense['red_zone'] = np.where(defense.yardline_100 <= 20, 1, 0)
+defense['goal_to_go'] = np.where(defense.yardline_100 <= 10, 1, 0)
+defense['goalline'] = np.where(defense.yardline_100 <= 5, 1, 0)
+defense['third_fourth'] = np.where(defense.down.isin([3, 4]), 1, 0)
+
+for c_sub in ['red_zone', 'goal_to_go', 'goalline', 'third_fourth']:
+    for c_stat in ['yards_gained', 'pass_attempt', 'complete_pass', 'rush_attempt', 'rush_touchdown', 'pass_touchdown',
+                   'ep', 'epa', 'wpa', 'cpoe', 'cp', 'tackled_for_loss']:
+        data[f'{c_sub}_{c_stat}'] = data[c_stat] * data[c_sub]
+        defense[f'{c_sub}_{c_stat}'] = defense[c_stat] * defense[c_sub]
 
 #%%
 
@@ -183,10 +200,18 @@ rec_sum_cols = ['shotgun', 'no_huddle', 'pass_attempt',
                 'ep', 'epa', 'touchdown', 'fumble', 'fumble_lost',  'xyac_epa',
                 'xyac_fd', 'xyac_mean_yardage', 'xyac_median_yardage', 'xyac_success',
                 'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
-                'yards_gained', 'ydstogo']
+                'yards_gained', 'ydstogo',
+                
+                'red_zone_yards_gained', 'red_zone_pass_attempt', 'red_zone_complete_pass','red_zone_pass_touchdown', 
+                'red_zone_ep', 'red_zone_epa', 'red_zone_wpa', 'red_zone_cpoe', 'red_zone_cp',
+                'goalline_yards_gained', 'goalline_pass_attempt', 'goalline_pass_touchdown', 'goalline_ep', 'goalline_epa',
+                'goalline_wpa', 'goalline_cpoe', 'goalline_cp',
+                'third_fourth_yards_gained', 'third_fourth_pass_attempt', 'third_fourth_complete_pass',
+                'third_fourth_ep', 'third_fourth_epa', 'third_fourth_wpa', 'third_fourth_cpoe', 'third_fourth_cp',
+                ]
 
 rec_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
-                'grass', 'synthetic', 'indoors', 'outdoors',
+              #  'grass', 'synthetic', 'indoors', 'outdoors',
                 'td_prob', 'qb_epa', 'wp', 'wpa',
                 'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
                 'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
@@ -211,7 +236,18 @@ rush_sum_cols = ['shotgun', 'no_huddle', 'rush_attempt', 'first_down',
             'third_down_converted', 'goal_to_go', 'run_middle', 'run_outside',
              'rush_touchdown', 'tackled_for_loss',
             'ep', 'epa', 'touchdown', 'fumble', 'fumble_lost','yardline_100', 'yards_after_catch',
-            'yards_gained', 'ydstogo']
+            'yards_gained', 'ydstogo',
+            
+            'red_zone_yards_gained', 'red_zone_rush_attempt', 'red_zone_rush_touchdown',
+            'red_zone_ep', 'red_zone_epa', 'red_zone_wpa', 
+            
+            'goalline_yards_gained', 'goalline_rush_attempt', 'goalline_rush_touchdown',
+            'goalline_ep', 'goalline_epa', 'goalline_wpa', 'goalline_tackled_for_loss',
+            
+            'third_fourth_yards_gained', 'third_fourth_rush_attempt', 'third_fourth_rush_touchdown',
+            'third_fourth_ep', 'third_fourth_epa', 'third_fourth_wpa', 'third_fourth_tackled_for_loss'
+
+            ]
 
 rush_mean_cols = ['td_prob', 'wp', 'wpa', 'ep', 'epa', 'yardline_100',
              'yards_gained', 'ydstogo']
@@ -234,14 +270,26 @@ all_stats['rec_yd_100_bonus'] = np.where(all_stats.rec_yards_gained_sum >= 100, 
 all_stats['rush_yd_100_bonus'] = np.where(all_stats.rush_yards_gained_sum >= 100, 1, 0)
 all_stats['fumble_lost'] = all_stats.rush_fumble_lost_sum + all_stats.rec_fumble_lost_sum
 
-fp_cols = {'rec_complete_pass_sum': 1, 
-           'rec_yards_gained_sum': 0.1,
-           'rush_yards_gained_sum': 0.1,  
-           'rec_pass_touchdown_sum': 6, 
-           'rush_rush_touchdown_sum': 6,
-           'rec_yd_100_bonus': 3, 
-           'rush_yd_100_bonus': 3,
-           'fumble_lost': -1}
+if dbname == 'FastR_Beta':
+    fp_cols = {'rec_complete_pass_sum': 0.5, 
+                'rec_yards_gained_sum': 0.1,
+                'rush_yards_gained_sum': 0.1,  
+                'rec_pass_touchdown_sum': 7, 
+                'rush_rush_touchdown_sum': 7,
+                'rec_yd_100_bonus': 1, 
+                'rush_yd_100_bonus': 1,
+                'fumble_lost': -2,
+               }
+else:
+    fp_cols = {'rec_complete_pass_sum': 1, 
+                'rec_yards_gained_sum': 0.1,
+                'rush_yards_gained_sum': 0.1,  
+                'rec_pass_touchdown_sum': 6, 
+                'rush_rush_touchdown_sum': 6,
+                'rec_yd_100_bonus': 3, 
+                'rush_yd_100_bonus': 3,
+                'fumble_lost': -1}
+    
 all_stats = calc_fp(all_stats, fp_cols)
 
 all_stats = all_stats.sort_values(by=['player', 'season', 'week']).reset_index(drop=True)
@@ -269,8 +317,8 @@ for df, t_name in zip([wr, rb, te], ['WR_Stats', 'RB_Stats', 'TE_Stats']):
     df.player = df.player.apply(dc.name_clean)
     df.team = df.team.map(team_map)
 
-    dm.delete_from_db('FastR', t_name, f"season={cur_season}")
-    dm.write_to_db(df, 'FastR', t_name, if_exist='append')
+    dm.delete_from_db(dbname, t_name, f"season={cur_season}")
+    dm.write_to_db(df, dbname, t_name, if_exist='append')
 
 
 #%%
@@ -289,10 +337,18 @@ qb_sum_cols = ['shotgun', 'no_huddle', 'pass_attempt',
             'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
             'yards_gained', 'ydstogo',
             'drive_ended_with_score', 'drive_first_downs', 'drive_play_count', 'drive_inside20',
-            'drive_time_of_possession']
+            'drive_time_of_possession',
+            
+            'red_zone_yards_gained', 'red_zone_pass_attempt', 'red_zone_complete_pass','red_zone_pass_touchdown', 
+            'red_zone_ep', 'red_zone_epa', 'red_zone_wpa', 'red_zone_cpoe', 'red_zone_cp',
+            'goalline_yards_gained', 'goalline_pass_attempt', 'goalline_pass_touchdown', 'goalline_ep', 'goalline_epa',
+            'goalline_wpa', 'goalline_cpoe', 'goalline_cp',
+            'third_fourth_yards_gained', 'third_fourth_pass_attempt', 'third_fourth_complete_pass',
+            'third_fourth_ep', 'third_fourth_epa', 'third_fourth_wpa', 'third_fourth_cpoe', 'third_fourth_cp',
+            ]
 
 qb_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
-             'grass', 'synthetic', 'indoors', 'outdoors',
+         #    'grass', 'synthetic', 'indoors', 'outdoors',
              'td_prob', 'qb_epa', 'wp', 'wpa',
              'qb_epa', 'cp', 'cpoe', 'air_epa', 'air_wpa',
              'air_yards', 'comp_air_epa', 'comp_air_wpa', 'comp_yac_epa',
@@ -331,25 +387,52 @@ qb['rush_yd_100_bonus'] = np.where(qb.rush_yards_gained_sum >= 100, 1, 0)
 qb['pass_yd_300_bonus'] = np.where(qb.pass_yards_gained_sum >= 300, 1, 0)
 qb['fumble_lost'] = qb.pass_fumble_lost_sum + qb.rush_fumble_lost_sum
 
-fp_cols = {'pass_yards_gained_sum': 0.04, 
-           'pass_pass_touchdown_sum': 4, 
-           'pass_interception_sum': -1,
-           'fumble_lost': -1,
-           'rush_yards_gained_sum': 0.1, 
-           'rush_rush_touchdown_sum': 6,
-           'rush_yd_100_bonus': 3,
-           'pass_yd_300_bonus': 3}
-qb = calc_fp(qb, fp_cols)
+if dbname == 'FastR_Beta':
+    fp_cols = {'pass_yards_gained_sum': 0.04, 
+                'pass_pass_touchdown_sum': 5, 
+                'pass_interception_sum': -2,
+                'fumble_lost': -2,
+                'rush_yards_gained_sum': 0.1, 
+                'rush_rush_touchdown_sum': 7,
+                'rush_yd_100_bonus': 1,
+                'pass_yd_300_bonus': 1,
+                 'sack_sum': -1
+                }
+else:
 
-rush_fp_cols = {'rush_yards_gained_sum': 0.1, 
-                'rush_rush_touchdown_sum': 6,
-                'rush_yd_100_bonus': 3}
-
-pass_fp_cols = {'pass_yards_gained_sum': 0.04, 
+    fp_cols = {'pass_yards_gained_sum': 0.04, 
                 'pass_pass_touchdown_sum': 4, 
                 'pass_interception_sum': -1,
                 'fumble_lost': -1,
+                'rush_yards_gained_sum': 0.1, 
+                'rush_rush_touchdown_sum': 6,
+                'rush_yd_100_bonus': 3,
                 'pass_yd_300_bonus': 3}
+    
+qb = calc_fp(qb, fp_cols)
+
+if dbname == 'FastR_Beta':
+    rush_fp_cols = {'rush_yards_gained_sum': 0.1, 
+                    'rush_rush_touchdown_sum': 7,
+                    'rush_yd_100_bonus': 1,
+                    'fumble_lost': -2}
+
+    pass_fp_cols = {'pass_yards_gained_sum': 0.04, 
+                    'pass_pass_touchdown_sum': 5, 
+                    'pass_interception_sum': -2,
+                    'pass_yd_300_bonus': 1,
+                    'sack_sum': -1}
+    
+else:
+    rush_fp_cols = {'rush_yards_gained_sum': 0.1, 
+                    'rush_rush_touchdown_sum': 6,
+                    'rush_yd_100_bonus': 3}
+
+    pass_fp_cols = {'pass_yards_gained_sum': 0.04, 
+                    'pass_pass_touchdown_sum': 4, 
+                    'pass_interception_sum': -1,
+                    'fumble_lost': -1,
+                    'pass_yd_300_bonus': 3}
 
 qb = calc_fp_qb(qb, rush_fp_cols, 'rush')
 qb = calc_fp_qb(qb, pass_fp_cols, 'pass')
@@ -360,10 +443,11 @@ qb = qb.sort_values(by=['player', 'season', 'week']).reset_index(drop=True)
 qb = pd.merge(qb[['week', 'season']].drop_duplicates(), qb, on=['week', 'season'], how='left')
 
 #%%
+
 qb.player = qb.player.apply(dc.name_clean)
 qb.team = qb.team.map(team_map)
-dm.delete_from_db('FastR', 'QB_Stats', f"season={cur_season}")
-dm.write_to_db(qb, 'FastR', 'QB_Stats', if_exist='append')
+dm.delete_from_db(dbname, 'QB_Stats', f"season={cur_season}")
+dm.write_to_db(qb, dbname, 'QB_Stats', if_exist='append')
 
 #%%
 
@@ -404,8 +488,8 @@ team = team[team.team!=''].reset_index(drop=True)
 #%%
 
 team['team'] = team['team'].map(team_map)
-dm.delete_from_db('FastR', 'Team_Stats', f"season={cur_season}")
-dm.write_to_db(team, 'FastR', 'Team_Stats', if_exist='append')
+dm.delete_from_db(dbname, 'Team_Stats', f"season={cur_season}")
+dm.write_to_db(team, dbname, 'Team_Stats', if_exist='append')
 
 
 #%%
@@ -416,11 +500,11 @@ def_allowed = def_allowed.rename(columns={'posteam_score_post': 'def_pts_allowed
 def_allowed['def_pts_allowed_score'] =  np.select(
     [
         def_allowed['def_pts_allowed']==0,
-        def_allowed['def_pts_allowed'].between(1, 6, inclusive=True),
-        def_allowed['def_pts_allowed'].between(7, 13, inclusive=True),
-        def_allowed['def_pts_allowed'].between(14, 20, inclusive=True),
-        def_allowed['def_pts_allowed'].between(21, 27, inclusive=True),
-        def_allowed['def_pts_allowed'].between(28, 34, inclusive=True),
+        def_allowed['def_pts_allowed'].between(1, 6, inclusive='both'),
+        def_allowed['def_pts_allowed'].between(7, 13, inclusive='both'),
+        def_allowed['def_pts_allowed'].between(14, 20, inclusive='both'),
+        def_allowed['def_pts_allowed'].between(21, 27, inclusive='both'),
+        def_allowed['def_pts_allowed'].between(28, 34, inclusive='both'),
     ], 
     [10, 7, 4, 1,0, -1], 
     default=-4
@@ -465,7 +549,17 @@ def_sum_cols = ['pass_attempt', 'rush_attempt','first_down', 'first_down_pass',
                 'ep', 'epa', 'touchdown', 'fumble_forced', 'fumble', 'xyac_epa',
                 'xyac_fd', 'xyac_mean_yardage', 'xyac_median_yardage', 'xyac_success',
                 'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
-                'yards_gained', 'ydstogo', 'def_td', 'return_yards']
+                'yards_gained', 'ydstogo', 'def_td', 'return_yards',
+                
+                'red_zone_yards_gained', 'red_zone_pass_attempt', 'red_zone_complete_pass',
+                'red_zone_pass_touchdown', 'red_zone_ep', 'red_zone_epa', 'red_zone_wpa', 'red_zone_cpoe', 
+                'red_zone_cp','red_zone_rush_attempt', 'red_zone_rush_touchdown',
+                'goalline_yards_gained', 'goalline_pass_attempt', 'goalline_pass_touchdown', 'goalline_ep', 'goalline_epa',
+                'goalline_wpa', 'goalline_cpoe', 'goalline_cp','goalline_rush_attempt', 'goalline_rush_touchdown', 'goalline_tackled_for_loss',
+                'third_fourth_yards_gained', 'third_fourth_pass_attempt', 'third_fourth_complete_pass',
+                'third_fourth_ep', 'third_fourth_epa', 'third_fourth_wpa', 'third_fourth_cpoe', 'third_fourth_cp',
+                'third_fourth_rush_attempt', 'third_fourth_rush_touchdown',
+                ]
 
 def_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
                  'td_prob', 'qb_epa', 'wp', 'wpa',
@@ -474,7 +568,10 @@ def_mean_cols = ['spread_line', 'total_line', 'vegas_wp',
                  'comp_yac_wpa',  'ep', 'epa', 'xyac_epa',
                  'xyac_fd', 'xyac_mean_yardage', 'xyac_median_yardage', 'xyac_success',
                  'yac_epa', 'yac_wpa', 'yardline_100', 'yards_after_catch',
-                 'yards_gained', 'ydstogo', 'return_yards'
+                 'yards_gained', 'ydstogo', 'return_yards', 
+                 
+                 'third_fourth_yards_gained','third_fourth_epa', 'third_fourth_wpa', 'third_fourth_cpoe',
+                 'red_zone_yards_gained', 'red_zone_epa', 'red_zone_wpa', 'red_zone_cpoe', 'red_zone_cp',
                 ]
 
 gcols = ['defteam', 'season', 'week']
@@ -487,8 +584,8 @@ def_scoring = pd.merge(def_scoring, defense_mean, on=['defteam', 'season', 'week
 def_scoring = def_scoring.sort_values(by=['defteam', 'season', 'week']).reset_index(drop=True)
 
 def_scoring.defteam = def_scoring.defteam.map(team_map)
-dm.delete_from_db('FastR', 'Defense_Stats', f"season={cur_season}")
-dm.write_to_db(def_scoring, 'FastR', 'Defense_Stats', if_exist='append')
+dm.delete_from_db(dbname, 'Defense_Stats', f"season={cur_season}")
+dm.write_to_db(def_scoring, dbname, 'Defense_Stats', if_exist='append')
 
 
 
