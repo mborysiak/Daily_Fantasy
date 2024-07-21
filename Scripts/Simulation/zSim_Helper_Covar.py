@@ -1042,6 +1042,7 @@ class RunSim:
 
         p = {k: v for k,v in zip(self.col_ordering, params)}
         conn = self.dm.db_connect('Simulation')
+        print(p)
                 
         try: p['min_players_opp_team'] = int(p['min_players_opp_team'])
         except: pass
@@ -1126,13 +1127,13 @@ class RunSim:
 
 #%%
     
-# week = 13
-# year = 2023
+# week = 1
+# year = 2022
 
 # salary_cap = 50000
 # pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 
-# pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+# pred_vers = 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100'
 # reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
 # million_ens_vers = 'random_full_stack_team_stats_matt0_brier1_include2_kfold3'
 # std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
@@ -1140,8 +1141,8 @@ class RunSim:
 
 # d = {'adjust_pos_counts': {False: 0.7, True: 0.3},
 #  'covar_type': {'kmeans_pred_trunc': 0.0,
-#                 'no_covar': 0.0,
-#                 'team_points_trunc': 1.0},
+#                 'no_covar': 1.0,
+#                 'team_points_trunc': 0},
 #  'full_model_weight': {0.2: 0.3, 5: 0.7},
 #  'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
 #  'matchup_seed': {0: 0.3, 1: 0.7},
@@ -1170,7 +1171,8 @@ class RunSim:
 
 # rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
 # params = rs.generate_param_list(d)
-# rs.run_full_lineup(params, existing_players=[], set_max_team=None)
+# rs.run_full_lineup(params[0], existing_players=[], set_max_team=None)
+
 
 #%%
 

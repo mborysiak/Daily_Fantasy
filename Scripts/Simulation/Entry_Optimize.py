@@ -66,46 +66,46 @@ def get_top_hyperparams(num_rank, model_notes):
     return pred_params, other_params
 
 
-num_rank = 500000
+num_rank = 0
 model_notes = 'only_reg_full_stack_non8_times_5_more_options'
 model_vers, d = get_top_hyperparams(num_rank, model_notes)
-manual_adjust = False
+manual_adjust = True
 
 if manual_adjust:
-    model_vers = {'million_ens_vers': 'random_kbest_team_stats_matt0_brier1_include2_kfold3',
- 'pred_vers': 'sera0_rsq0_mse1_brier1_matt1_bayes',
- 'reg_ens_vers': 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
- 'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3'}
+    model_vers = {'million_ens_vers': 'random_full_stack_matt0_brier1_include2_kfold3',
+                'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100',
+                'reg_ens_vers': 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
+                'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3'}
     
-    d = {'adjust_pos_counts': {False: 0.6, True: 0.4},
-        'covar_type': {'kmeans_pred_trunc': 0.0,
-                        'kmeans_pred_trunc_new': 0.0,
-                        'no_covar': 0,
-                        'team_points_trunc': 1},
-        'full_model_weight': {0.2: 0.4, 5: 0.6},
-        'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
-        'matchup_seed': {0: 0.8, 1: 0.2},
-        'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
-        'max_team_type': {'player_points': 0.3, 'vegas_points': 0.7},
-        'min_player_same_team': {2: 0.2, 3: 0.2, 'Auto': 0.6},
-        'min_players_opp_team': {1: 0.1, 2: 0.2, 'Auto': 0.7},
-        'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
-        'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
-        'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
-        'own_neg_frac': {0.8: 0.0, 0.9: 0.0, 1: 1.0},
-        'ownership_vers': {'mil_div_standard_ln': 0.0,
-                            'mil_only': 0.3,
-                            'mil_times_standard_ln': 0,
-                            'standard_ln': 0.7},
-        'player_drop_multiple': {0: 1.0, 2: 0.0, 4: 0.0, 10: 0.0, 20: 0.0, 30: 0.0},
-        'qb_min_iter': {0: 0.5, 2: 0.5, 4: 0.0, 9: 0},
-        'qb_set_max_team': {0: 0.2, 1: 0.8},
-        'qb_solo_start': {False: 1.0, True: 0.0},
-        'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
-        'static_top_players': {False: 0.3, True: 0.7},
-        'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
-        'use_ownership': {0.7: 0.0, 0.8: 0.4, 0.9: 0.0, 1: 0.6},
-        'use_unique_players': {False: 1.0, True: 0.0}}
+    d =    {'adjust_pos_counts': {False: 0.6, True: 0.4},
+            'covar_type': {'kmeans_pred_trunc': 0.0,
+                            'kmeans_pred_trunc_new': 0.0,
+                            'no_covar': 0,
+                            'team_points_trunc': 1},
+            'full_model_weight': {0.2: 0.4, 5: 0.6},
+            'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
+            'matchup_seed': {0: 0.8, 1: 0.2},
+            'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
+            'max_team_type': {'player_points': 0.3, 'vegas_points': 0.7},
+            'min_player_same_team': {2: 0.2, 3: 0.2, 'Auto': 0.6},
+            'min_players_opp_team': {1: 0.1, 2: 0.2, 'Auto': 0.7},
+            'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
+            'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
+            'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
+            'own_neg_frac': {0.8: 0.0, 0.9: 0.0, 1: 1.0},
+            'ownership_vers': {'mil_div_standard_ln': 0.0,
+                                'mil_only': 0.3,
+                                'mil_times_standard_ln': 0,
+                                'standard_ln': 0.7},
+            'player_drop_multiple': {0: 1.0, 2: 0.0, 4: 0.0, 10: 0.0, 20: 0.0, 30: 0.0},
+            'qb_min_iter': {0: 0.5, 2: 0.5, 4: 0.0, 9: 0},
+            'qb_set_max_team': {0: 0.2, 1: 0.8},
+            'qb_solo_start': {False: 1.0, True: 0.0},
+            'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
+            'static_top_players': {False: 0.3, True: 0.7},
+            'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
+            'use_ownership': {0.7: 0.0, 0.8: 0.4, 0.9: 0.0, 1: 0.6},
+            'use_unique_players': {False: 1.0, True: 0.0}}
 
 print('Num Rank:', num_rank)
 print('Model Notes:', model_notes)
@@ -125,13 +125,13 @@ pprint.pprint(d)
 
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+   1, 2, 3, 4, 5, 6#, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+ #  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
-      2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
+      2022, 2022, 2022, 2022, 2022, 2022#, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
+      #2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
 ]
 
 # set_weeks=[14]
@@ -161,7 +161,7 @@ def run_weekly_sim(d, week, year, salary_cap, pos_require_start, pred_vers, reg_
 
     rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
     params = rs.generate_param_list(d)
-    winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=False)
+    winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=True)
     print(player_results)
 
     return winnings, player_results, params, winnings_list

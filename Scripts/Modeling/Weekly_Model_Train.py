@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import time
 from hyperopt import Trials
 from wakepy import keep
+import copy
+import optuna
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -35,12 +37,12 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [6]
+run_weeks = [7]
 verbosity = 50
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2023,
+    'set_year': 2022,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -68,6 +70,9 @@ run_params = {
     'rush_pass': '',
 
     'hp_algo': 'atpe',
+    'study_db': "sqlite:///optuna/weekly_train.sqlite3",
+    'num_past_trials': 100,
+    'optuna_timeout': 60*5
 }
 
 n_splits = run_params['n_splits']
@@ -80,11 +85,11 @@ model_type = 'full_model'
 r2_wt = 0
 sera_wt = 0
 mse_wt = 1
-matt_wt = 1
+matt_wt = 0
 brier_wt = 1
 
 # set version and iterations
-vers = f"sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_brier{brier_wt}_matt{matt_wt}_bayes"#_{run_params['hp_algo']}"
+vers = f"sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_brier{brier_wt}_matt{matt_wt}_bayes_{run_params['hp_algo']}_numtrials{run_params['num_past_trials']}"
 
 #----------------
 # Data Loading
@@ -230,6 +235,44 @@ def get_last_run_week(w, run_params):
     return run_params
 
 
+def rename_existing(study_db, study_name):
+    import datetime as dt
+    new_study_name = study_name + '_' + dt.datetime.now().strftime('%Y%m%d%H%M%S')
+    optuna.copy_study(from_study_name=study_name, from_storage=study_db, to_storage=study_db, to_study_name=new_study_name)
+    optuna.delete_study(study_name=study_name, storage=study_db)
+
+
+def get_new_study(db, old_name, new_name, num_trials):
+    
+    if old_name is not None:
+        old_study = optuna.create_study(
+            study_name=old_name,
+            storage=db,
+            load_if_exists=True
+        )
+    
+    try:
+        next_study = optuna.create_study(
+            study_name=new_name, 
+            storage=db, 
+            load_if_exists=False
+        )
+
+    except:
+        rename_existing(db, new_name)
+        next_study = optuna.create_study(
+            study_name=new_name, 
+            storage=db, 
+            load_if_exists=False
+        )
+    
+    if old_name is not None:
+        print(f"Loaded {new_name} study with {old_name} {len(old_study.trials)} trials")
+        next_study.add_trials(old_study.trials[-num_trials:])
+
+    return next_study
+    
+
 def get_trial_times(root_path, run_params, set_pos, model_type, vers):
 
     yr = run_params['last_run_year']
@@ -245,33 +288,35 @@ def get_trial_times(root_path, run_params, set_pos, model_type, vers):
             for i in range(max_trial-100, max_trial):
                 trial_times.append(v.trials[i]['refresh_time'] - v.trials[i]['book_time'])
             trial_time = np.mean(trial_times).seconds
-            times.append([k, np.round(trial_time / 60, 2)])
+            times.append([f'{set_pos}_{k}_{model_type}', np.round(trial_time / 60, 2)])
 
     time_per_trial = pd.DataFrame(times, columns=['model', 'time_per_trial']).sort_values(by='time_per_trial', ascending=False)
     time_per_trial['total_time'] = time_per_trial.time_per_trial * 100
+
     return time_per_trial
 
 def calc_num_trials(time_per_trial, run_params):
 
     n_iters = run_params['n_iters']
-    time_per_trial['percentile_90_time'] = time_per_trial.time_per_trial.quantile(0.8)
+    time_per_trial['percentile_90_time'] = time_per_trial.time_per_trial.quantile(0.5)
     time_per_trial['num_trials'] = n_iters * time_per_trial.percentile_90_time / time_per_trial.time_per_trial
-    time_per_trial['num_trials'] = time_per_trial.num_trials.apply(lambda x: np.min([n_iters, np.max([x, n_iters/4])])).astype('int')
+    time_per_trial['num_trials'] = time_per_trial.num_trials.apply(lambda x: np.min([n_iters, np.max([x, 4])])).astype('int')
     
     return {k:v for k,v in zip(time_per_trial.model, time_per_trial.num_trials)}
 
-def reg_params(df_train, min_samples, num_trials, run_params):
+def reg_params(df_train, min_samples, num_trials, run_params, set_pos, model_type):
     model_list = ['adp', 'cb', 'mlp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'knn','xgb']
     label = 'reg'
     func_params_reg = []
     for i, m  in enumerate(model_list):
         try: num_trial = num_trials[f'{label}_{m}']
         except: num_trial = run_params['n_iters']
-        func_params_reg.append([m, label, df_train, 'reg', i, min_samples, '', num_trial])
+        rp = copy.deepcopy(run_params)
+        func_params_reg.append([set_pos, m, label,  df_train, 'reg', rp, i, min_samples, '', num_trial, model_type])
 
     return func_params_reg
 
-def class_params(df, min_samples, num_trials, run_params):
+def class_params(df, min_samples, num_trials, run_params, set_pos, model_type):
     model_list = ['gbm_c', 'cb_c', 'mlp_c', 'rf_c','gbmh_c', 'lgbm_c', 'lr_c', 'knn_c','xgb_c']
     func_params_c = []
     for cut in run_params['cuts']:
@@ -280,23 +325,25 @@ def class_params(df, min_samples, num_trials, run_params):
         for i, m  in enumerate(model_list):
             try: num_trial = num_trials[f'{label}_{m}']
             except: num_trial = run_params['n_iters']
-            func_params_c.append([m, label, df_train_class, 'class', i, min_samples, '', num_trial])
+            rp = copy.deepcopy(run_params)
+            func_params_c.append([set_pos, m, label,  df_train_class, 'class', rp, i, min_samples, '', num_trial, model_type])
 
     return func_params_c
 
-def quant_params(df_train, alphas, min_samples, num_trials, run_params):
-    model_list =  ['qr_q', 'lgbm_q', 'gbm_q', 'gbmh_q']#'knn_q','rf_q',
+def quant_params(df_train, alphas, min_samples, num_trials, run_params, set_pos, model_type):
+    model_list =  ['qr_q', 'lgbm_q', 'gbm_q', 'gbmh_q', 'cb_q']#'knn_q','rf_q',
     func_params_q = []
     for alph in alphas:
         label = f'quant_{alph}'
         for i, m  in enumerate(model_list):
             try: num_trial = num_trials[f'{label}_{m}']
             except: num_trial = run_params['n_iters']
-            func_params_q.append([m, label, df_train, 'quantile', i, min_samples, alph, num_trial])
+            rp = copy.deepcopy(run_params)
+            func_params_q.append([set_pos, m, label, df_train, 'quantile', rp, i, min_samples, alph, num_trial, model_type])
 
     return func_params_q
 
-def million_params(df, num_trials, run_params):
+def million_params(df, num_trials, run_params, set_pos, model_type):
     model_list = ['gbm_c', 'cb_c', 'mlp_c', 'rf_c', 'gbmh_c', 'lgbm_c', 'lr_c', 'knn_c', 'xgb_c' ]
     label = 'million'
     df_train_mil, _, min_samples_mil = predict_million_df(df, run_params)
@@ -305,16 +352,17 @@ def million_params(df, num_trials, run_params):
     for i, m  in enumerate(model_list):
         try: num_trial = num_trials[f'{label}_{m}']
         except: num_trial = run_params['n_iters']
-        func_params_mil.append([m, label, df_train_mil, 'class', i, min_samples_mil, '', num_trial])
+        rp = copy.deepcopy(run_params)
+        func_params_mil.append([set_pos, m, label, df_train_mil, 'class', rp, i, min_samples_mil, '', num_trial, model_type])
 
     return func_params_mil
 
 def order_func_params(func_params, trial_times):
     
     if trial_times is not None:
-        missing_trials = [f'{x[1]}_{x[0]}' for x in func_params if f'{x[1]}_{x[0]}' not in trial_times.values]
+        missing_trials = [f'{x[0]}_{x[2]}_{x[1]}_{x[-1]}' for x in func_params if f'{x[0]}_{x[2]}_{x[1]}_{x[-1]}' not in trial_times.values]
         trial_order = missing_trials + list(trial_times.model.values)
-        func_params = sorted(func_params, key=lambda x: trial_order.index(f'{x[1]}_{x[0]}'))
+        func_params = sorted(func_params, key=lambda x: trial_order.index(f'{x[0]}_{x[2]}_{x[1]}_{x[-1]}'))
 
     return func_params
 
@@ -382,6 +430,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
 
         if m in ('qr_q', 'gbmh_q'): pipe.set_params(**{f'{m}__quantile': alpha})
         elif m in ('rf_q', 'knn_q'): pipe.set_params(**{f'{m}__q': alpha})
+        elif m == 'cb_q': pipe.set_params(**{f'{m}__loss_function': f'Quantile:alpha={alpha}'})
         else: pipe.set_params(**{f'{m}__alpha': alpha})
     
 
@@ -399,7 +448,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
 
 def update_trials_params(trials, m, params, pipe):
 
-    if m not in ('cb', 'cb_c'):
+    if m not in ('cb', 'cb_c', 'cb_q'):
         
         m_params = [p.split('__')[1] for p in params.keys() if m in p]
 
@@ -426,37 +475,34 @@ def adjust_adp(model_name):
     else: bayes_rand = run_params['opt_type']
     return bayes_rand
 
-def get_newest_folder(path):
-    folders = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
-    newest_folder = max(folders, key=lambda f: os.path.getctime(os.path.join(path, f)))
-    return os.path.join(path, newest_folder)
 
-def get_newest_folder_with_keywords(path, keywords, ignore_keywords=None):
-    folders = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
-    
-    # Apply ignore_keywords if provided
-    if ignore_keywords:
-        folders = [f for f in folders if not any(ignore_keyword in f for ignore_keyword in ignore_keywords)]
-    
-    matching_folders = [f for f in folders if all(keyword in f for keyword in keywords)]
-    
-    if not matching_folders:
-        return None
-    
-    newest_folder = max(matching_folders, key=lambda f: os.path.getctime(os.path.join(path, f)))
-    return os.path.join(path, newest_folder)
+def get_recent_trials(trials, n=200):
+    # Sort trials based on 'tid'
+    sorted_trials = sorted(trials.trials, key=lambda trial: trial['tid'], reverse=True)
+    # Get the most recent 'n' trials
+    recent_trials = sorted_trials[:n]
+
+    # Create a new Trials object and add the recent trials to it
+    new_trials = Trials()
+    for trial in recent_trials:
+        new_trials.insert_trial_docs([trial])
+        new_trials.refresh()
+    return new_trials
 
 
-def get_trials(label, m, bayes_rand):
 
-    newest_folder = get_newest_folder(f"{root_path}/Model_Outputs/")
-    recent_save = get_newest_folder_with_keywords(newest_folder, [set_pos, model_type, vers], [f"_week{run_params['set_week']}_"])
+def get_trials(label, m, bayes_rand, run_params, set_pos):
+
+    yr = run_params['last_run_year']
+    wk = run_params['last_run_week']
+    recent_save = f"{root_path}/Model_Outputs/{yr}/{set_pos}_year{yr}_week{wk}_{model_type}{vers}"
 
     if recent_save is not None and bayes_rand=='bayes': 
         try:
             trials = load_pickle(recent_save, 'all_trials')
             trials = trials[f'{label}_{m}']
             print('Loading previous trials')
+            trials = get_recent_trials(trials, n=run_params['num_past_trials'])
         except:
             print('No Previous Trials Exist')
             trials = Trials()
@@ -469,19 +515,31 @@ def get_trials(label, m, bayes_rand):
         trials = None
 
     return trials
+
+def get_optuna_study(label, vers, run_params, set_pos, model_type):
+    old_name = f"{label}_{vers}_{set_pos}_{model_type}_{run_params['last_run_year']}_{run_params['last_run_week']}"
+    new_name = f"{label}_{vers}_{set_pos}_{model_type}_{run_params['set_year']}_{run_params['set_week']}"
+    next_study = get_new_study(run_params['study_db'], old_name, new_name, num_trials)
+    return next_study
+
     
 
-def get_model_output(model_name, label, cur_df, model_obj, run_params, i, min_samples=10, alpha='', n_iter=20):
+def get_model_output(set_pos, model_name, label, cur_df, model_obj, run_params, i, min_samples=10, alpha='', n_iter=20):
 
     print(f'\n{model_name}\n============\n')
     
     bayes_rand = adjust_adp(model_name)
     proba = get_proba(model_obj)
-    trials = get_trials(label, model_name, bayes_rand)
+
+    if bayes_rand == 'bayes': trials = get_trials(label, model_name, bayes_rand, run_params, set_pos)
+    elif bayes_rand == 'optuna': trials = get_optuna_study(label, vers, run_params, set_pos, model_type)
 
     skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'], hp_algo=run_params['hp_algo'])
     pipe, params = get_full_pipe(skm, model_name, alpha, min_samples=min_samples, bayes_rand=bayes_rand)
-    if trials is not None: trials = update_trials_params(trials, model_name, params, pipe)
+    if trials is not None and bayes_rand=='bayes': trials = update_trials_params(trials, model_name, params, pipe)
+
+#    trials.trials_dataframe().duration.mean().seconds
+
 
     # fit and append the ADP model
     start = time.time()
@@ -489,7 +547,8 @@ def get_model_output(model_name, label, cur_df, model_obj, run_params, i, min_sa
                                                                      n_splits=run_params['n_splits'], col_split='game_date', 
                                                                      time_split=run_params['cv_time_input'],
                                                                      bayes_rand=bayes_rand, proba=proba, trials=trials,
-                                                                     random_seed=(i+7)*19+(i*12)+6, alpha=alpha)
+                                                                     random_seed=(i+7)*19+(i*12)+6, alpha=alpha,
+                                                                     optuna_timeout=run_params['optuna_timeout'])
     best_models = [bm.fit(X,y) for bm in best_models]
     print('Time Elapsed:', np.round((time.time()-start)/60,1), 'Minutes')
     
@@ -595,10 +654,11 @@ def update_output_dict(out_dict, label, m, result):
     return out_dict
 
 
-def unpack_results(out_dict, func_params, results):
+def unpack_results(out_dict, func_params, results, set_pos, model_type):
     for fp, result in zip(func_params, results):
-        model_name, label, _, _, _, _, _, _ = fp
-        out_dict = update_output_dict(out_dict, label, model_name, result)
+        set_pos_cur, model_name, label, _, _, _, _, _, _, _, model_type_cur = fp
+        if set_pos_cur == set_pos and model_type_cur == model_type:
+            out_dict = update_output_dict(out_dict, label, model_name, result)
     return out_dict
 
 
@@ -635,21 +695,25 @@ with keep.running() as m:
         print('Fell Asleep')
 
     run_list = [
-                # ['QB', '', 'full_model'],
+                ['QB', '', 'full_model'],
                 ['RB', '', 'full_model'],
-                # ['WR', '', 'full_model'],
-                # ['TE', '', 'full_model'],
-                # ['Defense', '', 'full_model'],
-                # ['QB', '', 'backfill'],
-                # ['RB', '', 'backfill'],
-                # ['WR', '', 'backfill'],
-                # ['TE', '', 'backfill'],
+                ['WR', '', 'full_model'],
+                ['TE', '', 'full_model'],
+                ['Defense', '', 'full_model'],
+                ['QB', '', 'backfill'],
+                ['RB', '', 'backfill'],
+                ['WR', '', 'backfill'],
+                ['TE', '', 'backfill'],
     ]
 
     for w in run_weeks:
         run_params['set_week'] = w
         run_params = get_last_run_week(w, run_params)
 
+        func_params = []
+        adp_result_dict = {}
+        trial_times = pd.DataFrame()
+        all_model_output_path = {}
         for set_pos, rush_pass, model_type in run_list:
 
             run_params['rush_pass'] = rush_pass
@@ -662,6 +726,7 @@ with keep.running() as m:
 
             # load data and filter down
             pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
+            all_model_output_path[f'{set_pos}_{model_type}'] = model_output_path
             df, run_params = load_data(model_type, set_pos, run_params)
             df, run_params = create_game_date(df, run_params)
 
@@ -669,135 +734,52 @@ with keep.running() as m:
             print(df_train.loc[-10:, ['player', 'week', 'year', 'y_act']])
 
             try:
-                trial_times = get_trial_times(root_path, run_params, set_pos, model_type, vers)
-                num_trials = calc_num_trials(trial_times, run_params)
+                trial_times_pos = get_trial_times(root_path, run_params, set_pos, model_type, vers)
+                num_trials = calc_num_trials(trial_times_pos, run_params)
+                trial_times = pd.concat([trial_times, trial_times_pos], axis=0)
+                trial_times = trial_times.sort_values(by='time_per_trial', ascending=False).reset_index(drop=True)
                 print('Lower trials:', {k:v for k,v in num_trials.items() if v < run_params['n_iters']})
             except:
                 num_trials = None
                 trial_times = None
                 print('No Trials Exist')
 
-            adp_result = get_model_output('adp', 'reg', df_train, 'reg', run_params, 0, min_samples, '', run_params['n_iters'])
-            adp_result = list(adp_result)
+            # adp_result = get_model_output(set_pos, 'adp', 'reg', df_train, 'reg', run_params, 0, min_samples, '', run_params['n_iters'])
+            # adp_result_dict[set_pos] = list(adp_result)
 
-            func_params = []
-            func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples,  num_trials, run_params))
-            func_params.extend(reg_params(df_train, min_samples, num_trials, run_params))
-            func_params.extend(class_params(df, min_samples, num_trials, run_params))
-            func_params.extend(million_params(df, num_trials, run_params))
-            func_params = order_func_params(func_params, trial_times)
+        #     func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples,  num_trials, run_params, set_pos, model_type))
+        #     func_params.extend(reg_params(df_train, min_samples, num_trials, run_params, set_pos, model_type))
+        #     func_params.extend(class_params(df, min_samples, num_trials, run_params, set_pos, model_type))
+        #     func_params.extend(million_params(df, num_trials, run_params, set_pos, model_type))
+        
+        # func_params = order_func_params(func_params, trial_times)
             
-            # # run all models in parallel
-            # results = Parallel(n_jobs=-1, verbose=verbosity)(
-            #                 delayed(get_model_output)
-            #                 (m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
-            #                     for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params[1:] # skip ADP to append due to Scaler error
-            #                 )
-            # all_results = []
-            # all_results.append(adp_result)
-            # all_results.extend(results)
+        # # run all models in parallel
+        # results = Parallel(n_jobs=-1, verbose=verbosity)(
+        #                 delayed(get_model_output)
+        #                 (set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
+        #                     for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _ in func_params # skip ADP to append due to Scaler error
+        #                 )
 
-            # # save output for all models
-            # out_dict = output_dict()
-            # out_dict = unpack_results(out_dict, func_params, all_results)
-            # save_output_dict(out_dict, 'all', model_output_path)
-
-            
-#%%
-
-num_trials
+        # # save output for all models
+        # for k, v in all_model_output_path.items():
+        #     cur_set_pos = k.split('_')[0]
+        #     cur_model_type = '_'.join(k.split('_')[1:])
+        #     out_dict = output_dict()
+        #     out_dict = unpack_results(out_dict, func_params, results, cur_set_pos, cur_model_type)
+        #     save_output_dict(out_dict, 'all', v)
 
 
 #%%
-for m, label, df, model_obj, i, min_samples, alpha, n_iter in func_params[1:]:
-    results = get_model_output('cb', 'reg', df_train, 'reg', run_params, 0, min_samples, '', run_params['n_iters'])
+func_params_test = [func_params[-2]]
 
- #%%
-import os
-import shutil
+for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _  in func_params_test:
+    results = get_model_output(set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter)
 
-
-def navigate_folders(root_dir, search_keywords, old_filename, new_filename):
-    for dirpath, _, _ in os.walk(root_dir):
-        if all(keyword in dirpath for keyword in search_keywords):
-            try:
-                source_path = os.path.join(dirpath, old_filename)
-                destination_path = os.path.join(dirpath, new_filename)
-                shutil.copy2(source_path, destination_path)
-            except:
-                print(dirpath, 'failed')
-
-root_directory = '/Users/mborysia/Documents/Github/Daily_Fantasy//Model_Outputs/2022/'
-search_keywords = [f'sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_brier{brier_wt}_matt{matt_wt}_bayes']
-
-# old_filename = 'quantile80.0_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
-# new_filename = 'quantile80.0_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
-
-# old_filename = 'class_random_kbest_sera1_rsq0_mse0_include2_kfold3.p'
-# new_filename=   'class_random_kbest_sera0_rsq0_mse1_include2_kfold3.p'
-
-old_filename = 'all_trials.p'
-new_filename = 'all_trials_old.p'
-
-
-navigate_folders(root_directory, search_keywords, old_filename, new_filename)
+# results = Parallel(n_jobs=-1, verbose=verbosity)(
+#                 delayed(get_model_output)
+#                 (set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
+#                     for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _ in func_params_test # skip ADP to append due to Scaler error
+#                 )
 
 #%%
-
-class_pred = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-reg_pred = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-new_save = 'sera0_rsq0_mse1_brier1_matt0_bayes'
-
-pos = 'TE'
-model_type = 'backfill'
-week = 9
-filename = 'all_trials'
-
-
-def extract_dict_data(filename):
-
-    class_data = load_pickle(f'/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/{pos}_year2022_week{week}_{model_type}{class_pred}', filename)
-    reg_data = load_pickle(f'/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/{pos}_year2022_week{week}_{model_type}{reg_pred}', filename)
-    
-    new_data = {}
-    for k,v in reg_data.items():
-        if 'class' not in k and 'million' not in k: new_data[k] = v
-
-    for k,v in class_data.items():
-        if 'class' in k or 'million' in k: new_data[k] = v
-
-    return new_data
-
-# for week in range(2, 9):
-#     for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
-#         for model_type in ['full_model', 'backfill']:
-#             if pos=='Defense' and model_type=='backfill': continue
-#             print(week, pos, model_type)
-#             for f in ['all_trials', 'all_models', 'all_pred', 'all_actual', 'all_scores', 'all_param_scores', 'all_full_hold']:
-#                 new_data = extract_dict_data(f)
-#                 path = f'/Users/borys/OneDrive/Documents/Github/Daily_Fantasy//Model_Outputs/2022/{pos}_year2022_week{week}_{model_type}{new_save}'
-#                 if not os.path.exists(path):
-#                     os.makedirs(path)
-#                 save_pickle(new_data, path, f)
-
-#%%
-extract_dict_data('all_trials')
-extract_dict_data('all_models')
-extract_dict_data('all_pred')
-extract_dict_data('all_actual')
-extract_dict_data('all_scores')
-extract_dict_data('all_param_scores')
-extract_dict_data('all_full_hold')
-
-# %%
-extract_dict_data('all_scores')
-# %%
-extract_dict_data('all_models')
-
-# %%
-out = get_model_output('lr_c', 'million', func_params[2][2], 'class', run_params, 10, min_samples, None, 10)
-# %%
-out
-# %%
-out[1]['full_hold'][out[1]['full_hold'].player=='Kenneth Gainwell']
-# %%

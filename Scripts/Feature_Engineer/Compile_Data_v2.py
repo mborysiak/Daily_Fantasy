@@ -1467,9 +1467,10 @@ def one_qb_per_week(df):
 def replace_inf_values(df):
     for c in df.columns:
         try:
-            if len(df[df[c]==np.inf])>0:
+            if len(df[df[c].isin([np.inf, -np.inf])])>0:
                 print('Infinite Value:', c)
-                df.loc[df[c]==np.inf, c] = df.loc[df[c]!=np.inf, c].mean()
+                df.loc[df[c].isin([np.inf, -np.inf]), c] = df.loc[~df[c].isin([np.inf, -np.inf]), c].mean()
+                print('Remaining Errors:', len(df[df[c].isin([np.inf, -np.inf])])>0)
         except:
             pass
     return df

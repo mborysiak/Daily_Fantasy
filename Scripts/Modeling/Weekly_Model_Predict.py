@@ -132,9 +132,9 @@ def get_class_data(df, cut, run_params):
 def get_skm(skm_df, model_obj, to_drop):
     
     skm_options = {
-        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt, mse_wt=mse_wt, logloss_wt=log_wt),
-        'class': SciKitModel(skm_df, model_obj='class', brier_wt=brier_wt, matt_wt=matt_wt),
-        'quantile': SciKitModel(skm_df, model_obj='quantile')
+        'reg': SciKitModel(skm_df, model_obj='reg', r2_wt=r2_wt, sera_wt=sera_wt, mse_wt=mse_wt, logloss_wt=log_wt, hp_algo=hp_algo),
+        'class': SciKitModel(skm_df, model_obj='class', brier_wt=brier_wt, matt_wt=matt_wt, hp_algo=hp_algo),
+        'quantile': SciKitModel(skm_df, model_obj='quantile', hp_algo=hp_algo)
     }
     
     skm = skm_options[model_obj]
@@ -213,6 +213,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
     if skm.model_obj == 'quantile':
         if m in ('qr_q', 'gbmh_q'): pipe.set_params(**{f'{m}__quantile': alpha})
         elif m in ('rf_q', 'knn_q'): pipe.set_params(**{f'{m}__q': alpha})
+        elif m == 'cb_q': pipe.set_params(**{f'{m}__loss_function': f'Quantile:alpha={alpha}'})
         else: pipe.set_params(**{f'{m}__alpha': alpha})
 
     if stack_model=='random_full_stack' and run_params['opt_type']=='bayes': 
@@ -234,18 +235,20 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
 
 def update_trials_params(trials, m, params, pipe):
 
-    m_params = [p.split('__')[1] for p in params.keys() if m in p]
+    if m not in ('cb', 'cb_c', 'cb_q'):
+        
+        m_params = [p.split('__')[1] for p in params.keys() if m in p]
 
-    hyper_params = {
-        p: pipe.steps[-1][1].get_params()[p] for p in m_params
-    }
+        hyper_params = {
+            p: pipe.steps[-1][1].get_params()[p] for p in m_params
+        }
 
-    for trial in trials:
-        # Update each trial with the new hyperparameters
-        for k,v in hyper_params.items():
-            if k not in trial['misc']['vals']:
-                trial['misc']['vals'][k] = [v]
-                trial['misc']['idxs'][k] = [trial['tid']]
+        for trial in trials:
+            # Update each trial with the new hyperparameters
+            for k,v in hyper_params.items():
+                if k not in trial['misc']['vals']:
+                    trial['misc']['vals'][k] = [v]
+                    trial['misc']['idxs'][k] = [trial['tid']]
 
     return trials
 
@@ -325,6 +328,7 @@ def load_all_stack_pred_million(model_output_path):
 def fit_and_predict(m_label, m, df_predict, X, y, proba):
 
     try:
+    
         cols = m.steps[0][-1].columns
         cols = [c for c in cols if c in X.columns]
         X = X[cols]
@@ -955,6 +959,18 @@ def get_proba_adp_coef(model_obj, final_m, run_params):
 
     return proba, run_adp, print_coef
 
+def get_recent_trials(trials, n=200):
+    # Sort trials based on 'tid'
+    sorted_trials = sorted(trials.trials, key=lambda trial: trial['tid'], reverse=True)
+    # Get the most recent 'n' trials
+    recent_trials = sorted_trials[:n]
+
+    # Create a new Trials object and add the recent trials to it
+    new_trials = Trials()
+    for trial in recent_trials:
+        new_trials.insert_trial_docs([trial])
+        new_trials.refresh()
+    return new_trials
 
 def get_trials(fname, final_m, bayes_rand):
 
@@ -973,6 +989,7 @@ def get_trials(fname, final_m, bayes_rand):
             trials = load_pickle(recent_save, fname)
             trials = trials['trials'][final_m]
             print('Loading previous trials')
+            trials = get_recent_trials(trials, run_params['num_recent_trials'])
         except:
             print('No Previous Trials Exist')
             trials = Trials()
@@ -985,6 +1002,8 @@ def get_trials(fname, final_m, bayes_rand):
         trials = None
 
     return trials
+
+
 
 def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million):
 
@@ -1017,9 +1036,9 @@ def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_
 def get_func_params(model_obj, alpha):
 
     model_list = {
-        'reg': ['rf', 'gbm', 'gbmh', 'huber', 'xgb', 'lgbm', 'knn', 'ridge', 'lasso', 'bridge', 'mlp'],
-        'class': ['rf_c', 'gbm_c', 'gbmh_c', 'xgb_c','lgbm_c', 'knn_c', 'lr_c', 'mlp_c'],
-        'quantile': ['qr_q', 'gbm_q', 'lgbm_q', 'gbmh_q', 'rf_q']#, 'knn_q']
+        'reg': ['rf', 'gbm', 'gbmh', 'mlp', 'cb', 'huber', 'xgb', 'lgbm', 'knn', 'ridge', 'lasso', 'bridge', 'enet'],
+        'class': ['rf_c', 'gbm_c', 'gbmh_c', 'xgb_c','lgbm_c', 'knn_c', 'lr_c', 'mlp_c', 'cb_c'],
+        'quantile': ['qr_q', 'gbm_q', 'lgbm_q', 'gbmh_q', 'rf_q', 'cb_q']#, 'knn_q']
     }
 
     func_params = [[m, i, model_obj, alpha] for i, m  in enumerate(model_list[model_obj])]
@@ -1285,7 +1304,7 @@ globals().update(config)
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2023,
+    'set_year': 2022,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -1293,8 +1312,8 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_full_stack_team_stats',
-    'stack_model_million': 'random_full_stack_team_stats',
+    'stack_model': 'random_full_stack',
+    'stack_model_million': 'random_full_stack',
 
     # opt params
     'opt_type': 'bayes',
@@ -1310,6 +1329,8 @@ run_params = {
     'use_sample_weight': False,
     
     'met': 'y_act',   
+
+    'num_recent_trials': 50,
 }
 
 s_mod = run_params['stack_model']
@@ -1323,12 +1344,13 @@ mse_wt = 1
 brier_wt = 1
 matt_wt = 0
 log_wt = 0
+hp_algo = 'atpe'
 
 alpha = 80
 class_cut = 80
 
-set_weeks = [12,13,14,15,16]
-pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+set_weeks = [7]
+pred_vers = 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
 class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
@@ -1439,7 +1461,7 @@ with keep.running() as m:
             # get the training data for stacking and prediction data after stacking
             X_stack, y_stack, y_stack_class, models_reg, models_class, models_quant = load_all_stack_pred(model_output_path)
             X_predict_player, X_predict = get_stack_predict_data(df_train, df_predict, df, run_params, models_reg, models_class, models_quant)
-            
+        
             if 'team_stats' in run_params['stack_model']:      
                 X_stack = merge_team_sum(X_stack, team_sum)
                 X_predict_player = merge_team_sum(X_predict_player, team_sum)
@@ -1530,29 +1552,6 @@ with keep.running() as m:
         dm.delete_from_db('Simulation', 'Vegas_Points', f"week={run_params['set_week']} AND year={run_params['set_year']}", create_backup=False)
         dm.write_to_db(vp, 'Simulation', 'Vegas_Points', 'append')
         print('All Runs Finished')
-
-#%%
-
-
-from sklearn.linear_model import Ridge
-from sklearn.preprocessing import StandardScaler
-
-df = pd.read_csv("C:/Users/borys/OneDrive/Desktop/Model Tracking Ens Reg.csv").dropna()
-df = df[df.Week==7].reset_index(drop=True)
-X = df[['POS', 'UseTeamStats', 'EnsVers', 'Type', 'Week', 'Include Pos Rank',# 'Remove Bad', 
-        'Include Vegas', 'Models Include', 'Opt', 'UseKBestFU', 'UseRandom']]
-
-
-
-for c in ['POS', 'UseTeamStats', 'Opt', 'EnsVers', 'Type', 'Week']:
-    X = pd.concat([X, pd.get_dummies(X[c], prefix=c)], axis=1).drop(c, axis=1)
-
-y = df[['Val', 'Test']].mean(axis=1)
-X = pd.DataFrame(StandardScaler().fit_transform(X), columns=X.columns)
-lr = Ridge()
-lr.fit(X, y)
-pd.Series(lr.coef_, index=X.columns).sort_values(ascending=False)
-
 
 #%%
 

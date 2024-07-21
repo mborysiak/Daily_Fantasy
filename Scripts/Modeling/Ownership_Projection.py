@@ -16,11 +16,11 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
-pred_version = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+pred_version = 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100'
 million_ens_vers = 'random_full_stack_team_stats_matt0_brier1_include2_kfold3'
 
 set_year = 2022
-set_week = 2
+set_week = 1
 contest = 'Million'
 include_dst = True
 run_owner_model = True
@@ -724,58 +724,19 @@ def save_current_week_pred(ownership_vers, set_week, set_year, include_dst=True)
     dm.delete_from_db('Simulation', 'Predicted_Ownership', del_q, create_backup=False)
     dm.write_to_db(sim_values, 'Simulation', 'Predicted_Ownership', 'append')
 
-#%%
-
-# val_fdata = dm.read(f'''SELECT player, team, week, year, ownership pred_ownership
-#                        FROM Projected_Ownership
-#                        WHERE year < {set_year}
-#                              OR (year={set_year} 
-#                                  AND week < {set_week})
-#                              ''', 'Pre_PlayerData')
-
-# test_fdata = dm.read(f'''SELECT player, team, week, year, ownership pred_ownership
-#                         FROM Projected_Ownership
-#                         WHERE year={set_year}
-#                               AND week={set_week}
-#                     ''', 'Pre_PlayerData')
-
-# player_ownership = pull_player_ownership(contest, set_week, set_year).rename(columns={'pct_drafted': 'y_act'})
-# val_fdata = pd.merge(val_fdata, player_ownership, on=['player', 'week', 'year'])
-# val_fdata = val_fdata[val_fdata.y_act > 0].reset_index(drop=True)
-
-# # val_predict = adjust_ownership(val_pred, 'y_act', 'ln')
-# # test_predict = adjust_ownership(test_pred, 'y_act', 'ln')
-
-# val_fdata, test_fdata = calc_std_dev(val_fdata, test_fdata)
-
-# val_fdata.loc[val_fdata.std_dev < 0, 'std_dev'] = 1
-# test_fdata.loc[test_fdata.std_dev < 0, 'std_dev'] = 1
-
-# val_fdata.loc[val_fdata.min_score < 0, 'min_score'] = 0
-# test_fdata.loc[test_fdata.min_score < 0, 'min_score'] = 0
-
-# ownership_vers = 'fantasydata'
-
-# test_fdata['ownership_vers'] = ownership_vers
-# dm.delete_from_db('Simulation', 'Predicted_Ownership_Only', f"week={set_week} AND year={set_year} AND ownership_vers='{ownership_vers}'", create_backup=False)
-# dm.write_to_db(test_fdata, 'Simulation', 'Predicted_Ownership_Only', 'append')
-
-# val_fdata = val_fdata[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
-# val_fdata['ownership_vers'] = ownership_vers
-# dm.delete_from_db('Validations', 'Predicted_Ownership_Validation', f"ownership_vers='{ownership_vers}'", create_backup=False)
-# dm.write_to_db(val_fdata, 'Validations', 'Predicted_Ownership_Validation', 'append')
 
 #%%
 #================
 # Predict Ownership Pct
 #================
 
-for set_week, set_year in zip([#1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 
-                               1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+for set_week, set_year in zip([#1, 2, 3, 
+                               4, 5, 6#, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 
+                              # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
                                ], 
                               [
-                               #2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-                               2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
+                               2022, 2022, 2022,# 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+                              # 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
                                ]):
 
     print(f'Running week {set_week} year {set_year}')
@@ -889,4 +850,44 @@ for set_week, set_year in zip([#1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 1
 
         run_ttest(full_dist, greater_or_less='greater')
         save_current_week_pred(ownership_vers, set_week, set_year, include_dst)
- # %%
+
+#%%
+
+# val_fdata = dm.read(f'''SELECT player, team, week, year, ownership pred_ownership
+#                        FROM Projected_Ownership
+#                        WHERE year < {set_year}
+#                              OR (year={set_year} 
+#                                  AND week < {set_week})
+#                              ''', 'Pre_PlayerData')
+
+# test_fdata = dm.read(f'''SELECT player, team, week, year, ownership pred_ownership
+#                         FROM Projected_Ownership
+#                         WHERE year={set_year}
+#                               AND week={set_week}
+#                     ''', 'Pre_PlayerData')
+
+# player_ownership = pull_player_ownership(contest, set_week, set_year).rename(columns={'pct_drafted': 'y_act'})
+# val_fdata = pd.merge(val_fdata, player_ownership, on=['player', 'week', 'year'])
+# val_fdata = val_fdata[val_fdata.y_act > 0].reset_index(drop=True)
+
+# # val_predict = adjust_ownership(val_pred, 'y_act', 'ln')
+# # test_predict = adjust_ownership(test_pred, 'y_act', 'ln')
+
+# val_fdata, test_fdata = calc_std_dev(val_fdata, test_fdata)
+
+# val_fdata.loc[val_fdata.std_dev < 0, 'std_dev'] = 1
+# test_fdata.loc[test_fdata.std_dev < 0, 'std_dev'] = 1
+
+# val_fdata.loc[val_fdata.min_score < 0, 'min_score'] = 0
+# test_fdata.loc[test_fdata.min_score < 0, 'min_score'] = 0
+
+# ownership_vers = 'fantasydata'
+
+# test_fdata['ownership_vers'] = ownership_vers
+# dm.delete_from_db('Simulation', 'Predicted_Ownership_Only', f"week={set_week} AND year={set_year} AND ownership_vers='{ownership_vers}'", create_backup=False)
+# dm.write_to_db(test_fdata, 'Simulation', 'Predicted_Ownership_Only', 'append')
+
+# val_fdata = val_fdata[['player', 'team', 'week', 'year', 'pred_ownership', 'std_dev', 'min_score', 'max_score']]
+# val_fdata['ownership_vers'] = ownership_vers
+# dm.delete_from_db('Validations', 'Predicted_Ownership_Validation', f"ownership_vers='{ownership_vers}'", create_backup=False)
+# dm.write_to_db(val_fdata, 'Validations', 'Predicted_Ownership_Validation', 'append')

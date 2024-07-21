@@ -338,34 +338,34 @@ covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
- #    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-     #1, 2, 3, 4, 5, 
-     6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+    #1, 2, 3, 
+    4, 5, 6,# 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+     #1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 ]
 
 set_years = [
-     # 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
-      2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
+     2022, 2022, 2022,# 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
+   # 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
 ]
 
 # set_weeks = [17]
 # set_years = [2023,2023]
 
 pred_versions = [
-                 'sera0_rsq0_mse1_brier1_matt1_bayes',
+                 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100',
                 #  'sera1_rsq0_mse0_brier1_matt0_bayes'
                  ]
 
 reg_ens_versions = [
                     # 'random_sera0_rsq0_mse1_include2_kfold3',
-                    'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_kbest_sera0_rsq0_mse1_include2_kfold3',
                     # 'kbest_sera0_rsq0_mse1_include2_kfold3',
-                    # 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
+                    'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
                     # 'random_sera1_rsq0_mse0_include2_kfold3',
                     # 'random_kbest_sera1_rsq0_mse0_include2_kfold3',
                     # 'random_full_stack_sera0_rsq1_mse0_include2_kfold3',
                     # 'random_full_stack_sera0_rsq0_mse1_include2_kfold3_rand',
-                    # 'random_kbest_team_stats_sera0_rsq0_mse1_include2_kfold3',
+                    'random_kbest_team_stats_sera0_rsq0_mse1_include2_kfold3',
                     # 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
                 ]
 
