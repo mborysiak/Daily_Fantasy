@@ -37,7 +37,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [7]
+run_weeks = [1]
 verbosity = 50
 run_params = {
     
@@ -54,7 +54,6 @@ run_params = {
 
     # other parameters
     'use_sample_weight': False,
-    'opt_type': 'bayes',
     'cuts': [33, 80, 95],
     'met': 'y_act',
 
@@ -69,10 +68,11 @@ run_params = {
 
     'rush_pass': '',
 
-    'hp_algo': 'atpe',
+    'opt_type': 'optuna',
+    'hp_algo': 'tpe',
     'study_db': "sqlite:///optuna/weekly_train.sqlite3",
     'num_past_trials': 100,
-    'optuna_timeout': 60*5
+    'optuna_timeout': 60*8
 }
 
 n_splits = run_params['n_splits']
@@ -89,7 +89,7 @@ matt_wt = 0
 brier_wt = 1
 
 # set version and iterations
-vers = f"sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_brier{brier_wt}_matt{matt_wt}_bayes_{run_params['hp_algo']}_numtrials{run_params['num_past_trials']}"
+vers = f"sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_brier{brier_wt}_matt{matt_wt}_{run_params['opt_type']}_{run_params['hp_algo']}_numtrials{run_params['num_past_trials']}_higherkb"
 
 #----------------
 # Data Loading
@@ -243,30 +243,37 @@ def rename_existing(study_db, study_name):
 
 
 def get_new_study(db, old_name, new_name, num_trials):
+
+    storage = optuna.storages.RDBStorage(
+                                url=db,
+                                engine_kwargs={"pool_size": 64, 
+                                            "connect_args": {"timeout": 10},
+                                            },
+                                )
     
     if old_name is not None:
         old_study = optuna.create_study(
             study_name=old_name,
-            storage=db,
+            storage=storage,
             load_if_exists=True
         )
     
     try:
         next_study = optuna.create_study(
             study_name=new_name, 
-            storage=db, 
+            storage=storage, 
             load_if_exists=False
         )
 
     except:
-        rename_existing(db, new_name)
+        rename_existing(storage, new_name)
         next_study = optuna.create_study(
             study_name=new_name, 
-            storage=db, 
+            storage=storage, 
             load_if_exists=False
         )
     
-    if old_name is not None:
+    if old_name is not None and len(old_study.trials) > 0:
         print(f"Loaded {new_name} study with {old_name} {len(old_study.trials)} trials")
         next_study.add_trials(old_study.trials[-num_trials:])
 
@@ -305,7 +312,7 @@ def calc_num_trials(time_per_trial, run_params):
     return {k:v for k,v in zip(time_per_trial.model, time_per_trial.num_trials)}
 
 def reg_params(df_train, min_samples, num_trials, run_params, set_pos, model_type):
-    model_list = ['adp', 'cb', 'mlp', 'bridge', 'gbm', 'gbmh', 'rf', 'lgbm', 'ridge', 'svr', 'lasso', 'enet', 'knn','xgb']
+    model_list = ['adp', 'knn','mlp', 'bridge', 'ridge', 'svr', 'lasso', 'enet','xgb', 'cb', 'gbm', 'gbmh', 'lgbm', 'rf']
     label = 'reg'
     func_params_reg = []
     for i, m  in enumerate(model_list):
@@ -403,7 +410,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
                                 skm.piece('select_perc'),
                                 skm.feature_union([
                                                 skm.piece('agglomeration'), 
-                                                skm.piece('k_best'),
+                                                skm.piece('k_best_fu'),
                                                 skm.piece('pca')
                                                 ]),
                                 skm.piece('k_best'),
@@ -414,8 +421,9 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
                                skm.piece('std_scale'), 
                                skm.piece('select_perc_c'),
                                skm.feature_union([
+                                                skm.piece('pca'),
                                                 skm.piece('agglomeration'), 
-                                                skm.piece('k_best_c'),
+                                                skm.piece('k_best_c_fu'),
                                                 ]),
                                skm.piece('k_best_c'),
                                skm.piece(m)])
@@ -473,7 +481,7 @@ def get_proba(model_obj):
 def adjust_adp(model_name):
     if model_name == 'adp': bayes_rand = 'rand'
     else: bayes_rand = run_params['opt_type']
-    return bayes_rand
+    return bayes_rand, None
 
 
 def get_recent_trials(trials, n=200):
@@ -516,10 +524,11 @@ def get_trials(label, m, bayes_rand, run_params, set_pos):
 
     return trials
 
-def get_optuna_study(label, vers, run_params, set_pos, model_type):
-    old_name = f"{label}_{vers}_{set_pos}_{model_type}_{run_params['last_run_year']}_{run_params['last_run_week']}"
-    new_name = f"{label}_{vers}_{set_pos}_{model_type}_{run_params['set_year']}_{run_params['set_week']}"
-    next_study = get_new_study(run_params['study_db'], old_name, new_name, num_trials)
+def get_optuna_study(model_name, label, vers, run_params, set_pos, model_type):
+    time.sleep(5*np.random.random())
+    old_name = f"{label}_{model_name}_{vers}_{set_pos}_{run_params['model_type']}_{run_params['last_run_year']}_{run_params['last_run_week']}"
+    new_name = f"{label}_{model_name}_{vers}_{set_pos}_{run_params['model_type']}_{run_params['set_year']}_{run_params['set_week']}"
+    next_study = get_new_study(run_params['study_db'], old_name, new_name, run_params['num_past_trials'])
     return next_study
 
     
@@ -528,12 +537,12 @@ def get_model_output(set_pos, model_name, label, cur_df, model_obj, run_params, 
 
     print(f'\n{model_name}\n============\n')
     
-    bayes_rand = adjust_adp(model_name)
+    bayes_rand, trials = adjust_adp(model_name)
     proba = get_proba(model_obj)
 
     if bayes_rand == 'bayes': trials = get_trials(label, model_name, bayes_rand, run_params, set_pos)
-    elif bayes_rand == 'optuna': trials = get_optuna_study(label, vers, run_params, set_pos, model_type)
-
+    elif bayes_rand == 'optuna': trials = get_optuna_study(label, model_name, vers, run_params, set_pos, model_type)
+    
     skm, X, y = get_skm(cur_df, model_obj, to_drop=run_params['drop_cols'], hp_algo=run_params['hp_algo'])
     pipe, params = get_full_pipe(skm, model_name, alpha, min_samples=min_samples, bayes_rand=bayes_rand)
     if trials is not None and bayes_rand=='bayes': trials = update_trials_params(trials, model_name, params, pipe)
@@ -718,6 +727,7 @@ with keep.running() as m:
 
             run_params['rush_pass'] = rush_pass
             run_params['n_splits'] = n_splits
+            run_params['model_type'] = model_type
             print(f"\n==================\n{set_pos} {model_type} {rush_pass} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
 
             #==========
@@ -744,36 +754,34 @@ with keep.running() as m:
                 trial_times = None
                 print('No Trials Exist')
 
-            # adp_result = get_model_output(set_pos, 'adp', 'reg', df_train, 'reg', run_params, 0, min_samples, '', run_params['n_iters'])
-            # adp_result_dict[set_pos] = list(adp_result)
-
-        #     func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples,  num_trials, run_params, set_pos, model_type))
-        #     func_params.extend(reg_params(df_train, min_samples, num_trials, run_params, set_pos, model_type))
-        #     func_params.extend(class_params(df, min_samples, num_trials, run_params, set_pos, model_type))
-        #     func_params.extend(million_params(df, num_trials, run_params, set_pos, model_type))
+            func_params.extend(quant_params(df_train, [0.8, 0.95], min_samples,  num_trials, run_params, set_pos, model_type))
+            func_params.extend(reg_params(df_train, min_samples, num_trials, run_params, set_pos, model_type))
+            func_params.extend(class_params(df, min_samples, num_trials, run_params, set_pos, model_type))
+            func_params.extend(million_params(df, num_trials, run_params, set_pos, model_type))
         
         # func_params = order_func_params(func_params, trial_times)
             
-        # # run all models in parallel
-        # results = Parallel(n_jobs=-1, verbose=verbosity)(
-        #                 delayed(get_model_output)
-        #                 (set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
-        #                     for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _ in func_params # skip ADP to append due to Scaler error
-        #                 )
+        # run all models in parallel
+        results = Parallel(n_jobs=-1, verbose=verbosity)(
+                        delayed(get_model_output)
+                        (set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
+                            for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _ in func_params
+                        )
 
-        # # save output for all models
-        # for k, v in all_model_output_path.items():
-        #     cur_set_pos = k.split('_')[0]
-        #     cur_model_type = '_'.join(k.split('_')[1:])
-        #     out_dict = output_dict()
-        #     out_dict = unpack_results(out_dict, func_params, results, cur_set_pos, cur_model_type)
-        #     save_output_dict(out_dict, 'all', v)
+        # save output for all models
+        for k, v in all_model_output_path.items():
+            cur_set_pos = k.split('_')[0]
+            cur_model_type = '_'.join(k.split('_')[1:])
+            out_dict = output_dict()
+            out_dict = unpack_results(out_dict, func_params, results, cur_set_pos, cur_model_type)
+            save_output_dict(out_dict, 'all', v)
 
 
 #%%
-func_params_test = [func_params[-2]]
 
-for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _  in func_params_test:
+# func_params_test = [func_params[11]]
+
+for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _  in func_params:
     results = get_model_output(set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter)
 
 # results = Parallel(n_jobs=-1, verbose=verbosity)(
@@ -782,4 +790,15 @@ for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter,
 #                     for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _ in func_params_test # skip ADP to append due to Scaler error
 #                 )
 
-#%%
+# %%
+
+from optuna.visualization import plot_parallel_coordinate
+
+study = optuna.create_study(
+            study_name='lgbm_reg_sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb_RB_full_model_2022_1',
+            storage=run_params['study_db'],
+            load_if_exists=True
+        )
+
+plot_parallel_coordinate(study, )
+# %%

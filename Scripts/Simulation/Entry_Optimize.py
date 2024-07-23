@@ -74,7 +74,7 @@ manual_adjust = True
 if manual_adjust:
     model_vers = {'million_ens_vers': 'random_full_stack_matt0_brier1_include2_kfold3',
                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100',
-                'reg_ens_vers': 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
+                'reg_ens_vers': 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
                 'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3'}
     
     d =    {'adjust_pos_counts': {False: 0.6, True: 0.4},
@@ -125,12 +125,12 @@ pprint.pprint(d)
 
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6#, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+   1, 2, 3, 4, 5, 6, 7, 8#, 9, 10, 11, 12, 13, 14, 15, 16,
  #  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022#, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022#, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
       #2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
 ]
 

@@ -161,3 +161,6 @@ Data/Databases/Simulation.sqlite3
 Data/OtherData/DK_Results*
 Data/Databases/SimParams.sqlite3
 Data/Databases/Model_Features - Copy.sqlite3
+Scripts/Modeling/optuna/weekly_predict.sqlite3-journal
+Scripts/Modeling/optuna/weekly_train.sqlite3
+Scripts/Modeling/optuna/weekly_predict.sqlite3

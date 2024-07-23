@@ -1057,7 +1057,7 @@ class RunSim:
         else: drop_length = self.total_lineups_to_run + 5
         to_drop_selected = self.rand_drop_selected(existing_players, p['player_drop_multiple'], drop_length)
 
-        to_add = []
+        to_add = ['Aaron Jones']
         sim = FootballSimulation(conn, self.week, self.year, self.salary_cap, self.pos_require_start, p['num_iters'], 
                                  self.pred_vers, self.reg_ens_vers, self.million_ens_vers, self.std_dev_type, 
                                  p['covar_type'], p['full_model_weight'], p['matchup_seed'], p['use_covar'], p['use_ownership'], 
@@ -1127,51 +1127,51 @@ class RunSim:
 
 #%%
     
-# week = 1
-# year = 2022
+week = 1
+year = 2022
 
-# salary_cap = 50000
-# pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
+salary_cap = 50000
+pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 
-# pred_vers = 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100'
-# reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'random_full_stack_team_stats_matt0_brier1_include2_kfold3'
-# std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
-# total_lineups = 2
+pred_vers = 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100'
+reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
+million_ens_vers = 'random_full_stack_team_stats_matt0_brier1_include2_kfold3'
+std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
+total_lineups = 2
 
-# d = {'adjust_pos_counts': {False: 0.7, True: 0.3},
-#  'covar_type': {'kmeans_pred_trunc': 0.0,
-#                 'no_covar': 1.0,
-#                 'team_points_trunc': 0},
-#  'full_model_weight': {0.2: 0.3, 5: 0.7},
-#  'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
-#  'matchup_seed': {0: 0.3, 1: 0.7},
-#  'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
-#  'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
-#  'min_player_same_team': {2: 0.2, 3: 0.2, 'Auto': 0.6},
-#  'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8},
-#  'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
-#  'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
-#  'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
-#  'own_neg_frac': {0.8: 0.0, 1: 1.0},
-#  'ownership_vers': {'mil_div_standard_ln': 0.0,
-#                     'mil_only': 0.0,
-#                     'mil_times_standard_ln': 0.3,
-#                     'standard_ln': 0.7},
-#  'player_drop_multiple': {0: 0.5, 10: 0.5, 20:0},
-#  'qb_min_iter': {0: 0.6, 2: 0.4, 4: 0.0, 9: 0.0},
-#  'qb_set_max_team': {0: 0.7, 1: 0.3},
-#  'qb_solo_start': {False: 1.0, True: 0.0},
-#  'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
-#  'static_top_players': {False: 0.3, True: 0.7},
-#  'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
-#  'use_ownership': {0.7: 0.0, 0.8: 0.2, 0.9: 0.0, 1: 0.8},
-#  'use_unique_players': {True: 0.5, False: 0.5}
-#  }
+d = {'adjust_pos_counts': {False: 0.7, True: 0.3},
+ 'covar_type': {'kmeans_pred_trunc': 0.0,
+                'no_covar': 1.0,
+                'team_points_trunc': 0},
+ 'full_model_weight': {0.2: 0.3, 5: 0.7},
+ 'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
+ 'matchup_seed': {0: 0.3, 1: 0.7},
+ 'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
+ 'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
+ 'min_player_same_team': {2: 0.2, 3: 0.2, 'Auto': 0.6},
+ 'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8},
+ 'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
+ 'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
+ 'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
+ 'own_neg_frac': {0.8: 0.0, 1: 1.0},
+ 'ownership_vers': {'mil_div_standard_ln': 0.0,
+                    'mil_only': 0.0,
+                    'mil_times_standard_ln': 0.3,
+                    'standard_ln': 0.7},
+ 'player_drop_multiple': {0: 0.5, 10: 0.5, 20:0},
+ 'qb_min_iter': {0: 0.6, 2: 0.4, 4: 0.0, 9: 0.0},
+ 'qb_set_max_team': {0: 0.7, 1: 0.3},
+ 'qb_solo_start': {False: 1.0, True: 0.0},
+ 'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
+ 'static_top_players': {False: 0.3, True: 0.7},
+ 'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
+ 'use_ownership': {0.7: 0.0, 0.8: 0.2, 0.9: 0.0, 1: 0.8},
+ 'use_unique_players': {True: 0.5, False: 0.5}
+ }
 
-# rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
-# params = rs.generate_param_list(d)
-# rs.run_full_lineup(params[0], existing_players=[], set_max_team=None)
+rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
+params = rs.generate_param_list(d)
+rs.run_full_lineup(params[0], existing_players=[], set_max_team=None)
 
 
 #%%
