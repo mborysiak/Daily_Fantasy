@@ -72,9 +72,9 @@ model_vers, d = get_top_hyperparams(num_rank, model_notes)
 manual_adjust = True
 
 if manual_adjust:
-    model_vers = {'million_ens_vers': 'random_full_stack_matt0_brier1_include2_kfold3',
+    model_vers = {'million_ens_vers': 'random_full_stack_team_stats_matt0_brier1_include2_kfold3',
                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100',
-                'reg_ens_vers': 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
+                'reg_ens_vers': 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
                 'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3'}
     
     d =    {'adjust_pos_counts': {False: 0.6, True: 0.4},
@@ -125,12 +125,13 @@ pprint.pprint(d)
 
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8#, 9, 10, 11, 12, 13, 14, 15, 16,
+   1, 2, 3, 4, 5, 6, 7, 8
+ #, 9, 10, 11, 12, 13, 14, 15, 16,
  #  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022#, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, #2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
       #2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
 ]
 
@@ -162,7 +163,6 @@ def run_weekly_sim(d, week, year, salary_cap, pos_require_start, pred_vers, reg_
     rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
     params = rs.generate_param_list(d)
     winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=True)
-    print(player_results)
 
     return winnings, player_results, params, winnings_list
 
@@ -175,7 +175,6 @@ def objective(param_options, pred_vers, reg_ens_vers, std_dev_type, million_ens_
                                                         million_ens_vers, std_dev_type, total_lineups) for
                                 week, year in zip(set_weeks, set_years)
                                 )
-
     total_winnings = []
     player_results = pd.DataFrame()
     param_output = []
@@ -283,7 +282,7 @@ with keep.running() as m:
 
 #%%
 
-to_delete_num=619
+to_delete_num=652
 df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
 dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
 

@@ -37,7 +37,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [1]
+run_weeks = [2, 3]
 verbosity = 50
 run_params = {
     
@@ -246,9 +246,8 @@ def get_new_study(db, old_name, new_name, num_trials):
 
     storage = optuna.storages.RDBStorage(
                                 url=db,
-                                engine_kwargs={"pool_size": 64, 
-                                            "connect_args": {"timeout": 10},
-                                            },
+                                engine_kwargs={"pool_size": 128, 
+                                               "connect_args": {"timeout": 60}},
                                 )
     
     if old_name is not None:

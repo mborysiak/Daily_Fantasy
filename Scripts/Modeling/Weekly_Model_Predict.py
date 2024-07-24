@@ -174,7 +174,7 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
                                       skm.piece('std_scale'), 
                                       skm.feature_union([
                                                     skm.piece('agglomeration'), 
-                                                    skm.piece(f'{kb}'),
+                                                    skm.piece(f'{kb}_fu'),
                                                     skm.piece('pca')
                                                     ]),
                                       skm.piece(kb),
@@ -1097,7 +1097,7 @@ def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_
                                                                 trials=trials, bayes_rand=run_params['opt_type'],
                                                                 run_adp=run_adp, print_coef=print_coef,
                                                                 proba=proba, num_k_folds=run_params['num_k_folds'],
-                                                                random_state=(i*2)+(i*7))
+                                                                random_state=(i*2)+(i*7), optuna_timeout=run_params['optuna_timeout'])
     
     return best_model, stack_scores, stack_pred, trial
 
@@ -1368,8 +1368,8 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_full_stack',
-    'stack_model_million': 'random_full_stack',
+    'stack_model': 'random_full_stack_team_stats',
+    'stack_model_million': 'random_full_stack_team_stats',
 
     # opt params
     'n_iters': 50,
@@ -1408,7 +1408,7 @@ alpha = 80
 class_cut = 80
 
 set_weeks = [1]
-pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
+pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
 class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
@@ -1491,14 +1491,14 @@ with keep.running() as m:
 
         runs = [
             ['QB', 'full_model', ''],
-            # ['RB', 'full_model', ''],
-            # ['WR', 'full_model', ''],
-            # ['TE', 'full_model', ''],
-            # ['Defense', 'full_model', ''],
-            # ['QB', 'backfill', ''],
-            # ['RB', 'backfill', ''],
-            # ['WR', 'backfill', ''],
-            # ['TE', 'backfill', '']
+            ['RB', 'full_model', ''],
+            ['WR', 'full_model', ''],
+            ['TE', 'full_model', ''],
+            ['Defense', 'full_model', ''],
+            ['QB', 'backfill', ''],
+            ['RB', 'backfill', ''],
+            ['WR', 'backfill', ''],
+            ['TE', 'backfill', '']
         ]
 
         for set_pos, model_type, rush_pass in runs:
