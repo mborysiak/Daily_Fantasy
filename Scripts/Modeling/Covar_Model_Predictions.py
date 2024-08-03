@@ -338,13 +338,13 @@ covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
-    #1, 2, 3, 4, 5, 6,# 
-    7, 8, #9, 10, 11, 12, 13, 14, 15, 16,
+    #1, 2, 3, 4, 5, 6,7, 8, 
+    9, 10, 11, 12,# 13, 14, 15, 16,
      #1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 ]
 
 set_years = [
-     2022, 2022, 2022,# 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
+     2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, #2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
    # 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
 ]
 
@@ -352,21 +352,17 @@ set_years = [
 # set_years = [2023,2023]
 
 pred_versions = [
-                 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100',
-                #  'sera1_rsq0_mse0_brier1_matt0_bayes'
+                #  'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100',
+                 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
+                #  'sera0_rsq0_mse1_brier1_matt1_bayes'
                  ]
 
 reg_ens_versions = [
-                    # 'random_sera0_rsq0_mse1_include2_kfold3',
-                    # 'random_kbest_sera0_rsq0_mse1_include2_kfold3',
-                    # 'kbest_sera0_rsq0_mse1_include2_kfold3',
                     'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
-                    # 'random_sera1_rsq0_mse0_include2_kfold3',
-                    # 'random_kbest_sera1_rsq0_mse0_include2_kfold3',
-                    # 'random_full_stack_sera0_rsq1_mse0_include2_kfold3',
-                    # 'random_full_stack_sera0_rsq0_mse1_include2_kfold3_rand',
-                    'random_kbest_team_stats_sera0_rsq0_mse1_include2_kfold3',
-                    # 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
+                    'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_kbest_team_stats_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+
                 ]
 
 
@@ -375,14 +371,6 @@ std_dev_types = [
                  'spline_pred_class80_matt0_brier1_kfold3',
                  'spline_pred_q80_matt0_brier1_kfold3',
                  'spline_class80_q80_matt0_brier1_kfold3',
-                #  'spline_pred_class80_q80_matt1_brier1_kfold3',
-                #  'spline_pred_class80_matt1_brier1_kfold3',
-                #  'spline_pred_q80_matt1_brier1_kfold3',
-                #  'spline_class80_q80_matt1_brier1_kfold3',
-                # 'spline_pred_class80_q80_matt1_brier5_kfold3',
-                #  'spline_pred_class80_matt1_brier5_kfold3',
-                #  'spline_pred_q80_matt1_brier5_kfold3',
-                #  'spline_class80_q80_matt1_brier5_kfold3',
                  ]
 
 full_model_weights = [0.2, 5]
@@ -390,7 +378,7 @@ full_model_weights = [0.2, 5]
 iter_cats = list(set(itertools.product(pred_versions, reg_ens_versions, std_dev_types, full_model_weights)))
 iter_cats = pd.DataFrame(iter_cats).sort_values(by=[0, 1]).values
 
-i = 1
+i = 10
 for set_week, set_year in zip(set_weeks, set_years):
 
     print(set_week, set_year)

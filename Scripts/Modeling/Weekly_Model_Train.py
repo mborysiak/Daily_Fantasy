@@ -37,12 +37,12 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [2, 3]
+run_weeks = [3]
 verbosity = 50
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2022,
+    'set_year': 2023,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -778,9 +778,12 @@ with keep.running() as m:
 
 #%%
 
-# func_params_test = [func_params[11]]
+for i, f in enumerate(func_params):
+    print(i, f[0], f[1])
 
-for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _  in func_params:
+#%%
+
+for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _  in func_params[14:15]:
     results = get_model_output(set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter)
 
 # results = Parallel(n_jobs=-1, verbose=verbosity)(
@@ -794,10 +797,10 @@ for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter,
 from optuna.visualization import plot_parallel_coordinate
 
 study = optuna.create_study(
-            study_name='lgbm_reg_sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb_RB_full_model_2022_1',
+            study_name='bridge_reg_sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb_QB_full_model_2023_2',
             storage=run_params['study_db'],
             load_if_exists=True
         )
 
-plot_parallel_coordinate(study, )
+plot_parallel_coordinate(study)
 # %%

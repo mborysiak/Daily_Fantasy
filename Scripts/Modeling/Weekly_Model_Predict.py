@@ -1209,7 +1209,7 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
         best_models, scores, stack_val_pred = load_stack_runs(path, fname)
     
     else:
-        results = Parallel(n_jobs=-1, verbose=50)(
+        results = Parallel(n_jobs=8, verbose=50)(
                         delayed(run_stack_models)
                         (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million) 
                         for final_m, i, model_obj, alpha in func_params
@@ -1389,7 +1389,7 @@ run_params = {
     'hp_algo': 'tpe',
     'study_db': "sqlite:///optuna/weekly_predict.sqlite3",
     'num_recent_trials': 100,
-    'optuna_timeout': 60*3
+    'optuna_timeout': 60*2
 }
 
 s_mod = run_params['stack_model']
@@ -1407,8 +1407,8 @@ log_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [1]
-pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100'
+set_weeks = [3,9]
+pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
 class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
@@ -1616,3 +1616,22 @@ with keep.running() as m:
         print('All Runs Finished')
 
 #%%
+
+# import os
+# import shutil
+
+# def copy_and_rename_files(year, keyword):
+#     base_dir = r"C:\Users\borys\OneDrive\Documents\GitHub\Daily_Fantasy\Model_Outputs"
+#     year_dir = os.path.join(base_dir, str(year))
+
+#     for root, dirs, files in os.walk(year_dir):
+#         if keyword in root:  # Only process folders containing the keyword
+#             for file in files:
+#                 if "all_" not in file and "include2" in file:
+#                     old_file_path = os.path.join(root, file)
+#                     new_file_name = file.replace("include2", "include3")
+#                     new_file_path = os.path.join(root, new_file_name)
+#                     shutil.copy(old_file_path, new_file_path)
+
+# # Call the function with the year and keyword you want
+# copy_and_rename_files(2022, "higherkb")

@@ -768,13 +768,22 @@ class FootballSimulation:
         to_drop.extend(self.player_data.loc[self.player_data.team.isin(matchup_to_drop), 'player'].values)
 
         return to_drop, matchup_to_drop
+    
+    @staticmethod
+    def remove_max_pick(results, to_add, rb_max_pick, wr_max_pick, te_max_pick, def_max_pick):
+        for pos, max_pick in zip(['RB', 'WR', 'TE', 'DEF'], 
+                                    [rb_max_pick, wr_max_pick, te_max_pick, def_max_pick]):
+            if len(to_add) < max_pick:
+                results = results[results.pos!=pos].reset_index(drop=True)
+        
+        return results
 
 
     def run_sim(self, conn, to_add, to_drop, min_players_same_team_input, set_max_team, 
                 min_players_opp_team_input=0, adjust_select=False, max_team_type='player_points',
                 num_matchup_drop=0, own_neg_frac=1, n_top_players=5, ownership_vers='standard_ln',
                 static_top_players=True, qb_min_iter=9, qb_set_max_team=False, qb_solo_start=True,
-                num_avg_pts=1, qb_stack_wt=2):
+                num_avg_pts=1, qb_stack_wt=2, rb_max_pick=0, wr_max_pick=0, te_max_pick=0, def_max_pick=0):
         
         # can set as argument, but static set for now
         self.conn = conn
@@ -923,12 +932,13 @@ class FootballSimulation:
             results = self.adjust_select_perc(results, open_pos_require)
 
         team_cnts = self.final_team_cnts(max_team_cnt)
+        results = pd.merge(results, self.player_data[['player', 'pos']], on='player')
 
         if len(to_add) == qb_min_iter and open_pos_require['QB'] == 1:
-            results = pd.merge(results, self.player_data[['player', 'pos']], on='player')
-            results = results[results.pos=='QB'].reset_index(drop=True).drop('pos', axis=1)
+            results = results[results.pos=='QB'].reset_index(drop=True)
 
-        results = results.iloc[:30]
+        results = self.remove_max_pick(results, to_add, rb_max_pick, wr_max_pick, te_max_pick, def_max_pick)
+        results = results.drop('pos', axis=1).iloc[:30]
 
         return results, team_cnts
 
@@ -957,7 +967,8 @@ class RunSim:
                              'min_player_same_team', 'min_players_opp_team', 'num_top_players', 
                              'ownership_vers', 'qb_min_iter', 'qb_set_max_team', 'qb_solo_start', 'qb_stack_wt',
                              'static_top_players', 'use_ownership', 'own_neg_frac', 'max_salary_remain', 
-                             'num_iters', 'num_avg_pts', 'use_unique_players']
+                             'num_iters', 'num_avg_pts', 'use_unique_players',
+                             'rb_max_pick', 'wr_max_pick', 'te_max_pick', 'def_max_pick']
         
         self.player_stats = self.pull_past_points(week, year)
         self.prizes = self.get_past_prizes(week, year)
@@ -1074,7 +1085,8 @@ class RunSim:
                                      p['min_players_opp_team'], p['adjust_pos_counts'], p['max_team_type'],
                                      p['matchup_drop'], p['own_neg_frac'], p['num_top_players'], p['ownership_vers'],
                                      p['static_top_players'], p['qb_min_iter'], p['qb_set_max_team'], p['qb_solo_start'],
-                                     p['num_avg_pts'], p['qb_stack_wt'],)
+                                     p['num_avg_pts'], p['qb_stack_wt'], p['rb_max_pick'], p['wr_max_pick'],
+                                     p['te_max_pick'], p['def_max_pick'])
             
             results = results[~results.player.isin(to_add)].reset_index(drop=True)
             prob = results.loc[:p['top_n_choices'], 'SelectionCounts'] / results.loc[:p['top_n_choices'], 'SelectionCounts'].sum()
@@ -1128,64 +1140,68 @@ class RunSim:
 
 #%%
     
-# week = 8
-# year = 2022
+# for week in range(3,13):
+#     year = 2022
+#     print(f'Running week {week} for year {year}')
+#     total_lineups = 2
+#     salary_cap = 50000
+#     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 
-# salary_cap = 50000
-# pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
+#     model_vers = {
+#                 'million_ens_vers': 'random_full_stack_team_stats_matt0_brier1_include2_kfold3',
+#                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
+#                 'reg_ens_vers': 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
+#                 'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3'
+#                 }
+#     d = {
+#         'adjust_pos_counts': {False: 0.6, True: 0.4},
+#         'covar_type': {'kmeans_pred_trunc': 0.0,
+#                         'kmeans_pred_trunc_new': 0.0,
+#                         'no_covar': 0,
+#                         'team_points_trunc': 1},
+#         'def_max_pick': {0: 1},
+#         'full_model_weight': {0.2: 0.4, 5: 0.6},
+#         'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
+#         'matchup_seed': {0: 0.8, 1: 0.2},
+#         'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
+#         'max_team_type': {'player_points': 0.3, 'vegas_points': 0.7},
+#         'min_player_same_team': {2: 0.2, 3: 0.2, 'Auto': 0.6},
+#         'min_players_opp_team': {1: 0.1, 2: 0.2, 'Auto': 0.7},
+#         'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
+#         'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
+#         'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
+#         'own_neg_frac': {0.8: 0.0, 0.9: 0.0, 1: 1.0},
+#         'ownership_vers': {'mil_div_standard_ln': 0.0,
+#                             'mil_only': 0.3,
+#                             'mil_times_standard_ln': 0,
+#                             'standard_ln': 0.7},
+#         'player_drop_multiple': {0: 1.0, 2: 0.0, 4: 0.0, 10: 0.0, 20: 0.0, 30: 0.0},
+#         'qb_min_iter': {0: 0.5, 2: 0.5, 4: 0.0, 9: 0},
+#         'qb_set_max_team': {0: 0.2, 1: 0.8},
+#         'qb_solo_start': {False: 1.0, True: 0.0},
+#         'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
+#         'rb_max_pick': {0: 1},
+#         'static_top_players': {False: 0.3, True: 0.7},
+#         'te_max_pick': {0: 1},
+#         'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
+#         'use_ownership': {0.7: 0.0, 0.8: 0.4, 0.9: 0.0, 1: 0.6},
+#         'use_unique_players': {False: 1.0, True: 0.0},
+#         'wr_max_pick': {0: 1}
+#     }
 
-# pred_vers = 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100'
-# reg_ens_vers ='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
-# million_ens_vers = 'random_full_stack_team_stats_matt0_brier1_include2_kfold3'
-# std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
-# total_lineups = 2
-
-# d = {'adjust_pos_counts': {False: 0.7, True: 0.3},
-#  'covar_type': {'kmeans_pred_trunc': 0.0,
-#                 'no_covar': 1.0,
-#                 'team_points_trunc': 0},
-#  'full_model_weight': {0.2: 0.3, 5: 0.7},
-#  'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
-#  'matchup_seed': {0: 0.3, 1: 0.7},
-#  'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
-#  'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
-#  'min_player_same_team': {2: 0.2, 3: 0.2, 'Auto': 0.6},
-#  'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8},
-#  'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
-#  'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
-#  'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
-#  'own_neg_frac': {0.8: 0.0, 1: 1.0},
-#  'ownership_vers': {'mil_div_standard_ln': 0.0,
-#                     'mil_only': 0.0,
-#                     'mil_times_standard_ln': 0.3,
-#                     'standard_ln': 0.7},
-#  'player_drop_multiple': {0: 0.5, 10: 0.5, 20:0},
-#  'qb_min_iter': {0: 0.6, 2: 0.4, 4: 0.0, 9: 0.0},
-#  'qb_set_max_team': {0: 0.7, 1: 0.3},
-#  'qb_solo_start': {False: 1.0, True: 0.0},
-#  'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
-#  'static_top_players': {False: 0.3, True: 0.7},
-#  'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
-#  'use_ownership': {0.7: 0.0, 0.8: 0.2, 0.9: 0.0, 1: 0.8},
-#  'use_unique_players': {True: 0.5, False: 0.5}
-#  }
-
-# rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
-# params = rs.generate_param_list(d)
-# rs.run_full_lineup(params[0], existing_players=[], set_max_team=None)
+#     pred_vers = model_vers['pred_vers']
+#     reg_ens_vers = model_vers['reg_ens_vers']
+#     million_ens_vers = model_vers['million_ens_vers']
+#     std_dev_type = model_vers['std_dev_type']
 
 
-#%%
+#     rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
+#     params = rs.generate_param_list(d)
+#     # rs.run_full_lineup(params[0], existing_players=[], set_max_team=None)
 
-# winnings, player_results = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=True, n_jobs=-1, verbose=0)
-# print(winnings)
-# player_results.groupby('player').size().sort_values(ascending=False)
-
-# #%%
-
-# winnings, player_results = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=False, n_jobs=-1, verbose=0)
-# print(winnings)
-# player_results.groupby('player').size().sort_values(ascending=False)
+#     total_winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=False, n_jobs=1, verbose=0)
+#     print(total_winnings)
+#     player_results.groupby('player').size().sort_values(ascending=False)
 
 #%%
 
