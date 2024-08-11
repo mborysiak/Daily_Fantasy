@@ -787,7 +787,7 @@ class FootballSimulation:
         
         # can set as argument, but static set for now
         self.conn = conn
-        num_options=250
+        num_options=3000
         player_selections = self.init_select_cnts()
         max_team_cnt = []
         success_trials = 0
@@ -828,12 +828,6 @@ class FootballSimulation:
                 remaining_pos_cnt = np.sum(list(open_pos_require.values()))
                 added_teams, max_added_team_cnt = self.get_current_team_cnts(to_add)
 
-            # append the flex position to position requirements
-            cur_pos_require = self.add_flex(open_pos_require)
-            b_position = self.create_b_matrix(cur_pos_require)
-
-            if i % 25 == 0:
-
                 # remove QB defense opponent from dataset
                 if open_pos_require['QB'] == 0:
                     qb_team = self.player_data.loc[(self.player_data.player.isin(to_add)) & \
@@ -841,6 +835,12 @@ class FootballSimulation:
                     qb_def_team = self.matchups[qb_team]
                     if qb_def_team not in to_add: 
                         to_drop.append(qb_def_team)
+
+            # append the flex position to position requirements
+            cur_pos_require = self.add_flex(open_pos_require)
+            b_position = self.create_b_matrix(cur_pos_require)
+
+            if i % 150 == 0:
                 
                 # get predictions and remove to drop players
                 predictions = self.get_predictions(col='pred_fp_per_game', num_options=num_options)
@@ -965,9 +965,9 @@ class RunSim:
         self.col_ordering = ['adjust_pos_counts', 'player_drop_multiple', 'matchup_seed', 'matchup_drop', 
                              'top_n_choices', 'full_model_weight', 'covar_type', 'max_team_type',
                              'min_player_same_team', 'min_players_opp_team', 'num_top_players', 
-                             'ownership_vers', 'qb_min_iter', 'qb_set_max_team', 'qb_solo_start', 'qb_stack_wt',
-                             'static_top_players', 'use_ownership', 'own_neg_frac', 'max_salary_remain', 
-                             'num_iters', 'num_avg_pts', 'use_unique_players',
+                             'ownership_vers_variable', 'ownership_vers', 'qb_min_iter', 'qb_set_max_team', 
+                             'qb_solo_start', 'qb_stack_wt','static_top_players', 'use_ownership', 'own_neg_frac',
+                             'max_salary_remain', 'num_iters', 'num_avg_pts', 'use_unique_players',
                              'rb_max_pick', 'wr_max_pick', 'te_max_pick', 'def_max_pick']
         
         self.player_stats = self.pull_past_points(week, year)
@@ -1040,17 +1040,23 @@ class RunSim:
         params = []
         for i in range(self.total_lineups_to_run):
             cur_params = []
-            for _, param_options in d.items():
-                param_vars = list(param_options.keys())
-                param_prob = list(param_options.values())
-                cur_params.append(np.random.choice(param_vars, p=param_prob))
+            for k, param_options in d.items():
+                if k == 'ownership_vers' and ownership_var==1:
+                    cur_params.append(param_options)
+                else:
+                    param_vars = list(param_options.keys())
+                    param_prob = list(param_options.values())
+                    cur_choice = np.random.choice(param_vars, p=param_prob)
+                    cur_params.append(cur_choice)
+                    if k=='ownership_vers_variable':
+                        ownership_var = cur_choice
 
             cur_params.append(i)
             params.append(cur_params)
 
         return params
-                    
-    def run_full_lineup(self, params, existing_players=[], set_max_team=None):
+    
+    def setup_sim(self, params, existing_players):
 
         p = {k: v for k,v in zip(self.col_ordering, params)}
         conn = self.dm.db_connect('Simulation')
@@ -1074,29 +1080,47 @@ class RunSim:
                                  self.pred_vers, self.reg_ens_vers, self.million_ens_vers, self.std_dev_type, 
                                  p['covar_type'], p['full_model_weight'], p['matchup_seed'], p['use_covar'], p['use_ownership'], 
                                  p['max_salary_remain'])
+        
+        return sim, conn, p, to_add, to_drop_selected
+    
+    
+    def run_single_iter(self, sim, conn, p, to_add, to_drop_selected, set_max_team=None):
+        if p['ownership_vers_variable']==1:
+            own_opt, own_prob = list(p['ownership_vers'].keys()), list(p['ownership_vers'].values())
+            own_vers = np.random.choice(own_opt, p=own_prob)
+        else:
+            own_vers = p['ownership_vers']
+
+        print('Ownership Vers:', own_vers)
+
+        to_drop = []
+        to_drop.extend(to_drop_selected)
+
+        results, _ = sim.run_sim(conn, to_add, to_drop, p['min_player_same_team'], set_max_team, 
+                                    p['min_players_opp_team'], p['adjust_pos_counts'], p['max_team_type'],
+                                    p['matchup_drop'], p['own_neg_frac'], p['num_top_players'], own_vers,
+                                    p['static_top_players'], p['qb_min_iter'], p['qb_set_max_team'], p['qb_solo_start'],
+                                    p['num_avg_pts'], p['qb_stack_wt'], p['rb_max_pick'], p['wr_max_pick'],
+                                    p['te_max_pick'], p['def_max_pick'])
+        
+        results = results[~results.player.isin(to_add)].reset_index(drop=True)
+        
+        return results
+                    
+    def run_full_lineup(self, params, existing_players=[], set_max_team=None):
+
+        sim, conn, p, to_add, to_drop_selected = self.setup_sim(params, existing_players)
 
         i = 0  # Initialize the iteration counter
         while len(to_add) < 9 and i < 18:  # Use a while loop to control iterations and break if necessary
-
-            to_drop = []
-            to_drop.extend(to_drop_selected)
-
-            results, _ = sim.run_sim(conn, to_add, to_drop, p['min_player_same_team'], set_max_team, 
-                                     p['min_players_opp_team'], p['adjust_pos_counts'], p['max_team_type'],
-                                     p['matchup_drop'], p['own_neg_frac'], p['num_top_players'], p['ownership_vers'],
-                                     p['static_top_players'], p['qb_min_iter'], p['qb_set_max_team'], p['qb_solo_start'],
-                                     p['num_avg_pts'], p['qb_stack_wt'], p['rb_max_pick'], p['wr_max_pick'],
-                                     p['te_max_pick'], p['def_max_pick'])
-            
-            results = results[~results.player.isin(to_add)].reset_index(drop=True)
+            results = self.run_single_iter(sim, conn, p, to_add, to_drop_selected, set_max_team)
             prob = results.loc[:p['top_n_choices'], 'SelectionCounts'] / results.loc[:p['top_n_choices'], 'SelectionCounts'].sum()
-            
+        
             try: 
                 selected_player = np.random.choice(results.loc[:p['top_n_choices'], 'player'], p=prob)
                 to_add.append(selected_player)
             except: 
                 pass
-
             i += 1  # Increment the iteration counter    
 
         return to_add
@@ -1140,25 +1164,25 @@ class RunSim:
 
 #%%
     
-# for week in range(3,13):
+# for week in range(1,2):
 #     year = 2022
 #     print(f'Running week {week} for year {year}')
-#     total_lineups = 2
+#     total_lineups = 15
 #     salary_cap = 50000
 #     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 
 #     model_vers = {
-#                 'million_ens_vers': 'random_full_stack_team_stats_matt0_brier1_include2_kfold3',
+#                 'million_ens_vers': 'random_full_stack_matt0_brier1_include2_kfold3',
 #                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
-#                 'reg_ens_vers': 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
-#                 'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3'
+#                 'reg_ens_vers': 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
+#                 'std_dev_type': 'spline_pred_class80_q80_matt0_brier1_kfold3'
 #                 }
 #     d = {
-#         'adjust_pos_counts': {False: 0.6, True: 0.4},
+#         'adjust_pos_counts': {False: 0.5, True: 0.5},
 #         'covar_type': {'kmeans_pred_trunc': 0.0,
 #                         'kmeans_pred_trunc_new': 0.0,
-#                         'no_covar': 0,
-#                         'team_points_trunc': 1},
+#                         'no_covar': 0.5,
+#                         'team_points_trunc': 0.5},
 #         'def_max_pick': {0: 1},
 #         'full_model_weight': {0.2: 0.4, 5: 0.6},
 #         'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
@@ -1171,9 +1195,10 @@ class RunSim:
 #         'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
 #         'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
 #         'own_neg_frac': {0.8: 0.0, 0.9: 0.0, 1: 1.0},
+#         'ownership_vers_variable': {0: 0, 1: 1},
 #         'ownership_vers': {'mil_div_standard_ln': 0.0,
-#                             'mil_only': 0.3,
-#                             'mil_times_standard_ln': 0,
+#                             'mil_only': 0,
+#                             'mil_times_standard_ln': 0.3,
 #                             'standard_ln': 0.7},
 #         'player_drop_multiple': {0: 1.0, 2: 0.0, 4: 0.0, 10: 0.0, 20: 0.0, 30: 0.0},
 #         'qb_min_iter': {0: 0.5, 2: 0.5, 4: 0.0, 9: 0},
@@ -1197,60 +1222,26 @@ class RunSim:
 
 #     rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
 #     params = rs.generate_param_list(d)
-#     # rs.run_full_lineup(params[0], existing_players=[], set_max_team=None)
 
-#     total_winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=False, n_jobs=1, verbose=0)
-#     print(total_winnings)
-#     player_results.groupby('player').size().sort_values(ascending=False)
-
-#%%
-
-# # set the model version
-# set_weeks = [
-#    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-#    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
-
-# ]
-
-# set_years = [
-#       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-#       2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
-# ]
-
-# def objective(d, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups):
-
-#     rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
-#     params = rs.generate_param_list(d)
-#     winnings, player_results = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=False)
-
-#     return winnings, player_results, params
-
-
-# output = Parallel(n_jobs=-1, verbose=1)(
-#                                 delayed(objective)(d, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, 
-#                                                    million_ens_vers, std_dev_type, total_lineups) for
-#                                 week, year in zip(set_weeks, set_years)
-#                                 )
-
-# total_winnings = []
-# player_results = pd.DataFrame()
-# ran_params = []
-# for w, l, p in output:
-#     total_winnings.append(w)
-#     player_results = pd.concat([player_results, l])
-#     ran_params.append(p)
-    
-# print('Unadjusted Winnings:', {i+1: t for i,t in zip(range(len(total_winnings)), total_winnings)})
-# total_winnings = rs.adjust_high_winnings(total_winnings, max_adjust=15000)
-# print(np.sum(total_winnings))
 
 # #%%
 
-# mean_loss = -np.mean(total_winnings)
-# median_loss = -np.percentile(total_winnings, 80)
-# var_loss = np.var(total_winnings)
-# loss = mean_loss + median_loss
+# sim, conn, p, to_add, to_drop_selected = rs.setup_sim(params[0], existing_players=[])
 
-# print('Total Winnings:', np.sum(total_winnings), 'Mean Loss:', np.round(mean_loss,1), 
-#           'Median Loss (80th perc):', np.round(median_loss,1), ' Current Loss:', np.round(loss,1), 'Variance Loss:', np.round(np.sqrt(var_loss),1))
-# %%
+# #%%
+# import time
+# to_add = ['Patrick Mahomes', 'Travis Kelce']
+# start = time.time()
+# results = rs.run_single_iter(sim, conn, p, to_add, to_drop_selected, set_max_team=None)
+# print(time.time()-start)
+# results
+
+# #%%
+
+# rs.run_full_lineup(params[0], existing_players=[], set_max_team=None)
+
+# #%%
+
+# total_winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=True, n_jobs=15, verbose=0)
+# print(total_winnings)
+# display(player_results.groupby('player').size().sort_values(ascending=False))

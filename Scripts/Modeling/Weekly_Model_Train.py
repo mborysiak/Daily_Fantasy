@@ -37,7 +37,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [3]
+run_weeks = [11]
 verbosity = 50
 run_params = {
     
@@ -797,7 +797,7 @@ for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter,
 from optuna.visualization import plot_parallel_coordinate
 
 study = optuna.create_study(
-            study_name='bridge_reg_sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb_QB_full_model_2023_2',
+            study_name='lr_c_million_sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb_WR_full_model_2023_2',
             storage=run_params['study_db'],
             load_if_exists=True
         )

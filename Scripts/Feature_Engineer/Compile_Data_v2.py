@@ -334,6 +334,13 @@ def consensus_fill(df, is_dst=False):
             df['min' + k] = df[tf].min(axis=1)
         else:
             df['max_' + k] = df[tf].max(axis=1)
+
+    df['avg_proj_rush_points'] = df.avg_proj_rush_yds * 0.1 + df.avg_proj_rush_td * 6
+    df['avg_proj_rec_points'] = df.avg_proj_rec_yds * 0.1 + df.avg_proj_rec_td * 6 + df.avg_proj_rec
+    df['avg_proj_pass_points'] = df.avg_proj_pass_yds * 0.04 + df.avg_proj_pass_td * 4 - df.avg_proj_pass_int * 1
+
+    df['avg_proj_pass_ratio'] = df.avg_proj_pass_points / (df.avg_proj_pass_points + df.avg_proj_rush_points + 1)
+    df['avg_proj_rush_ratio'] = df.avg_proj_rush_points / (df.avg_proj_rec_points + df.avg_proj_rush_points + 1)
     
     return df
 
@@ -1717,7 +1724,8 @@ def get_max_qb():
                'avg_proj_rush_yds',  'avg_proj_rush_att', 'avg_proj_rush_td', 
                'ffa_points', 'projected_points', 'avg_proj_points', 'ProjPts', 
                'log_avg_proj_rank', 'log_playeradj_fp_rank', 'log_expertConsensus', 'avg_proj_rank',
-               'fp_rank', 'log_ffa_position_rank', 'log_rankadj_fp_rank', 'dk_salary'
+               'fp_rank', 'log_ffa_position_rank', 'log_rankadj_fp_rank', 'dk_salary',
+               'avg_proj_pass_points', 'avg_proj_rush_points', 'avg_proj_pass_ratio'
                ]
     df = df.sort_values(by=['team', 'year', 'week', 'projected_points', 'ffa_points'],
                         ascending=[True, True, True, False, False])

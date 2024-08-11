@@ -1360,7 +1360,7 @@ globals().update(config)
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2022,
+    'set_year': 2023,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -1368,8 +1368,8 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_full_stack_team_stats',
-    'stack_model_million': 'random_full_stack_team_stats',
+    'stack_model': 'random_full_stack',
+    'stack_model_million': 'random_full_stack',
 
     # opt params
     'n_iters': 50,
@@ -1407,7 +1407,7 @@ log_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [3,9]
+set_weeks = [9,10]
 pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"

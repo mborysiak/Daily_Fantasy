@@ -1,3 +1,4 @@
+#%%
 from skmodel import SciKitModel
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -195,8 +196,8 @@ df = dm.read('''SELECT *
                      SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, entry_type, trial_num, repeat_num
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
-                WHERE trial_num >= 460
-                      AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+                WHERE trial_num >= 655
+                     -- AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
                     --  AND NOT (week=8 AND year=2022)
                     --  AND (reg_ens_vers LIKE '%team_stats%' OR million_ens_vers LIKE '%team_stats%')
@@ -226,8 +227,9 @@ show_coef(coef_vals, X)
 weeks = [
          1, 2, 3, 4, 5, 6, 7, 8, 
          9, 10, 11, 12, 13, 14, 15, 16,
-         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
-         11, 12, 13, 14, 15, 16]
+         1, 2, 3, 4, 5, 6,
+          # 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+           ]
 years = [
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
@@ -243,8 +245,8 @@ for w, yr in zip(weeks, years):
                             SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, entry_type, trial_num, repeat_num
                             FROM Entry_Optimize_Results          
                           ) USING (week, year, trial_num, repeat_num)
-                     WHERE trial_num >= 460
-                           AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+                     WHERE trial_num >= 655
+                         --  AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                         --   AND (reg_ens_vers LIKE '%team_stats%' OR million_ens_vers LIKE '%team_stats%')
                            AND week = {w}
                            AND year = {yr}

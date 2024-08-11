@@ -66,9 +66,9 @@ def get_top_hyperparams(num_rank, model_notes):
     return pred_params, other_params
 
 
-num_rank = 0
+num_rank =591
 model_notes = 'only_reg_full_stack_non8_times_5_more_options'
-model_vers, d = get_top_hyperparams(num_rank, model_notes)
+# model_vers, d = get_top_hyperparams(num_rank, model_notes)
 manual_adjust = True
 
 if manual_adjust:
@@ -82,43 +82,43 @@ if manual_adjust:
                 'reg_ens_vers': 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
                 # 'reg_ens_vers': 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
                 
-                'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3'
+                'std_dev_type': 'spline_pred_class80_q80_matt0_brier1_kfold3'
                 }
     
-    d ={'adjust_pos_counts': {False: 0.6, True: 0.4},
+    d ={'adjust_pos_counts': {False: 0.3, True: 0.7},
         'covar_type': {'kmeans_pred_trunc': 0.0,
                         'kmeans_pred_trunc_new': 0.0,
-                        'no_covar': 0.0,
-                        'team_points_trunc': 1.0},
-        'def_max_pick': {0: 1.0},
-        'full_model_weight': {0.2: 0.2, 5: 0.8},
-        'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
+                        'no_covar': 0.7,
+                        'team_points_trunc': 0.3},
+        'full_model_weight': {0.2: 0.7, 5: 0.3},
+        'matchup_drop': {0: 1, 1: 0, 2: 0.0, 3: 0.0},
         'matchup_seed': {0: 0.3, 1: 0.7},
-        'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
+        'max_salary_remain': {200: 0.0, 500: 0.7, 1000: 0.3, 1500: 0.0},
         'max_team_type': {'player_points': 0.3, 'vegas_points': 0.7},
-        'min_player_same_team': {2: 0.2, 3: 0.2, 'Auto': 0.6},
-        'min_players_opp_team': {1: 0.1, 2: 0.2, 'Auto': 0.7},
+        'min_player_same_team': {2: 0.2, 3: 0.5, 'Auto': 0.3},
+        'min_players_opp_team': {1: 0.1, 2: 0.4, 'Auto': 0.5},
         'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
         'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
-        'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
+        'num_top_players': {2: 0, 3: 0.8, 5: 0.2},
         'own_neg_frac': {0.8: 0.0, 0.9: 0.0, 1: 1.0},
+        'ownership_vers_variable': {0: 1, 1: 0},
         'ownership_vers': {'mil_div_standard_ln': 0.0,
-                            'mil_only': 0.2,
-                            'mil_times_standard_ln': 0.2,
-                            'standard_ln': 0.6},
+                            'mil_only': 0,
+                            'mil_times_standard_ln': 0.5,
+                            'standard_ln': 0.5},
         'player_drop_multiple': {0: 1.0, 2: 0.0, 4: 0.0, 10: 0.0, 20: 0.0, 30: 0.0},
-        'qb_min_iter': {0: 0.5, 2: 0.5, 4: 0.0, 9: 0.0},
+        'qb_min_iter': {0: 0.3, 2: 0.7, 4: 0, 9: 0.0},
         'qb_set_max_team': {0: 0.2, 1: 0.8},
         'qb_solo_start': {False: 1.0, True: 0.0},
-        'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
-        'static_top_players': {False: 0.3, True: 0.7},
+        'qb_stack_wt': {1: 0.0, 2: 0, 3: 0.5, 4: 0.5},
+        'static_top_players': {False: 0.7, True: 0.3},
         'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
-        'use_ownership': {0.7: 0.0, 0.8: 0.2, 0.9: 0.0, 1: 0.8},
+        'use_ownership': {0.7: 0.0, 0.8: 1, 0.9: 0.0, 1: 0},
         'use_unique_players': {0: 1.0, 1: 0.0},
-        'rb_max_pick': {0: 0, 3: 0.5, 4: 0.5},
+        'rb_max_pick': {0: 1, 3: 0, 4: 0},
         'wr_max_pick': {0:1},
         'te_max_pick': {0:1},
-        'def_max_pick': {8: 1}
+        'def_max_pick': {0: 0, 5: 0.5, 8: 0.5}
  }    
     
 
@@ -140,13 +140,13 @@ pprint.pprint(d)
 
 # set the model version
 set_weeks = [
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,# 13, 14, 15, 16,
- #  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10,# 11, 12, 13, 14, 15, 16
 ]
 
 set_years = [
-      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,# 2022, 2022, 2022, 2022,
-      #2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
+      2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
 ]
 
 # set_weeks=[14]
@@ -282,6 +282,7 @@ with keep.running() as m:
         dm.write_to_db(player_results_out, 'Results', 'Entry_Optimize_Lineups', 'append')
 
         param_output_df = detailed_param_output(rs, param_output, winning_list, set_weeks, set_years, trial_num, repeat_num)
+        param_output_df.ownership_vers = param_output_df.ownership_vers.astype('str')
         dm.write_to_db(param_output_df, 'Results', 'Entry_Optimize_Params_Detail', 'append')
 
     # save out the initial params that were set for randomization
@@ -296,7 +297,7 @@ with keep.running() as m:
 
 #%%
 
-to_delete_num=652
+to_delete_num=670
 df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
 dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
 
@@ -312,32 +313,27 @@ dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
 
 #%%
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
-# add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
-# add_on = add_on.assign(param='rb_max_pick', param_option=0, option_value=1)
-# add_on = add_on.assign(param='wr_max_pick', param_option=0, option_value=1)
-# add_on = add_on.assign(param='te_max_pick', param_option=0, option_value=1)
-# add_on = add_on.assign(param='def_max_pick', param_option=0, option_value=1)
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
+add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
+add_on = add_on.assign(param='ownership_vers_variable', param_option=0, option_value=1)
 
-# add_on = add_on[df.columns]
 
-# df = pd.concat([df, add_on], axis=0)
-# df = df.sort_values(by='trial_num')
+add_on = add_on[df.columns]
 
-# # # df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
+df = pd.concat([df, add_on], axis=0)
+df = df.sort_values(by='trial_num')
+
+# # df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
 
 #%%
 
 
-# df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'Results')
-# df['rb_max_pick'] = 0
-# df['wr_max_pick'] = 0
-# df['te_max_pick'] = 0
-# df['def_max_pick'] = 0
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'Results')
+df['ownership_vers_variable'] = 0
 
-# # df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
+# df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
+dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
 
 #%%
 

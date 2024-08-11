@@ -338,14 +338,13 @@ covar_type = 'team_points_trunc'
 
 # set the model version
 set_weeks = [
-    #1, 2, 3, 4, 5, 6,7, 8, 
-    9, 10, 11, 12,# 13, 14, 15, 16,
-     #1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+    #1, 2, 3, 4, 5, 6,7, 8, 9, 10, 11, 12, 
+     7,8,9,10,# 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 ]
 
 set_years = [
-     2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, #2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
-   # 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
+   #  2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
+     2023, 2023, 2023, 2023, #2023,2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
 ]
 
 # set_weeks = [17]
@@ -359,7 +358,7 @@ pred_versions = [
 
 reg_ens_versions = [
                     'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
-                    'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
+                   # 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
                     # 'random_kbest_team_stats_sera0_rsq0_mse1_include2_kfold3',
                     # 'random_kbest_sera0_rsq0_mse1_include2_kfold3',
 

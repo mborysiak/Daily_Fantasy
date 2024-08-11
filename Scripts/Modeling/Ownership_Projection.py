@@ -17,13 +17,13 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 pred_version = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
-million_ens_vers = 'random_full_stack_team_stats_matt0_brier1_include2_kfold3'
+million_ens_vers = 'random_full_stack_matt0_brier1_include2_kfold3'
 
 set_year = 2022
 set_week = 8
 contest = 'Million'
 include_dst = True
-run_owner_model = False
+run_owner_model = True
 
 #%%
 
@@ -730,12 +730,12 @@ def save_current_week_pred(ownership_vers, set_week, set_year, include_dst=True)
 # Predict Ownership Pct
 #================
 
-for set_week, set_year in zip([3, 9# 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 
-                              # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+for set_week, set_year in zip([ #1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 
+                              7,8,9,10 # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
                                ], 
                               [
-                               2022, 2022, 2022, 2022, 2022, 2022,2022, 2022, #2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-                              # 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
+                              # 2022, 2022, 2022, 2022, 2022, 2022,2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+                          2023,2023,2023,2023    # 2023, 2023, 2023, 2023, 2023, #2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
                                ]):
 
     print(f'Running week {set_week} year {set_year}')

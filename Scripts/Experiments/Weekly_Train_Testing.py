@@ -1,3 +1,5 @@
+#%%
+
 from skmodel import SciKitModel
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -368,7 +370,7 @@ print('Running Model for Year:', run_params['set_year'], 'Week:', run_params['se
 
 
 set_pos = 'QB'
-is_million = False
+is_million = True
 model_feature_db = 'Model_Features'
 # model_feature_db = 'Model_Features - Copy'
 
@@ -376,18 +378,9 @@ model_feature_db = 'Model_Features'
 #==========
 # Pull and clean compiled data
 #==========
-#%%
-if model_feature_db=='Model_Features':
-    
-    df2, _ = load_data(model_type, set_pos, {'rush_pass': ''}, "Model_Features - Copy")
-    
-    df, run_params = load_data(model_type, set_pos, run_params, "Model_Features")
-    df, run_params = create_game_date(df, run_params)
 
-    df = pd.merge(df, df2[['player', 'week', 'year']], on=['player', 'week', 'year'])
-else:
-    df, run_params = load_data(model_type, set_pos, run_params, model_feature_db)
-    df, run_params = create_game_date(df, run_params)
+df, run_params = load_data(model_type, set_pos, run_params, model_feature_db)
+df, run_params = create_game_date(df, run_params)
 
 for c in df.columns:
     if len(df[df[c]==np.inf]) >0:
@@ -538,36 +531,36 @@ else:
 #     }
 
 
-# param_scores_all = {}
-# for model_name in models_test:
-#     run_model(model_name, df_train, df_predict, run_params, model_obj, test_settings)
+param_scores_all = {}
+for model_name in models_test[:1]:
+    run_model(model_name, df_train, df_predict, run_params, model_obj, test_settings)
 
 
 
-results = []
-for trials_obj in [ 'Cumulative']:
-    for hp_algo in ['atpe', 'tpe']:
-        for learning_rate in ['loguniform(-3, -0.5)', 'loguniform(-5, -0.5)']:
-            if trials_obj == 'New': num_trials = 0
-            elif trials_obj == 'Cumulative': num_trials = 2500
-            else: num_trials = 100
+# results = []
+# for trials_obj in [ 'Cumulative']:
+#     for hp_algo in ['atpe', 'tpe']:
+#         for learning_rate in ['loguniform(-3, -0.5)', 'loguniform(-5, -0.5)']:
+#             if trials_obj == 'New': num_trials = 0
+#             elif trials_obj == 'Cumulative': num_trials = 2500
+#             else: num_trials = 100
 
-            test_settings = {
-                'Experiment': 'Reg, Week7 Create Trials',
-                'TrialsObj': trials_obj,
-                'HyperOptAlgo': hp_algo,
-                'NumTrials': num_trials,
-                'LearningRate': learning_rate
-            }
-            print(test_settings)
+#             test_settings = {
+#                 'Experiment': 'Reg, Week7 Create Trials',
+#                 'TrialsObj': trials_obj,
+#                 'HyperOptAlgo': hp_algo,
+#                 'NumTrials': num_trials,
+#                 'LearningRate': learning_rate
+#             }
+#             print(test_settings)
 
-            output_trials = Parallel(n_jobs=-1, verbose=1)(
-                delayed(run_model)
-                (model_name, df_train, df_predict, run_params, model_obj, test_settings) \
-                for model_name in models_test 
-                )
-            test_settings['TrialsOutput'] = output_trials
-            results.append(test_settings)
+#             output_trials = Parallel(n_jobs=-1, verbose=1)(
+#                 delayed(run_model)
+#                 (model_name, df_train, df_predict, run_params, model_obj, test_settings) \
+#                 for model_name in models_test 
+#                 )
+#             test_settings['TrialsOutput'] = output_trials
+#             results.append(test_settings)
 
 #%%
 
