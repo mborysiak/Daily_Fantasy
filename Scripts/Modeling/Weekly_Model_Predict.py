@@ -227,10 +227,15 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
     
     elif stack_model=='random_full_stack' and run_params['opt_type']=='rand':
         params['random_sample__frac'] = np.arange(0.5, 1, 0.05)
-        # params['select_perc__percentile'] = hp.uniform('percentile', 0.5, 1)
-        # params['feature_union__agglomeration__n_clusters'] = scope.int(hp.quniform('n_clusters', 2, 10, 1))
-        # params['feature_union__pca__n_components'] = scope.int(hp.quniform('n_components', 2, 10, 1))
 
+    elif stack_model=='random_full_stack' and run_params['opt_type']=='optuna':
+        params['random_sample__frac'] = ['real', 0.2, 1]
+        params[f'{sp}__percentile'] = ['real', 20, 100]
+        params['feature_union__agglomeration__n_clusters'] = ['int', 3, 15]
+        params['feature_union__pca__n_components'] = ['int', 3, 15]
+        params[f'feature_union__{kb}_fu__k'] = ['int', 10, 100]
+        params[f'{kb}__k'] = ['int', 10, 100]
+ 
     return pipe, params
 
 
@@ -1015,41 +1020,49 @@ def get_trials(fname, final_m, bayes_rand):
     return trials
 
 
-def rename_existing(study_db, study_name):
+def rename_existing(old_study_db, new_study_db, study_name):
+
     import datetime as dt
     new_study_name = study_name + '_' + dt.datetime.now().strftime('%Y%m%d%H%M%S')
-    optuna.copy_study(from_study_name=study_name, from_storage=study_db, to_storage=study_db, to_study_name=new_study_name)
-    optuna.delete_study(study_name=study_name, storage=study_db)
+    optuna.copy_study(from_study_name=study_name, from_storage=old_study_db, to_storage=new_study_db, to_study_name=new_study_name)
+    optuna.delete_study(study_name=study_name, storage=new_study_db)
 
 
-def get_new_study(db, old_name, new_name, num_trials):
+def get_new_study(old_db, new_db, old_name, new_name, num_trials):
 
-    storage = optuna.storages.RDBStorage(
-                                url=db,
-                                engine_kwargs={"pool_size": 64, 
-                                            "connect_args": {"timeout": 10},
+    old_storage = optuna.storages.RDBStorage(
+                                url=old_db,
+                                engine_kwargs={"pool_size": 32, 
+                                            "connect_args": {"timeout": 60},
+                                            },
+                                )
+    
+    new_storage = optuna.storages.RDBStorage(
+                                url=new_db,
+                                engine_kwargs={"pool_size": 32, 
+                                            "connect_args": {"timeout": 60},
                                             },
                                 )
     
     if old_name is not None:
         old_study = optuna.create_study(
             study_name=old_name,
-            storage=storage,
+            storage=old_storage,
             load_if_exists=True
         )
     
     try:
         next_study = optuna.create_study(
             study_name=new_name, 
-            storage=storage, 
+            storage=new_storage, 
             load_if_exists=False
         )
 
     except:
-        rename_existing(storage, new_name)
+        rename_existing(old_storage, new_storage, new_name)
         next_study = optuna.create_study(
             study_name=new_name, 
-            storage=storage, 
+            storage=new_storage, 
             load_if_exists=False
         )
     
@@ -1062,7 +1075,7 @@ def get_new_study(db, old_name, new_name, num_trials):
 def get_optuna_study(fname, final_m, run_params):
     old_name = f"{final_m}_{fname}_{run_params['set_pos']}_{run_params['model_type']}_{run_params['last_run_year']}_{run_params['last_run_week']}"
     new_name = f"{final_m}_{fname}_{run_params['set_pos']}_{run_params['model_type']}_{run_params['set_year']}_{run_params['set_week']}"
-    next_study = get_new_study(run_params['study_db'], old_name, new_name, run_params['num_recent_trials'])
+    next_study = get_new_study(run_params['last_study_db'], run_params['study_db'], old_name, new_name, run_params['num_recent_trials'])
     return next_study
 
     
@@ -1209,7 +1222,7 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
         best_models, scores, stack_val_pred = load_stack_runs(path, fname)
     
     else:
-        results = Parallel(n_jobs=8, verbose=50)(
+        results = Parallel(n_jobs=16, verbose=50)(
                         delayed(run_stack_models)
                         (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million) 
                         for final_m, i, model_obj, alpha in func_params
@@ -1387,7 +1400,6 @@ run_params = {
 
     'opt_type': 'optuna',
     'hp_algo': 'tpe',
-    'study_db': "sqlite:///optuna/weekly_predict.sqlite3",
     'num_recent_trials': 100,
     'optuna_timeout': 60*2
 }
@@ -1407,7 +1419,7 @@ log_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [9,10]
+set_weeks = [11]#,12]
 pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
@@ -1437,8 +1449,10 @@ with keep.running() as m:
     for w in set_weeks:
         run_params['set_week'] = w
         run_params = get_last_run_week(w, run_params)
-
-
+        run_params['last_study_db'] = f"sqlite:///optuna/weekly_predict_week{run_params['last_run_week']}_year{run_params['last_run_year']}.sqlite3"
+        run_params['study_db'] = f"sqlite:///optuna/weekly_predict_week{run_params['set_week']}_year{run_params['set_year']}.sqlite3"
+        optuna.create_study(study_name='setup', storage=run_params['study_db'], load_if_exists=True)
+        
         if 'team_stats' in run_params['stack_model']:
             vegas_scores = dm.read("SELECT * FROM Scores_Lines", 'Model_Features')
             vegas_scores = vegas_scores[['team', 'week', 'year', 'over_under', 'implied_points_for', 'implied_points_against', 'is_home']]
@@ -1493,12 +1507,12 @@ with keep.running() as m:
             ['QB', 'full_model', ''],
             ['RB', 'full_model', ''],
             ['WR', 'full_model', ''],
-            ['TE', 'full_model', ''],
-            ['Defense', 'full_model', ''],
-            ['QB', 'backfill', ''],
-            ['RB', 'backfill', ''],
-            ['WR', 'backfill', ''],
-            ['TE', 'backfill', '']
+            # ['TE', 'full_model', ''],
+            # ['Defense', 'full_model', ''],
+            # ['QB', 'backfill', ''],
+            # ['RB', 'backfill', ''],
+            # ['WR', 'backfill', ''],
+            # ['TE', 'backfill', '']
         ]
 
         for set_pos, model_type, rush_pass in runs:
@@ -1617,6 +1631,17 @@ with keep.running() as m:
 
 #%%
 
+from optuna.visualization import plot_parallel_coordinate
+
+study = optuna.create_study(
+            study_name='lgbm_reg_random_full_stack_sera0_rsq0_mse1_include2_kfold3_QB_full_model_2023_11',
+            storage=run_params['study_db'],
+            load_if_exists=True
+        )
+
+plot_parallel_coordinate(study)
+
+#%%
 # import os
 # import shutil
 

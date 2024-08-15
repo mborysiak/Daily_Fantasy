@@ -335,12 +335,22 @@ def consensus_fill(df, is_dst=False):
         else:
             df['max_' + k] = df[tf].max(axis=1)
 
-    df['avg_proj_rush_points'] = df.avg_proj_rush_yds * 0.1 + df.avg_proj_rush_td * 6
-    df['avg_proj_rec_points'] = df.avg_proj_rec_yds * 0.1 + df.avg_proj_rec_td * 6 + df.avg_proj_rec
-    df['avg_proj_pass_points'] = df.avg_proj_pass_yds * 0.04 + df.avg_proj_pass_td * 4 - df.avg_proj_pass_int * 1
+    if not is_dst:
+        df['avg_proj_rush_points'] = df.avg_proj_rush_yds * 0.1 + df.avg_proj_rush_td * 6
+        df['avg_proj_rec_points'] = df.avg_proj_rec_yds * 0.1 + df.avg_proj_rec_td * 6 + df.avg_proj_rec
+        df['avg_proj_pass_points'] = df.avg_proj_pass_yds * 0.04 + df.avg_proj_pass_td * 4 - df.avg_proj_pass_int * 1
 
-    df['avg_proj_pass_ratio'] = df.avg_proj_pass_points / (df.avg_proj_pass_points + df.avg_proj_rush_points + 1)
-    df['avg_proj_rush_ratio'] = df.avg_proj_rush_points / (df.avg_proj_rec_points + df.avg_proj_rush_points + 1)
+        df['avg_proj_pass_ratio'] = df.avg_proj_pass_points / (df.avg_proj_pass_points + df.avg_proj_rush_points + 1)
+        df['avg_proj_rush_ratio'] = df.avg_proj_rush_points / (df.avg_proj_rec_points + df.avg_proj_rush_points + 1)
+
+        df['avg_proj_rush_yds_per_att'] = df.avg_proj_rush_yds / (df.avg_proj_rush_att + 1)
+        df['avg_proj_rec_yds_per_tgt'] = df.avg_proj_rec_yds / (df.avg_proj_rec_tgts + 1)
+        df['avg_proj_rec_yds_per_rec'] = df.avg_proj_rec_yds / (df.avg_proj_rec + 1)
+        df['avg_proj_pass_yds_per_att'] = df.avg_proj_pass_yds / (df.avg_proj_pass_att + 1)
+
+        df['avg_proj_rush_td_per_att'] = df.avg_proj_rush_td / (df.avg_proj_rush_att + 1)
+        df['avg_proj_rec_td_per_tgt'] = df.avg_proj_rec_td / (df.avg_proj_rec_tgts + 1)
+        df['avg_proj_pass_td_per_att'] = df.avg_proj_pass_td / (df.avg_proj_pass_att + 1)
     
     return df
 

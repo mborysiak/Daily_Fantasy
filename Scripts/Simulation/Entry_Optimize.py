@@ -72,54 +72,47 @@ model_notes = 'only_reg_full_stack_non8_times_5_more_options'
 manual_adjust = True
 
 if manual_adjust:
-    model_vers = {
-                'million_ens_vers': 'random_full_stack_matt0_brier1_include2_kfold3',
-                # 'million_ens_vers': 'random_full_stack_team_stats_matt0_brier1_include2_kfold3',
-                
-                # 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100',
+    model_vers = {'million_ens_vers': 'random_full_stack_matt0_brier1_include2_kfold3',
                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
-                
                 'reg_ens_vers': 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
-                # 'reg_ens_vers': 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
-                
-                'std_dev_type': 'spline_pred_class80_q80_matt0_brier1_kfold3'
-                }
+                'std_dev_type': 'spline_pred_class80_matt0_brier1_kfold3',
+ }
     
     d ={'adjust_pos_counts': {False: 0.3, True: 0.7},
         'covar_type': {'kmeans_pred_trunc': 0.0,
-                        'kmeans_pred_trunc_new': 0.0,
-                        'no_covar': 0.7,
-                        'team_points_trunc': 0.3},
-        'full_model_weight': {0.2: 0.7, 5: 0.3},
+                        'kmeans_pred_trunc_new': 0,
+                        'no_covar': 0.5,
+                        'team_points_trunc': 0.5},
+        'def_max_pick': {0: 0, 5: 0, 8: 1},
+        'full_model_weight': {0.2: 0.5, 5: 0.5},
         'matchup_drop': {0: 1, 1: 0, 2: 0.0, 3: 0.0},
         'matchup_seed': {0: 0.3, 1: 0.7},
-        'max_salary_remain': {200: 0.0, 500: 0.7, 1000: 0.3, 1500: 0.0},
-        'max_team_type': {'player_points': 0.3, 'vegas_points': 0.7},
-        'min_player_same_team': {2: 0.2, 3: 0.5, 'Auto': 0.3},
-        'min_players_opp_team': {1: 0.1, 2: 0.4, 'Auto': 0.5},
-        'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
+        'max_salary_remain': {300: 0.5, 500: 0.5, 1000: 0, 1500: 0.0},
+        'max_team_type': {'player_points': 0.6, 'vegas_points': 0.4},
+        'min_player_same_team': {2: 0.2, 3: 0.6, 'Auto': 0.2},
+        'min_players_opp_team': {1: 0.5, 2: 0.1, 'Auto': 0.4},
+        'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.2, 7: 0.3, 10: 0.5},
         'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
-        'num_top_players': {2: 0, 3: 0.8, 5: 0.2},
+        'num_top_players': {2: 0, 3: 0.3, 5: 0.7},
         'own_neg_frac': {0.8: 0.0, 0.9: 0.0, 1: 1.0},
-        'ownership_vers_variable': {0: 1, 1: 0},
         'ownership_vers': {'mil_div_standard_ln': 0.0,
-                            'mil_only': 0,
-                            'mil_times_standard_ln': 0.5,
-                            'standard_ln': 0.5},
+                            'mil_only': 0.0,
+                            'mil_times_standard_ln': 0.6,
+                            'standard_ln': 0.4},
+        'ownership_vers_variable': {0: 0.4, 1: 0.6},
         'player_drop_multiple': {0: 1.0, 2: 0.0, 4: 0.0, 10: 0.0, 20: 0.0, 30: 0.0},
-        'qb_min_iter': {0: 0.3, 2: 0.7, 4: 0, 9: 0.0},
-        'qb_set_max_team': {0: 0.2, 1: 0.8},
+        'qb_min_iter': {0: 0.5, 2: 0.5, 4: 0, 9: 0.0},
+        'qb_set_max_team': {0: 0.4, 1: 0.6},
         'qb_solo_start': {False: 1.0, True: 0.0},
-        'qb_stack_wt': {1: 0.0, 2: 0, 3: 0.5, 4: 0.5},
-        'static_top_players': {False: 0.7, True: 0.3},
-        'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
-        'use_ownership': {0.7: 0.0, 0.8: 1, 0.9: 0.0, 1: 0},
-        'use_unique_players': {0: 1.0, 1: 0.0},
+        'qb_stack_wt': {1: 0.0, 2: 0.2, 3: 0.8, 4: 0},
         'rb_max_pick': {0: 1, 3: 0, 4: 0},
-        'wr_max_pick': {0:1},
-        'te_max_pick': {0:1},
-        'def_max_pick': {0: 0, 5: 0.5, 8: 0.5}
- }    
+        'static_top_players': {False: 0.7, True: 0.3},
+        'te_max_pick': {0: 1},
+        'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
+        'use_ownership': {0.7: 0.0, 0.8: 0, 0.9: 0.0, 1: 1},
+        'use_unique_players': {0: 1.0, 1: 0.0},
+        'wr_max_pick': {0: 1}
+ }
     
 
 print('Num Rank:', num_rank)

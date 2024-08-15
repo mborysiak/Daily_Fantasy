@@ -37,7 +37,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [11]
+run_weeks = [13]
 verbosity = 50
 run_params = {
     
@@ -70,7 +70,6 @@ run_params = {
 
     'opt_type': 'optuna',
     'hp_algo': 'tpe',
-    'study_db': "sqlite:///optuna/weekly_train.sqlite3",
     'num_past_trials': 100,
     'optuna_timeout': 60*8
 }
@@ -235,40 +234,49 @@ def get_last_run_week(w, run_params):
     return run_params
 
 
-def rename_existing(study_db, study_name):
+def rename_existing(old_study_db, new_study_db, study_name):
+
     import datetime as dt
     new_study_name = study_name + '_' + dt.datetime.now().strftime('%Y%m%d%H%M%S')
-    optuna.copy_study(from_study_name=study_name, from_storage=study_db, to_storage=study_db, to_study_name=new_study_name)
-    optuna.delete_study(study_name=study_name, storage=study_db)
+    optuna.copy_study(from_study_name=study_name, from_storage=old_study_db, to_storage=new_study_db, to_study_name=new_study_name)
+    optuna.delete_study(study_name=study_name, storage=new_study_db)
 
 
-def get_new_study(db, old_name, new_name, num_trials):
+def get_new_study(old_db, new_db, old_name, new_name, num_trials):
 
-    storage = optuna.storages.RDBStorage(
-                                url=db,
-                                engine_kwargs={"pool_size": 128, 
-                                               "connect_args": {"timeout": 60}},
+    old_storage = optuna.storages.RDBStorage(
+                                url=old_db,
+                                engine_kwargs={"pool_size": 64, 
+                                            "connect_args": {"timeout": 60},
+                                            },
+                                )
+    
+    new_storage = optuna.storages.RDBStorage(
+                                url=new_db,
+                                engine_kwargs={"pool_size": 64, 
+                                            "connect_args": {"timeout": 60},
+                                            },
                                 )
     
     if old_name is not None:
         old_study = optuna.create_study(
             study_name=old_name,
-            storage=storage,
+            storage=old_storage,
             load_if_exists=True
         )
     
     try:
         next_study = optuna.create_study(
             study_name=new_name, 
-            storage=storage, 
+            storage=new_storage, 
             load_if_exists=False
         )
 
     except:
-        rename_existing(storage, new_name)
+        rename_existing(old_storage, new_storage, new_name)
         next_study = optuna.create_study(
             study_name=new_name, 
-            storage=storage, 
+            storage=new_storage, 
             load_if_exists=False
         )
     
@@ -276,6 +284,14 @@ def get_new_study(db, old_name, new_name, num_trials):
         print(f"Loaded {new_name} study with {old_name} {len(old_study.trials)} trials")
         next_study.add_trials(old_study.trials[-num_trials:])
 
+    return next_study
+    
+
+def get_optuna_study(model_name, label, vers, run_params, set_pos, model_type):
+    time.sleep(5*np.random.random())
+    old_name = f"{label}_{model_name}_{vers}_{set_pos}_{run_params['model_type']}_{run_params['last_run_year']}_{run_params['last_run_week']}"
+    new_name = f"{label}_{model_name}_{vers}_{set_pos}_{run_params['model_type']}_{run_params['set_year']}_{run_params['set_week']}"
+    next_study = get_new_study(run_params['last_study_db'], run_params['study_db'], old_name, new_name, run_params['num_past_trials'])
     return next_study
     
 
@@ -522,14 +538,6 @@ def get_trials(label, m, bayes_rand, run_params, set_pos):
         trials = None
 
     return trials
-
-def get_optuna_study(model_name, label, vers, run_params, set_pos, model_type):
-    time.sleep(5*np.random.random())
-    old_name = f"{label}_{model_name}_{vers}_{set_pos}_{run_params['model_type']}_{run_params['last_run_year']}_{run_params['last_run_week']}"
-    new_name = f"{label}_{model_name}_{vers}_{set_pos}_{run_params['model_type']}_{run_params['set_year']}_{run_params['set_week']}"
-    next_study = get_new_study(run_params['study_db'], old_name, new_name, run_params['num_past_trials'])
-    return next_study
-
     
 
 def get_model_output(set_pos, model_name, label, cur_df, model_obj, run_params, i, min_samples=10, alpha='', n_iter=20):
@@ -717,6 +725,8 @@ with keep.running() as m:
     for w in run_weeks:
         run_params['set_week'] = w
         run_params = get_last_run_week(w, run_params)
+        run_params['last_study_db'] = f"sqlite:///optuna/weekly_train_week{run_params['last_run_week']}_year{run_params['last_run_year']}.sqlite3"
+        run_params['study_db'] = f"sqlite:///optuna/weekly_train_week{run_params['set_week']}_year{run_params['set_year']}.sqlite3"
 
         func_params = []
         adp_result_dict = {}
@@ -760,20 +770,20 @@ with keep.running() as m:
         
         # func_params = order_func_params(func_params, trial_times)
             
-        # run all models in parallel
-        results = Parallel(n_jobs=-1, verbose=verbosity)(
-                        delayed(get_model_output)
-                        (set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
-                            for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _ in func_params
-                        )
+        # # run all models in parallel
+        # results = Parallel(n_jobs=-1, verbose=verbosity)(
+        #                 delayed(get_model_output)
+        #                 (set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
+        #                     for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _ in func_params
+        #                 )
 
-        # save output for all models
-        for k, v in all_model_output_path.items():
-            cur_set_pos = k.split('_')[0]
-            cur_model_type = '_'.join(k.split('_')[1:])
-            out_dict = output_dict()
-            out_dict = unpack_results(out_dict, func_params, results, cur_set_pos, cur_model_type)
-            save_output_dict(out_dict, 'all', v)
+        # # save output for all models
+        # for k, v in all_model_output_path.items():
+        #     cur_set_pos = k.split('_')[0]
+        #     cur_model_type = '_'.join(k.split('_')[1:])
+        #     out_dict = output_dict()
+        #     out_dict = unpack_results(out_dict, func_params, results, cur_set_pos, cur_model_type)
+        #     save_output_dict(out_dict, 'all', v)
 
 
 #%%
@@ -782,10 +792,11 @@ for i, f in enumerate(func_params):
     print(i, f[0], f[1])
 
 #%%
-
+import time
+start = time.time()
 for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _  in func_params[14:15]:
     results = get_model_output(set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter)
-
+time.time() - start
 # results = Parallel(n_jobs=-1, verbose=verbosity)(
 #                 delayed(get_model_output)
 #                 (set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \

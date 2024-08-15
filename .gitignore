@@ -24,6 +24,8 @@ DB_Versioning/
 *Validations.sqlite3
 *Simulation.sqlite3
 
+*optuna/
+
 # C extensions
 *.so
 

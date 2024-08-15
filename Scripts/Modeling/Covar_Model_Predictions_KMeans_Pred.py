@@ -11,6 +11,9 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 
 def get_val_predictions(label, val_table, pred_version, ensemble_vers, set_week, set_year):
 
@@ -350,7 +353,7 @@ covar_type = 'kmeans_pred_trunc_new'
 # set the model version
 set_weeks = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,# 11, 12, 13, 14, 15, 16
 ]
 
 set_years = [
@@ -362,22 +365,22 @@ set_years = [
 # set_years = [2023,2023]
 
 pred_versions = [
-                 'sera0_rsq0_mse1_brier1_matt1_bayes',
+                 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
                 #  'sera1_rsq0_mse0_brier1_matt0_bayes',
                 #  'sera0_rsq0_mse1_brier1_matt0_bayes',
                  ]
 
 reg_ens_versions = [
                     # 'random_sera0_rsq0_mse1_include2_kfold3',
-                    'random_kbest_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_kbest_sera0_rsq0_mse1_include2_kfold3',
                     # 'kbest_sera0_rsq0_mse1_include2_kfold3',
-                    # 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
+                    'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
                     # 'random_sera1_rsq0_mse0_include2_kfold3',
                     # 'random_kbest_sera1_rsq0_mse0_include2_kfold3',
                     # 'random_full_stack_sera0_rsq1_mse0_include2_kfold3',
                     # 'random_full_stack_sera0_rsq0_mse1_include2_kfold3_rand',
-                    'random_kbest_team_stats_sera0_rsq0_mse1_include2_kfold3',
-                    'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_kbest_team_stats_sera0_rsq0_mse1_include2_kfold3',
+                    # 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
                 ]
 
 
@@ -464,9 +467,20 @@ for set_week, set_year in zip(set_weeks, set_years):
 
 
 # %%
-teams = dm.read(f'''SELECT * 
+
+corr_data = dm.read('''SELECT * 
+                    FROM Covar_Matrix
+                    WHERE pred_vers='sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
+                            AND reg_ens_vers='random_full_stack_sera0_rsq0_mse1_include2_kfold3'
+                            AND std_dev_type='spline_pred_class80_q80_matt0_brier1_kfold3'
+                            AND covar_type='kmeans_pred_trunc_new'
+                            AND full_model_rel_weight=5
+                    ''', 'Simulation')
+corr_data = add_actual(corr_data)
+
+teams = dm.read(f'''SELECT player, team, team past_teams, week, year
                         FROM Player_Teams
-                       ''', 'Simulation').rename(columns={'team': 'past_teams'})
+                       ''', 'Simulation')
 corr_data = pd.merge(corr_data, teams, on=['player', 'week', 'year'])
 
 #%%
@@ -500,4 +514,6 @@ compare.plot.scatter(x='covar', y='y_act2')
 # %%
 
 compare[(compare.covar > 20)]
+# %%
+compare
 # %%

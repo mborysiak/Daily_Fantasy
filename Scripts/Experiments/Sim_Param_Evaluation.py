@@ -165,7 +165,7 @@ def entry_optimize_params(df, max_adjust, model_name):
     df.winnings = df.winnings / df.max_lineup_num
     
     df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
-    df.loc[(df.winnings >= 500) & (df.week==8) & (df.year==2022), 'winnings'] = 500
+    # df.loc[(df.winnings >= 500) & (df.week==8) & (df.year==2022), 'winnings'] = 500
 
     df.loc[df.trial_num < 520, 'player_drop_multiple'] = 0
 
@@ -204,8 +204,10 @@ df = dm.read('''SELECT *
              
                 ''', 'Results')
 
+df.ownership_vers = df.ownership_vers.apply(lambda x: x.replace('{', '').replace('}', '').replace('0. ', '0.0 ').replace(':', '').replace(',',''))
+
 df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
-df.loc[df.week!='8_2022', 'winnings'] = df.loc[df.week!='8_2022', 'winnings']*2
+# df.loc[df.week!='8_2022', 'winnings'] = df.loc[df.week!='8_2022', 'winnings']*2
 
 model_type = {
  'enet': ElasticNet(alpha=1, l1_ratio=0.1),
@@ -225,10 +227,9 @@ show_coef(coef_vals, X)
 #%%
 
 weeks = [
-         1, 2, 3, 4, 5, 6, 7, 8, 
+         1,2, 3, 4, 5, 6, 7, 8, 
          9, 10, 11, 12, 13, 14, 15, 16,
-         1, 2, 3, 4, 5, 6,
-          # 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, #11, 12, 13, 14, 15, 16
            ]
 years = [
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
@@ -252,12 +253,13 @@ for w, yr in zip(weeks, years):
                            AND year = {yr}
                      ''', 'Results')
     df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
-    df.loc[df.week!='8_2022', 'winnings'] = df.loc[df.week!='8_2022', 'winnings']*2
+    # df.loc[df.week!='8_2022', 'winnings'] = df.loc[df.week!='8_2022', 'winnings']*2
 
     model_name = 'enet'
     m = model_type[model_name]
-    if w == 8 and yr==2022: max_adjust = 1000
-    else: max_adjust = 10000
+    # if w == 8 and yr==2022: max_adjust = 1000
+    # else: max_adjust = 10000
+    max_adjust = 10000
     X, y = entry_optimize_params(df, max_adjust=max_adjust, model_name=model_name)
     coef_vals, X = get_model_coef(X, y, m)
     all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1
