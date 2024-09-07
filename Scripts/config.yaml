@@ -92,3 +92,55 @@ metrics_dict:
   spline_class80_q80_matt1_brier5_kfold3:
     pred_fp_per_game_class: 1
     pred_fp_per_game_quantile: 1
+  
+  spline_pred_class80_q80_matt1_brier1_kfold1:
+    pred_fp_per_game: 1
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 1
+   
+  spline_pred_class80_matt1_brier1_kfold1:
+    pred_fp_per_game: 1
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 0
+
+  spline_pred_q80_matt1_brier1_kfold1:
+    pred_fp_per_game: 1
+    pred_fp_per_game_quantile: 1
+
+  spline_class80_q80_matt1_brier1_kfold1:
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 1
+
+  spline_pred_class80_q80_matt0_brier1_kfold1:
+    pred_fp_per_game: 1
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 1
+
+  spline_pred_class80_matt0_brier1_kfold1:
+    pred_fp_per_game: 1
+    pred_fp_per_game_class: 1
+
+  spline_pred_q80_matt0_brier1_kfold1:
+    pred_fp_per_game: 1
+    pred_fp_per_game_quantile: 1
+
+  spline_class80_q80_matt0_brier1_kfold1:
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 1
+
+  spline_pred_class80_q80_matt1_brier5_kfold1:
+    pred_fp_per_game: 1
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 1
+
+  spline_pred_class80_matt1_brier5_kfold1:
+    pred_fp_per_game: 1
+    pred_fp_per_game_class: 1
+
+  spline_pred_q80_matt1_brier5_kfold1:
+    pred_fp_per_game: 1
+    pred_fp_per_game_quantile: 1
+
+  spline_class80_q80_matt1_brier5_kfold1:
+    pred_fp_per_game_class: 1
+    pred_fp_per_game_quantile: 1

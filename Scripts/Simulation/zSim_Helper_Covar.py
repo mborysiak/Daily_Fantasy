@@ -8,12 +8,6 @@ from collections import Counter
 import contextlib
 import sqlite3
 
-from ff import general as ffgeneral
-from ff.db_operations import DataManage
-root_path = ffgeneral.get_main_path('Daily_Fantasy')
-db_path = f'{root_path}/Data/Databases/'
-dm = DataManage(db_path)
-
 # linear optimization
 from cvxopt import matrix
 from cvxopt.glpk import ilp
@@ -26,7 +20,7 @@ class FootballSimulation:
     def __init__(self, conn, week, set_year, salary_cap, pos_require_start, num_iters, 
                  pred_vers='standard', reg_ens_vers='no_weight', million_ens_vers='random_matt0_brier1_include2_kfold3',
                  std_dev_type='spline', covar_type='team_points', full_model_rel_weight=1, matchup_seed=False,
-                 use_covar=True, use_ownership=0, salary_remain_max=None):
+                 use_covar=True, use_ownership=0, salary_remain_max=None, min_pts_per_dollar=0, min_pred_pts=0, min_pts_variable=0):
 
         self.week = week
         self.set_year = set_year
@@ -41,7 +35,8 @@ class FootballSimulation:
         self.full_model_rel_weight = full_model_rel_weight
         self.use_covar = use_covar
         self.use_ownership = use_ownership
-        self.salary_remain_max = salary_remain_max  
+        self.salary_remain_max = salary_remain_max 
+        self.min_pts_variable = min_pts_variable 
         self.boot = False
         self.conn = conn
 
@@ -66,6 +61,13 @@ class FootballSimulation:
         if matchup_seed: self.matchup_seed = np.random.randint(20000)
         else: self.matchup_seed = None
 
+        if min_pts_variable == 1:
+            self.player_data = self.filter_points(self.player_data, min_pts_per_dollar, min_pred_pts)
+
+        elif min_pts_variable > 0:
+            self.player_data_copy = self.player_data.copy()
+            self.min_pts_per_dollar = min_pts_per_dollar
+            self.min_pred_pts = min_pred_pts
 
 
     def get_covar_means(self):
@@ -246,6 +248,13 @@ class FootballSimulation:
         df.loc[df.pred_ownership < df.min_score, 'pred_ownership'] = df.loc[df.pred_ownership < df.min_score, 'max_score'] / 3
         df.loc[df.max_score.isnull(), 'max_score'] = abs(df.loc[df.max_score.isnull(), 'pred_ownership']) * 2
 
+        return df
+    
+    def filter_points(self, df, min_pts_per_dollar, min_pred_pts, to_add=[]):
+        df = df.copy()
+        df['pts_per_dollar'] = 1000*df.pred_fp_per_game / df.salary
+        df = df[((df.pts_per_dollar >= min_pts_per_dollar) & (df.pred_fp_per_game >= min_pred_pts)) | (df.player.isin(to_add))].reset_index(drop=True)
+        df = df.drop('pts_per_dollar', axis=1)
         return df
 
     def pull_vegas_points(self):
@@ -785,6 +794,12 @@ class FootballSimulation:
                 static_top_players=True, qb_min_iter=9, qb_set_max_team=False, qb_solo_start=True,
                 num_avg_pts=1, qb_stack_wt=2, rb_max_pick=0, wr_max_pick=0, te_max_pick=0, def_max_pick=0):
         
+        if self.min_pts_variable > 0 and self.min_pts_variable < 1:
+            self.player_data = self.player_data_copy.copy()
+            min_pred_pts = np.random.choice([0, self.min_pred_pts], p=[1-self.min_pts_variable, self.min_pts_variable])
+            min_pts_per_dollar = np.random.choice([0, self.min_pts_per_dollar], p=[1-self.min_pts_variable, self.min_pts_variable])
+            self.player_data = self.filter_points(self.player_data, min_pts_per_dollar, min_pred_pts, to_add)
+
         # can set as argument, but static set for now
         self.conn = conn
         num_options=3000
@@ -816,6 +831,7 @@ class FootballSimulation:
         self.n_top_players = n_top_players
         self.static_top_players = static_top_players
         self.top_team_players = self.get_top_players_from_team(self.player_data, top_players=self.n_top_players)
+        
 
         for i in range(self.num_iters):
 
@@ -949,10 +965,12 @@ from joblib import Parallel, delayed
 
 class RunSim:
 
-    def __init__(self, dm, week, year, salary_cap, pos_require_start,
-                 pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups_to_run):
+    def __init__(self, db_path, week, year, salary_cap, pos_require_start,
+                 pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups):
         
-        self.dm = dm
+        if '.sqlite3' not in db_path: self.db_path = f'{db_path}/Simulation.sqlite3'
+        else: self.db_path = db_path
+
         self.week = week
         self.year = year
         self.salary_cap = salary_cap
@@ -961,33 +979,43 @@ class RunSim:
         self.reg_ens_vers = reg_ens_vers
         self.million_ens_vers = million_ens_vers
         self.std_dev_type = std_dev_type
-        self.total_lineups_to_run = total_lineups_to_run
+        self.total_lineups = total_lineups
         self.col_ordering = ['adjust_pos_counts', 'player_drop_multiple', 'matchup_seed', 'matchup_drop', 
                              'top_n_choices', 'full_model_weight', 'covar_type', 'max_team_type',
                              'min_player_same_team', 'min_players_opp_team', 'num_top_players', 
                              'ownership_vers_variable', 'ownership_vers', 'qb_min_iter', 'qb_set_max_team', 
                              'qb_solo_start', 'qb_stack_wt','static_top_players', 'use_ownership', 'own_neg_frac',
                              'max_salary_remain', 'num_iters', 'num_avg_pts', 'use_unique_players',
-                             'rb_max_pick', 'wr_max_pick', 'te_max_pick', 'def_max_pick']
+                             'rb_max_pick', 'wr_max_pick', 'te_max_pick', 'def_max_pick', 'min_pts_per_dollar',
+                             'min_pred_pts', 'min_pts_variable']
         
-        self.player_stats = self.pull_past_points(week, year)
-        self.prizes = self.get_past_prizes(week, year)
+        try:
+            stats_conn = sqlite3.connect(f'{db_path}/FastR.sqlite3', timeout=60)
+            results_conn = sqlite3.connect(f'{db_path}/DK_Results.sqlite3', timeout=60)
+            self.player_stats = self.pull_past_points(stats_conn, week, year)
+            self.prizes = self.get_past_prizes(results_conn, week, year)
+        except:
+            print('No Stats or DK Results')
+
+    def create_conn(self):
+        return sqlite3.connect(self.db_path, timeout=60)
         
     @staticmethod
-    def get_past_stats(pos, week, year):
+    def get_past_stats(stats_conn, pos, week, year):
         if pos=='Defense': colname='defTeam'
         else: colname='player'
-        return dm.read(f'''SELECT {colname} AS player, fantasy_pts
-                                FROM {pos}_Stats
-                                WHERE week={week}
-                                    AND season={year}''', 'FastR')
+        return pd.read_sql_query(f'''SELECT {colname} AS player, fantasy_pts
+                                     FROM {pos}_Stats
+                                     WHERE week={week}
+                                            AND season={year}''', stats_conn)
 
 
-    def pull_past_points(self, week, year):
+
+    def pull_past_points(self, stats_conn, week, year):
 
         points = pd.DataFrame()
         for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
-            points = pd.concat([points, self.get_past_stats(pos, week, year)])
+            points = pd.concat([points, self.get_past_stats(stats_conn, pos, week, year)])
 
         return points
 
@@ -1001,12 +1029,12 @@ class RunSim:
         return prize_money, results
 
     @staticmethod
-    def get_past_prizes(week, year):
-        prizes = dm.read(f'''SELECT Rank, Points, prize
-                             FROM Contest_Results
-                             WHERE week={week}
-                                   AND year={year}
-                                   AND Contest='Million' ''', 'DK_Results')
+    def get_past_prizes(results_conn, week, year):
+        prizes = pd.read_sql_query(f'''SELECT Rank, Points, prize
+                                        FROM Contest_Results
+                                        WHERE week={week}
+                                            AND year={year}
+                                            AND Contest='Million' ''', results_conn)
         return prizes
         
     @staticmethod
@@ -1038,7 +1066,7 @@ class RunSim:
 
         d = {k: d[k] for k in self.col_ordering}
         params = []
-        for i in range(self.total_lineups_to_run):
+        for i in range(self.total_lineups):
             cur_params = []
             for k, param_options in d.items():
                 if k == 'ownership_vers' and ownership_var==1:
@@ -1059,7 +1087,6 @@ class RunSim:
     def setup_sim(self, params, existing_players):
 
         p = {k: v for k,v in zip(self.col_ordering, params)}
-        conn = self.dm.db_connect('Simulation')
         print(p)
                 
         try: p['min_players_opp_team'] = int(p['min_players_opp_team'])
@@ -1072,48 +1099,48 @@ class RunSim:
         else: p['use_covar']=True
 
         if p['use_unique_players']: drop_length = len(set(existing_players)) + 5
-        else: drop_length = self.total_lineups_to_run + 5
+        else: drop_length = self.total_lineups + 5
         to_drop_selected = self.rand_drop_selected(existing_players, p['player_drop_multiple'], drop_length)
 
         to_add = []
+        conn = self.create_conn()
         sim = FootballSimulation(conn, self.week, self.year, self.salary_cap, self.pos_require_start, p['num_iters'], 
                                  self.pred_vers, self.reg_ens_vers, self.million_ens_vers, self.std_dev_type, 
                                  p['covar_type'], p['full_model_weight'], p['matchup_seed'], p['use_covar'], p['use_ownership'], 
-                                 p['max_salary_remain'])
-        
-        return sim, conn, p, to_add, to_drop_selected
+                                 p['max_salary_remain'], p['min_pts_per_dollar'], p['min_pred_pts'], p['min_pts_variable'])
+        conn.close()
+        return sim, p, to_add, to_drop_selected
     
     
-    def run_single_iter(self, sim, conn, p, to_add, to_drop_selected, set_max_team=None):
+    def run_single_iter(self, sim, p, to_add, to_drop_selected, set_max_team=None):
         if p['ownership_vers_variable']==1:
             own_opt, own_prob = list(p['ownership_vers'].keys()), list(p['ownership_vers'].values())
             own_vers = np.random.choice(own_opt, p=own_prob)
         else:
             own_vers = p['ownership_vers']
 
-        print('Ownership Vers:', own_vers)
-
         to_drop = []
         to_drop.extend(to_drop_selected)
 
+        conn = self.create_conn()
         results, _ = sim.run_sim(conn, to_add, to_drop, p['min_player_same_team'], set_max_team, 
-                                    p['min_players_opp_team'], p['adjust_pos_counts'], p['max_team_type'],
-                                    p['matchup_drop'], p['own_neg_frac'], p['num_top_players'], own_vers,
-                                    p['static_top_players'], p['qb_min_iter'], p['qb_set_max_team'], p['qb_solo_start'],
-                                    p['num_avg_pts'], p['qb_stack_wt'], p['rb_max_pick'], p['wr_max_pick'],
-                                    p['te_max_pick'], p['def_max_pick'])
-        
+                                p['min_players_opp_team'], p['adjust_pos_counts'], p['max_team_type'],
+                                p['matchup_drop'], p['own_neg_frac'], p['num_top_players'], own_vers,
+                                p['static_top_players'], p['qb_min_iter'], p['qb_set_max_team'], p['qb_solo_start'],
+                                p['num_avg_pts'], p['qb_stack_wt'], p['rb_max_pick'], p['wr_max_pick'],
+                                p['te_max_pick'], p['def_max_pick'])
+        conn.close()
         results = results[~results.player.isin(to_add)].reset_index(drop=True)
         
         return results
                     
     def run_full_lineup(self, params, existing_players=[], set_max_team=None):
 
-        sim, conn, p, to_add, to_drop_selected = self.setup_sim(params, existing_players)
+        sim, p, to_add, to_drop_selected = self.setup_sim(params, existing_players)
 
         i = 0  # Initialize the iteration counter
         while len(to_add) < 9 and i < 18:  # Use a while loop to control iterations and break if necessary
-            results = self.run_single_iter(sim, conn, p, to_add, to_drop_selected, set_max_team)
+            results = self.run_single_iter(sim, p, to_add, to_drop_selected, set_max_team)
             prob = results.loc[:p['top_n_choices'], 'SelectionCounts'] / results.loc[:p['top_n_choices'], 'SelectionCounts'].sum()
         
             try: 
@@ -1163,11 +1190,12 @@ class RunSim:
 
 
 #%%
-    
+
+
 # for week in range(1,2):
 #     year = 2022
 #     print(f'Running week {week} for year {year}')
-#     total_lineups = 15
+#     total_lineups = 2
 #     salary_cap = 50000
 #     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 
@@ -1185,7 +1213,7 @@ class RunSim:
 #                         'team_points_trunc': 0.5},
 #         'def_max_pick': {0: 1},
 #         'full_model_weight': {0.2: 0.4, 5: 0.6},
-#         'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
+#         'matchup_drop': {0: 1, 1: 0, 2: 0.0, 3: 0.0},
 #         'matchup_seed': {0: 0.8, 1: 0.2},
 #         'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
 #         'max_team_type': {'player_points': 0.3, 'vegas_points': 0.7},
@@ -1211,7 +1239,10 @@ class RunSim:
 #         'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
 #         'use_ownership': {0.7: 0.0, 0.8: 0.4, 0.9: 0.0, 1: 0.6},
 #         'use_unique_players': {False: 1.0, True: 0.0},
-#         'wr_max_pick': {0: 1}
+#         'wr_max_pick': {0: 1},
+#         'min_pts_per_dollar': {2: 1}, 
+#         'min_pred_pts': {5: 1},
+#         'min_pts_variable': {0: 0.0, 1: 1}
 #     }
 
 #     pred_vers = model_vers['pred_vers']
@@ -1219,26 +1250,25 @@ class RunSim:
 #     million_ens_vers = model_vers['million_ens_vers']
 #     std_dev_type = model_vers['std_dev_type']
 
-
-#     rs = RunSim(dm, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
+#     path = 'C:/Users/borys/OneDrive/Documents/Github/Daily_Fantasy/Data/Databases/'
+#     rs = RunSim(path, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
 #     params = rs.generate_param_list(d)
 
 
 # #%%
 
-# sim, conn, p, to_add, to_drop_selected = rs.setup_sim(params[0], existing_players=[])
+# sim, p, to_add, to_drop_selected = rs.setup_sim(params[0], existing_players=[])
 
 # #%%
 # import time
-# to_add = ['Patrick Mahomes', 'Travis Kelce']
 # start = time.time()
-# results = rs.run_single_iter(sim, conn, p, to_add, to_drop_selected, set_max_team=None)
+# results = rs.run_single_iter(sim, p, to_add, to_drop_selected, set_max_team=None)
 # print(time.time()-start)
 # results
 
 # #%%
 
-# rs.run_full_lineup(params[0], existing_players=[], set_max_team=None)
+# # rs.run_full_lineup(params[0], existing_players=[], set_max_team=None)
 
 # #%%
 

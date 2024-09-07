@@ -4,6 +4,7 @@ import numpy as np
 from ff import data_clean as dc
 import datetime as dt
 from hyperopt import Trials
+import optuna
 
 from ff.db_operations import DataManage   
 import ff.general as ffgeneral 
@@ -17,10 +18,11 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 pred_version = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
-million_ens_vers = 'random_full_stack_matt0_brier1_include2_kfold3'
+million_ens_vers = 'random_full_stack_newp_matt0_brier1_include2_kfold3'
+ownership_vers = 'standard_ln'
 
-set_year = 2022
-set_week = 8
+set_year = 2024
+set_week = 1
 contest = 'Million'
 include_dst = True
 run_owner_model = True
@@ -105,9 +107,9 @@ def pull_this_week_players(set_week, set_year):
 
 
 # calculate ownership projections
-def add_proj(df):
+def add_proj(df, set_week, set_year):
 
-    def_proj = dm.read('''SELECT player, 'DST' as pos, player as team, week, year, 
+    def_proj = dm.read(f'''SELECT player, 'DST' as pos, player as team, week, year, 
                              dk_salary, projected_points, fantasyPoints, ProjPts,
                              ffa_points, fc_proj_fantasy_pts_fc, ffa_position_rank, 
                              avg_proj_rank, avg_proj_points avg_proj_pts, max_proj_points,
@@ -117,20 +119,23 @@ def add_proj(df):
                              expertConsensus as playeradj_expertConsensus
                            --  1 as team_proj_avg_proj_points, 1 as team_proj_share_avg_proj_points,
                            --  1 as team_proj_share_log_avg_proj_rank
-                     FROM Defense_Data
-        ''', 'Model_Features')
+                     FROM Defense_Data_Week{set_week}
+        ''', f"Model_Features_{set_year}")
 
-    proj = dm.read('''SELECT player, pos, team, week, year, 
-                             dk_salary, projected_points, fantasyPoints, ProjPts,
-                             ffa_points, fc_proj_fantasy_pts_fc, ffa_position_rank, 
-                             avg_proj_rank, avg_proj_points avg_proj_pts, max_proj_points,
-                             fp_rank, rankadj_fp_rank, playeradj_fp_rank,  
-                             expertConsensus, expertIanHartitz,
-                             rankadj_expertConsensus, playeradj_expertConsensus
-                           --  team_proj_avg_proj_points, team_proj_share_avg_proj_points,
-                           --  team_proj_share_log_avg_proj_rank
-                     FROM Backfill
-        ''', 'Model_Features')
+    proj = pd.DataFrame()
+    for pos in ['QB', 'RB', 'WR', 'TE']:
+        cur_proj = dm.read(f'''SELECT player, pos, team, week, year, 
+                                dk_salary, projected_points, fantasyPoints, ProjPts,
+                                ffa_points, fc_proj_fantasy_pts_fc, ffa_position_rank, 
+                                avg_proj_rank, avg_proj_points avg_proj_pts, max_proj_points,
+                                fp_rank, rankadj_fp_rank, playeradj_fp_rank,  
+                                expertConsensus, expertIanHartitz,
+                                rankadj_expertConsensus, playeradj_expertConsensus
+                            --  team_proj_avg_proj_points, team_proj_share_avg_proj_points,
+                            --  team_proj_share_log_avg_proj_rank
+                        FROM Backfill_{pos}_Week{set_week}
+            ''', f"Model_Features_{set_year}")
+        proj = pd.concat([proj, cur_proj], axis=0)
 
     proj = pd.concat([proj, def_proj], axis=0)
 
@@ -326,6 +331,7 @@ def adjust_ownership(df, col, adjust_type):
     elif adjust_type =='ln': df[col] = np.log(df[col]/100)
     elif adjust_type == 'ln_prob': df[col] = np.log(df[col]+0.01)
     elif adjust_type == 'exp': df[col] = np.exp(df[col]+1)
+    elif adjust_type == 'ln_plus': df[col] = np.log(df[col]/100) + 10
     return df
 
 def remove_covid_games(df):
@@ -383,6 +389,21 @@ def train_test_split(df, train_time_split):
     df_train = df_train[df_train.y_act > 0].reset_index(drop=True)
     return df_train, df_test
 
+def get_new_study(model_name):
+
+    storage = optuna.storages.RDBStorage(
+                                url=f"sqlite:///optuna/weekly_train_ownership_{million_ens_vers}.sqlite3",
+                                engine_kwargs={"pool_size": 64, 
+                                               "connect_args": {"timeout": 10},
+                                            },
+                                )
+
+    study = optuna.create_study(
+            storage=storage,
+            # study_name=f"weekly_train_ownership_{model_name}_week{set_week}_year{set_year}",
+        )
+
+    return study
 
 def run_model_mean(m, df_train, df_test, time_split):   
 
@@ -399,15 +420,18 @@ def run_model_mean(m, df_train, df_test, time_split):
 
     params = skm.default_params(pipe,bayes_rand='rand')
     params['k_best__k'] = range(1, X.shape[1]+1)
+    # params['k_best__k'] = ['int', 1, X.shape[1]]
     
     # run the model with parameter search
-    trials = Trials()
+    # trials = Trials()
+    trials = get_new_study(m)
     best_models, oof_data, _, _ = skm.time_series_cv(pipe, X, y, 
-                                                 params, n_iter=25,
-                                                 bayes_rand='rand', 
-                                                 trials=trials,
-                                                 col_split='game_date',
-                                                 time_split=time_split)
+                                                    params, n_iter=25,
+                                                    bayes_rand='rand', 
+                                                    trials=trials,
+                                                    col_split='game_date',
+                                                    time_split=time_split
+                                                    )
 
     val_predict = oof_data['full_hold'].copy()
     val_predict = val_predict.rename(columns={'pred': f'pred_ownership'})
@@ -730,16 +754,17 @@ def save_current_week_pred(ownership_vers, set_week, set_year, include_dst=True)
 # Predict Ownership Pct
 #================
 
-for set_week, set_year in zip([ #1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 
-                              7,8,9,10 # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
-                               ], 
-                              [
-                              # 2022, 2022, 2022, 2022, 2022, 2022,2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-                          2023,2023,2023,2023    # 2023, 2023, 2023, 2023, 2023, #2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
-                               ]):
+# for set_week, set_year in zip([ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 
+#                                 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+#                                ], 
+#                               [
+#                                2022, 2022, 2022, 2022, 2022, 2022,2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+#                                 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
+#                                ]):
+
+for set_week, set_year in zip([1], [2024]):
 
     print(f'Running week {set_week} year {set_year}')
-    ownership_vers = 'standard_ln'
 
     if run_owner_model:
 
@@ -752,7 +777,7 @@ for set_week, set_year in zip([ #1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 
         current_players = pull_this_week_players(set_week, set_year)
         player_ownership = pd.concat([player_ownership, current_players])
 
-        df = add_proj(player_ownership)
+        df = add_proj(player_ownership, set_week, set_year)
 
         df = drop_player_weeks(df)
         df = add_injuries(df)

@@ -260,7 +260,7 @@ def add_actual():
 
 pts = add_actual()
 
-##%%
+#%%
 
 for contest in ['Million']:#, 'ThreePointStance', 'ScreenPass']:
     dk_data = read_in_csv(save_path, set_week, set_year)
@@ -336,8 +336,46 @@ df_lineups_top['value'] = df_lineups_top.fpts / df_lineups_top.dk_salary
 df_lineups_top['y_act'] = 0
 df_lineups_top.loc[(df_lineups_top.counts >= 5) & (df_lineups_top.value > 3), 'y_act'] = 1
 
-dm.delete_from_db('DK_Results', 'Top_Players', f"week={set_week} AND year={set_year}", create_backup=False)
-dm.write_to_db(df_lineups_top, 'DK_Results', 'Top_Players', 'append')
+# dm.delete_from_db('DK_Results', 'Top_Players', f"week={set_week} AND year={set_year}", create_backup=False)
+# dm.write_to_db(df_lineups_top, 'DK_Results', 'Top_Players', 'append')
+
+df_lineups_top[df_lineups_top.y_act==1]
+
+#%%
+
+set_week=8
+set_year=2023
+
+contest = 'Million'
+base_place = 1
+places = 500
+
+full_entries = dm.read(f'''SELECT * 
+                           FROM Contest_Results 
+                           WHERE Contest='{contest}'
+                                 AND week = {set_week}
+                                 AND year = {set_year}
+                        ''', 'DK_Results')
+
+df_lineups = format_lineups(full_entries, min_place=base_place, max_place=base_place+places)
+df_lineups.player = df_lineups.player.apply(dc.name_clean)
+df_lineups.loc[df_lineups.lineup_position=='DST', 'player'] = df_lineups.loc[df_lineups.lineup_position=='DST', 'player'].map(team_map)
+
+df_lineups_top = df_lineups.groupby(['player', 'week', 'year']).agg(counts=('place', 'count')).reset_index()
+
+salaries = dm.read('''SELECT player, week, year, dk_salary/1000.0 dk_salary FROM Daily_Salaries''', 'Pre_PlayerData')
+team_salaries = dm.read('''SELECT team player, week, year, dk_salary/1000.0 dk_salary FROM Daily_Salaries''', 'Pre_TeamData')
+salaries = pd.concat([salaries, team_salaries], axis=0)
+
+df_lineups_top = pd.merge(df_lineups_top, pts, on=['player', 'week', 'year'], how='left')
+df_lineups_top = pd.merge(df_lineups_top, salaries, on=['player', 'week', 'year'], how='left')
+df_lineups_top['value'] = df_lineups_top.fpts / df_lineups_top.dk_salary
+
+df_lineups_top['y_act'] = 0
+df_lineups_top.loc[(df_lineups_top.counts >= 25) & (df_lineups_top.value > 4), 'y_act'] = 1
+
+# dm.delete_from_db('DK_Results', 'Top_Players', f"week={set_week} AND year={set_year}", create_backup=False)
+# dm.write_to_db(df_lineups_top, 'DK_Results', 'Top_Players', 'append')
 
 df_lineups_top[df_lineups_top.y_act==1]
 

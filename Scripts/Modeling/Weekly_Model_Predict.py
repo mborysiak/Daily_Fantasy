@@ -50,16 +50,18 @@ def load_data(model_type, set_pos, run_params):
 
     # load data and filter down
     if model_type=='full_model': df = dm.read(f'''SELECT * 
-                                                  FROM {set_pos}_Data{run_params['rush_pass']}
-                                                ''', 'Model_Features')
+                                                  FROM {set_pos}_Data{run_params['rush_pass']}_Week{run_params['set_week']}
+                                                ''', f"Model_Features_{run_params['set_year']}")
     elif model_type=='backfill': df = dm.read(f'''SELECT * 
-                                                  FROM Backfill 
-                                                  WHERE pos='{set_pos}' ''', 'Model_Features')
+                                                  FROM Backfill_{set_pos}_Week{run_params['set_week']}
+                                                  WHERE pos='{set_pos}' 
+                                                  ''', 
+                                                  f"Model_Features_{run_params['set_year']}")
 
     if df.shape[1]==2000:
         df2 = dm.read(f'''SELECT * 
-                          FROM {set_pos}_Data{run_params['rush_pass']}2
-                       ''', 'Model_Features')
+                          FROM {set_pos}_Data{run_params['rush_pass']}_Week{run_params['set_week']}_v2
+                       ''', f"Model_Features_{run_params['set_year']}")
         df = pd.concat([df, df2], axis=1)
 
     df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
@@ -181,6 +183,18 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
                                       skm.piece(m)
                                       ]),
 
+        'random_full_stack_newp': skm.model_pipe([
+                                      skm.piece('random_sample'),
+                                      skm.piece('std_scale'), 
+                                      skm.feature_union([
+                                                    skm.piece('agglomeration'), 
+                                                    skm.piece(f'{kb}_fu'),
+                                                    skm.piece('pca')
+                                                    ]),
+                                      skm.piece(kb),
+                                      skm.piece(m)
+                                      ]),
+
         'kbest': skm.model_pipe([
                                  skm.piece('std_scale'),
                                  skm.piece(kb),
@@ -228,13 +242,16 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
     elif stack_model=='random_full_stack' and run_params['opt_type']=='rand':
         params['random_sample__frac'] = np.arange(0.5, 1, 0.05)
 
-    elif stack_model=='random_full_stack' and run_params['opt_type']=='optuna':
+    elif stack_model=='random_full_stack_newp' and run_params['opt_type']=='optuna':
         params['random_sample__frac'] = ['real', 0.2, 1]
-        params[f'{sp}__percentile'] = ['real', 20, 100]
         params['feature_union__agglomeration__n_clusters'] = ['int', 3, 15]
         params['feature_union__pca__n_components'] = ['int', 3, 15]
-        params[f'feature_union__{kb}_fu__k'] = ['int', 10, 100]
-        params[f'{kb}__k'] = ['int', 10, 100]
+        params[f'feature_union__{kb}_fu__k'] = ['int', 3, 50]
+        params[f'{kb}__k'] = ['int', 5, 50]
+
+    elif stack_model=='random_kbest_newp' and run_params['opt_type']=='optuna':
+        params['random_sample__frac'] = ['real', 0.2, 1]
+        params[f'{kb}__k'] = ['int', 5, 50]
  
     return pipe, params
 
@@ -637,7 +654,7 @@ def val_std_dev(val_data, metrics={'pred_fp_per_game': 1}, iso_spline='iso', sho
 
 def vegas_points(run_params, metrics={'implied_points_for': 1}, show_plot=False):
 
-    scores = dm.read("SELECT * FROM Scores_Lines", 'Model_Features')
+    scores = dm.read("SELECT * FROM Scores_Lines", f"Model_Features_{run_params['set_year']}")
     scores = scores.rename(columns={'team': 'player', 'final_score': 'y_act'})
 
     output_cols = ['player', 'week', 'year']
@@ -1073,13 +1090,15 @@ def get_new_study(old_db, new_db, old_name, new_name, num_trials):
     return next_study
     
 def get_optuna_study(fname, final_m, run_params):
+    last_db = f"{run_params['last_study_db']}_{final_m}.sqlite3"
+    new_db = f"{run_params['study_db']}_{final_m}.sqlite3"
     old_name = f"{final_m}_{fname}_{run_params['set_pos']}_{run_params['model_type']}_{run_params['last_run_year']}_{run_params['last_run_week']}"
     new_name = f"{final_m}_{fname}_{run_params['set_pos']}_{run_params['model_type']}_{run_params['set_year']}_{run_params['set_week']}"
-    next_study = get_new_study(run_params['last_study_db'], run_params['study_db'], old_name, new_name, run_params['num_recent_trials'])
+    next_study = get_new_study(last_db, new_db, old_name, new_name, run_params['num_recent_trials'])
     return next_study
 
-    
-
+# 'class_random_full_stack_newp_c80_matt0_brier1_include1_kfold3'
+# 'gbm_c'
 def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million):
 
     print(f'\n{final_m}')
@@ -1222,7 +1241,7 @@ def load_run_models(run_params, X_stack, y_stack, X_predict, model_obj, alpha=No
         best_models, scores, stack_val_pred = load_stack_runs(path, fname)
     
     else:
-        results = Parallel(n_jobs=16, verbose=50)(
+        results = Parallel(n_jobs=-1, verbose=50)(
                         delayed(run_stack_models)
                         (fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_params, num_trials, is_million) 
                         for final_m, i, model_obj, alpha in func_params
@@ -1373,7 +1392,7 @@ globals().update(config)
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2023,
+    'set_year': 2024,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -1381,8 +1400,8 @@ run_params = {
 
     'cuts': [33, 80, 95],
 
-    'stack_model': 'random_full_stack',
-    'stack_model_million': 'random_full_stack',
+    'stack_model': 'random_full_stack_newp',
+    'stack_model_million': 'random_full_stack_newp',
 
     # opt params
     'n_iters': 50,
@@ -1401,7 +1420,7 @@ run_params = {
     'opt_type': 'optuna',
     'hp_algo': 'tpe',
     'num_recent_trials': 100,
-    'optuna_timeout': 60*2
+    'optuna_timeout': 60*2.5
 }
 
 s_mod = run_params['stack_model']
@@ -1419,7 +1438,12 @@ log_wt = 0
 alpha = 80
 class_cut = 80
 
-set_weeks = [11]#,12]
+# set_weeks = [1,2,3,4]
+# set_weeks = [5,6,7,8]
+# set_weeks = [9,10,11,12]
+# set_weeks = [13,14,15,16]
+set_weeks = [1]
+
 pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
@@ -1449,12 +1473,17 @@ with keep.running() as m:
     for w in set_weeks:
         run_params['set_week'] = w
         run_params = get_last_run_week(w, run_params)
-        run_params['last_study_db'] = f"sqlite:///optuna/weekly_predict_week{run_params['last_run_week']}_year{run_params['last_run_year']}.sqlite3"
-        run_params['study_db'] = f"sqlite:///optuna/weekly_predict_week{run_params['set_week']}_year{run_params['set_year']}.sqlite3"
-        optuna.create_study(study_name='setup', storage=run_params['study_db'], load_if_exists=True)
-        
+
+        if not os.path.exists(f"{root_path}/Scripts/Modeling/optuna/{run_params['set_year']}/week{run_params['set_week']}/"):
+            os.makedirs(f"{root_path}/Scripts/Modeling/optuna/{run_params['set_year']}/week{run_params['set_week']}/")
+        if not os.path.exists(f"{root_path}/Scripts/Modeling/optuna/{run_params['last_run_year']}/week{run_params['last_run_week']}/"):
+            os.makedirs(f"{root_path}/Scripts/Modeling/optuna/{run_params['last_run_year']}/week{run_params['last_run_week']}/")
+
+        run_params['last_study_db'] = f"sqlite:///optuna/{run_params['last_run_year']}/week{run_params['last_run_week']}/weekly_predict"
+        run_params['study_db'] = f"sqlite:///optuna/{run_params['set_year']}/week{run_params['set_week']}/weekly_predict"
+
         if 'team_stats' in run_params['stack_model']:
-            vegas_scores = dm.read("SELECT * FROM Scores_Lines", 'Model_Features')
+            vegas_scores = dm.read("SELECT * FROM Scores_Lines", f"Model_Features_{run_params['set_year']}")
             vegas_scores = vegas_scores[['team', 'week', 'year', 'over_under', 'implied_points_for', 'implied_points_against', 'is_home']]
 
             model_type = 'backfill'
@@ -1507,12 +1536,12 @@ with keep.running() as m:
             ['QB', 'full_model', ''],
             ['RB', 'full_model', ''],
             ['WR', 'full_model', ''],
-            # ['TE', 'full_model', ''],
-            # ['Defense', 'full_model', ''],
-            # ['QB', 'backfill', ''],
-            # ['RB', 'backfill', ''],
-            # ['WR', 'backfill', ''],
-            # ['TE', 'backfill', '']
+            ['TE', 'full_model', ''],
+            ['Defense', 'full_model', ''],
+            ['QB', 'backfill', ''],
+            ['RB', 'backfill', ''],
+            ['WR', 'backfill', ''],
+            ['TE', 'backfill', '']
         ]
 
         for set_pos, model_type, rush_pass in runs:
@@ -1631,32 +1660,47 @@ with keep.running() as m:
 
 #%%
 
+week = 1
+year = 2024
+model = 'lgbm_c'
+model_obj = 'class'
+pos = 'QB'
+model_type = 'full_model'
+
+if model_obj=='reg': ens_vers = run_params['reg_ens_vers']
+elif model_obj == 'class': ens_vers = run_params['class_ens_vers']
+elif model_obj=='quantile': ens_vers = run_params['quant_ens_vers']
+elif model_obj=='million': ens_vers = run_params['million_ens_vers']
 from optuna.visualization import plot_parallel_coordinate
 
 study = optuna.create_study(
-            study_name='lgbm_reg_random_full_stack_sera0_rsq0_mse1_include2_kfold3_QB_full_model_2023_11',
-            storage=run_params['study_db'],
+            study_name=f'{model}_{model_obj}_{ens_vers}_{pos}_{model_type}_{year}_{week}',
+            storage=f'sqlite:///optuna/{year}/week{week}/weekly_predict_{model}.sqlite3',
             load_if_exists=True
         )
 
 plot_parallel_coordinate(study)
 
 #%%
-# import os
-# import shutil
+import os
+import shutil
 
-# def copy_and_rename_files(year, keyword):
-#     base_dir = r"C:\Users\borys\OneDrive\Documents\GitHub\Daily_Fantasy\Model_Outputs"
-#     year_dir = os.path.join(base_dir, str(year))
+def copy_and_rename_files(year, keyword):
+    base_dir = r"C:\Users\borys\OneDrive\Documents\GitHub\Daily_Fantasy\Model_Outputs"
+    year_dir = os.path.join(base_dir, str(year))
 
-#     for root, dirs, files in os.walk(year_dir):
-#         if keyword in root:  # Only process folders containing the keyword
-#             for file in files:
-#                 if "all_" not in file and "include2" in file:
-#                     old_file_path = os.path.join(root, file)
-#                     new_file_name = file.replace("include2", "include3")
-#                     new_file_path = os.path.join(root, new_file_name)
-#                     shutil.copy(old_file_path, new_file_path)
+    for root, dirs, files in os.walk(year_dir):
+        if keyword in root:  # Only process folders containing the keyword
+            for file in files:
+                if "all_" not in file and "include2" in file:
+                    old_file_path = os.path.join(root, file)
+                    new_file_name = file.replace("include2", "include1")
+                    new_file_path = os.path.join(root, new_file_name)
+                    shutil.copy(old_file_path, new_file_path)
 
-# # Call the function with the year and keyword you want
-# copy_and_rename_files(2022, "higherkb")
+# Call the function with the year and keyword you want
+copy_and_rename_files(2023, "higherkb")
+
+
+
+# %%

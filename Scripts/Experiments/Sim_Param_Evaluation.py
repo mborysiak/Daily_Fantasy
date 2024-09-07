@@ -168,7 +168,8 @@ def entry_optimize_params(df, max_adjust, model_name):
     # df.loc[(df.winnings >= 500) & (df.week==8) & (df.year==2022), 'winnings'] = 500
 
     df.loc[df.trial_num < 520, 'player_drop_multiple'] = 0
-
+    df.loc[df.matchup_drop==0, 'matchup_seed'] = 0
+    
     str_cols = ['week', 'year', 'pred_vers', 'reg_ens_vers', 'million_ens_vers', 'std_dev_type']
     if model_name in ('enet', 'lasso',' ridge'):
         str_cols.extend( ['player_drop_multiple','top_n_choices', 'matchup_drop', 'adjust_pos_counts', 
@@ -197,10 +198,10 @@ df = dm.read('''SELECT *
                       FROM Entry_Optimize_Results
                       ) USING (week, year, trial_num, repeat_num)
                 WHERE trial_num >= 655
-                     -- AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
                       AND week < 17
-                    --  AND NOT (week=8 AND year=2022)
-                    --  AND (reg_ens_vers LIKE '%team_stats%' OR million_ens_vers LIKE '%team_stats%')
+                      --AND NOT (week=8 AND year=2022)
+                      --AND NOT (week=1 AND year=2022)
+                    AND (reg_ens_vers LIKE '%newp%' )
              
                 ''', 'Results')
 
@@ -227,15 +228,17 @@ show_coef(coef_vals, X)
 #%%
 
 weeks = [
-         1,2, 3, 4, 5, 6, 7, 8, 
-         9, 10, 11, 12, 13, 14, 15, 16,
-         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, #11, 12, 13, 14, 15, 16
+         2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16,
+         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+       1,
+        8
            ]
 years = [
-          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
-          2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-          2023, 2023, 2023, 2023, 2023, 2023]
+          2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
+          2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
+        2022,
+         2022
+          ]
 
 i=0
 all_coef = None; X_all = None
@@ -248,7 +251,7 @@ for w, yr in zip(weeks, years):
                           ) USING (week, year, trial_num, repeat_num)
                      WHERE trial_num >= 655
                          --  AND pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
-                        --   AND (reg_ens_vers LIKE '%team_stats%' OR million_ens_vers LIKE '%team_stats%')
+                           AND (reg_ens_vers LIKE '%newp%')
                            AND week = {w}
                            AND year = {yr}
                      ''', 'Results')

@@ -87,41 +87,69 @@ def format_fantasy_cruncher(df, set_week, set_year):
     return df
 
 
-def pull_fantasy_data(set_week):
+def pull_fantasy_data(set_week, is_def=False):
+
+    if is_def: pos = 'DEF'
+    else: pos = ''
+
+    try:
+        fdta_file = [f for f in os.listdir('c:/Users/borys/Downloads') if 'fantasy-football-weekly-projections' in f][0]
+        new_fname = '-'.join(fdta_file.split('-')[:-1])+pos+'.csv'
+        os.rename(f'/Users/borys/Downloads/{fdta_file}', f'/Users/borys/Downloads/{new_fname}')
+    except: 
+        print('No new Fantasy Data file found')
 
     # move fantasydata projections
-    df = move_download_to_folder(root_path, 'FantasyData', 'fantasy-football-weekly-projections.csv', week=set_week)
-    df = df.drop('Week', axis=1).assign(week=set_week, year=set_year)
+    df = move_download_to_folder(root_path, 'FantasyData', f'nfl-fantasy-football-weekly-projections{pos}.csv', week=set_week)
+    df = df.assign(week=set_week, year=set_year).drop(['id', 'game.week'], axis=1)
     
+    if is_def:
+        cols = {
+            'rank': 'fdta_rank',
+            'team': 'player',
+            'tkl_loss': 'fdta_tkl_loss',
+            'def_sck': 'fdta_sack',
+            'qb_hits': 'fdta_qb_hits',
+            'def_int': 'fdta_def_int',
+            'fum_recovered': 'fdta_fum_rec',
+            'safeties': 'fdta_safeties',
+            'def_td': 'fdta_def_td',
+            'return_td': 'fdta_return_td',
+            'opp_pts': 'fdta_opp_pts',
+            'fpts_draftkings': 'fdta_proj_points'
+        }
 
-    cols = {
-            'Rank': 'fdta_rank',
-            'Name': 'player', 
-            'Team': 'team', 
-            'Position': 'position',
-            'Opponent': 'opp',
-            'PassingYards': 'fdta_pass_yds',
-            'PassingTouchdowns': 'fdta_pass_td',
-            'PassingInterceptions': 'fdta_pass_int',
-            'RushingYards': 'fdta_rush_yds',
-            'RushingTouchdowns': 'fdta_rush_td',
-            'Receptions': 'fdta_rec',
-            'ReceivingYards': 'fdta_rec_yds',
-            'ReceivingTouchdowns': 'fdta_rec_td',
-            'Sacks': 'fdta_sack',
-            'Interceptions': 'fdta_int',
-            'FumblesRecovered': 'fdta_fum_rec',
-            'FumblesForced': 'fdta_fum_forced',
-            'FantasyPointsPerGameDraftKings': 'fdta_dk_points_per_game',
-            'FantasyPointsDraftKings': 'fdta_dk_points',
-            }
-    df = df[df.Position.isin(['QB', 'RB', 'WR', 'TE', 'DST'])].reset_index(drop=True)
-    df = df.rename(columns=cols)
+        df = df.rename(columns=cols)
+        df.player = df.player.map(team_map)
 
-    df.player = df.player.apply(dc.name_clean)
-    df.team = df.team.map(team_map)
-    df.loc[df.position=='DST', 'player'] = df.loc[df.position=='DST', 'team']
-    
+    else:
+        cols = {
+                'rank': 'fdta_rank',
+                'player': 'player', 
+                'team': 'team', 
+                'pos': 'position',
+                'opp': 'opp',
+                'pass_yds': 'fdta_pass_yds',
+                'pass_td': 'fdta_pass_td',
+                'pass_int': 'fdta_pass_int',
+                'rush_yds': 'fdta_rush_yds',
+                'rush_td': 'fdta_rush_td',
+                'rec': 'fdta_rec',
+                'rec_yds': 'fdta_rec_yds',
+                'rec_td': 'fdta_rec_td',
+                'def_sck': 'fdta_sack',
+                'def_int': 'fdta_int',
+                'fum_recovered': 'fdta_fum_rec',
+                'fum_forced': 'fdta_fum_forced',
+                'fpts_draftkings': 'fdta_proj_points',
+                }
+        df = df[df.pos.isin(['QB', 'RB', 'WR', 'TE', 'DST'])].reset_index(drop=True)
+        df = df.rename(columns=cols)
+
+        df.player = df.player.apply(dc.name_clean)
+        df.team = df.team.map(team_map)
+        df.loc[df.position=='DST', 'player'] = df.loc[df.position=='DST', 'team']
+  
     return df
 
 
@@ -307,6 +335,12 @@ dm.delete_from_db('Pre_PlayerData', 'FantasyData', f"week={set_week} AND year={s
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData', 'append')
 
 #%%
+
+df = pull_fantasy_data(set_week, is_def=True)
+dm.delete_from_db('Pre_PlayerData', 'FantasyData_Defense', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData_Defense', 'append')
+
+#%%
 df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
 df = format_fantasy_cruncher(df, set_week, set_year)
 col = dm.read("SELECT * FROM FantasyCruncher", 'Pre_PlayerData').columns
@@ -326,6 +360,7 @@ players = nf[0]
 players = players.T.reset_index().T.reset_index(drop=True)
 players.columns = ['player']
 players.player = players.player.apply(lambda x: x.split(' ')[0] + ' ' + x.split(' ')[1])
+players.player = players.player.apply(dc.name_clean)
 
 nf_data = pd.concat([players, stats], axis=1)
 for c in ['opp_rank', 'ranks_ovr', 'ranks_pos']:
@@ -335,32 +370,183 @@ nf_data['week'] = set_week
 nf_data['year'] = set_year
 nf_data = nf_data.drop('nf_opp_team', axis=1)
 
+nf_data['nf_proj_points'] = nf_data.nf_passing_yds * 0.04 + nf_data.nf_passing_tds * 4 - nf_data.nf_passing_ints * 1 + \
+                          nf_data.nf_rushing_yds * 0.1 + nf_data.nf_rushing_tds * 6 + \
+                          nf_data.nf_receiving_yds * 0.1 + nf_data.nf_receiving_tds * 6 + nf_data.nf_receiving_rec * 1
+
 dm.delete_from_db('Pre_PlayerData', 'NumberFire', f"week={set_week} AND year={set_year}")
 dm.write_to_db(nf_data, 'Pre_PlayerData', 'NumberFire', 'append')
 
 #%%
 
+fname = 'Weekly DraftKings Projections'
+
 try:
-    os.replace(f"/Users/borys/Downloads/draftkings.csv", 
-                f'{root_path}/Data/OtherData/projected_ownership/FantasyData/{set_year}/week{set_week}.csv')
+    os.replace(f"/Users/borys/Downloads/{fname}.csv", 
+                f'{root_path}/Data/OtherData/ETR/{set_year}/{fname}_week{set_week}.csv')
+    df = pd.read_csv(f'{root_path}/Data/OtherData/ETR/{set_year}/{fname}_week{set_week}.csv')
+
 except:
-    pass
+    df = pd.read_csv(f'{root_path}/Data/OtherData/ETR/{set_year}/{fname}_week{set_week}.csv')
 
-df = pd.read_csv(f'{root_path}/Data/OtherData/projected_ownership/FantasyData/{set_year}/week{set_week}.csv')
+df = df.rename(columns={
+    'Player': 'player', 
+    'Team': 'team', 
+    'Opponent': 'opp', 
+    'DK Position': 'pos', 
+    'DK Salary': 'dk_salary',
+    'DK Projection': 'etr_proj_points',
+    'DK Value': 'etr_proj_value', 
+    'DK Large Ownership': 'etr_proj_large_own', 
+    'DK Small Ownership': 'etr_proj_small_own',
+    'DKSlateID': 'dk_slate_id', 
+    'DK Floor': 'etr_proj_floor', 
+    'DK Ceiling': 'etr_proj_ceiling'
+})
 
-df = df[['Name', 'Position', 'Team', 'Week', 'ProjectedOwnershipPercentage']]
-df.columns = ['player', 'position', 'team', 'week', 'ownership']
-
-df = df.assign(year=set_year, ownership_type='FantasyData')
 df.player = df.player.apply(dc.name_clean)
 df.team = df.team.map(team_map)
-df.loc[df.position=='DST', 'player'] = df.loc[df.position=='DST', 'team']
+df.opp = df.opp.map(team_map)
 
-df = df[['player', 'position', 'team', 'week', 'year', 'ownership_type', 'ownership']]
+df['week'] = set_week
+df['year'] = set_year
 
-dm.delete_from_db('Pre_PlayerData', 'Projected_Ownership', f"week={set_week} AND year={set_year}", create_backup=False)
-dm.write_to_db(df, 'Pre_PlayerData', 'Projected_Ownership', 'append')
+dm.delete_from_db('Pre_PlayerData', 'ETR_Projections_DK', f"week={set_week} AND year={set_year}")
+dm.write_to_db(df, 'Pre_PlayerData', 'ETR_Projections_DK', 'append')
 
+#%%
+
+fname = 'Weekly Fantasy Projections'
+
+try:
+    os.replace(f"/Users/borys/Downloads/{fname}.csv", 
+                f'{root_path}/Data/OtherData/ETR/{set_year}/{fname}_week{set_week}.csv')
+    df = pd.read_csv(f'{root_path}/Data/OtherData/ETR/{set_year}/{fname}_week{set_week}.csv')
+
+except:
+    df = pd.read_csv(f'{root_path}/Data/OtherData/ETR/{set_year}/{fname}_week{set_week}.csv')
+
+df = df.rename(columns={
+    'Player': 'player', 
+    'Team': 'team', 
+    'Position': 'pos', 
+    'DK': 'etr_proj_points',
+    'FD': 'etr_proj_points_fd', 
+    'Std': 'etr_proj_points_std', 
+    'Half': 'etr_proj_points_half',
+    'Full': 'dk_slate_id', 
+    'DK Ceiling': 'etr_proj_ceiling',
+    'FD Ceiling': 'etr_proj_ceiling_fd'
+})
+
+df
+df.player = df.player.apply(dc.name_clean)
+df.team = df.team.map(team_map)
+
+df['week'] = set_week
+df['year'] = set_year
+
+dm.delete_from_db('Pre_PlayerData', 'ETR_Projections', f"week={set_week} AND year={set_year}")
+dm.write_to_db(df, 'Pre_PlayerData', 'ETR_Projections', 'append')
+
+#%%
+
+
+fpts_fname = '2024 NFL Fantasy Football Rankings  Projections QB, RB, WR, TE  Fantasy Points'
+try:
+    os.replace(f"/Users/borys/Downloads/{fpts_fname}.csv", 
+                f'{root_path}/Data/OtherData/FantasyPoints/{set_year}/{fpts_fname}_week{set_week}.csv')
+    df = pd.read_csv(f'{root_path}/Data/OtherData/FantasyPoints/{set_year}/{fpts_fname}_week{set_week}.csv')
+
+except:
+    df = pd.read_csv(f'{root_path}/Data/OtherData/FantasyPoints/{set_year}/{fpts_fname}_week{set_week}.csv')
+
+df = df.rename(columns={
+    'RK': 'fpts_overall_rank', 
+    'Name': 'player', 
+    'POS': 'pos', 
+    'Team': 'team', 
+    'Opp':  'opp', 
+    'FPTS': 'fpts_proj_points', 
+    'ATT': 'fpts_pass_att', 
+    'CMP': 'fpts_pass_cmp', 
+    'YDS': 'fpts_pass_yds', 
+    'TD': 'fpts_pass_td',
+    'INT': 'fpts_pass_int', 
+    'ATT.1': 'fpts_rush_att', 
+    'YDS.1': 'fpts_rush_yds', 
+    'TD.1': 'fpts_rush_td', 
+    'REC': 'fpts_rec', 
+    'YDS.2': 'fpts_rec_yds', 
+    'TD.2': 'fpts_rec_td', 
+    'UP': 'fpts_up', 
+    'DOWN': 'fpts_down',
+    'MOVE': 'fpts_move', 
+    'WW': 'fpts_ww', 
+    'INJ': 'fpts_inj',
+})
+
+df.player = df.player.apply(dc.name_clean)
+df.team = df.team.map(team_map)
+df.opp = df.opp.map(team_map)
+df = df.assign(week=set_week, year=set_year)
+
+for c in df.columns:
+    try: df[c] = df[c].apply(lambda x: x.replace('-', '0')).astype('float')
+    except: pass
+
+df['fpts_pass_yds_per_att'] = df.fpts_pass_yds / df.fpts_pass_att
+df['fpts_pass_yds_per_cmp'] = df.fpts_pass_yds / df.fpts_pass_cmp
+df['fpts_rush_yds_per_att'] = df.fpts_rush_yds / df.fpts_rush_att
+df['fpts_rec_yds_per_rec'] = df.fpts_rec_yds / df.fpts_rec
+
+dm.delete_from_db('Pre_PlayerData', 'FantasyPoints', f"week={set_week} AND year={set_year}")
+dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPoints', 'append')
+
+#%%
+
+
+fpts_fname = '2024 NFL Fantasy Football Rankings  Projections QB, RB, WR, TE  Fantasy Points'
+try:
+    os.replace(f"/Users/borys/Downloads/{fpts_fname}.csv", 
+                f'{root_path}/Data/OtherData/FantasyPoints/{set_year}/Def_{fpts_fname}_week{set_week}.csv')
+    df = pd.read_csv(f'{root_path}/Data/OtherData/FantasyPoints/{set_year}/Def_{fpts_fname}_week{set_week}.csv')
+
+except:
+    df = pd.read_csv(f'{root_path}/Data/OtherData/FantasyPoints/{set_year}/Def_{fpts_fname}_week{set_week}.csv')
+
+
+df = df.rename(columns={
+    'RK': 'fpts_overall_rank', 
+    'Name': 'player', 
+    'POS': 'pos', 
+    'Team': 'team', 
+    'Opp':  'opp', 
+    'FPTS': 'fpts_proj_points', 
+    'SACK': 'fpts_sack', 
+    'INT': 'fpts_int', 
+    'FR': 'fpts_fum_rec', 
+    'DTD': 'fpts_def_td',
+    'STD': 'fpts_special_td',
+    'UP': 'fpts_up', 
+    'DOWN': 'fpts_down',
+    'MOVE': 'fpts_move', 
+    'WW': 'fpts_ww', 
+    'INJ': 'fpts_inj',
+})
+
+df.player = df.team
+df.player = df.player.map(team_map)
+df.team = df.team.map(team_map)
+df.opp = df.opp.map(team_map)
+df = df.assign(week=set_week, year=set_year)
+
+for c in df.columns:
+    try: df[c] = df[c].apply(lambda x: x.replace('-', '0')).astype('float')
+    except: pass
+
+dm.delete_from_db('Pre_PlayerData', 'FantasyPoints_Defense', f"week={set_week} AND year={set_year}")
+dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPoints_Defense', 'append')
 
 #%%
 # ## PFF Matchups
@@ -759,6 +945,30 @@ dk['year'] = set_year
 
 dm.delete_from_db('Simulation', 'Projected_Ownership', f"week={set_week} AND year={set_year}")
 dm.write_to_db(dk, 'Simulation', 'Projected_Ownership', 'replace')
+
+#%%
+
+# try:
+#     os.replace(f"/Users/borys/Downloads/draftkings.csv", 
+#                 f'{root_path}/Data/OtherData/projected_ownership/FantasyData/{set_year}/week{set_week}.csv')
+# except:
+#     pass
+
+# df = pd.read_csv(f'{root_path}/Data/OtherData/projected_ownership/FantasyData/{set_year}/week{set_week}.csv')
+
+# df = df[['Name', 'Position', 'Team', 'Week', 'ProjectedOwnershipPercentage']]
+# df.columns = ['player', 'position', 'team', 'week', 'ownership']
+
+# df = df.assign(year=set_year, ownership_type='FantasyData')
+# df.player = df.player.apply(dc.name_clean)
+# df.team = df.team.map(team_map)
+# df.loc[df.position=='DST', 'player'] = df.loc[df.position=='DST', 'team']
+
+# df = df[['player', 'position', 'team', 'week', 'year', 'ownership_type', 'ownership']]
+
+# dm.delete_from_db('Pre_PlayerData', 'Projected_Ownership', f"week={set_week} AND year={set_year}", create_backup=False)
+# dm.write_to_db(df, 'Pre_PlayerData', 'Projected_Ownership', 'append')
+
 
 #%%
 

@@ -23,6 +23,14 @@ def create_sd_max_metrics(df):
     
     df = df.drop(['fantasyPoints', 'ProjPts', 'projected_points', 
                     'roll_std', 'roll_max'], axis=1)
+    
+    # df['sd_metric'] = df[['fantasyPoints', 'ProjPts', 'projected_points', 'roll_std',
+    #                       'ffa_points', 'ffa_ceiling',  'max_proj_points', 'avg_proj_points']].mean(axis=1)
+    # df['max_metric'] = df[['fantasyPoints', 'ProjPts', 'projected_points', 'roll_max',
+    #                        'ffa_points', 'ffa_ceiling',  'max_proj_points', 'avg_proj_points']].mean(axis=1)
+    
+    # df = df.drop(['fantasyPoints', 'ProjPts', 'projected_points', 
+    #                 'roll_std', 'roll_max','ffa_points','ffa_ceiling', 'max_proj_points', 'avg_proj_points'], axis=1)
 
     return df
 
@@ -80,6 +88,16 @@ def projection_data(pos):
                                   FROM PFF_Proj_Ranks)
                                   USING (offTeam, week, year)''', 'Pre_TeamData')
         proj = pd.merge(proj, proj_2, on=['player', 'team', 'week', 'year'])
+
+        # proj1 = dm.read('''SELECT player, player team, week, year, projected_points, fantasyPoints, ProjPts,
+        #                           ffa_points, ffa_ceiling,  max_proj_points, avg_proj_points
+        #                    FROM Defense_Data''', 'Model_Features')
+        # proj_2 = dm.read('''SELECT offteam player, defTeam, week, year
+        #                     FROM PFF_Expert_Ranks
+        #                     ''', 'Pre_TeamData')
+        # proj = pd.merge(proj1, proj_2, on=['player', 'week', 'year'])
+        # proj = proj[['player', 'team', 'defTeam', 'week', 'year', 'projected_points', 'fantasyPoints', 'ProjPts',
+        #              'ffa_points', 'ffa_ceiling', 'max_proj_points', 'avg_proj_points']]
     
     else:
         # pull in the salary and actual results data
@@ -93,6 +111,13 @@ def projection_data(pos):
                                   USING (player, offTeam, week, year)
                             WHERE position='{pos.lower()}' 
                                   ''', 'Pre_PlayerData')
+
+        # proj = dm.read(f'''
+        #                SELECT player, team, defTeam, week, year, projected_points, fantasyPoints, ProjPts,
+        #                       ffa_points, ffa_ceiling, max_proj_points, avg_proj_points
+        #                FROM Backfill
+        #                WHERE pos = '{pos}'
+        #                ''', 'Model_Features')
 
     return proj
 
@@ -336,19 +361,19 @@ def get_mean_points(preds):
 import itertools
 covar_type = 'team_points_trunc'
 
-# set the model version
-set_weeks = [
-    #1, 2, 3, 4, 5, 6,7, 8, 9, 10, 11, 12, 
-     7,8,9,10,# 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-]
+# # set the model version
+# set_weeks = [
+#     1, 2, 3, 4, 5, 6,7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+#     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+# ]
 
-set_years = [
-   #  2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
-     2023, 2023, 2023, 2023, #2023,2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
-]
+# set_years = [
+#     2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
+#     2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
+# ]
 
-# set_weeks = [17]
-# set_years = [2023,2023]
+set_weeks = [1]
+set_years = [2024]
 
 pred_versions = [
                 #  'sera0_rsq0_mse1_brier1_matt0_bayes_atpe_numtrials100',
@@ -357,7 +382,8 @@ pred_versions = [
                  ]
 
 reg_ens_versions = [
-                    'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
+                   'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3',
+                #    'random_full_stack_newp_sera0_rsq0_mse1_include1_kfold3',
                    # 'random_full_stack_team_stats_sera0_rsq0_mse1_include2_kfold3',
                     # 'random_kbest_team_stats_sera0_rsq0_mse1_include2_kfold3',
                     # 'random_kbest_sera0_rsq0_mse1_include2_kfold3',
@@ -366,13 +392,17 @@ reg_ens_versions = [
 
 
 std_dev_types = [
-                 'spline_pred_class80_q80_matt0_brier1_kfold3',
+                #  'spline_pred_class80_q80_matt0_brier1_kfold3',
+                #  'spline_pred_class80_matt0_brier1_kfold3',
+                #  'spline_pred_q80_matt0_brier1_kfold3',
+                #  'spline_class80_q80_matt0_brier1_kfold3',
+                  'spline_pred_class80_q80_matt0_brier1_kfold3',
                  'spline_pred_class80_matt0_brier1_kfold3',
                  'spline_pred_q80_matt0_brier1_kfold3',
                  'spline_class80_q80_matt0_brier1_kfold3',
                  ]
 
-full_model_weights = [0.2, 5]
+full_model_weights = [0.2, 1, 5]
 
 iter_cats = list(set(itertools.product(pred_versions, reg_ens_versions, std_dev_types, full_model_weights)))
 iter_cats = pd.DataFrame(iter_cats).sort_values(by=[0, 1]).values

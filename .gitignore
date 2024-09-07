@@ -166,3 +166,4 @@ Data/Databases/Model_Features - Copy.sqlite3
 Scripts/Modeling/optuna/weekly_predict.sqlite3-journal
 Scripts/Modeling/optuna/weekly_train.sqlite3
 Scripts/Modeling/optuna/weekly_predict.sqlite3
+Data/Databases/Model_Features_2024.sqlite3

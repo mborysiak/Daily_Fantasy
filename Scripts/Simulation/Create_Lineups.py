@@ -16,15 +16,15 @@ conn = dm.db_connect('Simulation')
 # Settings and User Inputs
 #===============
 
-year=2023
-week=17
+year=2024
+week=1
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 5
+num_lineups = 50
 set_max_team = None
 
-pred_vers = 'sera0_rsq0_mse1_brier1_matt1_bayes'
+pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
 
 #%%
 
@@ -102,134 +102,23 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'Results')
     return vers
 
-best_trials = 624
+best_trials = 685
 
 opt_params = pull_best_params(best_trials)
 pprint.pprint(opt_params)
+del opt_params['lineups_per_param']
+
+if 'min_pts_per_dollar' not in opt_params.keys():
+    opt_params['min_pts_per_dollar'] = {0: 0.0}
 
 best_vers = pull_params_version(best_trials)
 pred_vers = best_vers.pred_vers.values[0]
 reg_ens_vers = best_vers.reg_ens_vers.values[0]
 million_ens_vers = best_vers.million_ens_vers.values[0]
 std_dev_type = best_vers.std_dev_type.values[0]
-best_vers
+pprint.pprint(best_vers.values)
 
 #%%
-        
-d_ordering = ['adjust_pos_counts', 'player_drop_multiple', 'matchup_seed', 'matchup_drop', 
-            'top_n_choices', 'full_model_weight', 'covar_type', 'max_team_type',
-            'min_player_same_team', 'min_players_opp_team', 'num_top_players', 
-            'ownership_vers', 'qb_min_iter', 'qb_set_max_team', 'qb_solo_start', 
-            'static_top_players', 'use_ownership', 'own_neg_frac', 
-            'max_salary_remain', 'num_iters', 'num_avg_pts']
-
-d = {'adjust_pos_counts': {False: 0.7, True: 0.3},
- 'covar_type': {'kmeans_pred_trunc': 0.0,
-                'no_covar': 0.0,
-                'team_points_trunc': 1.0},
- 'full_model_weight': {0.2: 0.3, 5: 0.7},
- 'lineups_per_param': {1: 1.0},
- 'matchup_drop': {0: 0.7, 1: 0.1, 2: 0.2, 3: 0.0},
- 'matchup_seed': {0: 0.3, 1: 0.7},
- 'max_salary_remain': {200: 0.0, 500: 0.6, 1000: 0.4, 1500: 0.0},
- 'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
- 'min_player_same_team': {2: 0.2, 3: 0.2, 'Auto': 0.6},
- 'min_players_opp_team': {1: 0.1, 2: 0.1, 'Auto': 0.8},
- 'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
- 'num_iters': {50: 0.0, 100: 0.0, 150: 1.0},
- 'num_top_players': {2: 0.4, 3: 0.6, 5: 0.0},
- 'own_neg_frac': {0.8: 0.0, 1: 1.0},
- 'ownership_vers': {'mil_div_standard_ln': 0.0,
-                    'mil_only': 0.0,
-                    'mil_times_standard_ln': 0.3,
-                    'standard_ln': 0.7},
- 'player_drop_multiple': {0: 0.4, 2: 0.2, 4: 0.4},
- 'qb_min_iter': {0: 0.6, 2: 0.4, 4: 0.0, 9: 0.0},
- 'qb_set_max_team': {0: 0.7, 1: 0.3},
- 'qb_solo_start': {False: 1.0, True: 0.0},
- 'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
- 'static_top_players': {False: 0.3, True: 0.7},
- 'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
- 'use_ownership': {0.7: 0.0, 0.8: 0.2, 0.9: 0.0, 1: 0.8},
- 'use_unique_players': {0: 1.0}}
-
-lineups_per_param = int(d['lineups_per_param'][1])
-
-d = {k: d[k] for k in d_ordering}
-params = []
-for i in range(int(num_lineups/lineups_per_param)):
-    cur_params = []
-    for param, param_options in d.items():
-        param_vars = list(param_options.keys())
-        param_prob = list(param_options.values())
-        cur_params.append(np.random.choice(param_vars, p=param_prob))
-
-    cur_params.append(i)
-    params.append(cur_params)
-
-#%%
-
-def sim_winnings(adjust_select, player_drop_multiplier, matchup_seed, matchup_drop, top_n_choices, 
-                full_model_rel_weight, covar_type, max_team_type, min_players_same_team, 
-                min_players_opp_team, num_top_players, ownership_vers, qb_min_iter, qb_set_max_team, qb_solo_start,
-                static_top_players, use_ownership, own_neg_frac, max_salary_remain, 
-                num_iters, num_avg_pts, param_iter
-                ):
-    
-    try: min_players_opp_team = int(min_players_opp_team)
-    except: pass
-
-    try: min_players_same_team = float(min_players_same_team)
-    except: pass
-
-    if covar_type=='no_covar': use_covar=False
-    else: use_covar=True
-
-    total_add = []
-    to_drop_selected = []
-    lineups = []
-    for _ in range(lineups_per_param):
-
-        to_add = []
-        sim = FootballSimulation(dm.db_connect('Simulation'), week, year, salary_cap, pos_require_start, num_iters, 
-                                pred_vers, reg_ens_vers=reg_ens_vers, million_ens_vers=million_ens_vers,
-                                std_dev_type=std_dev_type, covar_type=covar_type, 
-                                full_model_rel_weight=full_model_rel_weight, matchup_seed=matchup_seed,
-                                use_covar=use_covar, use_ownership=use_ownership, 
-                                salary_remain_max=max_salary_remain)
-        
-
-        i = 0  # Initialize the iteration counter
-        while len(to_add) < 9 and i < 18:  # Use a while loop to control iterations and break if necessary
-            
-            to_drop = []
-            to_drop.extend(to_drop_selected)
-            
-            results, _ = sim.run_sim(dm.db_connect('Simulation'), to_add, to_drop, min_players_same_team, set_max_team, 
-                                    min_players_opp_team_input=min_players_opp_team, max_team_type=max_team_type,
-                                    adjust_select=adjust_select, num_matchup_drop=matchup_drop,
-                                    own_neg_frac=own_neg_frac, ownership_vers=ownership_vers,
-                                    n_top_players=num_top_players, num_avg_pts=num_avg_pts,
-                                    static_top_players=static_top_players, qb_min_iter=qb_min_iter,
-                                    qb_set_max_team=qb_set_max_team, qb_solo_start=qb_solo_start)
-            
-            results = results[~results.player.isin(to_add)].reset_index(drop=True)
-            prob = results.loc[:top_n_choices, 'SelectionCounts'] / results.loc[:top_n_choices, 'SelectionCounts'].sum()
-            
-            try: 
-                selected_player = np.random.choice(results.loc[:top_n_choices, 'player'], p=prob)
-                to_add.append(selected_player)
-            except: 
-                pass
-            i += 1
-
-        lineups.append(to_add)
-        total_add.extend(to_add)
-        to_drop_selected = rand_drop_selected(total_add, player_drop_multiplier)
-            
-        to_add.append(param_iter)
-
-    return lineups, sim.player_data
 
 def clean_lineup_list(lineups_list, player_data):
     lineups = pd.DataFrame(lineups_list).T
@@ -283,20 +172,22 @@ def create_database_output(my_team, j):
     dm.write_to_db(dk_output, 'Simulation', 'Automated_Lineups', 'append')
 
 #%%
+# run all the lineups
+rs = RunSim(db_path, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, num_lineups)
+params = rs.generate_param_list(opt_params)
+lineups_list = rs.run_multiple_lineups(params, calc_winnings=False, parallelize=True, n_jobs=15, verbose=0)
 
-# for adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i in params:
-#     sim_winnings(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i)
+#%%
+# get the player data
+rs_pd = RunSim(db_path, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, 1)
+player_data_param = copy.deepcopy(opt_params)
+player_data_param['min_pts_variable'] = {0: 1}
+player_data_param = rs.generate_param_list(player_data_param)
+sim, _, _, _ = rs.setup_sim(player_data_param[0], existing_players=[])
+player_data = sim.player_data.copy()
 
-par_out = Parallel(n_jobs=-1, verbose=0)(delayed(sim_winnings)(adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i) for \
-                                                               adj, pdm, mseed, md, tn, fmw, ct, mtt, mpst, mpot, ntp, owvers, qmi, qsmt, qss, stp, uo, onf, msr, ni, nap, param_i in params)
-
-lineups_list = []
-for p in par_out:
-    lineups_list.extend(p[0])
-
-player_data = par_out[0][1]
+#%%
 lineups = clean_lineup_list(lineups_list, player_data)
-
 lineups = lineups.sample(frac=1)
 
 dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={week}', create_backup=False)
@@ -319,12 +210,10 @@ run_params_dict = {
     'million_ens_vers': [million_ens_vers]
 }
 
-for param, param_options in d.items():
-    param_vars = list(param_options.keys())
-    param_prob = list(param_options.values())
-    run_params_dict[param] = ['np.random.choice(' + str(param_vars) + ', p=' + str(param_prob) + ')']
+for k, v in opt_params.items():
+    run_params_dict[k] = str(v)
 
-run_params_df = pd.DataFrame(run_params_dict)
+run_params_df = pd.DataFrame(run_params_dict, index=[0])
 
 dm_app = DataManage('c:/Users/borys/OneDrive/Documents/Github/Daily_Fantasy_App/app/')
 dm_app.write_to_db(run_params_df, 'Simulation_App', 'Run_Params', 'replace')

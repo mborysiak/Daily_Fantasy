@@ -404,6 +404,28 @@ dm.write_to_db(df, 'Post_PlayerData', 'Defense_Players', 'append')
 
 # %%
 
+set_year = 2020
+for set_week in range(1, 18):
+
+    try:
+        os.replace(f"/Users/borys/Downloads/receiving_scheme ({set_week}).csv", 
+                    f'{root_path}/Data/OtherData/PFF_Rec_Stats/{set_year}/receiving_scheme_week{set_week}.csv')
+    except: 
+        pass
+
+    df = pd.read_csv(f'{root_path}/Data/OtherData/PFF_Rec_Stats/{set_year}/receiving_scheme_week{set_week}.csv')
+    df['week'] = set_week
+    df['year'] = set_year
+
+    df.player = df.player.apply(dc.name_clean)
+    df = df.rename(columns={'team_name': 'team'})
+    df.team = df.team.map(team_map)
+
+    dm.delete_from_db('Post_PlayerData', 'PFF_Receiving_Scheme', f"week={set_week} AND year={set_year}", create_backup=False)
+    dm.write_to_db(df, 'Post_PlayerData', 'PFF_Receiving_Scheme', 'append')
+
+#%%
+
 try:
     os.replace(f"/Users/borys/Downloads/offense_blocking.csv", 
                 f'{root_path}/Data/OtherData/PFF_Offensive_Line/{set_year}/offense_blocking_week{set_week}.csv')
@@ -420,6 +442,7 @@ df.team = df.team.map(team_map)
 
 dm.delete_from_db('Post_PlayerData', 'Offensive_Line_Players', f"week={set_week} AND year={set_year}")
 dm.write_to_db(df, 'Post_PlayerData', 'Offensive_Line_Players', 'append')
+
 
 #%%
 

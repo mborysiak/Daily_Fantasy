@@ -37,12 +37,12 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [13]
+run_weeks = [1]
 verbosity = 50
 run_params = {
     
     # set year and week to analyze
-    'set_year': 2023,
+    'set_year': 2024,
 
     # set beginning of validation period
     'val_year_min': 2020,
@@ -117,17 +117,19 @@ def load_data(model_type, set_pos, run_params):
 
     # load data and filter down
     if model_type=='full_model': df = dm.read(f'''SELECT * 
-                                                  FROM {set_pos}_Data{run_params['rush_pass']}
-                                                ''', 'Model_Features')
+                                                  FROM {set_pos}_Data{run_params['rush_pass']}_Week{run_params['set_week']}
+                                                ''', f"Model_Features_{run_params['set_year']}")
         
     elif model_type=='backfill': df = dm.read(f'''SELECT * 
-                                                  FROM Backfill 
-                                                  WHERE pos='{set_pos}' ''', 'Model_Features')
+                                                  FROM Backfill_{set_pos}_Week{run_params['set_week']}
+                                                  WHERE pos='{set_pos}' ''', 
+                                                  f"Model_Features_{run_params['set_year']}")
 
     if df.shape[1]==2000:
         df2 = dm.read(f'''SELECT * 
-                          FROM {set_pos}_Data{run_params['rush_pass']}2
-                       ''', 'Model_Features')
+                          FROM {set_pos}_Data{run_params['rush_pass']}_Week{run_params['set_week']}_v2
+                       ''', 
+                       f"Model_Features_{run_params['set_year']}")
         df = pd.concat([df, df2], axis=1)
 
     df = df.sort_values(by=['year', 'week']).reset_index(drop=True)
@@ -705,6 +707,47 @@ def save_output_dict(out_dict, label, model_output_path):
 
 #%%
 
+# w = run_weeks[0]
+# run_params['set_week'] = w
+# run_params = get_last_run_week(w, run_params)
+
+# run_params['last_study_db'] = f"sqlite:///optuna/{run_params['last_run_year']}/week{run_params['last_run_week']}/weekly_train_week{run_params['last_run_week']}_year{run_params['last_run_year']}.sqlite3"
+# run_params['study_db'] = f"sqlite:///optuna/{run_params['set_year']}/week{run_params['set_week']}/weekly_train_week{run_params['set_week']}_year{run_params['set_year']}.sqlite3"
+
+# func_params = []
+# adp_result_dict = {}
+# trial_times = pd.DataFrame()
+# all_model_output_path = {}
+
+# set_pos = 'QB'
+# run_params['rush_pass'] = ''
+# run_params['n_splits'] = 5
+# run_params['model_type'] = 'full_model'
+# print(f"\n==================\n{set_pos} {model_type} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
+
+# #==========
+# # Pull and clean compiled data
+# #==========
+
+# # load data and filter down
+# pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
+# all_model_output_path[f'{set_pos}_{model_type}'] = model_output_path
+# df, run_params = load_data(model_type, set_pos, run_params)
+# df, run_params = create_game_date(df, run_params)
+
+# df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
+# print(df_train.loc[-10:, ['player', 'week', 'year', 'y_act']])
+
+# func_params.extend(reg_params(df_train, min_samples, 5, run_params, set_pos, model_type))
+
+# import time
+# start = time.time()
+# for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _  in func_params[3:4]:
+#     results = get_model_output(set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, 3)
+# time.time() - start
+
+
+#%%
 
 with keep.running() as m:
     if not m.success:
@@ -725,8 +768,9 @@ with keep.running() as m:
     for w in run_weeks:
         run_params['set_week'] = w
         run_params = get_last_run_week(w, run_params)
-        run_params['last_study_db'] = f"sqlite:///optuna/weekly_train_week{run_params['last_run_week']}_year{run_params['last_run_year']}.sqlite3"
-        run_params['study_db'] = f"sqlite:///optuna/weekly_train_week{run_params['set_week']}_year{run_params['set_year']}.sqlite3"
+        
+        run_params['last_study_db'] = f"sqlite:///optuna/{run_params['last_run_year']}/week{run_params['last_run_week']}/weekly_train_week{run_params['last_run_week']}_year{run_params['last_run_year']}.sqlite3"
+        run_params['study_db'] = f"sqlite:///optuna/{run_params['set_year']}/week{run_params['set_week']}/weekly_train_week{run_params['set_week']}_year{run_params['set_year']}.sqlite3"
 
         func_params = []
         adp_result_dict = {}
@@ -770,20 +814,20 @@ with keep.running() as m:
         
         # func_params = order_func_params(func_params, trial_times)
             
-        # # run all models in parallel
-        # results = Parallel(n_jobs=-1, verbose=verbosity)(
-        #                 delayed(get_model_output)
-        #                 (set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
-        #                     for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _ in func_params
-        #                 )
+        # run all models in parallel
+        results = Parallel(n_jobs=-1, verbose=verbosity)(
+                        delayed(get_model_output)
+                        (set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter) \
+                            for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _ in func_params
+                        )
 
-        # # save output for all models
-        # for k, v in all_model_output_path.items():
-        #     cur_set_pos = k.split('_')[0]
-        #     cur_model_type = '_'.join(k.split('_')[1:])
-        #     out_dict = output_dict()
-        #     out_dict = unpack_results(out_dict, func_params, results, cur_set_pos, cur_model_type)
-        #     save_output_dict(out_dict, 'all', v)
+        # save output for all models
+        for k, v in all_model_output_path.items():
+            cur_set_pos = k.split('_')[0]
+            cur_model_type = '_'.join(k.split('_')[1:])
+            out_dict = output_dict()
+            out_dict = unpack_results(out_dict, func_params, results, cur_set_pos, cur_model_type)
+            save_output_dict(out_dict, 'all', v)
 
 
 #%%

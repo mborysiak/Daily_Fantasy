@@ -369,8 +369,9 @@ run_params = {
 print('Running Model for Year:', run_params['set_year'], 'Week:', run_params['set_week'])
 
 
-set_pos = 'QB'
-is_million = True
+set_pos = 'WR'
+is_million = False
+is_over_proj = True
 model_feature_db = 'Model_Features'
 # model_feature_db = 'Model_Features - Copy'
 
@@ -388,6 +389,18 @@ for c in df.columns:
 
 if is_million: 
     df_train, df_predict, min_samples = predict_million_df(df, run_params)
+    df_train = add_sal_columns(df_train)
+    df_predict = add_sal_columns(df_predict)
+elif is_over_proj:
+    df['proj_diff' ] = df.y_act - df.avg_proj_points
+    proj_diff_cut = df.groupby('game_date')['proj_diff'].apply(lambda x: np.percentile(x, 90)).reset_index()
+    top_scores = df.groupby('game_date')['y_act'].apply(lambda x: np.percentile(x, 75)).reset_index()
+    df = pd.merge(df, proj_diff_cut.rename(columns={'proj_diff': 'cut_perc'}), on=['game_date'])
+    df = pd.merge(df, top_scores.rename(columns={'y_act': 'top_perc'}), on=['game_date'])
+    df['y_act'] = np.where((df.y_act > (df.avg_proj_points + df.cut_perc)) & (df.y_act > df.top_perc), 1, 0)
+    df = df.drop(['proj_diff', 'top_perc', 'cut_perc'], axis=1)
+
+    df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
     df_train = add_sal_columns(df_train)
     df_predict = add_sal_columns(df_predict)
 else:
@@ -514,7 +527,10 @@ def run_model(model_name, df_train, df_predict, run_params, model_obj, test_sett
 
 if is_million: 
     # models_test = ['lgbm_c', 'xgb_c', 'gbmh_c', 'cb_c', 'gbm_c']
-    models_test = ['cb_c', 'mlp_c', 'lr_c', 'lgbm_c', 'xgb_c', 'gbmh_c', 'rf_c', 'gbm_c', 'knn_c']
+    models_test = ['lr_c', 'cb_c', 'mlp_c',  'lgbm_c', 'xgb_c', 'gbmh_c', 'rf_c', 'gbm_c', 'knn_c']
+    model_obj = 'class'
+elif is_over_proj:
+    models_test = ['lr_c', 'cb_c', 'mlp_c', 'lgbm_c', 'xgb_c', 'gbmh_c', 'rf_c', 'gbm_c', 'knn_c']
     model_obj = 'class'
 else: 
     models_test = ['ridge', 'enet', 'bridge', 'lasso', 'lgbm', 'xgb', 'bridge', 'knn', 'gbm', 'gbmh', 'cb', 'rf', 'mlp']
@@ -522,13 +538,13 @@ else:
     model_obj = 'reg'
 
 
-# test_settings = {
-#     'Experiment': 'Week7 Create Trials', 
-#     'TrialsObj': 'Recent', 
-#     'HyperOptAlgo': 'atpe', 
-#     'NumTrials': 100, 
-#     'LearningRate': 'loguniform(-5, -0.5)'
-#     }
+test_settings = {
+    'Experiment': 'OverProj', 
+    'TrialsObj': 'New', 
+    'HyperOptAlgo': 'atpe', 
+    'NumTrials': 100, 
+    'LearningRate': 'loguniform(-5, -0.5)'
+    }
 
 
 param_scores_all = {}
