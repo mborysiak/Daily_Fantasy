@@ -9,8 +9,8 @@ from DataPull_Helper import *
 pd.set_option('display.max_columns', 999)
 
 # +
-set_year = 2023
-set_week = 8
+set_year = 2024
+set_week = 1
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -233,7 +233,7 @@ qb['wins'] = qb.QBrec.apply(lambda x: float(x.split('-')[0]))
 qb['losses'] = qb.QBrec.apply(lambda x: float(x.split('-')[1]))
 qb['ties'] = qb.QBrec.apply(lambda x: float(x.split('-')[2]))
 
-qb = qb.drop(['QBrec', 'Succ_pct'], axis=1)
+qb = qb.drop(['QBrec', 'Succ_pct', 'Awards'], axis=1)
 qb = qb.fillna(0)
 
 #------------
@@ -398,31 +398,29 @@ df['year'] = set_year
 df.player = df.player.apply(dc.name_clean)
 df = df.rename(columns={'team_name': 'team'})
 df.team = df.team.map(team_map)
+df = df.drop(['fumble_recoveries', 'fumble_recovery_touchdowns', 'interception_touchdowns', 'safeties', 'tackles_for_loss'], axis=1)
 
 dm.delete_from_db('Post_PlayerData', 'Defense_Players', f"week={set_week} AND year={set_year}")
 dm.write_to_db(df, 'Post_PlayerData', 'Defense_Players', 'append')
 
 # %%
 
-set_year = 2020
-for set_week in range(1, 18):
+try:
+    os.replace(f"/Users/borys/Downloads/receiving_scheme ({set_week}).csv", 
+                f'{root_path}/Data/OtherData/PFF_Rec_Stats/{set_year}/receiving_scheme_week{set_week}.csv')
+except: 
+    pass
 
-    try:
-        os.replace(f"/Users/borys/Downloads/receiving_scheme ({set_week}).csv", 
-                    f'{root_path}/Data/OtherData/PFF_Rec_Stats/{set_year}/receiving_scheme_week{set_week}.csv')
-    except: 
-        pass
+df = pd.read_csv(f'{root_path}/Data/OtherData/PFF_Rec_Stats/{set_year}/receiving_scheme_week{set_week}.csv')
+df['week'] = set_week
+df['year'] = set_year
 
-    df = pd.read_csv(f'{root_path}/Data/OtherData/PFF_Rec_Stats/{set_year}/receiving_scheme_week{set_week}.csv')
-    df['week'] = set_week
-    df['year'] = set_year
+df.player = df.player.apply(dc.name_clean)
+df = df.rename(columns={'team_name': 'team'})
+df.team = df.team.map(team_map)
 
-    df.player = df.player.apply(dc.name_clean)
-    df = df.rename(columns={'team_name': 'team'})
-    df.team = df.team.map(team_map)
-
-    dm.delete_from_db('Post_PlayerData', 'PFF_Receiving_Scheme', f"week={set_week} AND year={set_year}", create_backup=False)
-    dm.write_to_db(df, 'Post_PlayerData', 'PFF_Receiving_Scheme', 'append')
+dm.delete_from_db('Post_PlayerData', 'PFF_Receiving_Scheme', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Post_PlayerData', 'PFF_Receiving_Scheme', 'append')
 
 #%%
 
@@ -511,7 +509,7 @@ for stat_type in ['passing', 'rushing', 'receiving']:
             'TLOS': 'avgTimeToLos',
             'ROE%': 'rushPctOverExpected',
             'RYOE': 'rushYardsOverExpected',
-            'RYOE/ATT': 'rushYardsOverExpectedPerAtt',
+            'RYOE/Att': 'rushYardsOverExpectedPerAtt',
             'EFF': 'efficiency',
             '8+D%': 'percentAttemptsGteEightDefenders',
             'AVG': 'avgRushYards'

@@ -12,7 +12,7 @@ import lxml
 
 # +
 set_year = 2024
-set_week = 1
+set_week = 2
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -341,13 +341,13 @@ dm.delete_from_db('Pre_PlayerData', 'FantasyData_Defense', f"week={set_week} AND
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData_Defense', 'append')
 
 #%%
-df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
-df = format_fantasy_cruncher(df, set_week, set_year)
-col = dm.read("SELECT * FROM FantasyCruncher", 'Pre_PlayerData').columns
-df = df[[c for c in df.columns if c in col]]
+# df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
+# df = format_fantasy_cruncher(df, set_week, set_year)
+# col = dm.read("SELECT * FROM FantasyCruncher", 'Pre_PlayerData').columns
+# df = df[[c for c in df.columns if c in col]]
 
-dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
-dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
+# dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
+# dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
 
 #%%
 
@@ -448,6 +448,45 @@ df['year'] = set_year
 
 dm.delete_from_db('Pre_PlayerData', 'ETR_Projections', f"week={set_week} AND year={set_year}")
 dm.write_to_db(df, 'Pre_PlayerData', 'ETR_Projections', 'append')
+
+#%%
+
+fname = 'Weekly Projections Detail'
+
+try:
+    os.replace(f"/Users/borys/Downloads/{fname}.csv", 
+                f'{root_path}/Data/OtherData/ETR/{set_year}/{fname}_week{set_week}.csv')
+    df = pd.read_csv(f'{root_path}/Data/OtherData/ETR/{set_year}/{fname}_week{set_week}.csv')
+
+except:
+    df = pd.read_csv(f'{root_path}/Data/OtherData/ETR/{set_year}/{fname}_week{set_week}.csv')
+
+df = df.rename(columns={
+    'Player': 'player', 
+    'Team': 'team', 
+    'Position': 'pos', 
+    'Opponent': 'opp',
+    'Completions': 'etr_pass_cmp', 
+    'Attempts': 'etr_pass_att',
+    'Pass Yards': 'etr_pass_yds', 
+    'Pass TDs': 'etr_pass_tds', 
+    'Pass INTs': 'etr_pass_int', 
+    'Carries': 'etr_rush_att', 
+    'Rush Yards': 'etr_rush_yds',
+    'Rush TDs': 'etr_rush_tds', 
+    'Receptions': 'etr_rec', 
+    'Receiving Yards': 'etr_rec_yds', 
+    'Receiving TDs': 'etr_rec_td',
+}).fillna(0)
+
+df.player = df.player.apply(dc.name_clean)
+df.team = df.team.map(team_map)
+
+df['week'] = set_week
+df['year'] = set_year
+
+dm.delete_from_db('Pre_PlayerData', 'ETR_Projections', f"week={set_week} AND year={set_year}")
+dm.write_to_db(df, 'Pre_PlayerData', 'ETR_Projections_Detail', 'append')
 
 #%%
 

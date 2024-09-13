@@ -1,9 +1,8 @@
 #%%
 
 YEAR = 2024
-WEEK = 1
+WEEK = 2
 
-#%%
 
 import pandas as pd 
 import numpy as np
@@ -318,47 +317,111 @@ def etr_projection(df, pos):
                     ) USING (player, week, year)
                     WHERE pos='{pos}'
                 ''', 'Pre_PlayerData')
+    
+    etr_stats = dm.read(f'''SELECT * 
+                            FROM ETR_Projections_Detail
+                            WHERE pos='{pos}'
+                        ''', 'Pre_PlayerData')
+    etr_stats = etr_stats.drop(['team', 'opp', 'pos'], axis=1)
 
     df = pd.merge(df, etr, on=['player', 'week', 'year'], how='left')
+    df = pd.merge(df, etr_stats, on=['player', 'week', 'year'], how='left')
+
+    return df
+
+def etr_projection_def(df):
+
+    etr = dm.read(f'''SELECT team player, week, year,
+                            etr_proj_points,
+                            etr_proj_floor,
+                            etr_proj_ceiling 
+                    FROM ETR_Projections 
+                    LEFT JOIN (
+                        SELECT team player, week, year, etr_proj_floor
+                        FROM ETR_Projections_DK
+                    ) USING (player, week, year)
+                    WHERE pos='DST'
+                ''', 'Pre_PlayerData')
+
+    df = pd.merge(df, etr, on=['player', 'week', 'year'], how='left')
+
+    return df
+
+def fantasy_points_projection(df, pos):
+
+    fpts = dm.read(f'''SELECT * 
+                       FROM FantasyPoints
+                       WHERE pos='{pos}'
+                       ''', 'Pre_PlayerData')
+
+    fpts = fpts.drop(['fpts_overall_rank', 'team', 'opp', 'pos',  'fpts_up', 'fpts_down', 'fpts_move', 'fpts_ww', 'fpts_inj',
+                      'fpts_pass_yds_per_att', 'fpts_pass_yds_per_cmp', 'fpts_rush_yds_per_att', 'fpts_rec_yds_per_rec'], axis=1)
+    fpts['fpts_rank'] = fpts.groupby(['year', 'week'])['fpts_proj_points'].rank(ascending=False, method='min')
+    
+    df = pd.merge(df, fpts, on=['player', 'week', 'year'], how='left')
+
+    return df
+
+def fantasy_points_projection_def(df):
+
+    fpts = dm.read(f'''SELECT player, week, year, fpts_proj_points, fpts_int, 
+                              fpts_fum_rec, fpts_sack, fpts_def_td + fpts_special_td fpts_td
+                       FROM FantasyPoints_Defense
+                       ''', 'Pre_PlayerData')
+
+    fpts['fpts_rank'] = fpts.groupby(['year', 'week'])['fpts_proj_points'].rank(ascending=False, method='min')
+    
+    df = pd.merge(df, fpts, on=['player', 'week', 'year'], how='left')
+
     return df
 
 def consensus_fill(df, is_dst=False):
 
     if is_dst:
         to_fill = {
-                'proj_dst_int': ['def_rmean3_interception', 'dstInt', 'ffa_dst_int', 'fc_proj_defensive_stats_int', 'fdta_def_int'],
-                'proj_dst_fumble': ['rmean3_def_fumble_sum', 'dstFumblesRecovered', 'fc_proj_defensive_stats_fum', 'fdta_fum_rec'],
-                'proj_dst_sack': ['def_rmean3_sack', 'dstSacks', 'ffa_dst_sacks', 'fc_proj_defensive_stats_sacks', 'fdta_sack'],
+                'proj_dst_int': ['def_rmean3_interception', 'dstInt', 'ffa_dst_int', 'fc_proj_defensive_stats_int', 'fdta_def_int', 'fpts_int'],
+                'proj_dst_fumble': ['rmean3_def_fumble_sum', 'dstFumblesRecovered', 'fc_proj_defensive_stats_fum', 'fdta_fum_rec', 'fpts_fum_rec'],
+                'proj_dst_sack': ['def_rmean3_sack', 'dstSacks', 'ffa_dst_sacks', 'fc_proj_defensive_stats_sacks', 'fdta_sack', 'fpts_sack'],
                 'proj_dst_safety': ['def_rmean3_safety', 'dstSafeties', 'ffa_dst_safety', 'fc_proj_defensive_stats_sfty'],
-                'proj_dst_td': ['rmean3_def_td', 'dstTd', 'ffa_dst_td', 'fc_proj_defensive_stats_tds', 'fdta_def_td'],
-                'proj_dst_points': ['projected_points', 'ProjPts_dst', 'ffa_points', 'fc_proj_fantasy_pts_fc', 'fdta_proj_points'],
+                'proj_dst_td': ['rmean3_def_td', 'dstTd', 'ffa_dst_td', 'fc_proj_defensive_stats_tds', 'fdta_def_td', 'fpts_td'],
+                'proj_dst_points': ['projected_points', 'ProjPts_dst', 'ffa_points', 'fc_proj_fantasy_pts_fc', 'fdta_proj_points', 'fpts_proj_points',
+                                    'etr_proj_points'],
                 'proj_dst_rank': ['fp_rank', 'rankadj_fp_rank', 'playeradj_fp_rank', 'ffa_position_rank',
-                                  'expertConsensus_dst', 'fc_rank', 'fdta_rank']
+                                  'expertConsensus_dst', 'fc_rank', 'fdta_rank', 'fpts_rank'],
                 }
     else:
         to_fill = {
 
             # stat fills
-            'proj_pass_yds': ['passYds', 'ffa_pass_yds', 'fft_pass_yds', 'fc_proj_passing_stats_yrds', 'fdta_pass_yds', 'nf_passing_yds'],
-            'proj_pass_td': ['passTd', 'ffa_pass_tds', 'fft_pass_td', 'fc_proj_passing_stats_tds', 'fdta_pass_td', 'nf_passing_tds'],
-            'proj_pass_int': ['passInt', 'ffa_pass_int', 'fft_pass_int', 'fc_proj_passing_stats_int', 'nf_passing_ints'],
-            'proj_pass_att': ['passAtt', 'fft_pass_att', 'fc_proj_passing_stats_att'],
-            'proj_rush_yds': ['rushYds', 'ffa_rush_yds', 'fft_rush_yds', 'fc_proj_rushing_stats_yrds', 'fdta_rush_yds', 'nf_rushing_yds'],
-            'proj_rush_att': ['rushAtt', 'fft_rush_att', 'fc_proj_rushing_stats_att', 'nf_rushing_att'],
-            'proj_rush_td': ['rushTd', 'ffa_rush_tds', 'fft_rush_td', 'fc_proj_rushing_stats_tds', 'fdta_rush_td', 'nf_rushing_tds'],
-            'proj_rec': ['recvReceptions', 'ffa_rec', 'fft_rec', 'fc_proj_receiving_stats_rec', 'fdta_rec', 'nf_receiving_rec'],
-            'proj_rec_yds': ['recvYds', 'ffa_rec_yds', 'fft_rec_yds', 'fc_proj_receiving_stats_yrds', 'fdta_rec_yds', 'nf_receiving_yds'],
-            'proj_rec_td': ['recvTd', 'ffa_rec_tds', 'fft_rec_td', 'fc_proj_receiving_stats_tds', 'fdta_rec_td', 'nf_receiving_tds'],
+            'proj_pass_yds': ['passYds', 'ffa_pass_yds', 'fft_pass_yds', 'fc_proj_passing_stats_yrds', 'fdta_pass_yds', 
+                              'nf_passing_yds', 'etr_pass_yds', 'fpts_pass_yds'],
+            'proj_pass_td': ['passTd', 'ffa_pass_tds', 'fft_pass_td', 'fc_proj_passing_stats_tds', 'fdta_pass_td', 
+                             'nf_passing_tds', 'etr_pass_tds', 'fpts_pass_td'],
+            'proj_pass_int': ['passInt', 'ffa_pass_int', 'fft_pass_int', 'fc_proj_passing_stats_int', 
+                              'nf_passing_ints', 'etr_pass_int', 'fpts_pass_int'],
+            'proj_pass_comp': ['etr_pass_cmp', 'fft_pass_comp', 'fpts_pass_cmp', 'passComp', 'fpts_pass_cmp'],
+            'proj_pass_att': ['passAtt', 'fft_pass_att', 'fc_proj_passing_stats_att', 'etr_pass_att', 'fpts_pass_att'],
+            'proj_rush_yds': ['rushYds', 'ffa_rush_yds', 'fft_rush_yds', 'fc_proj_rushing_stats_yrds', 'fdta_rush_yds', 
+                              'nf_rushing_yds', 'etr_rush_yds', 'fpts_rush_yds'],
+            'proj_rush_att': ['rushAtt', 'fft_rush_att', 'fc_proj_rushing_stats_att', 'nf_rushing_att', 'etr_rush_att', 'fpts_rush_att'],
+            'proj_rush_td': ['rushTd', 'ffa_rush_tds', 'fft_rush_td', 'fc_proj_rushing_stats_tds', 'fdta_rush_td', 
+                             'nf_rushing_tds', 'etr_rush_tds', 'fpts_rush_td'],
+            'proj_rec': ['recvReceptions', 'ffa_rec', 'fft_rec', 'fc_proj_receiving_stats_rec', 'fdta_rec', 
+                         'nf_receiving_rec', 'etr_rec', 'fpts_rec'],
+            'proj_rec_yds': ['recvYds', 'ffa_rec_yds', 'fft_rec_yds', 'fc_proj_receiving_stats_yrds', 'fdta_rec_yds', 
+                             'nf_receiving_yds', 'etr_rec_yds', 'fpts_rec_yds'],
+            'proj_rec_td': ['recvTd', 'ffa_rec_tds', 'fft_rec_td', 'fc_proj_receiving_stats_tds', 'fdta_rec_td', 
+                            'nf_receiving_tds', 'etr_rec_td', 'fpts_rec_td'],
             'proj_rec_tgts': ['recvTargets', 'fc_proj_receiving_stats_tar'],
 
             # point and rank fills
             'proj_points': ['projected_points', 'fantasyPoints', 'ProjPts', 'ffa_points', 'fft_proj_pts', 'fc_proj_fantasy_pts_fc', 
-                            'fdta_proj_points', 'nf_proj_points', 'etr_proj_points'],
+                            'fdta_proj_points', 'nf_proj_points', 'etr_proj_points', 'fpts_proj_points'],
             'proj_floor': ['ffa_floor', 'fc_projected_values_floor', 'etr_proj_floor'],
             'proj_ceiling': ['ffa_ceiling', 'fc_projected_values_ceiling', 'etr_proj_ceiling'],
 
             'proj_rank': ['fp_rank',   'expertConsensus', 'expertNathanJahnke', 'expertIanHartitz',  'nf_ranks_pos',
-                          'ffa_position_rank', 'fc_rank', 'fdta_rank', 'etr_rank', 'fft_rank'],
+                          'ffa_position_rank', 'fc_rank', 'fdta_rank', 'etr_rank', 'fft_rank', 'fpts_rank'],
             'player_adj_proj_rank': ['playeradj_expertNathanJahnke', 'playeradj_expertConsensus','playeradj_fp_rank'],
             'rank_adj_proj_rank': ['rankadj_expertConsensus', 'rankadj_expertNathanJahnke','rankadj_fp_rank'],
             'floor_rank': ['ffa_floor_rank', 'etr_floor_rank'],
@@ -383,25 +446,27 @@ def consensus_fill(df, is_dst=False):
         else:
             df['max_' + k] = df[tf].max(axis=1)
 
-        if k == 'proj_points' and not is_dst:
-            etr_ratio_ceiling = (df['etr_proj_ceiling'] / df['etr_proj_points']).mean()
+        if k == 'proj_points':
+            etr_ratio_ceiling = (df['etr_proj_ceiling'] / (df['etr_proj_points']+0.1)).mean()
             df.loc[df.etr_proj_ceiling.isnull(), 'etr_proj_ceiling'] = df.loc[df.etr_proj_ceiling.isnull(), 'etr_proj_points'] * etr_ratio_ceiling
             
-            etr_ratio_floor = (df['etr_proj_floor'] / df['etr_proj_points']).mean()
+            etr_ratio_floor = (df['etr_proj_floor'] / (df['etr_proj_points']+0.1)).mean()
             df.loc[df.etr_proj_floor.isnull(), 'etr_proj_floor'] = df.loc[df.etr_proj_floor.isnull(), 'etr_proj_points'] * etr_ratio_floor
 
-            fc_ratio_ceiling = (df['fc_projected_values_ceiling'] / df['fc_proj_fantasy_pts_fc']).mean()
+            fc_ratio_ceiling = (df['fc_projected_values_ceiling'] / (df['fc_proj_fantasy_pts_fc']+0.1)).mean()
             df.loc[df.fc_projected_values_ceiling.isnull(), 'fc_projected_values_ceiling'] = df.loc[df.fc_projected_values_ceiling.isnull(), 'fc_proj_fantasy_pts_fc'] * fc_ratio_ceiling
 
-            fc_ratio_floor = (df['fc_projected_values_floor'] / df['fc_proj_fantasy_pts_fc']).mean()
+            fc_ratio_floor = (df['fc_projected_values_floor'] / (df['fc_proj_fantasy_pts_fc']+0.1)).mean()
             df.loc[df.fc_projected_values_floor.isnull(), 'fc_projected_values_floor'] = df.loc[df.fc_projected_values_floor.isnull(), 'fc_proj_fantasy_pts_fc'] * fc_ratio_floor
         
-        if k == 'proj_ceiling' and not is_dst:
+        if k == 'proj_ceiling':
             df['etr_floor_rank'] = df.groupby(['year', 'week'])['etr_proj_floor'].rank(ascending=False, method='min')
             df['etr_rank'] = df.groupby(['year', 'week'])['etr_proj_points'].rank(ascending=False, method='min')
             df['etr_ceiling_rank'] = df.groupby(['year', 'week'])['etr_proj_ceiling'].rank(ascending=False, method='min')
 
     if not is_dst:
+        df['avg_proj_pass_cmp_pct'] = df.avg_proj_pass_comp / (df.avg_proj_pass_att + 1)
+
         df['avg_proj_rush_points'] = df.avg_proj_rush_yds * 0.1 + df.avg_proj_rush_td * 6
         df['avg_proj_rec_points'] = df.avg_proj_rec_yds * 0.1 + df.avg_proj_rec_td * 6 + df.avg_proj_rec
         df['avg_proj_pass_points'] = df.avg_proj_pass_yds * 0.04 + df.avg_proj_pass_td * 4 - df.avg_proj_pass_int * 1
@@ -1064,8 +1129,8 @@ def advanced_rb_stats(df):
     adv = dc.convert_to_float(adv)
     adv.player = adv.player.apply(dc.name_clean)
     
-    adv['yds_before_contact_pct'] = adv['yds_before_contact'] / adv['rush_yds']
-    adv['yds_after_contact_pct'] = adv['yds_after_contact'] / adv['rush_yds']
+    adv['yds_before_contact_pct'] = adv['yds_before_contact'] / (adv['rush_yds']+0.1)
+    adv['yds_after_contact_pct'] = adv['yds_after_contact'] / (adv['rush_yds']+0.1)
     adv['yds_before_contact_per_game'] = adv['yds_before_contact'] / adv['games']
     adv['yds_after_contact_per_game'] = adv['yds_after_contact'] / adv['games']
     adv['broke_tackles_per_game'] = adv['broke_tackles'] / adv['games']
@@ -1750,6 +1815,7 @@ def defense_for_pos():
     # defense stats that can be added to the offensive player data
     defense = fantasy_pros_new('DST').rename(columns={'player': 'defTeam'})
     defense = add_ffa_defense(defense)
+
     defense = defense.drop(['pos', 'position', 'team'], axis=1)
 
     pff_def = add_team_matchups()
@@ -1787,6 +1853,7 @@ def get_max_qb():
     df = fantasy_data_proj(df, 'QB')
     df = numberfire_proj(df)
     df = etr_projection(df, 'QB')
+    df = fantasy_points_projection(df, 'QB')
     df = get_salaries(df, 'QB')
 
     df = consensus_fill(df)
@@ -1801,9 +1868,10 @@ def get_max_qb():
                'fc_proj_rushing_stats_att',  'fc_proj_rushing_stats_yrds', 'fc_proj_rushing_stats_tds',
                'fft_proj_pts', 'fft_pass_att', 'fft_pass_int', 'fft_rush_yds', 'fft_rush_att', 'fft_pass_yds', 'fft_pass_td',
                'fft_rush_td', 'fft_pass_comp',  'fdta_pass_yds', 'fdta_pass_td', 'fdta_rush_yds','fdta_rush_td',
-               'etr_proj_points', 'etr_proj_ceiling', 'etr_proj_floor', 'nf_passing_yds', 'nf_passing_tds',
-               'nf_rushing_att', 'nf_rushing_tds', 'nf_rushing_yds',
-               'avg_proj_pass_yds', 'avg_proj_pass_td',  'avg_proj_pass_int', 'avg_proj_pass_att',
+               'etr_proj_points', 'etr_proj_ceiling', 'etr_proj_floor', 'etr_pass_yds', 'etr_pass_tds',
+               'etr_rush_yds', 'etr_rush_tds', 'etr_pass_att', 'etr_pass_cmp',
+               'nf_passing_yds', 'nf_passing_tds', 'nf_rushing_att', 'nf_rushing_tds', 'nf_rushing_yds',
+               'avg_proj_pass_yds', 'avg_proj_pass_td',  'avg_proj_pass_int', 'avg_proj_pass_att', 'avg_proj_pass_comp',
                'avg_proj_rush_yds',  'avg_proj_rush_att', 'avg_proj_rush_td', 
                'ffa_points', 'projected_points', 'avg_proj_points', 'ProjPts', 
                'log_avg_proj_rank', 'log_playeradj_fp_rank', 'log_expertConsensus', 'avg_proj_rank',
@@ -1846,10 +1914,13 @@ def get_team_projections():
         tp = numberfire_proj(tp)
         tp = fantasy_data_proj(tp, pos)
         tp = etr_projection(tp, pos)
+        tp = fantasy_points_projection(tp, pos)
 
         tp = consensus_fill(tp)
         tp = fill_ratio_nulls(tp)
         tp = log_rank_cols(tp)
+        tp, _ = add_injuries(tp, pos); print(tp.shape[0])
+
         team_proj = pd.concat([team_proj, tp], axis=0)
 
     team_proj = create_pos_rank(team_proj)
@@ -1917,9 +1988,13 @@ def non_qb_team_pos_rank():
         tp = fantasy_cruncher(tp, pos)
         tp = fantasy_data_proj(tp, pos)
         tp = etr_projection(tp, pos)
+        tp = numberfire_proj(tp)
+        tp = fantasy_points_projection(tp, pos)
         tp = consensus_fill(tp)
         tp = fill_ratio_nulls(tp)
         team_pos_rank = pd.concat([team_pos_rank, tp], axis=0)
+        tp, _ = add_injuries(tp, pos); print(tp.shape[0])
+
 
     team_pos_rank = create_pos_rank(team_pos_rank, extra_pos=True)
     return  team_pos_rank[['player', 'pos', 'pos_rank', 'team', 'week', 'year']]
@@ -1957,6 +2032,7 @@ def qb_pull(rush_or_pass):
     df = fantasy_data_proj(df, pos); print(df.shape[0])
     df = numberfire_proj(df); print(df.shape[0])
     df = etr_projection(df, pos); print(df.shape[0])
+    df = fantasy_points_projection(df, pos); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
 
     # clean up any missing values and engineer data
@@ -2037,6 +2113,7 @@ for pos in ['RB', 'WR', 'TE']:
     df = fantasy_data_proj(df, pos); print(df.shape[0])
     df = numberfire_proj(df); print(df.shape[0])
     df = etr_projection(df, pos); print(df.shape[0])
+    df = fantasy_points_projection(df, pos); print(df.shape[0])
     df = get_salaries(df, pos); print(df.shape[0])
 
     # clean up any missing values and engineer data
@@ -2123,6 +2200,7 @@ for pos in ['QB', 'RB', 'WR', 'TE']:
     df = fantasy_data_proj(df, pos); print(df.shape[0])
     df = numberfire_proj(df); print(df.shape[0])
     df = etr_projection(df, pos); print(df.shape[0])
+    df = fantasy_points_projection(df, pos); print(df.shape[0])
 
     df = consensus_fill(df); print(df.shape[0])
     df = fill_ratio_nulls(df); print(df.shape[0])
@@ -2205,7 +2283,11 @@ defense = fantasy_cruncher(defense.rename(columns={'defTeam': 'player'}), 'DST')
 defense = defense.rename(columns={'player': 'defTeam'})
 
 defense = fantasy_data_proj_def(defense.rename(columns={'defTeam': 'player'}))
+defense = fantasy_points_projection_def(defense)
+defense = etr_projection_def(defense)
 defense = defense.rename(columns={'player': 'defTeam'})
+
+
 
 defense = consensus_fill(defense, is_dst=True)
 defense = fill_ratio_nulls(defense)
@@ -2258,25 +2340,29 @@ print('Team Counts by Week:', defense[['year', 'week', 'player']].drop_duplicate
 
 defense.columns = [c.replace('_dst', '') for c in defense.columns]
 defense = remove_non_uniques(defense)
-defense = remove_low_corrs(defense, corr_cut=0.02)
+defense = remove_low_corrs(defense, corr_cut=0.03)
 
 dm.write_to_db(defense, f'Model_Features_{YEAR}', f'Defense_Data_Week{WEEK}', if_exist='replace')
 
 
 #%%
 
-chk_week = 1
+chk_week = 2
 backfill_chk = dm.read(f'''SELECT player 
                            FROM Backfill_QB_Week{WEEK} 
+                           WHERE week={chk_week} AND year={YEAR}
                            UNION
                            SELECT player 
                            FROM Backfill_RB_Week{WEEK} 
+                           WHERE week={chk_week} AND year={YEAR}
                            UNION
                            SELECT player 
                            FROM Backfill_WR_Week{WEEK} 
+                           WHERE week={chk_week} AND year={YEAR}
                            UNION
                            SELECT player 
                            FROM Backfill_TE_Week{WEEK} 
+                           WHERE week={chk_week} AND year={YEAR}
                         ''', f'Model_Features_{YEAR}').player.values
 sal = dm.read(f"SELECT player, salary FROM Salaries WHERE week={chk_week} AND year={YEAR}", 'Simulation')
 sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).iloc[:50]

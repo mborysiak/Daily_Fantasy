@@ -17,7 +17,7 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2024
-week=1
+week=2
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -102,7 +102,7 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'Results')
     return vers
 
-best_trials = 685
+best_trials = 762
 
 opt_params = pull_best_params(best_trials)
 pprint.pprint(opt_params)
@@ -175,7 +175,7 @@ def create_database_output(my_team, j):
 # run all the lineups
 rs = RunSim(db_path, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, num_lineups)
 params = rs.generate_param_list(opt_params)
-lineups_list = rs.run_multiple_lineups(params, calc_winnings=False, parallelize=True, n_jobs=15, verbose=0)
+lineups_list = rs.run_multiple_lineups(params, calc_winnings=False, parallelize=True, n_jobs=-1, verbose=0)
 
 #%%
 # get the player data

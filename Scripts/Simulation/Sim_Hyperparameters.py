@@ -274,7 +274,7 @@ winnings_pr = winnings_pr.assign(model_notes=model_notes, date_run=date_run)
 
 try:
     dm.delete_from_db('SimParams', 'Entry_Optimize_Hyperparams', f"model_notes='{model_notes}' AND date_run='{date_run}'", create_backup=False)
-    dm.write_to_db(winnings_pr.iloc[:10000], 'SimParams','Entry_Optimize_Hyperparams', 'append')
+    dm.write_to_db(winnings_pr.iloc[:5000], 'SimParams','Entry_Optimize_Hyperparams', 'append')
 
 except:
     old_df = dm.read('''SELECT * FROM Entry_Optimize_Hyperparams''', 'SimParams')

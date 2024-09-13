@@ -15,10 +15,10 @@ dm = DataManage(db_path)
 DATA_PATH = f'{root_path}/Data/OtherData/NFL_FastR/'
 pd.set_option('display.max_columns', 999)
 
-cur_season = 2023
+cur_season = 2024
 FNAME = f'raw_data_{cur_season}.parquet'
 
-dbname = 'FastR_Beta'
+dbname = 'FastR'
 
 #---------------
 # Functions

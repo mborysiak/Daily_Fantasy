@@ -24,13 +24,13 @@ def create_sd_max_metrics(df):
     df = df.drop(['fantasyPoints', 'ProjPts', 'projected_points', 
                     'roll_std', 'roll_max'], axis=1)
     
-    # df['sd_metric'] = df[['fantasyPoints', 'ProjPts', 'projected_points', 'roll_std',
+    # df['sd_metric'] = df[['fantasyPoints', 'ProjPts', 'projected_points', #'roll_std',
     #                       'ffa_points', 'ffa_ceiling',  'max_proj_points', 'avg_proj_points']].mean(axis=1)
-    # df['max_metric'] = df[['fantasyPoints', 'ProjPts', 'projected_points', 'roll_max',
+    # df['max_metric'] = df[['fantasyPoints', 'ProjPts', 'projected_points', #'roll_max',
     #                        'ffa_points', 'ffa_ceiling',  'max_proj_points', 'avg_proj_points']].mean(axis=1)
     
-    # df = df.drop(['fantasyPoints', 'ProjPts', 'projected_points', 
-    #                 'roll_std', 'roll_max','ffa_points','ffa_ceiling', 'max_proj_points', 'avg_proj_points'], axis=1)
+    # df = df.drop(['fantasyPoints', 'ProjPts', 'projected_points', 'roll_std', 'roll_max', 
+    #               'ffa_points','ffa_ceiling', 'max_proj_points', 'avg_proj_points'], axis=1)
 
     return df
 
@@ -139,12 +139,12 @@ def get_max_metrics(week, year):
         stats, current = rolling_max_std(pos, week, year)
 
         # join together and calculate sd and max metrics
-        past = pd.merge(proj, stats, on=['player', 'team', 'week', 'year'])
+        past = pd.merge(proj, stats, on=['player', 'team', 'week', 'year'], how='left')
         past = create_sd_max_metrics(past)
         past['pos'] = pos
         corr_data = pd.concat([corr_data, past], axis=0)
 
-        current = pd.merge(proj, current, on=['player', 'week', 'year'])
+        current = pd.merge(proj, current, on=['player', 'week', 'year'], how='left')
         current = create_sd_max_metrics(current)
         current['pos'] = pos
         current_data = pd.concat([current_data, current], axis=0)
@@ -372,7 +372,7 @@ covar_type = 'team_points_trunc'
 #     2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
 # ]
 
-set_weeks = [1]
+set_weeks = [2]
 set_years = [2024]
 
 pred_versions = [

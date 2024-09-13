@@ -37,7 +37,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [1]
+run_weeks = [2]
 verbosity = 50
 run_params = {
     
@@ -711,6 +711,9 @@ def save_output_dict(out_dict, label, model_output_path):
 # run_params['set_week'] = w
 # run_params = get_last_run_week(w, run_params)
 
+# if not os.path.exists(f"{root_path}/Scripts/Modeling/optuna/{run_params['set_year']}/week{run_params['set_week']}/"):
+#     os.makedirs(f"{root_path}/Scripts/Modeling/optuna/{run_params['set_year']}/week{run_params['set_week']}/")
+
 # run_params['last_study_db'] = f"sqlite:///optuna/{run_params['last_run_year']}/week{run_params['last_run_week']}/weekly_train_week{run_params['last_run_week']}_year{run_params['last_run_year']}.sqlite3"
 # run_params['study_db'] = f"sqlite:///optuna/{run_params['set_year']}/week{run_params['set_week']}/weekly_train_week{run_params['set_week']}_year{run_params['set_year']}.sqlite3"
 
@@ -769,6 +772,8 @@ with keep.running() as m:
         run_params['set_week'] = w
         run_params = get_last_run_week(w, run_params)
         
+        if not os.path.exists(f"{root_path}/Scripts/Modeling/optuna/{run_params['set_year']}/week{run_params['set_week']}/"):
+            os.makedirs(f"{root_path}/Scripts/Modeling/optuna/{run_params['set_year']}/week{run_params['set_week']}/")
         run_params['last_study_db'] = f"sqlite:///optuna/{run_params['last_run_year']}/week{run_params['last_run_week']}/weekly_train_week{run_params['last_run_week']}_year{run_params['last_run_year']}.sqlite3"
         run_params['study_db'] = f"sqlite:///optuna/{run_params['set_year']}/week{run_params['set_week']}/weekly_train_week{run_params['set_week']}_year{run_params['set_year']}.sqlite3"
 
