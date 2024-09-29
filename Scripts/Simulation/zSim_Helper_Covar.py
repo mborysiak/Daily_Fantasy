@@ -1192,25 +1192,25 @@ class RunSim:
 #%%
 
 
-# for week in range(1,2):
-#     year = 2022
+# for week in range(3,4):
+#     year = 2024
 #     print(f'Running week {week} for year {year}')
 #     total_lineups = 2
 #     salary_cap = 50000
 #     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 
 #     model_vers = {
-#                 'million_ens_vers': 'random_full_stack_matt0_brier1_include2_kfold3',
+#                 'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
 #                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
-#                 'reg_ens_vers': 'random_full_stack_sera0_rsq0_mse1_include2_kfold3',
+#                 'reg_ens_vers': 'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3',
 #                 'std_dev_type': 'spline_pred_class80_q80_matt0_brier1_kfold3'
 #                 }
 #     d = {
 #         'adjust_pos_counts': {False: 0.5, True: 0.5},
 #         'covar_type': {'kmeans_pred_trunc': 0.0,
 #                         'kmeans_pred_trunc_new': 0.0,
-#                         'no_covar': 0.5,
-#                         'team_points_trunc': 0.5},
+#                         'no_covar': 1,
+#                         'team_points_trunc': 0},
 #         'def_max_pick': {0: 1},
 #         'full_model_weight': {0.2: 0.4, 5: 0.6},
 #         'matchup_drop': {0: 1, 1: 0, 2: 0.0, 3: 0.0},
@@ -1240,9 +1240,9 @@ class RunSim:
 #         'use_ownership': {0.7: 0.0, 0.8: 0.4, 0.9: 0.0, 1: 0.6},
 #         'use_unique_players': {False: 1.0, True: 0.0},
 #         'wr_max_pick': {0: 1},
-#         'min_pts_per_dollar': {2: 1}, 
-#         'min_pred_pts': {5: 1},
-#         'min_pts_variable': {0: 0.0, 1: 1}
+#         'min_pts_per_dollar': {0: 1}, 
+#         'min_pred_pts': {0: 1},
+#         'min_pts_variable': {0: 0.0, 1: 1},
 #     }
 
 #     pred_vers = model_vers['pred_vers']
@@ -1268,10 +1268,12 @@ class RunSim:
 
 # #%%
 
-# # rs.run_full_lineup(params[0], existing_players=[], set_max_team=None)
+# rs.run_full_lineup(params[0], existing_players=[], set_max_team=None)
 
-# #%%
+#%%
 
 # total_winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=True, n_jobs=15, verbose=0)
 # print(total_winnings)
 # display(player_results.groupby('player').size().sort_values(ascending=False))
+
+# %%

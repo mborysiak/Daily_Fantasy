@@ -113,6 +113,7 @@ class FoldPredict:
 best_trials = dm.read('''SELECT *
                          FROM Entry_Optimize_Results
                          WHERE trial_num >= 654
+                                 AND reg_ens_vers LIKE '%_include2_kfold3%'
                          ''', 'Results')
 
 best_trials.loc[best_trials.avg_winnings > 10000, 'avg_winnings'] = 10000
@@ -171,11 +172,12 @@ results = dm.read('''SELECT *
                     WHERE trial_num >= 654
                           AND reg_ens_vers LIKE '%newp%'
                           AND reg_ens_vers LIKE '%_include2_kfold3%'
+                          AND million_ens_vers LIKE '%_include2_kfold3%'
                     ''', 'Results')
 
-# results.loc[results.avg_winnings > 10000, 'avg_winnings'] = 10000
-# results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] = \
-#     results.loc[~((results.week==8)&(results.year==2022)), 'avg_winnings'] * 3
+results.loc[results.avg_winnings > 10000, 'avg_winnings'] = 10000
+results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] = \
+    results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] * 2
 
 # results.loc[((results.week==1)&(results.year==2022)), 'avg_winnings'] = \
 #     results.loc[((results.week==1)&(results.year==2022)), 'avg_winnings'] / 2
@@ -266,9 +268,10 @@ for c in grp_cols:
 winnings_pr = winnings_pr.sort_values(by='winnings_pred', ascending=False).drop_duplicates().reset_index(drop=True)
 winnings_pr = winnings_pr.reset_index().rename(columns={'index': 'param_rank'})
 
-model_notes = 'newp_v2'
+model_notes = 'newp_v2_onlykfold3_include2_non1_8_times2'
 date_run = dt.datetime.now().strftime('%Y-%m-%d')
 winnings_pr = winnings_pr.assign(model_notes=model_notes, date_run=date_run)
+winnings_pr
 
 #%%
 

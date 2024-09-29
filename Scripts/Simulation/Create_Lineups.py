@@ -17,7 +17,7 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2024
-week=2
+week=4
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -102,11 +102,12 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'Results')
     return vers
 
-best_trials = 762
+best_trials = 795
 
 opt_params = pull_best_params(best_trials)
-pprint.pprint(opt_params)
 del opt_params['lineups_per_param']
+del opt_params['rb_min_sal']
+pprint.pprint(opt_params)
 
 if 'min_pts_per_dollar' not in opt_params.keys():
     opt_params['min_pts_per_dollar'] = {0: 0.0}
@@ -233,6 +234,14 @@ for t in ['Model_Predictions', 'Covar_Means', 'Covar_Matrix']:
                         AND reg_ens_vers='{reg_ens_vers}'
                         AND std_dev_type='{std_dev_type}'
                         ''', 'Simulation')
+    dm_app.write_to_db(df, 'Simulation_App', t, 'replace')
+
+for t in ['ETR_Projections_DK']:
+    df = dm.read(f'''SELECT * 
+                    FROM {t}
+                    WHERE week={week}
+                        AND year={year}
+                        ''', 'Pre_PlayerData')
     dm_app.write_to_db(df, 'Simulation_App', t, 'replace')
 
 # %%

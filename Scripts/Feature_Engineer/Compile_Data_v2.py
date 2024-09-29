@@ -1,8 +1,7 @@
 #%%
 
 YEAR = 2024
-WEEK = 2
-
+WEEK = 4
 
 import pandas as pd 
 import numpy as np
@@ -1109,7 +1108,7 @@ def add_weather(df):
         weather.loc[weather.team.isin(domes), c] = 0
 
     matchups = dm.read('''SELECT offTeam team, defTeam, week, year 
-                        FROM PFF_Expert_Ranks''', 'Pre_TeamData')
+                          FROM PFF_Expert_Ranks''', 'Pre_TeamData')
 
     away_weather = pd.merge(weather, matchups, on=['team', 'week', 'year'])
     away_weather = away_weather.drop('team', axis=1).rename(columns={'defTeam': 'team'})
@@ -1597,7 +1596,7 @@ def remove_non_uniques(df):
     return df
 
 def drop_duplicate_players(df):
-    df = df.sort_values(by=['player', 'year', 'week', 'projected_points', 'ffa_points'],
+    df = df.sort_values(by=['player', 'year', 'week', 'avg_proj_points', 'projected_points'],
                     ascending=[True, True, True, False, False])
     df = df.drop_duplicates(subset=['player', 'year', 'week'], keep='first').reset_index(drop=True)
     return df
@@ -1826,11 +1825,18 @@ def defense_for_pos():
 
     d_stats = get_defense_stats().rename(columns={'team': 'defTeam'})
     defense = pd.merge(defense, d_stats, on=['defTeam', 'week', 'year'], how='inner')
+    
+    defense = fantasy_data_proj_def(defense.rename(columns={'defTeam': 'player'}))
+    defense = fantasy_points_projection_def(defense)
+    defense = etr_projection_def(defense)
+    defense = defense.rename(columns={'player': 'defTeam'})
 
     defense = consensus_fill(defense, is_dst=True)
     defense = fill_ratio_nulls(defense)
     defense = log_rank_cols(defense)
     # defense = rolling_proj_stats(defense)
+
+    defense = defense.dropna(axis=1, thresh=defense.shape[0]-100)
 
     defense = defense.dropna()
     pff_def = pff_defense_rollup().rename(columns={'team': 'defTeam'})
@@ -1878,9 +1884,8 @@ def get_max_qb():
                'fp_rank', 'log_ffa_position_rank', 'log_rankadj_fp_rank', 'dk_salary',
                'avg_proj_pass_points', 'avg_proj_rush_points', 'avg_proj_pass_ratio'
                ]
-    df = df.sort_values(by=['team', 'year', 'week', 'projected_points', 'ffa_points'],
-                        ascending=[True, True, True, False, False])
-    df = df.drop_duplicates(subset=['team', 'year', 'week'], keep='first').reset_index(drop=True)
+    df = drop_duplicate_players(df)
+    df = one_qb_per_week(df)
     df = df[qb_cols]
     df.columns = ['qb_'+c if c not in ('team', 'week', 'year') else c for c in df.columns]
 
@@ -1919,7 +1924,15 @@ def get_team_projections():
         tp = consensus_fill(tp)
         tp = fill_ratio_nulls(tp)
         tp = log_rank_cols(tp)
-        tp, _ = add_injuries(tp, pos); print(tp.shape[0])
+
+        tp_this_week = tp.copy()
+        tp_this_week = tp_this_week[(tp_this_week.week==WEEK) & (tp_this_week.year==YEAR)]
+        tp_other_weeks = tp.copy()
+        tp_other_weeks = tp_other_weeks[~((tp_other_weeks.week==WEEK) & (tp_other_weeks.year==YEAR))]
+
+        tp_this_week, _ = add_injuries(tp_this_week, pos); print(tp.shape[0])
+        tp = pd.concat([tp_this_week, tp_other_weeks], axis=0).reset_index(drop=True)
+        tp = drop_duplicate_players(tp)
 
         team_proj = pd.concat([team_proj, tp], axis=0)
 
@@ -1941,6 +1954,9 @@ def get_team_projections():
             'fc_proj_receiving_stats_tar', 'fc_proj_receiving_stats_rec',
             'fc_proj_receiving_stats_yrds', 'fc_proj_receiving_stats_tds', 
             'fdta_rush_yds', 'fdta_rush_td', 'fdta_rec', 'fdta_rec_yds', 'fdta_rec_td', 'fdta_proj_points',
+            'etr_proj_points', 'etr_proj_ceiling', 'etr_proj_floor', 'etr_rush_yds', 'etr_rush_tds', 'etr_rec', 'etr_rec_yds', 'etr_rec_td',
+            'nf_rushing_yds', 'nf_rushing_tds', 'nf_receiving_rec', 'nf_receiving_yds', 'nf_receiving_tds',
+            'fpts_rush_yds', 'fpts_rec', 'fpts_rush_td', 'fpts_rec_td', 'fpts_rush_yds', 'fpts_rec_yds',
             'avg_proj_rush_att', 'avg_proj_rush_td', 'avg_proj_rec', 'avg_proj_rec_tgts','avg_proj_rec_yds','avg_proj_rec_td', 
             ]
 
@@ -1994,6 +2010,7 @@ def non_qb_team_pos_rank():
         tp = fill_ratio_nulls(tp)
         team_pos_rank = pd.concat([team_pos_rank, tp], axis=0)
         tp, _ = add_injuries(tp, pos); print(tp.shape[0])
+        tp = drop_duplicate_players(tp)
 
 
     team_pos_rank = create_pos_rank(team_pos_rank, extra_pos=True)
@@ -2013,6 +2030,7 @@ team_pos_rank = non_qb_team_pos_rank()
 pff_oline = pff_oline_rollup()
 
 #%%
+
 pos = 'QB'
 rush_or_pass = ''
 
@@ -2347,7 +2365,7 @@ dm.write_to_db(defense, f'Model_Features_{YEAR}', f'Defense_Data_Week{WEEK}', if
 
 #%%
 
-chk_week = 2
+chk_week = 4
 backfill_chk = dm.read(f'''SELECT player 
                            FROM Backfill_QB_Week{WEEK} 
                            WHERE week={chk_week} AND year={YEAR}

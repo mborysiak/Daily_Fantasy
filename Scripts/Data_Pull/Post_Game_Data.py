@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2024
-set_week = 1
+set_week = 3
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -406,7 +406,7 @@ dm.write_to_db(df, 'Post_PlayerData', 'Defense_Players', 'append')
 # %%
 
 try:
-    os.replace(f"/Users/borys/Downloads/receiving_scheme ({set_week}).csv", 
+    os.replace(f"/Users/borys/Downloads/receiving_scheme.csv", 
                 f'{root_path}/Data/OtherData/PFF_Rec_Stats/{set_year}/receiving_scheme_week{set_week}.csv')
 except: 
     pass

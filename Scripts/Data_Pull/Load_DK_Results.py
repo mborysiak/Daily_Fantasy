@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2024
-set_week = 1
+set_week = 3
 
 download_path = f'c:/Users/borys/Downloads/week{set_week}.csv'
 save_path = f'c:/Users/borys/OneDrive/Documents/Github/Daily_Fantasy/Data/OtherData/DK_Results/{set_year}/week{set_week}.csv'
@@ -336,9 +336,10 @@ df_lineups_top['value'] = df_lineups_top.fpts / df_lineups_top.dk_salary
 df_lineups_top['y_act'] = 0
 # df_lineups_top.loc[((df_lineups_top.counts >= 5) & (df_lineups_top.value > 3)), 'y_act'] = 1
 
-df_lineups_top.loc[((df_lineups_top.counts >= 5) & (df_lineups_top.value > 3)) |
-                    ((df_lineups_top.counts >= 2) & (df_lineups_top.value > 4)) | 
-                    ((df_lineups_top.counts >= 20) & (df_lineups_top.value > 2.5)), 'y_act'] = 1
+df_lineups_top.loc[((df_lineups_top.counts >= 5) & (df_lineups_top.value > 3))# |
+                    # ((df_lineups_top.counts >= 2) & (df_lineups_top.value > 4)) | 
+                    # ((df_lineups_top.counts >= 20) & (df_lineups_top.value > 2.5))
+                    , 'y_act'] = 1
 
 dm.delete_from_db('DK_Results', 'Top_Players', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df_lineups_top, 'DK_Results', 'Top_Players', 'append')
@@ -386,54 +387,52 @@ df_lineups_top[df_lineups_top.y_act==1]
 
 # %%
 
-for set_week in range(1, 18):
-    for set_year in range(2020, 2024):
-        print(week, year)
+full_entries = dm.read(f'''SELECT * 
+                        FROM Contest_Results 
+                        WHERE Contest = '{contest}'
+                                AND week = {set_week}
+                                AND year = {set_year}
+                        ''', 'DK_Results')
 
-        full_entries = dm.read(f'''SELECT * 
-                                FROM Contest_Results 
-                                WHERE Contest = '{contest}'
-                                        AND week = {set_week}
-                                        AND year = {set_year}
-                                ''', 'DK_Results')
+num_lineups = full_entries.Rank.max()
 
-        num_lineups = full_entries.Rank.max()
+df_lineups_roi = format_lineups(full_entries, min_place=1, max_place=200000)
+df_lineups_roi.player = df_lineups_roi.player.apply(dc.name_clean)
+df_lineups_roi.loc[df_lineups_roi.lineup_position=='DST', 'player'] = \
+    df_lineups_roi.loc[df_lineups_roi.lineup_position=='DST', 'player'].map(team_map)
 
-        df_lineups_roi = format_lineups(full_entries, min_place=1, max_place=200000)
-        df_lineups_roi.player = df_lineups_roi.player.apply(dc.name_clean)
-        df_lineups_roi.loc[df_lineups_roi.lineup_position=='DST', 'player'] = \
-            df_lineups_roi.loc[df_lineups_roi.lineup_position=='DST', 'player'].map(team_map)
+prizes = full_entries[['Rank', 'week', 'year', 'prize']].rename(columns={'Rank': 'place'})
+df_lineups_roi = pd.merge(df_lineups_roi, prizes, on=['place', 'week', 'year'])
+df_lineups_roi = df_lineups_roi.groupby(['player', 'week', 'year']).agg(total_prize=('prize', 'sum'), 
+                                                                        total_lineups=('prize', 'count')).reset_index()
 
-        prizes = full_entries[['Rank', 'week', 'year', 'prize']].rename(columns={'Rank': 'place'})
-        df_lineups_roi = pd.merge(df_lineups_roi, prizes, on=['place', 'week', 'year'])
-        df_lineups_roi = df_lineups_roi.groupby(['player', 'week', 'year']).agg(total_prize=('prize', 'sum'), 
-                                                                                total_lineups=('prize', 'count')).reset_index()
+df_lineups_roi['prize_return_delta'] = (df_lineups_roi.total_prize - (df_lineups_roi.total_lineups*20))
+df_lineups_roi['prize_return_pct'] = (df_lineups_roi.total_prize - (df_lineups_roi.total_lineups*20)) / (df_lineups_roi.total_lineups*20)
 
-        df_lineups_roi['prize_return_delta'] = (df_lineups_roi.total_prize - (df_lineups_roi.total_lineups*20))
-        df_lineups_roi['prize_return_pct'] = (df_lineups_roi.total_prize - (df_lineups_roi.total_lineups*20)) / (df_lineups_roi.total_lineups*20)
+salaries = dm.read('''SELECT player, week, year, dk_salary/1000.0 dk_salary FROM Daily_Salaries''', 'Pre_PlayerData')
+team_salaries = dm.read('''SELECT team player, week, year, dk_salary/1000.0 dk_salary FROM Daily_Salaries''', 'Pre_TeamData')
+salaries = pd.concat([salaries, team_salaries], axis=0)
 
-        salaries = dm.read('''SELECT player, week, year, dk_salary/1000.0 dk_salary FROM Daily_Salaries''', 'Pre_PlayerData')
-        team_salaries = dm.read('''SELECT team player, week, year, dk_salary/1000.0 dk_salary FROM Daily_Salaries''', 'Pre_TeamData')
-        salaries = pd.concat([salaries, team_salaries], axis=0)
+df_lineups_roi = pd.merge(df_lineups_roi, pts, on=['player', 'week', 'year'], how='left')
+df_lineups_roi = pd.merge(df_lineups_roi, salaries, on=['player', 'week', 'year'], how='left')
+df_lineups_roi['value'] = df_lineups_roi.fpts / df_lineups_roi.dk_salary
+df_lineups_roi['ownership_pct'] = df_lineups_roi.total_lineups / num_lineups
 
-        df_lineups_roi = pd.merge(df_lineups_roi, pts, on=['player', 'week', 'year'], how='left')
-        df_lineups_roi = pd.merge(df_lineups_roi, salaries, on=['player', 'week', 'year'], how='left')
-        df_lineups_roi['value'] = df_lineups_roi.fpts / df_lineups_roi.dk_salary
-        df_lineups_roi['ownership_pct'] = df_lineups_roi.total_lineups / num_lineups
+df_lineups_roi['y_act'] = 0
+df_lineups_roi.loc[(df_lineups_roi.ownership_pct >= 0.005) & (df_lineups_roi.value > 2.5) & \
+    (df_lineups_roi.prize_return_delta > 0), 'y_act'] = 1
 
-        df_lineups_roi['y_act'] = 0
-        df_lineups_roi.loc[(df_lineups_roi.ownership_pct >= 0.005) & (df_lineups_roi.value > 2.5) & \
-            (df_lineups_roi.prize_return_delta > 0), 'y_act'] = 1
+dm.delete_from_db('DK_Results', 'Top_Players_ROI', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df_lineups_roi, 'DK_Results', 'Top_Players_ROI', 'append')
 
-        dm.delete_from_db('DK_Results', 'Top_Players_ROI', f"week={set_week} AND year={set_year}", create_backup=False)
-        dm.write_to_db(df_lineups_roi, 'DK_Results', 'Top_Players_ROI', 'append')
-
-        # df_lineups_roi[df_lineups_roi.y_act==1]
+# df_lineups_roi[df_lineups_roi.y_act==1]
 
 # %%
 
 dm.read('''SELECT * 
            FROM Top_Players_ROI
-           WHERE week=1
+           WHERE week=3
+                 AND year=2024
+                 AND y_act=1
            ''', 'DK_Results').sort_values(by='ownership_pct')
 # %%
