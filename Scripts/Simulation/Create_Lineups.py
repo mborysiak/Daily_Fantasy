@@ -1,5 +1,5 @@
 #%%
-from zSim_Helper_Covar import *
+from zSim_Helper_Covar_NewFeatures import *
 import pprint
 
 # set the root path and database management object
@@ -17,7 +17,7 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2024
-week=4
+week=5
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -102,7 +102,7 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'Results')
     return vers
 
-best_trials = 795
+best_trials = 833
 
 opt_params = pull_best_params(best_trials)
 del opt_params['lineups_per_param']
@@ -111,6 +111,9 @@ pprint.pprint(opt_params)
 
 if 'min_pts_per_dollar' not in opt_params.keys():
     opt_params['min_pts_per_dollar'] = {0: 0.0}
+
+if 'rb_min_sal' not in opt_params.keys():
+    opt_params['rb_min_sal'] = {3000: 1}
 
 best_vers = pull_params_version(best_trials)
 pred_vers = best_vers.pred_vers.values[0]

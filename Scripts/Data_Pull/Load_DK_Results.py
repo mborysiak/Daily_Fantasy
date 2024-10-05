@@ -13,7 +13,7 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
 set_year = 2024
-set_week = 3
+set_week = 4
 
 download_path = f'c:/Users/borys/Downloads/week{set_week}.csv'
 save_path = f'c:/Users/borys/OneDrive/Documents/Github/Daily_Fantasy/Data/OtherData/DK_Results/{set_year}/week{set_week}.csv'
@@ -431,7 +431,7 @@ dm.write_to_db(df_lineups_roi, 'DK_Results', 'Top_Players_ROI', 'append')
 
 dm.read('''SELECT * 
            FROM Top_Players_ROI
-           WHERE week=3
+           WHERE week=4
                  AND year=2024
                  AND y_act=1
            ''', 'DK_Results').sort_values(by='ownership_pct')

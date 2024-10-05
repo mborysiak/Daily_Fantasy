@@ -1442,7 +1442,7 @@ class_cut = 80
 # set_weeks = [5,6,7,8]
 # set_weeks = [9,10,11,12]
 # set_weeks = [13,14,15,16]
-set_weeks = [4]
+set_weeks = [5]
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"

@@ -13,7 +13,6 @@ db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 conn = dm.db_connect('Simulation')
 
-
 def get_top_hyperparams(num_rank, model_notes):
 
     top_settings = dm.read(f'''SELECT *
@@ -71,63 +70,81 @@ def get_top_hyperparams(num_rank, model_notes):
 
 num_rank = None
 # model_notes = 'newp_v2_onlykfold3_include2_non1_8_times2'
-model_notes = 'Trial 802 Rerun NewParams'
-# model_vers, d = get_top_hyperparams(num_rank, model_notes)
-manual_adjust = True
+model_notes = 'Trial 790 Rerun'
+if num_rank is not None: 
+    model_vers, d = get_top_hyperparams(num_rank, model_notes)
+    manual_adjust = False
+else:
+    manual_adjust = True
 
 if manual_adjust:
     model_vers = {'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
                 'reg_ens_vers': 'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3',
                 'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3',
- }
-    d ={'adjust_pos_counts': {False: 0.3, True: 0.7},
+    }
+    d = {'adjust_pos_counts': {False: 0.6, True: 0.4},
         'covar_type': {'kmeans_pred_trunc': 0.0,
                         'kmeans_pred_trunc_new': 0.0,
                         'no_covar': 0.3,
                         'team_points_trunc': 0.7,
                         'team_points_trunc_avgproj': 0.0},
         'def_max_pick': {0: 1.0, 5: 0.0, 7: 0.0, 8: 0.0},
-        'full_model_weight': {0.2: 0.6, 5: 0.4},
-        'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
-        'matchup_seed': {0: 0.8, 1: 0.2},
-        'max_salary_remain': {200: 0.0, 300: 0.0, 500: 0.7, 1000: 0.3, 1500: 0.0},
+        'full_model_weight': {0.2: 0.3, 5: 0.7},
+        'matchup_drop': {0: 0.9, 1: 0.1, 2: 0.0, 3: 0.0},
+        'matchup_seed': {0: 0.3, 1: 0.7},
+        'max_pts_per_dollar': {95: 0.0, 98: 0.0, 99: 0.0, 100: 1.0},
+        'max_pts_variable': {0: 1.0, 0.3: 0.0, 0.5: 0.0, 0.7: 0.0, 1: 0.0},
+        'max_salary_remain': {200: 0.0, 300: 0.5, 500: 0.5, 1000: 0.0, 1500: 0.0},
         'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
         'min_player_same_team': {2: 0.2, 3: 0.4, 'Auto': 0.4},
-        'min_players_opp_team': {1: 0.1, 2: 0.2, 'Auto': 0.7},
-        'min_pred_pts': {0: 0.3, 5: 0.5, 7: 0.2},
+        'min_players_opp_team': {1: 0.0, 2: 0.3, 'Auto': 0.7},
+        'min_pred_pts': {0: 1.0, 5: 0.0, 7: 0.0},
         'min_pts_per_dollar': {0: 1.0, 0.5: 0.0, 1: 0.0, 1.5: 0.0, 2: 0.0},
         'min_pts_variable': {0: 1.0, 1: 0.0},
-        'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
-        'num_iters': {50: 0.0, 100: 0.0, 150: 0.5, 200: 0.5},
-        'num_top_players': {2: 0.0, 3: 0.2, 5: 0.8},
+        'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.2, 7: 0.3, 10: 0.5},
+        'num_iters': {50: 0.0, 100: 0.0, 150: 1.0, 200: 0.0},
+        'num_top_players': {2: 0.0, 3: 0.3, 5: 0.7},
         'own_neg_frac': {0.8: 0.0, 0.9: 0.0, 1: 1.0},
-        'ownership_vers': {'mil_div_standard_ln': 0.2,
-                            'mil_only': 0.2,
-                            'mil_times_standard_ln': 0.3,
-                            'standard_ln': 0.3},
-        'ownership_vers_variable': {0: 0.0, 1: 1.0},
+        'ownership_vers': {'mil_div_standard_ln': 0.0,
+                            'mil_only': 0.0,
+                            'mil_times_standard_ln': 0.4,
+                            'standard_ln': 0.6},
+        'ownership_vers_variable': {0: 1.0, 1: 0.0},
         'player_drop_multiple': {0: 1.0, 2: 0.0, 4: 0.0, 10: 0.0, 20: 0.0, 30: 0.0},
-        'qb_min_iter': {0: 0.2, 2: 0.6, 4: 0.2, 9: 0.0},
-        'qb_set_max_team': {0: 0.6, 1: 0.4},
+        'qb_max_sal': {6000: 0.0, 7000: 0.0, 10000: 1.0},
+        'rb_min_sal': {3000: 1},
+
+        'qb_min_iter': {0: 0.3, 2: 0.4, 4: 0.3, 9: 0.0},
+        'qb_set_max_team': {0: 0.4, 1: 0.6},
         'qb_solo_start': {False: 0.7, True: 0.3},
         'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.3, 4: 0.7},
         'rb_max_pick': {0: 0.0, 3: 1.0, 4: 0.0},
-        'static_top_players': {False: 0.5, True: 0.5},
+        'static_top_players': {False: 0.7, True: 0.3},
         'te_max_pick': {0: 1.0},
         'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
         'use_ownership': {0.7: 0.0, 0.8: 0.5, 0.9: 0.5, 1: 0.0},
         'use_unique_players': {0: 1.0, 1: 0.0},
-        'wr_max_pick': {0: 1.0},
-        'max_pts_variable': {0: 0, 0.3: 0.4, 0.5: 0.3, 1: 0.3},
-        'max_pts_per_dollar': {100: 0.5, 98: 0.5, 95: 0.0},
-        'qb_max_sal': {10000: 0.5, 6000: 0.2, 6500: 0.3},
-        'rb_min_sal': {3000: 1}
-        }
+        'wr_max_pick': {0: 1.0}}
+    
+    
+try: del d['num']
+except: pass
 
 # d['ownership_vers_variable'] = {0: d['ownership_vers']['variable_0'], 1: d['ownership_vers']['variable_1']}
 if np.sum(list(d['min_pts_per_dollar'].values())) == 0:
     d['min_pts_per_dollar'][0] = 1
+
+if np.sum(list(d['qb_max_sal'].values())) == 0:
+    d['qb_max_sal'][10000] = 1
+
+d['rb_min_sal'] = {3000: 1}
+
+if np.sum(list(d['max_pts_per_dollar'].values())) == 0:
+    d['max_pts_per_dollar'][100] = 1
+
+if np.sum(list(d['max_pts_variable'].values())) == 0:
+    d['max_pts_variable'][0] = 1
 # del d['ownership_vers']['variable_0']
 # del d['ownership_vers']['variable_1']
 
@@ -160,13 +177,13 @@ for k,v in d.items():
 set_weeks = [
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-   1, 2, 3
+   1, 2, 3, 4 
 ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
       2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-      2024, 2024, 2024
+      2024, 2024, 2024, 2024
 ]
 
 # set_weeks=[14]
@@ -316,20 +333,12 @@ with keep.running() as m:
 
 #%%
 
-to_delete_num=812
-df = dm.read(f"SELECT * FROM Entry_Optimize_Lineups WHERE trial_num!={to_delete_num}", 'Results')
-dm.write_to_db(df, 'Results', 'Entry_Optimize_Lineups', 'replace')
+to_delete_num=816
 
-df = dm.read(f"SELECT * FROM Entry_Optimize_Params WHERE trial_num!={to_delete_num}", 'Results')
-dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace')
-
-df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail WHERE trial_num!={to_delete_num}", 'Results')
-dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
-
-df = dm.read(f"SELECT * FROM Entry_Optimize_Results WHERE trial_num!={to_delete_num}", 'Results')
-dm.write_to_db(df, 'Results', 'Entry_Optimize_Results', 'replace')
-
-
+dm.delete_from_db('Results', 'Entry_Optimize_Results', f'trial_num={to_delete_num}', create_backup=False)
+dm.delete_from_db('Results', 'Entry_Optimize_Lineups', f'trial_num={to_delete_num}', create_backup=False)
+dm.delete_from_db('Results', 'Entry_Optimize_Params', f'trial_num={to_delete_num}', create_backup=False)
+dm.delete_from_db('Results', 'Entry_Optimize_Params_Detail', f'trial_num={to_delete_num}', create_backup=False)
 
 #%%
 
@@ -346,7 +355,7 @@ df = pd.concat([df, add_on], axis=0)
 df = df.sort_values(by='trial_num')
 
 # # df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
-dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
 
 #%%
 
@@ -358,7 +367,7 @@ df['qb_max_sal'] = 10000
 df['rb_min_sal'] = 3000
 
 # df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
-dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
+# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
 
 #%%
 

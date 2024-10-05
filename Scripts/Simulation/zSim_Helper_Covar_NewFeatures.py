@@ -780,22 +780,46 @@ class FootballSimulation:
     @staticmethod
     def filter_points_and_sal(df, num_choices, min_pts_per_dollar, max_pts_per_dollar, min_pred_pts, qb_max_sal):
 
+        player_order = df[['player']].copy()
         df['pred_fp_per_game'] = df.loc[:,0:num_choices-1].mean(axis=1)
         df['pts_per_dollar'] = 1000*df.pred_fp_per_game / df.salary
         pts_per_dollar_pct_max = df.groupby('pos').agg({'pts_per_dollar': lambda x: np.percentile(x, max_pts_per_dollar)}).reset_index().rename(columns={'pts_per_dollar': 'pts_per_dollar_pct_max'})
         pts_per_dollar_pct_min = df.groupby('pos').agg({'pts_per_dollar': lambda x: np.percentile(x, min_pts_per_dollar)}).reset_index().rename(columns={'pts_per_dollar': 'pts_per_dollar_pct_min'})
         df = pd.merge(df, pts_per_dollar_pct_max, on='pos')
         df = pd.merge(df, pts_per_dollar_pct_min, on='pos')
-
-        df.loc[(df.pos=='QB') & (df.salary > qb_max_sal),  0:num_choices-1] = 0
         
-        df.loc[(df.pts_per_dollar > df.pts_per_dollar_pct_max+0.1) | \
+        df.loc[((df.pos=='QB') & (df.salary > qb_max_sal)) | \
+               (df.pts_per_dollar > df.pts_per_dollar_pct_max+0.001) | \
                (df.pred_fp_per_game < min_pred_pts) | \
-                (df.pts_per_dollar < df.pts_per_dollar_pct_min-0.1), 0:num_choices-1] = 0
+               (df.pts_per_dollar < df.pts_per_dollar_pct_min-0.001), 
+               0:num_choices-1] = 0
         
-        df = df.drop(['pts_per_dollar', 'pred_fp_per_game'], axis=1)
+        df = pd.merge(player_order, df, on='player')
+        df = df.drop(['pts_per_dollar', 'pred_fp_per_game', 'pts_per_dollar_pct_max', 'pts_per_dollar_pct_min'], axis=1)
 
         return df
+    
+    # @staticmethod
+    # def filter_points_and_sal(df, num_choices, min_pts_per_dollar, max_pts_per_dollar, min_pred_pts, qb_max_sal):
+
+    #     player_order = df[['player']].copy()
+    #     df['pred_fp_per_game'] = df.loc[:,0:num_choices-1].mean(axis=1)
+    #     df['pts_per_dollar'] = 1000*df.pred_fp_per_game / df.salary
+    #     pts_per_dollar_pct_max = df.groupby('pos').agg({'pts_per_dollar': lambda x: np.percentile(x, max_pts_per_dollar)}).reset_index().rename(columns={'pts_per_dollar': 'pts_per_dollar_pct_max'})
+    #     pts_per_dollar_pct_min = df.groupby('pos').agg({'pts_per_dollar': lambda x: np.percentile(x, min_pts_per_dollar)}).reset_index().rename(columns={'pts_per_dollar': 'pts_per_dollar_pct_min'})
+    #     df = pd.merge(df, pts_per_dollar_pct_max, on='pos')
+    #     df = pd.merge(df, pts_per_dollar_pct_min, on='pos')
+        
+    #     df.loc[((df.pos=='QB') & (df.salary > qb_max_sal)) | \
+    #            (df.pts_per_dollar > df.pts_per_dollar_pct_max+0.001) | \
+    #            (df.pred_fp_per_game < min_pred_pts) | \
+    #            (df.pts_per_dollar < df.pts_per_dollar_pct_min-0.001), 
+    #            0:num_choices-1] = 0
+        
+    #     df = pd.merge(player_order, df, on='player')
+    #     df = df.drop(['pts_per_dollar', 'pred_fp_per_game', 'pts_per_dollar_pct_max', 'pts_per_dollar_pct_min'], axis=1)
+
+    #     return df
 
 
     def run_sim(self, conn, to_add, to_drop, min_players_same_team_input, set_max_team, 
@@ -997,8 +1021,8 @@ class RunSim:
                              'qb_solo_start', 'qb_stack_wt', 'static_top_players', 'use_ownership', 'own_neg_frac',
                              'max_salary_remain', 'num_iters', 'num_avg_pts', 'use_unique_players',
                              'rb_max_pick', 'wr_max_pick', 'te_max_pick', 'def_max_pick', 'min_pts_per_dollar',
-                             'max_pts_per_dollar', 'min_pred_pts', 'min_pts_variable', 'max_pts_variable', 
-                             'qb_max_sal', 'rb_min_sal']
+                             'min_pred_pts', 'min_pts_variable', 
+                             'max_pts_variable', 'max_pts_per_dollar', 'qb_max_sal', 'rb_min_sal']
         
         try:
             stats_conn = sqlite3.connect(f'{db_path}/FastR.sqlite3', timeout=60)
@@ -1203,10 +1227,10 @@ class RunSim:
 
 #%%
 
-# for week in range(3,4):
+# for week in range(2,3):
 #     year = 2024
 #     print(f'Running week {week} for year {year}')
-#     total_lineups = 15
+#     total_lineups = 50
 #     salary_cap = 50000
 #     pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 
@@ -1223,43 +1247,43 @@ class RunSim:
 #                         'team_points_trunc': 0.7,
 #                         'team_points_trunc_avgproj': 0.0},
 #         'def_max_pick': {0: 1.0, 5: 0.0, 7: 0.0, 8: 0.0},
-#         'full_model_weight': {0.2: 0.3, 5: 0.7},
-#         'matchup_drop': {0: 1.0, 1: 0.0, 2: 0.0, 3: 0.0},
-#         'matchup_seed': {0: 0.3, 1: 0.7},
+#         'full_model_weight': {0.2: 0.6, 5: 0.4},
+#         'matchup_drop': {0: 0.8, 1: 0.2, 2: 0.0, 3: 0.0},
+#         'matchup_seed': {0: 0.8, 1: 0.2},
+#         'max_pts_per_dollar': {95: 0.1, 98: 0.3, 100: 0.6},
+#         'max_pts_variable': {0: 0.0, 0.3: 0.0, 0.5: 0.5, 1: 0.5},
 #         'max_salary_remain': {200: 0.0, 300: 0.0, 500: 0.7, 1000: 0.3, 1500: 0.0},
-#         'max_team_type': {'player_points': 0.8, 'vegas_points': 0.2},
+#         'max_team_type': {'player_points': 0.7, 'vegas_points': 0.3},
 #         'min_player_same_team': {2: 0.2, 3: 0.4, 'Auto': 0.4},
-#         'min_players_opp_team': {1: 0.0, 2: 0.3, 'Auto': 0.7},
-#         'min_pred_pts': {0: 0.5, 5: 0.5, 7: 0.0},
-#         'min_pts_per_dollar': {0: 0.5, 20: 0.5},
-#         'min_pts_variable': {0.5: 0.5, 1: 0.5},
-#         'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.2, 7: 0.7, 10: 0.1},
+#         'min_players_opp_team': {1: 0.1, 2: 0.2, 'Auto': 0.7},
+#         'min_pred_pts': {0: 0.3, 5: 0.5, 7: 0.2},
+#         'min_pts_per_dollar': {0: 0, 20: 1},
+#         'min_pts_variable': {0: 0, 1: 1},
+#         'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.3, 10: 0.7},
 #         'num_iters': {50: 0.0, 100: 0.0, 150: 0.5, 200: 0.5},
-#         'num_top_players': {2: 0.0, 3: 0.3, 5: 0.7},
+#         'num_top_players': {2: 0.0, 3: 0.2, 5: 0.8},
 #         'own_neg_frac': {0.8: 0.0, 0.9: 0.0, 1: 1.0},
-#         'ownership_vers': {'mil_div_standard_ln': 0.0,
-#                             'mil_only': 0.3,
+#         'ownership_vers': {'mil_div_standard_ln': 0.2,
+#                             'mil_only': 0.2,
 #                             'mil_times_standard_ln': 0.3,
-#                             'standard_ln': 0.4},
-#         'ownership_vers_variable': {0: 0.2, 1: 0.8},
+#                             'standard_ln': 0.3},
+#         'ownership_vers_variable': {0: 0.0, 1: 1.0},
 #         'player_drop_multiple': {0: 1.0, 2: 0.0, 4: 0.0, 10: 0.0, 20: 0.0, 30: 0.0},
-#         'qb_min_iter': {0: 0.3, 2: 0.7, 4: 0.0, 9: 0.0},
-#         'qb_set_max_team': {0: 0.4, 1: 0.6},
-#         'qb_solo_start': {False: 1.0, True: 0.0},
-#         'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
-#         'rb_max_pick': {0: 0.7, 3: 0.3, 4: 0.0},
-#         'static_top_players': {False: 0.3, True: 0.7},
+#         'qb_max_sal': {6000: 0.5, 10000: 0.5},
+#         'qb_min_iter': {0: 0.2, 2: 0.6, 4: 0.2, 9: 0.0},
+#         'qb_set_max_team': {0: 0.6, 1: 0.4},
+#         'qb_solo_start': {False: 0.7, True: 0.3},
+#         'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.3, 4: 0.7},
+#         'rb_max_pick': {0: 0.0, 3: 1.0, 4: 0.0},
+#         'static_top_players': {False: 0.5, True: 0.5},
 #         'te_max_pick': {0: 1.0},
 #         'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
 #         'use_ownership': {0.7: 0.0, 0.8: 0.5, 0.9: 0.5, 1: 0.0},
-#         'use_unique_players': {0: 0.5, 1: 0.5},
+#         'use_unique_players': {0: 1.0, 1: 0.0},
 #         'wr_max_pick': {0: 1.0},
-#         'max_pts_variable': {0.3: 0.4, 0.5: 0.4, 1: 0.2},
-#         'max_pts_per_dollar': {100: 0.5, 98: 0.3, 95: 0.2},
-#         'qb_max_sal': {10000: 0.5, 6000: 0.5},
-#         'rb_min_sal': {3000: 1}
+#         'rb_min_sal': {3000: 1.0}
 #         }
-
+    
 #     pred_vers = model_vers['pred_vers']
 #     reg_ens_vers = model_vers['reg_ens_vers']
 #     million_ens_vers = model_vers['million_ens_vers']
@@ -1272,6 +1296,7 @@ class RunSim:
 
 # #%%
 
+# print('New Features')
 # sim, p, to_add, to_drop_selected = rs.setup_sim(params[0], existing_players=[])
 
 # #%%

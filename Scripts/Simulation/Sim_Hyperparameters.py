@@ -121,6 +121,9 @@ best_trials.loc[best_trials.avg_winnings > 10000, 'avg_winnings'] = 10000
 best_trials['non8_winnings'] = best_trials.avg_winnings
 best_trials.loc[(best_trials.week == 8) & (best_trials.year==2022), 'non8_winnings'] = 0 
 
+best_trials['non1_winnings'] = best_trials.non8_winnings
+best_trials.loc[(best_trials.week == 1) & (best_trials.year==2022), 'non1_winnings'] = 0 
+
 best_trials['avg_winnings_sqrt_pre'] = best_trials.avg_winnings ** 0.5
 
 best_trials = (
@@ -130,6 +133,7 @@ best_trials = (
     .agg({'avg_winnings': 'mean',
           'avg_winnings_sqrt_pre': 'mean',
           'non8_winnings': 'mean',
+          'non1_winnings': 'mean',
           #'perc80': lambda x: np.percentile(x, 80)
           })
     .reset_index()
@@ -142,10 +146,11 @@ best_trials = (
     .agg({'avg_winnings': 'sum',
           'avg_winnings_sqrt_pre': 'sum',
           'avg_winnings_sqrt_post': 'sum',
-          'non8_winnings': 'sum'})
+          'non8_winnings': 'sum',
+          'non1_winnings': 'sum',})
 )
 
-winnings_cols = ['avg_winnings', 'avg_winnings_sqrt_pre', 'avg_winnings_sqrt_post', 'non8_winnings']
+winnings_cols = ['avg_winnings', 'avg_winnings_sqrt_pre', 'avg_winnings_sqrt_post', 'non8_winnings', 'non1_winnings']
 for c in winnings_cols:
     best_trials[c+'_rank'] = best_trials[c].rank(ascending=False)
 
@@ -182,8 +187,12 @@ results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] 
 # results.loc[((results.week==1)&(results.year==2022)), 'avg_winnings'] = \
 #     results.loc[((results.week==1)&(results.year==2022)), 'avg_winnings'] / 2
 
+week_years = results[['trial_num', 'week', 'year']].drop_duplicates()
+week_years = week_years.groupby('trial_num').agg({'week': 'count'}).reset_index().rename(columns={'week': 'num_weeks'})
+
 results = results.groupby(['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers', 
                             'entry_type', 'trial_num', 'repeat_num']).agg({'avg_winnings': 'sum'}).reset_index()
+results = pd.merge(results, week_years, on='trial_num')
 
 results = pd.merge(results, params, on='trial_num')
 results = results.drop(['trial_num', 'repeat_num'], axis=1)
@@ -225,7 +234,7 @@ shap.dependence_plot("ownership_vers_variable_1", shap_values, X)
 
 #%%
 
-num_options = 200000
+num_options = 500000
 
 def get_cur_params(X, cols, num_options=num_options):
     df = X[cols].value_counts()
@@ -271,6 +280,7 @@ winnings_pr = winnings_pr.reset_index().rename(columns={'index': 'param_rank'})
 model_notes = 'newp_v2_onlykfold3_include2_non1_8_times2'
 date_run = dt.datetime.now().strftime('%Y-%m-%d')
 winnings_pr = winnings_pr.assign(model_notes=model_notes, date_run=date_run)
+winnings_pr = winnings_pr.iloc[:5000]
 winnings_pr
 
 #%%
@@ -280,7 +290,7 @@ try:
     dm.write_to_db(winnings_pr.iloc[:5000], 'SimParams','Entry_Optimize_Hyperparams', 'append')
 
 except:
-    old_df = dm.read('''SELECT * FROM Entry_Optimize_Hyperparams''', 'SimParams')
+    old_df = dm.read('''SELECT * FROM Entry_Optimize_Hyperparams WHERE param_rank < 5000''', 'SimParams')
     winnings_pr = pd.concat([ winnings_pr, old_df], axis=0).reset_index(drop=True)
     winnings_pr = winnings_pr.fillna(0)
     dm.write_to_db(winnings_pr, 'SimParams','Entry_Optimize_Hyperparams', 'replace')

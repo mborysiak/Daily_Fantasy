@@ -12,7 +12,7 @@ import lxml
 
 # +
 set_year = 2024
-set_week = 4
+set_week = 5
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -434,8 +434,14 @@ dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData_Defense', 'append')
 # dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
 
 #%%
+import requests
+from io import StringIO
 
-nf = pd.read_html('https://www.numberfire.com/nfl/fantasy/fantasy-football-projections')
+url = 'https://www.numberfire.com/nfl/fantasy/fantasy-football-projections'
+response = requests.get(url, verify=False)
+nf = pd.read_html(StringIO(response.text))
+
+# nf = pd.read_html(url)
 
 stats = nf[1]
 stats.columns = [f"{c[0].lower()}_{c[1].lower().replace('.', '')}" for c in nf[1].columns]
