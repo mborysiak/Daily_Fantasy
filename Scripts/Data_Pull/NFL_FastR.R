@@ -11,7 +11,7 @@ future::plan("multisession")
 #------------------
 
 # define which seasons shall be loaded
-season_pull <- 2023
+season_pull <- 2024
 seasons <- season_pull
 pbp <- data.table(nflreadr::load_pbp(seasons))
 

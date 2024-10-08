@@ -182,7 +182,7 @@ results = dm.read('''SELECT *
 
 results.loc[results.avg_winnings > 10000, 'avg_winnings'] = 10000
 results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] = \
-    results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] * 2
+    results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] * 1.5
 
 # results.loc[((results.week==1)&(results.year==2022)), 'avg_winnings'] = \
 #     results.loc[((results.week==1)&(results.year==2022)), 'avg_winnings'] / 2
@@ -277,7 +277,7 @@ for c in grp_cols:
 winnings_pr = winnings_pr.sort_values(by='winnings_pred', ascending=False).drop_duplicates().reset_index(drop=True)
 winnings_pr = winnings_pr.reset_index().rename(columns={'index': 'param_rank'})
 
-model_notes = 'newp_v2_onlykfold3_include2_non1_8_times2'
+model_notes = 'newp_v2_onlykfold3_include2_non1_8_times1pt5'
 date_run = dt.datetime.now().strftime('%Y-%m-%d')
 winnings_pr = winnings_pr.assign(model_notes=model_notes, date_run=date_run)
 winnings_pr = winnings_pr.iloc[:5000]
@@ -287,7 +287,7 @@ winnings_pr
 
 try:
     dm.delete_from_db('SimParams', 'Entry_Optimize_Hyperparams', f"model_notes='{model_notes}' AND date_run='{date_run}'", create_backup=False)
-    dm.write_to_db(winnings_pr.iloc[:5000], 'SimParams','Entry_Optimize_Hyperparams', 'append')
+    dm.write_to_db(winnings_pr, 'SimParams','Entry_Optimize_Hyperparams', 'append')
 
 except:
     old_df = dm.read('''SELECT * FROM Entry_Optimize_Hyperparams WHERE param_rank < 5000''', 'SimParams')

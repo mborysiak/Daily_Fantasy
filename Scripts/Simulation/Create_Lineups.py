@@ -21,7 +21,7 @@ week=5
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 50
+num_lineups = 64
 set_max_team = None
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
@@ -102,7 +102,7 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'Results')
     return vers
 
-best_trials = 833
+best_trials = 818
 
 opt_params = pull_best_params(best_trials)
 del opt_params['lineups_per_param']

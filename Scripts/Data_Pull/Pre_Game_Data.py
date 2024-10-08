@@ -39,15 +39,18 @@ def move_download_to_folder(root_path, folder, fname, week=''):
 
 def format_ffa(df, table_name, set_week, set_year):
     df = df.dropna(subset=['player']).drop(['Unnamed: 0'], axis=1)
+    try: df = df.drop('week', axis=1)
+    except: pass
     df.player = df.player.apply(dc.name_clean)
     df.team = df.team.map(team_map)
     df.loc[df.position=='DST', 'player'] = df.loc[df.position=='DST', 'team']
 
     if table_name=='Projections': new_cols = ['player', 'position', 'team']
-    elif table_name=='RawStats': new_cols = ['player', 'team', 'position', 'week']
-
-    new_cols.extend(['ffa_' + c for c in df.columns if c not in ('player', 'position', 'team', 'week')])
-    df.columns = new_cols
+    elif table_name=='RawStats': new_cols = ['player', 'team', 'position']
+    
+    new_cols.extend([c for c in df.columns if c not in ('player', 'position', 'team')])
+    df = df[new_cols]
+    df = df.rename(columns={c: 'ffa_' + c for c in df.columns if c not in ('player', 'position', 'team')})
 
     df['week'] = set_week
     df['year'] = set_year
@@ -86,6 +89,60 @@ def format_fantasy_cruncher(df, set_week, set_year):
 
     return df
 
+
+def pull_fftoday(pos, set_week, set_year):
+
+    pos_ids = {
+        'QB': 10,
+        'RB': 20,
+        'WR': 30,
+        'TE': 40
+    }
+
+    num_pages = {
+        'QB': [0],
+        'RB': [0, 1],
+        'WR': [0, 1, 2],
+        'TE': [0]
+        }
+
+    cols = {
+            'QB': ['player', 'team', 'opp', 'fft_pass_comp', 'fft_pass_att', 'fft_pass_yds', 'fft_pass_td',
+                'fft_pass_int', 'fft_rush_att', 'fft_rush_yds', 'fft_rush_td', 'fft_proj_pts'],
+            'WR': ['player', 'team', 'opp',  'fft_rush_att', 'fft_rush_yds', 'fft_rush_td', 
+                   'fft_rec', 'fft_rec_yds', 'fft_rec_td', 'fft_proj_pts'],
+            'RB': ['player', 'team', 'opp', 'fft_rush_att', 'fft_rush_yds', 'fft_rush_td', 
+                'fft_rec', 'fft_rec_yds', 'fft_rec_td', 'fft_proj_pts'],
+            'TE': ['player', 'team', 'opp', 'fft_rec','fft_rush_att', 'fft_rush_yds', 'fft_rush_td', 
+                    'fft_rec_yds', 'fft_rec_td', 'fft_proj_pts']
+        }
+
+    df = pd.DataFrame()
+    for page_num in num_pages[pos]:
+        try:
+            fft_url = f"https://www.fftoday.com/rankings/playerwkproj.php?Season={set_year}&GameWeek={set_week}&PosID={pos_ids[pos]}&LeagueID=107644&order_by=FFPts&sort_order=DESC&cur_page={page_num}"
+
+            df_cur = pd.read_html(fft_url)[7]
+            df_cur = df_cur.iloc[2:, 1:]
+            df_cur.columns = cols[pos]
+
+            df_cur = df_cur.assign(pos=pos, week=set_week, year=set_year)
+
+            col_arr = ['player', 'pos', 'team', 'week', 'year']
+            col_arr.extend([c for c in df_cur.columns if 'fft' in c])
+            df_cur = df_cur[col_arr]
+            
+            df = pd.concat([df, df_cur], axis=0)
+            
+        except:
+            print(pos, set_week, set_year, 'failed')
+    try:
+        df.player = df.player.apply(dc.name_clean)
+        df.team = df.team.map(team_map)
+    except:
+        pass
+
+    return df
 
 def pull_fantasy_data(set_week, is_def=False):
 
@@ -152,7 +209,26 @@ def pull_fantasy_data(set_week, is_def=False):
   
     return df
 
+def check_new_data(df, table, db, where_statement=""):
+
+    from scipy.stats import ttest_ind
+    past_data = dm.read(f'''SELECT * FROM {table} {where_statement}''', db)
+    num_cols = past_data.dtypes[past_data.dtypes!='object'].index
+
+    for c in num_cols:
+        if c not in ('week', 'year'):
+            try:
+                test = df.loc[df[c]!=0, c].dropna().values
+                population = past_data.loc[past_data[c]!=0, c].dropna().values
+                t_result = ttest_ind(test, population, axis=0, equal_var=False)[1]
+                if t_result < 0.00001:
+                    print(f'{c} Significantly Changed. T-Test Result: {t_result}')
+            except:
+                print(f'{c} Failed')
+
+
 #%%
+ 
 #=============
 # Fantasy Pros
 #=============
@@ -194,6 +270,8 @@ for set_pos in ['QB', 'RB', 'WR', 'TE', 'DST']:
     df.loc[df.projected_points=='-', 'projected_points'] = 0
 
     df = create_adj_ranks(df, 'fp_rank', f"WHERE pos='{set_pos}'", 'FantasyPros', dm)
+
+    check_new_data(df, 'FantasyPros', 'Pre_PlayerData', "WHERE pos='{set_pos}'")
     
     dm.delete_from_db('Pre_PlayerData', 'FantasyPros', f"week={set_week} and year={set_year} and pos='{set_pos}'")
     dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros', if_exist='append')
@@ -258,6 +336,7 @@ dfs = [proj_pl, proj_tm]
 dbs = ['Pre_PlayerData', 'Pre_TeamData']
 
 for t, d, db in zip(tables, dfs, dbs):
+    check_new_data(d, f'PFF_{t}_Ranks', db)
     dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}", create_backup=False)
     dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
 
@@ -368,6 +447,7 @@ dbs = ['Pre_PlayerData', 'Pre_TeamData']
 
 for t, d, db in zip(tables, dfs, dbs):
     d = pd.merge(d, matchups, on='offTeam', how='left')
+    check_new_data(d, f'PFF_{t}_Ranks', db)
     dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}", create_backup=False)
     dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
 
@@ -381,6 +461,7 @@ df = df[~df.team.isnull()].reset_index(drop=True)
 player_pos_team = player_pos_team.rename(columns={'pos': 'position'})
 df = pd.merge(df, player_pos_team, on=['player', 'team', 'position'])
 
+check_new_data(df, 'FFA_Projections', 'Pre_PlayerData')
 dm.delete_from_db('Pre_PlayerData', 'FFA_Projections', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FFA_Projections', 'append')
 
@@ -390,13 +471,16 @@ df = format_ffa(df, 'RawStats', set_week, set_year)
 df = df[~df.team.isnull()].reset_index(drop=True)
 df = pd.merge(df, player_pos_team, on=['player', 'team', 'position'])
 
-dm.delete_from_db('Pre_PlayerData', 'FFA_RawStats', f"week={set_week} AND year={set_year}", create_backup=False)
+
+check_new_data(df, 'FFA_RawStats', 'Pre_PlayerData')
+dm.delete_from_db('Pre_PlayerData', 'FFA_RawStats', f"week={set_week} AND year={set_year}", create_backup=True)
 cols = dm.read("SELECT * FROM FFA_RawStats", 'Pre_PlayerData').columns
 df = df[cols]
 dm.write_to_db(df, 'Pre_PlayerData', 'FFA_RawStats', 'append')
 
 
 #%%
+
 # pull fftoday rankings
 output = pd.DataFrame()
 for pos in ['QB', 'RB', 'WR', 'TE']:
@@ -407,6 +491,7 @@ output = dc.convert_to_float(output)
 output.player = output.player.apply(dc.name_clean)
 output.team = output.team.map(team_map)
 
+check_new_data(output, 'FFToday_Projections', 'Pre_PlayerData')
 dm.delete_from_db('Pre_PlayerData', 'FFToday_Projections', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(output, 'Pre_PlayerData', 'FFToday_Projections', 'append')
 
@@ -415,12 +500,14 @@ dm.write_to_db(output, 'Pre_PlayerData', 'FFToday_Projections', 'append')
 df = pull_fantasy_data(set_week)
 df = pd.merge(df, player_pos_team, on=['player', 'team', 'position'])
 
+check_new_data(df, 'FantasyData', 'Pre_PlayerData')
 dm.delete_from_db('Pre_PlayerData', 'FantasyData', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData', 'append')
 
 #%%
 
 df = pull_fantasy_data(set_week, is_def=True)
+check_new_data(df, 'FantasyData_Defense', 'Pre_PlayerData')
 dm.delete_from_db('Pre_PlayerData', 'FantasyData_Defense', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData_Defense', 'append')
 
@@ -464,6 +551,7 @@ nf_data['nf_proj_points'] = nf_data.nf_passing_yds * 0.04 + nf_data.nf_passing_t
                           nf_data.nf_rushing_yds * 0.1 + nf_data.nf_rushing_tds * 6 + \
                           nf_data.nf_receiving_yds * 0.1 + nf_data.nf_receiving_tds * 6 + nf_data.nf_receiving_rec * 1
 
+check_new_data(nf_data, 'NumberFire', 'Pre_PlayerData')
 dm.delete_from_db('Pre_PlayerData', 'NumberFire', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(nf_data, 'Pre_PlayerData', 'NumberFire', 'append')
 
@@ -501,6 +589,7 @@ df.opp = df.opp.apply(lambda x: x.replace('@', '')).map(team_map)
 df['week'] = set_week
 df['year'] = set_year
 
+check_new_data(df, 'ETR_Projections_DK', 'Pre_PlayerData')
 dm.delete_from_db('Pre_PlayerData', 'ETR_Projections_DK', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'ETR_Projections_DK', 'append')
 
@@ -536,6 +625,7 @@ df.team = df.team.map(team_map)
 df['week'] = set_week
 df['year'] = set_year
 
+check_new_data(df, 'ETR_Projections', 'Pre_PlayerData')
 dm.delete_from_db('Pre_PlayerData', 'ETR_Projections', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'ETR_Projections', 'append')
 
@@ -613,6 +703,7 @@ df.team = df.team.map(team_map)
 df['week'] = set_week
 df['year'] = set_year
 
+check_new_data(df, 'ETR_Projections_Detail', 'Pre_PlayerData')
 dm.delete_from_db('Pre_PlayerData', 'ETR_Projections_Detail', f"week={set_week} AND year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'ETR_Projections_Detail', 'append')
 
