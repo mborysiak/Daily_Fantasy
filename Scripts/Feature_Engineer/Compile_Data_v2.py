@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2024
-WEEK = 5
+WEEK = 6
 
 import pandas as pd 
 import numpy as np

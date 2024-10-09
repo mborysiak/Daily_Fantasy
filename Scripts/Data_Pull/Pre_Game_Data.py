@@ -12,7 +12,7 @@ import lxml
 
 # +
 set_year = 2024
-set_week = 5
+set_week = 6
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -873,9 +873,14 @@ dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'replace')
 
 #%%
 
-dk_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/draftkings-salary-changes.php')[0]
-fd_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/fanduel-salary-changes.php')[0]
-yahoo_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/yahoo-salary-changes.php')[0]
+
+dk_sal = pd.read_html(StringIO(requests.get('https://www.fantasypros.com/daily-fantasy/nfl/draftkings-salary-changes.php', verify=False).text))[0]
+fd_sal = pd.read_html(StringIO(requests.get('https://www.fantasypros.com/daily-fantasy/nfl/fanduel-salary-changes.php', verify=False).text))[0]
+yahoo_sal = pd.read_html(StringIO(requests.get('https://www.fantasypros.com/daily-fantasy/nfl/yahoo-salary-changes.php', verify=False).text))[0]
+
+# dk_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/draftkings-salary-changes.php')[0]
+# fd_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/fanduel-salary-changes.php')[0]
+# yahoo_sal = pd.read_html('https://www.fantasypros.com/daily-fantasy/nfl/yahoo-salary-changes.php')[0]
 
 def cleanup_sal(df, name):
     df['player'] = df.Player.apply(lambda x: x.split('(')[0].strip(' '))

@@ -17,7 +17,7 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2024
-week=5
+week=6
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}

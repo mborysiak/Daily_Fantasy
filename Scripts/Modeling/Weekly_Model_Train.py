@@ -37,7 +37,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [5]
+run_weeks = [6]
 verbosity = 50
 run_params = {
     
@@ -71,7 +71,7 @@ run_params = {
     'opt_type': 'optuna',
     'hp_algo': 'tpe',
     'num_past_trials': 100,
-    'optuna_timeout': 60*10
+    'optuna_timeout': 60*8
 }
 
 n_splits = run_params['n_splits']

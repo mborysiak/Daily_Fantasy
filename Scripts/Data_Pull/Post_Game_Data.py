@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2024
-set_week = 4
+set_week = 5
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -322,7 +322,13 @@ dm.write_to_db(snaps, 'Post_PlayerData', f'Snap_Counts', 'append')
 
 #%%
 
-df = pd.read_html(f'https://www.fantasypros.com/nfl/reports/snap-counts/?year={set_year}')[0]
+import requests
+from io import StringIO
+
+url = f'https://www.fantasypros.com/nfl/reports/snap-counts/?year={set_year}'
+response = requests.get(url, verify=False)
+
+df = pd.read_html(StringIO(response.text))[0]
 df = pd.melt(df, id_vars=['Player', 'Pos', 'Team'])
 df = df[~df.variable.isin(['AVG', 'TTL'])].dropna().reset_index(drop=True)
 df.columns = ['player', 'pos', 'team', 'week', 'snap_counts']
