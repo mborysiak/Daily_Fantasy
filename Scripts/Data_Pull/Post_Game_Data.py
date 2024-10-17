@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2024
-set_week = 5
+set_week = 6
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -299,12 +299,17 @@ for df, t in zip([qb, qb_ay, qb_acc, qb_pres, qb_pt, rb, rec],
 #%%
 # # Snap Counts
 
-# +
-snaps = pd.read_html('https://www.fantasypros.com/nfl/reports/snap-counts/')[0]
+url = f'https://www.fantasypros.com/nfl/reports/snap-counts/'
+response = requests.get(url, verify=False)
+snaps = pd.read_html(StringIO(response.text))[0]
+
+# snaps = pd.read_html('https://www.fantasypros.com/nfl/reports/snap-counts/')[0]
 snaps = snaps[['Player', 'Pos', 'Team', str(set_week), 'TTL', 'AVG']]
 snaps.columns = ['player', 'position', 'team', 'snap_count', 'total_snap_count', 'avg_snap_count']
 
-snap_pct = pd.read_html('https://www.fantasypros.com/nfl/reports/snap-counts/?show=perc')[0]
+url = f'https://www.fantasypros.com/nfl/reports/snap-counts/?show=perc'
+response = requests.get(url, verify=False)
+snap_pct = pd.read_html(StringIO(response.text))[0]
 snap_pct = snap_pct[['Player', 'Pos', 'Team', str(set_week), 'AVG']]
 snap_pct.columns = ['player', 'position', 'team', 'snap_pct', 'avg_snap_pct']
 snaps = pd.merge(snaps, snap_pct, how='inner', 

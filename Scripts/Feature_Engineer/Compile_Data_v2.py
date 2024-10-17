@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2024
-WEEK = 6
+WEEK = 7
 
 import pandas as pd 
 import numpy as np
@@ -2365,7 +2365,7 @@ dm.write_to_db(defense, f'Model_Features_{YEAR}', f'Defense_Data_Week{WEEK}', if
 
 #%%
 
-chk_week = 5
+chk_week = 6
 backfill_chk = dm.read(f'''SELECT player 
                            FROM Backfill_QB_Week{WEEK} 
                            WHERE week={chk_week} AND year={YEAR}
