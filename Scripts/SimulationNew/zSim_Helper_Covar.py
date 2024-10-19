@@ -317,20 +317,23 @@ class FullLineupSim:
                 max_overlap, prev_qb_wt, previous_lineups):
         
         self.conn = conn
-        self.prepare_data(to_add, to_drop, ownership_vers, num_options, pos_or_neg)
-        self.set_position_counts()
+        self.prepare_data(ownership_vers, num_options, pos_or_neg)
         
         player_counts = {player: 0 for player in self.player_data['player']}
         successful_iterations = 0
         
         for _ in range(num_iters):
+
             iters_run = 0
             success = False
+            
             while not success and iters_run < 5:
+
+                self.set_position_counts()
                 iters_run += 1
                 cur_pred_fps = self.sample_points(num_options, num_avg_pts)
                 cur_ownership = self.sample_ownership(num_options, num_avg_pts)
-                c, A, b, G, h = self.setup_optimization_problem(cur_pred_fps, cur_ownership, qb_wr_stack, qb_te_stack, 
+                c, A, b, G, h = self.setup_optimization_problem(to_add, to_drop, cur_pred_fps, cur_ownership, qb_wr_stack, qb_te_stack, 
                                                                 min_opp_team, max_teams_lineup, max_salary_remain,
                                                                 max_overlap, prev_qb_wt, previous_lineups)
                 
@@ -364,7 +367,7 @@ class FullLineupSim:
         current_ownership = self.ownerships.iloc[:, np.random.choice(range(4, num_options+4), size=num_avg_pts)].mean(axis=1)
         return current_ownership
         
-    def prepare_data(self, to_add, to_drop, ownership_vers, num_options, pos_or_neg):
+    def prepare_data(self, ownership_vers, num_options, pos_or_neg):
         
         self.df = self.player_data.copy()
         self.pos_or_neg = pos_or_neg
@@ -381,8 +384,6 @@ class FullLineupSim:
         self.n_teams = len(self.unique_teams)
 
         self.pred_fps = self.get_predictions('pred_fp_per_game', num_options=num_options+1)   
-        self.pred_fps.loc[self.pred_fps.player.isin(to_add), 0:num_options] = 100
-        self.pred_fps.loc[self.pred_fps.player.isin(to_drop), 0:num_options] = 0
 
         self.ownerships = self.get_predictions('pred_ownership', ownership=True, num_options=num_options+1)
 
@@ -392,17 +393,16 @@ class FullLineupSim:
         self.position_counts[flex_pos] += 1
         self.num_pos = float(np.sum(list(self.position_counts.values())))
 
-    def setup_optimization_problem(self,cur_pred_fps, cur_ownership, qb_wr_stack, qb_te_stack, min_opp_team, 
+    def setup_optimization_problem(self, to_add, to_drop, cur_pred_fps, cur_ownership, qb_wr_stack, qb_te_stack, min_opp_team, 
                                    max_teams_lineup, max_salary_remain, max_overlap, prev_qb_wt, previous_lineups):
         
         n_variables = self.n_players + len(self.unique_teams)
         
         c = self.create_objective_function(cur_pred_fps)
         A, b = self.create_equality_constraints()
-        G, h = self.create_inequality_constraints(cur_ownership, n_variables, qb_wr_stack, qb_te_stack, 
+        G, h = self.create_inequality_constraints(to_add, to_drop, cur_ownership, n_variables, qb_wr_stack, qb_te_stack, 
                                                   min_opp_team, max_teams_lineup, max_salary_remain,
                                                   max_overlap, prev_qb_wt, previous_lineups)
-        
         return c, A, b, G, h
 
     def create_objective_function(self, cur_pred_fps):
@@ -424,20 +424,24 @@ class FullLineupSim:
 
         return matrix(A, tc='d'), matrix(b, tc='d')
 
-    def create_inequality_constraints(self, cur_ownership, n_variables, qb_wr_stack, qb_te_stack, 
+    def create_inequality_constraints(self, to_add, to_drop, cur_ownership, n_variables, qb_wr_stack, qb_te_stack, 
                                       min_opp_team, max_teams_lineup, max_salary_remain, max_overlap, prev_qb_wt,
                                       previous_lineups):
         G = []
         h = []
 
         self.add_salary_constraint(G, h, max_salary_remain)
-        self.add_stacking_constraints(G, h, n_variables, qb_wr_stack, qb_te_stack)
+        self.add_forced_players_constraint(G, h, n_variables, to_add)
+        self.add_excluded_players_constraint(G, h, n_variables, to_drop)
         self.add_qb_dst_constraint(G, h, n_variables)
-        self.add_opposing_team_constraint(G, h, n_variables, min_opp_team)
-        self.add_max_teams_constraint(G, h, n_variables, max_teams_lineup)
-        self.add_overlap_constraint(G, h, n_variables, max_overlap, previous_lineups, prev_qb_wt)
-        self.add_ownership_constraint(G, h, cur_ownership)
 
+        if len(to_add) <= 7:
+            self.add_ownership_constraint(G, h, cur_ownership)
+            self.add_stacking_constraints(G, h, n_variables, qb_wr_stack, qb_te_stack)
+            self.add_opposing_team_constraint(G, h, n_variables, min_opp_team)
+            self.add_max_teams_constraint(G, h, n_variables, max_teams_lineup)
+            self.add_overlap_constraint(G, h, n_variables, max_overlap, previous_lineups, prev_qb_wt)
+            
         return matrix(np.array(G), tc='d'), matrix(h, tc='d')
     
 
@@ -448,6 +452,25 @@ class FullLineupSim:
         # New constraint: Total salary >= SALARY_CAP - max_salary_remain
         G.append([-s for s in self.salaries] + [0] * len(self.unique_teams))
         h.append(-float(self.salary_cap - max_salary_remain))
+
+    def add_forced_players_constraint(self, G, h, n_variables, to_add):
+        for player in to_add:
+            if player in self.players:
+                index = list(self.players).index(player)
+                constraint = [0] * n_variables
+                constraint[index] = -1  # Force this player to be selected
+                G.append(constraint)
+                h.append(-1.0)  # Must be less than or equal to -1, forcing selection
+
+    
+    def add_excluded_players_constraint(self, G, h, n_variables, to_drop):
+        for player in to_drop:
+            if player in self.players:
+                index = list(self.players).index(player)
+                constraint = [0] * n_variables
+                constraint[index] = 1  # Prevent this player from being selected
+                G.append(constraint)
+                h.append(0.0)  # Must be less than or equal to 0, forcing non-selection
 
     def add_stacking_constraints(self, G, h, n_variables, qb_wr_stack, qb_te_stack):
         for team in self.unique_teams:
@@ -925,9 +948,9 @@ class RunSim:
 # rs = RunSim(path, week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
 # params = rs.generate_param_list(d)
 
-# sim, p = rs.setup_sim(params[0])
 
 #%%
+# sim, p = rs.setup_sim(params[0])
 
 # to_add = []
 # to_drop = []

@@ -1,7 +1,7 @@
 #%%
-from zSim_Helper_Covar_NewFeatures import *
+from zSim_Helper_Covar import *
 import pprint
-
+import copy
 # set the root path and database management object
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -17,11 +17,11 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2024
-week=5
+week=6
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 64
+num_lineups = 20
 set_max_team = None
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
@@ -73,7 +73,7 @@ def pull_best_params(best_trial):
     params = {}
     params_opt = dm.read(f'''SELECT * 
                              FROM Entry_Optimize_Params
-                             WHERE trial_num = {best_trial}''', 'Results')
+                             WHERE trial_num = {best_trial}''', 'ResultsNew')
     params_opt = params_opt.groupby(['param', 'param_option']).agg({'option_value': 'mean'}).reset_index()
 
     for p, opt, val in params_opt.values:
@@ -99,21 +99,14 @@ def pull_best_params(best_trial):
 def pull_params_version(best_trial):
     vers = dm.read(f'''SELECT DISTINCT trial_num, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type
                        FROM Entry_Optimize_Results
-                       WHERE trial_num = {best_trial}''', 'Results')
+                       WHERE trial_num = {best_trial}''', 'ResultsNew')
     return vers
 
-best_trials = 818
+best_trials = 15
 
 opt_params = pull_best_params(best_trials)
 del opt_params['lineups_per_param']
-del opt_params['rb_min_sal']
 pprint.pprint(opt_params)
-
-if 'min_pts_per_dollar' not in opt_params.keys():
-    opt_params['min_pts_per_dollar'] = {0: 0.0}
-
-if 'rb_min_sal' not in opt_params.keys():
-    opt_params['rb_min_sal'] = {3000: 1}
 
 best_vers = pull_params_version(best_trials)
 pred_vers = best_vers.pred_vers.values[0]
@@ -177,22 +170,21 @@ def create_database_output(my_team, j):
 
 #%%
 # run all the lineups
-rs = RunSim(db_path, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, num_lineups)
+rs = RunSim(db_path, week, year,pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, num_lineups)
 params = rs.generate_param_list(opt_params)
-lineups_list = rs.run_multiple_lineups(params, calc_winnings=False, parallelize=True, n_jobs=-1, verbose=0)
+lineups_list = rs.run_multiple_lineups(params, calc_winnings=False, parallelize=False, n_jobs=-1, verbose=0)
 
 #%%
 # get the player data
-rs_pd = RunSim(db_path, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, 1)
+rs_pd = RunSim(db_path, week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, 1)
 player_data_param = copy.deepcopy(opt_params)
-player_data_param['min_pts_variable'] = {0: 1}
 player_data_param = rs.generate_param_list(player_data_param)
-sim, _, _, _ = rs.setup_sim(player_data_param[0], existing_players=[])
+sim, _ = rs.setup_sim(player_data_param[0])
 player_data = sim.player_data.copy()
 
 #%%
 lineups = clean_lineup_list(lineups_list, player_data)
-lineups = lineups.sample(frac=1)
+# lineups = lineups.sample(frac=1)
 
 dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={week}', create_backup=False)
 for j, i in enumerate(lineups.TeamNum.unique()):

@@ -12,7 +12,7 @@ import lxml
 
 # +
 set_year = 2024
-set_week = 6
+set_week = 7
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -411,7 +411,9 @@ def pff_rank_new(label_pre, label_post, folder):
         'Team': 'offTeam'
     })
 
-    df = df.drop(['Overall Rank', 'ADP', 'Auction Value'], axis=1)
+    for c in ['Overall Rank', 'ADP', 'Auction Value', 'Injury Status']:
+        try: df = df.drop(c, axis=1)
+        except: pass
     df.expertConsensus = df.expertConsensus.astype('float')
     df['expertNathanJahnke'] = df['expertConsensus']
     df.player = df.player.apply(dc.name_clean)
@@ -441,6 +443,12 @@ for p in ['QB', 'RB', 'WR', 'TE']:
 
 rank1_pl = all_df.copy()
 
+rank1_pl = pd.merge(rank1_pl, proj_pl[['player', 'fantasyPoints']], on='player', how='left')
+rank1_pl = rank1_pl.rename(columns={'fantasyPoints': 'Proj Pts'})
+
+rank1_tm = pd.merge(rank1_tm, proj_tm[['offTeam', 'fantasyPoints']], on='offTeam', how='left')
+rank1_tm = rank1_tm.rename(columns={'fantasyPoints': 'Proj Pts'})
+
 tables = ['Expert', 'Expert']
 dfs = [rank1_pl, rank1_tm]
 dbs = ['Pre_PlayerData', 'Pre_TeamData']
@@ -450,7 +458,6 @@ for t, d, db in zip(tables, dfs, dbs):
     check_new_data(d, f'PFF_{t}_Ranks', db)
     dm.delete_from_db(db, f'PFF_{t}_Ranks', f"week={set_week} AND year={set_year}", create_backup=False)
     dm.write_to_db(d, db, f'PFF_{t}_Ranks', 'append')
-
 
 #%%
 

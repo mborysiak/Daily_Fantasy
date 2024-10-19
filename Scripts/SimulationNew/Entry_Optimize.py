@@ -1,5 +1,5 @@
 #%%
-from zSim_Helper_Covar_NewFeatures import *
+from zSim_Helper_Covar import *
 
 # set the root path and database management object
 from ff.db_operations import DataManage
@@ -70,7 +70,7 @@ def get_top_hyperparams(num_rank, model_notes):
 
 num_rank = None
 # model_notes = 'newp_v2_onlykfold3_include2_non1_8_times1pt5'
-model_notes = 'Week 5 Check'
+model_notes = ''
 if num_rank is not None: 
     model_vers, d = get_top_hyperparams(num_rank, model_notes)
     manual_adjust = False
@@ -81,78 +81,31 @@ if manual_adjust:
     model_vers = {'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
                 'reg_ens_vers': 'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3',
-                'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3',
+                'std_dev_type': 'spline_pred_class80_q80_matt0_brier1_kfold3',
     }
-    d = {'adjust_pos_counts': {False: 0.3, True: 0.7},
-        'covar_type': {'kmeans_pred_trunc': 0.0,
-                        'kmeans_pred_trunc_new': 0.0,
-                        'no_covar': 0.3,
-                        'team_points_trunc': 0.7,
-                        'team_points_trunc_avgproj': 0.0},
-        'def_max_pick': {0: 1.0, 5: 0.0, 7: 0.0, 8: 0.0},
-        'full_model_weight': {0.2: 0.3, 5: 0.7},
-        'matchup_drop': {0: 1.0, 1: 0.0, 2: 0.0, 3: 0.0},
-        'matchup_seed': {0: 0.3, 1: 0.7},
-        'max_pts_per_dollar': {95: 0.0, 98: 0.0, 99: 0.0, 100: 1.0},
-        'max_pts_variable': {0: 1.0, 0.3: 0.0, 0.5: 0.0, 0.7: 0.0, 1: 0.0},
-        'max_salary_remain': {200: 0.0, 300: 0.0, 500: 0.7, 1000: 0.3, 1500: 0.0},
-        'max_team_type': {'player_points': 0.8, 'vegas_points': 0.2},
-        'min_player_same_team': {2: 0.2, 3: 0.4, 'Auto': 0.4},
-        'min_players_opp_team': {1: 0.0, 2: 0.3, 'Auto': 0.7},
-        'min_pred_pts': {0: 0.0, 5: 1.0, 7: 0.0},
-        'min_pts_per_dollar': {0: 0.5, 10: 0.5, 20: 0.0},
-        'min_pts_variable': {0: 0.0, 1: 1.0},
-        'num_avg_pts': {1: 0.0, 2: 0.0, 3: 0.0, 5: 0.2, 7: 0.7, 10: 0.1},
-        'num_iters': {50: 0.0, 100: 0.0, 150: 0.5, 200: 0.5},
-        'num_top_players': {2: 0.0, 3: 0.3, 5: 0.7},
-        'own_neg_frac': {0.8: 0.0, 0.9: 0.0, 1: 1.0},
-        'ownership_vers': {'mil_div_standard_ln': 0.0,
-                            'mil_only': 0.3,
-                            'mil_times_standard_ln': 0.3,
-                            'standard_ln': 0.4},
-        'ownership_vers_variable': {0: 0.2, 1: 0.8},
-        'player_drop_multiple': {0: 1.0, 2: 0.0, 4: 0.0, 10: 0.0, 20: 0.0, 30: 0.0},
-        'qb_max_sal': {6000: 0.0, 7000: 0.0, 10000: 1.0},
-        'qb_min_iter': {0: 0.3, 2: 0.7, 4: 0.0, 9: 0.0},
-        'qb_set_max_team': {0: 0.4, 1: 0.6},
-        'qb_solo_start': {False: 1.0, True: 0.0},
-        'qb_stack_wt': {1: 0.0, 2: 0.0, 3: 0.7, 4: 0.3},
-        'rb_max_pick': {0: 0.7, 3: 0.3, 4: 0.0},
-        'static_top_players': {False: 0.3, True: 0.7},
-        'te_max_pick': {0: 1.0},
-        'top_n_choices': {0: 1.0, 1: 0.0, 2: 0.0},
-        'use_ownership': {0.7: 0.0, 0.8: 0.5, 0.9: 0.5, 1: 0.0},
-        'use_unique_players': {0: 0.5, 1: 0.5},
-        'wr_max_pick': {0: 1.0}}
+    d = {'covar_type': {'kmeans_pred_trunc': 0.0,
+                'kmeans_pred_trunc_new': 0.0,
+                'no_covar': 0.3,
+                'team_points_trunc': 0.7,
+                'team_points_trunc_avgproj': 0.0},
+ 'full_model_rel_weight': {0.2: 0.4, 5: 0.6},
+ 'max_overlap': {3: 0, 5: 0, 7: 0, 9: 0, 11: 0.5, 13: 0.5},
+ 'max_salary_remain': {500: 0, 1000: 1},
+ 'max_teams_lineup': {4: 0, 5: 0.3, 6: 0.3, 8: 0.4},
+ 'min_opp_team': {0: 1, 1: 0, 2: 0},
+ 'num_avg_pts': {10: 0, 25: 0, 50: 0, 100: 0.2, 200: 0.4, 500: 0.4},
+ 'num_iters': {1: 1},
+ 'num_options': {50: 0, 200: 0, 500: 0, 1000: 0, 2000: 1},
+ 'ownership_vers': {'mil_div_standard_ln': 0,
+                    'mil_only': 0.4,
+                    'mil_times_standard_ln': 0.6,
+                    'standard_ln': 0},
+ 'ownership_vers_variable': {0: 1.0, 1: 0},
+ 'pos_or_neg': {1: 1},
+ 'prev_qb_wt': {1: 0, 3: 0.4, 5: 0.4, 7: 0.2},
+ 'qb_te_stack': {0: 0.6, 1: 0.4},
+ 'qb_wr_stack': {0: 0.2, 1: 0.8, 2: 0}}
     
-    
-try: del d['num']
-except: pass
-
-# d['ownership_vers_variable'] = {0: d['ownership_vers']['variable_0'], 1: d['ownership_vers']['variable_1']}
-if np.sum(list(d['min_pts_per_dollar'].values())) == 0:
-    d['min_pts_per_dollar'][0] = 1
-
-if np.sum(list(d['qb_max_sal'].values())) == 0:
-    d['qb_max_sal'][10000] = 1
-
-d['rb_min_sal'] = {3000: 1}
-
-if np.sum(list(d['max_pts_per_dollar'].values())) == 0:
-    d['max_pts_per_dollar'][100] = 1
-
-if np.sum(list(d['max_pts_variable'].values())) == 0:
-    d['max_pts_variable'][0] = 1
-# del d['ownership_vers']['variable_0']
-# del d['ownership_vers']['variable_1']
-
-# d['rb_max_pick'][0] = 0
-# d['rb_max_pick'][3] = 0
-
-d['player_drop_multiple'][0] = 1
-d['player_drop_multiple'][10] = 0
-d['player_drop_multiple'][20] = 0
-
 
 print('Num Rank:', num_rank)
 print('Model Notes:', model_notes)
@@ -173,17 +126,15 @@ for k,v in d.items():
 
 # set the model version
 set_weeks = [
-#    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-#    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-#    1, 2, 3, 4,
-   5
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+   1, 2, 3, 4, 5, 6
 ]
 
 set_years = [
-    #   2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
-    #   2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-    #   2024, 2024, 2024, 2024,
-      2024
+      2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
+      2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
+      2024, 2024, 2024, 2024, 2024, 2024
 ]
 
 # set_weeks=[14]
@@ -204,25 +155,26 @@ entry_type = 'millions_only'
 if entry_type == 'millions_playaction': total_lineups = 30
 elif entry_type == 'millions_only': total_lineups = 13
 
-rs = RunSim(db_path, 1, 2022, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
+rs = RunSim(db_path, 1, 2022, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
 
-max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params_Detail", 'Results').values[0][0]
+max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params_Detail", 'ResultsNew').values[0][0]
 trial_num = max_trial_num + 1
 
-def run_weekly_sim(d, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups):
 
-    rs = RunSim(db_path, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
+def run_weekly_sim(d, week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups):
+
+    rs = RunSim(db_path, week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
     params = rs.generate_param_list(d)
-    winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=True)
+    winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=False)
 
     return winnings, player_results, params, winnings_list
 
 
 def objective(param_options, pred_vers, reg_ens_vers, std_dev_type, million_ens_vers, total_lineups, set_weeks, 
-              set_years, salary_cap, pos_require_start):
+              set_years):
     
     output = Parallel(n_jobs=-1, verbose=0)(
-                                delayed(run_weekly_sim)(param_options, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, 
+                                delayed(run_weekly_sim)(param_options, week, year, pred_vers, reg_ens_vers, 
                                                         million_ens_vers, std_dev_type, total_lineups) for
                                 week, year in zip(set_weeks, set_years)
                                 )
@@ -308,23 +260,23 @@ with keep.running() as m:
         print('Repeat #', repeat_num, '\n==============\n')
 
         weekly_winnings, player_results, param_output, winning_list = objective(d, pred_vers, reg_ens_vers, std_dev_type, million_ens_vers, total_lineups, 
-                                                                        set_weeks, set_years, salary_cap, pos_require_start)
+                                                                                set_weeks, set_years)
 
 
         output_results = format_output_results(weekly_winnings, set_weeks, set_years, pred_vers, reg_ens_vers, std_dev_type,
                                                million_ens_vers, trial_num, repeat_num, entry_type, num_rank, model_notes, manual_adjust)
-        dm.write_to_db(output_results, 'Results', 'Entry_Optimize_Results', 'append')
+        dm.write_to_db(output_results, 'ResultsNew', 'Entry_Optimize_Results', 'append')
 
         player_results_out = format_player_results(player_results, total_lineups, repeat_num, trial_num)
-        dm.write_to_db(player_results_out, 'Results', 'Entry_Optimize_Lineups', 'append')
+        dm.write_to_db(player_results_out, 'ResultsNew', 'Entry_Optimize_Lineups', 'append')
 
         param_output_df = detailed_param_output(rs, param_output, winning_list, set_weeks, set_years, trial_num, repeat_num)
         param_output_df.ownership_vers = param_output_df.ownership_vers.astype('str')
-        dm.write_to_db(param_output_df, 'Results', 'Entry_Optimize_Params_Detail', 'append')
+        dm.write_to_db(param_output_df, 'ResultsNew', 'Entry_Optimize_Params_Detail', 'append')
 
     # save out the initial params that were set for randomization
     output = param_set_output(d)
-    dm.write_to_db(output, 'Results', 'Entry_Optimize_Params', 'append')
+    dm.write_to_db(output, 'ResultsNew', 'Entry_Optimize_Params', 'append')
 
 
 #%%
@@ -333,12 +285,12 @@ with keep.running() as m:
 
 #%%
 
-to_delete_num=816
+to_delete_num=2
 
-dm.delete_from_db('Results', 'Entry_Optimize_Results', f'trial_num={to_delete_num}', create_backup=False)
-dm.delete_from_db('Results', 'Entry_Optimize_Lineups', f'trial_num={to_delete_num}', create_backup=False)
-dm.delete_from_db('Results', 'Entry_Optimize_Params', f'trial_num={to_delete_num}', create_backup=False)
-dm.delete_from_db('Results', 'Entry_Optimize_Params_Detail', f'trial_num={to_delete_num}', create_backup=False)
+dm.delete_from_db('ResultsNew', 'Entry_Optimize_Results', f'trial_num={to_delete_num}', create_backup=False)
+dm.delete_from_db('ResultsNew', 'Entry_Optimize_Lineups', f'trial_num={to_delete_num}', create_backup=False)
+dm.delete_from_db('ResultsNew', 'Entry_Optimize_Params', f'trial_num={to_delete_num}', create_backup=False)
+dm.delete_from_db('ResultsNew', 'Entry_Optimize_Params_Detail', f'trial_num={to_delete_num}', create_backup=False)
 
 #%%
 

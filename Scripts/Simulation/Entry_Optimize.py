@@ -70,7 +70,7 @@ def get_top_hyperparams(num_rank, model_notes):
 
 num_rank = None
 # model_notes = 'newp_v2_onlykfold3_include2_non1_8_times1pt5'
-model_notes = 'Week 5 Check'
+model_notes = 'Week 6 Check'
 if num_rank is not None: 
     model_vers, d = get_top_hyperparams(num_rank, model_notes)
     manual_adjust = False
@@ -175,14 +175,14 @@ for k,v in d.items():
 set_weeks = [
 #    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 #    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-#    1, 2, 3, 4,
-   5
+#    1, 2, 3, 4, 5, 
+   6
 ]
 
 set_years = [
     #   2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
     #   2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-    #   2024, 2024, 2024, 2024,
+    #   2024, 2024, 2024, 2024, 2024, 
       2024
 ]
 
@@ -213,7 +213,7 @@ def run_weekly_sim(d, week, year, salary_cap, pos_require_start, pred_vers, reg_
 
     rs = RunSim(db_path, week, year, salary_cap, pos_require_start, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
     params = rs.generate_param_list(d)
-    winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=True)
+    winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=False)
 
     return winnings, player_results, params, winnings_list
 
@@ -333,7 +333,7 @@ with keep.running() as m:
 
 #%%
 
-to_delete_num=816
+to_delete_num=840
 
 dm.delete_from_db('Results', 'Entry_Optimize_Results', f'trial_num={to_delete_num}', create_backup=False)
 dm.delete_from_db('Results', 'Entry_Optimize_Lineups', f'trial_num={to_delete_num}', create_backup=False)

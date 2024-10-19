@@ -116,7 +116,12 @@ best_trials = dm.read('''SELECT *
                                  AND reg_ens_vers LIKE '%_include2_kfold3%'
                          ''', 'Results')
 
-best_trials.loc[best_trials.avg_winnings > 10000, 'avg_winnings'] = 10000
+best_trials_new = dm.read('''SELECT *
+                         FROM Entry_Optimize_Results
+                         ''', 'ResultsNew')
+best_trials = pd.concat([best_trials, best_trials_new], axis=0)
+
+best_trials.loc[best_trials.avg_winnings > 25000, 'avg_winnings'] = 25000
 
 best_trials['non8_winnings'] = best_trials.avg_winnings
 best_trials.loc[(best_trials.week == 8) & (best_trials.year==2022), 'non8_winnings'] = 0 
@@ -180,7 +185,7 @@ results = dm.read('''SELECT *
                           AND million_ens_vers LIKE '%_include2_kfold3%'
                     ''', 'Results')
 
-results.loc[results.avg_winnings > 10000, 'avg_winnings'] = 10000
+results.loc[results.avg_winnings > 25000, 'avg_winnings'] = 25000
 results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] = \
     results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] * 1.5
 
