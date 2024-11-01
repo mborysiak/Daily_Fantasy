@@ -17,55 +17,14 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2024
-week=6
+week=8
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 20
+num_lineups = 15
 set_max_team = None
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
-
-#%%
-
-def rand_drop_selected(total_add, drop_multiplier):
-    to_drop = []
-    total_selections = dict(Counter(total_add))
-    for k, v in total_selections.items():
-        prob_drop = (v * drop_multiplier) / lineups_per_param
-        drop_val = np.random.uniform() * prob_drop
-        if  drop_val >= 0.5:
-            to_drop.append(k)
-    return to_drop
-
-
-def get_matchups():
-    df = dm.read(f'''SELECT away_team, home_team
-                    FROM Gambling_Lines 
-                    WHERE week={week} 
-                        and year={year} 
-                ''', 'Simulation')
-
-    matchups = []
-    for away, home in df.values:
-        matchups.append([home, away])
-
-    return matchups
-
-
-def rand_drop_teams(matchups, drop_matchups):
-    drop_teams = matchups[np.random.choice(matchups.shape[0], drop_matchups, replace=False), :][0]
-    return list(player_teams.loc[player_teams.team.isin(drop_teams), 'player'].values)
-
-
-player_teams = dm.read(f'''SELECT DISTINCT player, team 
-                            FROM Covar_Means
-                            WHERE week={week}
-                                    AND year={year}
-                                    AND pred_vers='{pred_vers}'
-                                    ''', 'Simulation')
-unique_teams = player_teams.team.unique()
-matchups = np.array([m for m in get_matchups() if m[0] in unique_teams and m[1] in unique_teams])
 
 #%%
 
@@ -102,20 +61,6 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'ResultsNew')
     return vers
 
-best_trials = 15
-
-opt_params = pull_best_params(best_trials)
-del opt_params['lineups_per_param']
-pprint.pprint(opt_params)
-
-best_vers = pull_params_version(best_trials)
-pred_vers = best_vers.pred_vers.values[0]
-reg_ens_vers = best_vers.reg_ens_vers.values[0]
-million_ens_vers = best_vers.million_ens_vers.values[0]
-std_dev_type = best_vers.std_dev_type.values[0]
-pprint.pprint(best_vers.values)
-
-#%%
 
 def clean_lineup_list(lineups_list, player_data):
     lineups = pd.DataFrame(lineups_list).T
@@ -169,10 +114,28 @@ def create_database_output(my_team, j):
     dm.write_to_db(dk_output, 'Simulation', 'Automated_Lineups', 'append')
 
 #%%
-# run all the lineups
-rs = RunSim(db_path, week, year,pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, num_lineups)
-params = rs.generate_param_list(opt_params)
-lineups_list = rs.run_multiple_lineups(params, calc_winnings=False, parallelize=False, n_jobs=-1, verbose=0)
+
+lineups_list = []
+for best_trials in (68,):
+
+    opt_params = pull_best_params(best_trials)
+    try:del opt_params['lineups_per_param']
+    except:pass
+    pprint.pprint(opt_params)
+
+    best_vers = pull_params_version(best_trials)
+    pred_vers = best_vers.pred_vers.values[0]
+    reg_ens_vers = best_vers.reg_ens_vers.values[0]
+    million_ens_vers = best_vers.million_ens_vers.values[0]
+    std_dev_type = best_vers.std_dev_type.values[0]
+    pprint.pprint(best_vers.values)
+
+
+    # run all the lineups
+    rs = RunSim(db_path, week, year,pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, num_lineups)
+    params = rs.generate_param_list(opt_params)
+    lineups_list_cur = rs.run_multiple_lineups(params, calc_winnings=False, parallelize=False, n_jobs=-1, verbose=0)
+    lineups_list.extend(lineups_list_cur)
 
 #%%
 # get the player data

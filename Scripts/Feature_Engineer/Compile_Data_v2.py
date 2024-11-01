@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2024
-WEEK = 7
+WEEK = 9
 
 import pandas as pd 
 import numpy as np
@@ -1626,9 +1626,10 @@ def replace_inf_values(df):
 def remove_low_corrs(df, corr_cut=0.015):
     orig_columns = df.shape[1]
     obj_cols = df.dtypes[df.dtypes=='object'].index
-    corrs = pd.DataFrame(np.corrcoef(df.drop(obj_cols, axis=1).values, rowvar=False), 
-                         columns=[c for c in df.columns if c not in obj_cols],
-                         index=[c for c in df.columns if c not in obj_cols])
+    corrs = df[~((df.week==WEEK) & (df.year==YEAR))].copy().reset_index(drop=True)
+    corrs = pd.DataFrame(np.corrcoef(corrs.drop(obj_cols, axis=1).values, rowvar=False), 
+                         columns=[c for c in corrs.columns if c not in obj_cols],
+                         index=[c for c in corrs.columns if c not in obj_cols])
     corrs = corrs['y_act']
     low_corrs = list(corrs[abs(corrs) < corr_cut].index)
     low_corrs = [c for c in low_corrs if c not in ('week', 'year', 'fd_salary')]
@@ -2031,6 +2032,33 @@ pff_oline = pff_oline_rollup()
 
 #%%
 
+# prop_types = ('player_rush_attempts', 'player_rush_yds', 'player_rush_attempts',
+#               'player_reception_yds', 'player_receptions',
+#               'player_pass_yds', 'player_pass_attempts', 'player_pass_completions')
+
+# odds = dm.read(f'''SELECT *,  
+#                         1/(price+0.1) as implied_prob
+#                 FROM Game_Odds
+#                 WHERE prop_type IN {prop_types}
+#                         AND price > 1.7
+#                         AND price < 2.3
+#                         AND name='Over'
+#             ''', 'Pre_PlayerData')
+
+# odds['adjustment'] = 0.5+odds.implied_prob
+# odds['pointadj'] = odds.adjustment * odds.point
+
+# odds = odds.groupby(['description','year', 'week', 'prop_type']).agg({'pointadj': 'mean',
+#                                                                     'point': 'mean'}).reset_index()
+# odds.prop_type = odds.prop_type.str.replace('player_', 'vegas_proj_').str.strip()
+# odds = odds.pivot_table(index=['description', 'year', 'week'], columns='prop_type', values=['point', 'pointadj']).reset_index()
+# odds.columns = [f"{c[1]}{c[0].replace('point', '')}" if c[1]!='' else c[0] for c in odds.columns]
+# odds.columns = [c.replace('adj', '_adj') for c in odds.columns]
+# odds = odds.rename(columns={'description': 'player'})
+
+# odds
+#%%
+
 pos = 'QB'
 rush_or_pass = ''
 
@@ -2365,7 +2393,7 @@ dm.write_to_db(defense, f'Model_Features_{YEAR}', f'Defense_Data_Week{WEEK}', if
 
 #%%
 
-chk_week = 7
+chk_week = 8
 backfill_chk = dm.read(f'''SELECT player 
                            FROM Backfill_QB_Week{WEEK} 
                            WHERE week={chk_week} AND year={YEAR}

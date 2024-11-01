@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2024
-set_week = 6
+set_week = 8
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -298,6 +298,8 @@ for df, t in zip([qb, qb_ay, qb_acc, qb_pres, qb_pt, rb, rec],
 
 #%%
 # # Snap Counts
+from io import StringIO
+import requests
 
 url = f'https://www.fantasypros.com/nfl/reports/snap-counts/'
 response = requests.get(url, verify=False)

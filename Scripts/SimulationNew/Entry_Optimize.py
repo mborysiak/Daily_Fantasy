@@ -23,7 +23,7 @@ def get_top_hyperparams(num_rank, model_notes):
                                     WHERE model_notes='{model_notes}'
                                     GROUP BY model_notes
                                     ) USING (model_notes, date_run)
-                            WHERE param_rank = {num_rank}''', 'SimParams')
+                            WHERE param_rank = {num_rank}''', 'SimParamsNew')
     pred_params = {}
     for k, v in top_settings.items():
         if k in ['pred_vers', 'reg_ens_vers', 'std_dev_type', 'million_ens_vers']:
@@ -41,6 +41,9 @@ def get_top_hyperparams(num_rank, model_notes):
             elif 'ownership_vers_variable' in k:
                 p = 'ownership_vers_variable'
                 opt = k.split('ownership_vers_variable_')[-1]
+            elif 'overlap_constraint' in k:
+                p = 'overlap_constraint'
+                opt = k.split('overlap_constraint_')[-1]
             elif 'ownership_vers' in k:
                 p = 'ownership_vers'
                 opt = k.split('ownership_vers_')[-1]
@@ -67,50 +70,107 @@ def get_top_hyperparams(num_rank, model_notes):
         
     return pred_params, other_params
 
+def pull_best_params(best_trial):
+    params = {}
+    params_opt = dm.read(f'''SELECT * 
+                             FROM Entry_Optimize_Params
+                             WHERE trial_num = {best_trial}''', 'ResultsNew')
+    params_opt = params_opt.groupby(['param', 'param_option']).agg({'option_value': 'mean'}).reset_index()
 
-num_rank = None
-# model_notes = 'newp_v2_onlykfold3_include2_non1_8_times1pt5'
-model_notes = ''
-if num_rank is not None: 
-    model_vers, d = get_top_hyperparams(num_rank, model_notes)
-    manual_adjust = False
-else:
-    manual_adjust = True
-
-if manual_adjust:
-    model_vers = {'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
-                'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
-                'reg_ens_vers': 'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3',
-                'std_dev_type': 'spline_pred_class80_q80_matt0_brier1_kfold3',
-    }
-    d = {'covar_type': {'kmeans_pred_trunc': 0.0,
-                'kmeans_pred_trunc_new': 0.0,
-                'no_covar': 0.3,
-                'team_points_trunc': 0.7,
-                'team_points_trunc_avgproj': 0.0},
- 'full_model_rel_weight': {0.2: 0.4, 5: 0.6},
- 'max_overlap': {3: 0, 5: 0, 7: 0, 9: 0, 11: 0.5, 13: 0.5},
- 'max_salary_remain': {500: 0, 1000: 1},
- 'max_teams_lineup': {4: 0, 5: 0.3, 6: 0.3, 8: 0.4},
- 'min_opp_team': {0: 1, 1: 0, 2: 0},
- 'num_avg_pts': {10: 0, 25: 0, 50: 0, 100: 0.2, 200: 0.4, 500: 0.4},
- 'num_iters': {1: 1},
- 'num_options': {50: 0, 200: 0, 500: 0, 1000: 0, 2000: 1},
- 'ownership_vers': {'mil_div_standard_ln': 0,
-                    'mil_only': 0.4,
-                    'mil_times_standard_ln': 0.6,
-                    'standard_ln': 0},
- 'ownership_vers_variable': {0: 1.0, 1: 0},
- 'pos_or_neg': {1: 1},
- 'prev_qb_wt': {1: 0, 3: 0.4, 5: 0.4, 7: 0.2},
- 'qb_te_stack': {0: 0.6, 1: 0.4},
- 'qb_wr_stack': {0: 0.2, 1: 0.8, 2: 0}}
+    for p, opt, val in params_opt.values:
+        if p not in params.keys(): params[p] = {}
+        if p in ('adjust_pos_counts', 'static_top_players', 'qb_set_max_max', 'qb_solo_start'):
+            if opt=='0': opt=False
+            if opt=='1': opt=True
+        else:
+            try: opt = int(opt)
+            except: 
+                try: opt = float(opt)
+                except: pass
     
+        params[p][opt] = np.round(val,2)
+
+    for k, v in params.items():
+        if np.sum(list(v.values())) != 1:
+            print('Not summed to 1:', k)
+    print('\n')
+
+    return params
+
+def pull_params_version(best_trial):
+    vers = dm.read(f'''SELECT DISTINCT trial_num, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type
+                       FROM Entry_Optimize_Results
+                       WHERE trial_num = {best_trial}''', 'ResultsNew')
+    return vers
+
+trial_repeat = 58
+model_notes = f'Trial {trial_repeat} Repeat'
+num_rank = None
+manual_adjust = False
+
+d = pull_best_params(trial_repeat)
+pprint.pprint(d)
+
+model_vers = pull_params_version(trial_repeat).drop('trial_num', axis=1).to_dict()
+model_vers = {k: v[0] for k,v in model_vers.items()}
+pprint.pprint(model_vers)
+
+# num_rank = None
+# # model_notes = 'param_test_v1'
+# model_notes = 'Trial 68 Repeat'
+
+# if num_rank is not None: 
+#     model_vers, d = get_top_hyperparams(num_rank, model_notes)
+#     manual_adjust = False
+# else:
+
+#     manual_adjust = True
+
+# if manual_adjust:
+#     model_vers = {'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
+#                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
+#                 'reg_ens_vers': 'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3',
+#                 'std_dev_type': 'spline_pred_class80_q80_matt0_brier1_kfold3',
+#     }
+#     d = {'covar_type': {'kmeans_pred_trunc': 0.0,
+#                 'kmeans_pred_trunc_new': 0.0,
+#                 'no_covar': 0.2,
+#                 'team_points_trunc': 0.8,
+#                 'team_points_trunc_avgproj': 0.0},
+#  'full_model_rel_weight': {0.2: 0.3, 5: 0.7},
+#  'lineups_per_param': {1: 1.0},
+#  'max_overlap': {3: 0.0, 5: 0.0, 7: 0.5, 8: 0.5, 9: 0.0, 11: 0.0, 13: 0.0},
+#  'max_salary_remain': {500: 0.0, 1000: 1.0},
+#  'max_teams_lineup': {4: 0.0, 5: 0.3, 6: 0.0, 8: 0.7},
+#  'min_opp_team': {0: 1.0, 1: 0.0, 2: 0.0},
+#  'num_avg_pts': {10: 0.0, 25: 0.0, 50: 0.0, 100: 0.2, 200: 0.0, 500: 0.8},
+#  'num_iters': {1: 1.0},
+#  'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 1.0},
+#  'overlap_constraint': {'div_two': 0.5, 'plus_wts': 0.5},
+#  'ownership_vers': {'mil_div_standard_ln': 0.0,
+#                     'mil_only': 0.4,
+#                     'mil_times_standard_ln': 0.6,
+#                     'standard_ln': 0.0},
+#  'ownership_vers_variable': {0: 1.0, 1: 0.0},
+#  'pos_or_neg': {1: 1.0},
+#  'prev_def_wt': {1: 1.0},
+#  'prev_qb_wt': {1: 0.0, 3: 0.5, 5: 0.0, 7: 0.5},
+#  'qb_te_stack': {0: 0.3, 1: 0.7},
+#  'qb_wr_stack': {0: 0.1, 1: 0.9, 2: 0.0},
+#  'rb_flex_pct': {0.3: 0.3, 0.4: 0.7},
+#  'use_ownership': {0: 0.3, 1: 0.7},
+#  'wr_flex_pct': {0.5: 0.5, 0.6: 0.5}}
+ 
+try: del d['num']
+except: pass
+
+try: del d['lineups_per_param']
+except: pass
 
 print('Num Rank:', num_rank)
 print('Model Notes:', model_notes)
-pprint.pprint(model_vers)
-pprint.pprint(d)
+# pprint.pprint(model_vers)
+# pprint.pprint(d)
 for k,v in d.items():
     print(k, np.sum(list(v.values())))
 
@@ -128,13 +188,13 @@ for k,v in d.items():
 set_weeks = [
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-   1, 2, 3, 4, 5, 6
+   1, 2, 3, 4, 5, 6, 7, 8
 ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
       2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-      2024, 2024, 2024, 2024, 2024, 2024
+      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
 ]
 
 # set_weeks=[14]
@@ -153,7 +213,7 @@ set_max_team = None
 
 entry_type = 'millions_only'
 if entry_type == 'millions_playaction': total_lineups = 30
-elif entry_type == 'millions_only': total_lineups = 13
+elif entry_type == 'millions_only': total_lineups = 15
 
 rs = RunSim(db_path, 1, 2022, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
 
@@ -280,12 +340,23 @@ with keep.running() as m:
 
 
 #%%
+prev_qb_wt = 3
+prev_def_wt = 1
+max_overlap = 8
 
+constraint_div = float(max_overlap+int(prev_qb_wt/2)+(prev_def_wt/2))
+constraint_minus = float(max_overlap+(prev_qb_wt-1)+(prev_def_wt-1))
+
+print('if qb, other players:', constraint_div-prev_qb_wt)
+print('if not qb, other players:', constraint_div)
+
+print('if qb, other players:', constraint_minus-prev_qb_wt)
+print('if not qb, other players:', constraint_minus)
 
 
 #%%
 
-to_delete_num=2
+to_delete_num=84
 
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Results', f'trial_num={to_delete_num}', create_backup=False)
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Lineups', f'trial_num={to_delete_num}', create_backup=False)
@@ -294,32 +365,35 @@ dm.delete_from_db('ResultsNew', 'Entry_Optimize_Params_Detail', f'trial_num={to_
 
 #%%
 
-df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'Results')
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params", 'ResultsNew')
 add_on = pd.DataFrame({'trial_num': range(df.trial_num.max()+1)})
-add_on = add_on.assign(param='max_pts_variable', param_option=0, option_value=1)
-add_on = add_on.assign(param='max_pts_per_dollar', param_option=100, option_value=1)
-add_on = add_on.assign(param='qb_max_sal', param_option=10000, option_value=1)
-add_on = add_on.assign(param='rb_min_sal', param_option=3000, option_value=1)
+add_on = add_on.assign(param='overlap_constraint', param_option='standard', option_value=1)
+# add_on = add_on.assign(param='rb_flex_pct', param_option=0.4, option_value=1)
+# add_on = add_on.assign(param='wr_flex_pct', param_option=0.5, option_value=1)
+# add_on = add_on.assign(param='rb_min_sal', param_option=3000, option_value=1)
 
 add_on = add_on[df.columns]
 
 df = pd.concat([df, add_on], axis=0)
 df = df.sort_values(by='trial_num')
 
-# # df.loc[(df.trial_num.isin([84])) & (df.param=='num_iters'), ['param_option', 'option_value']] = [100, 1]
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params', 'replace', create_backup=True)
+# df.loc[(df.trial_num.isin([57, 58, 59])) & (df.param=='overlap_constraint'), ['param_option', 'option_value']] = ['plus_wts', 1]
+# df.loc[(df.trial_num>59) & (df.param=='overlap_constraint'), ['param_option', 'option_value']] = ['minus_one', 1]
+# dm.write_to_db(df, 'ResultsNew', 'Entry_Optimize_Params', 'replace', create_backup=True)
 
 #%%
 
 
-df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'Results')
-df['max_pts_variable'] = 0
-df['max_pts_per_dollar'] = 100
-df['qb_max_sal'] = 10000
-df['rb_min_sal'] = 3000
+df = dm.read(f"SELECT * FROM Entry_Optimize_Params_Detail", 'ResultsNew')
+df['use_ownership'] = 1
+df['overlap_constraint'] = 'standard'
+# df['wr_flex_pct'] = 0.5
+# df['rb_min_sal'] = 3000
 
-# df.loc[df.trial_num.isin([84]), 'num_iters'] = 100
-# dm.write_to_db(df, 'Results', 'Entry_Optimize_Params_Detail', 'replace')
+df.loc[(df.trial_num.isin([57, 58, 59])), 'overlap_constraint'] = 'plus_wts'
+df.loc[(df.trial_num>59), 'overlap_constraint'] = 'minus_one'
+df
+# dm.write_to_db(df, 'ResultsNew', 'Entry_Optimize_Params_Detail', 'replace')
 
 #%%
 

@@ -110,26 +110,35 @@ class FoldPredict:
 
 #%%
 
+# best_trials_old = dm.read('''SELECT *
+#                          FROM Entry_Optimize_Results
+#                          WHERE trial_num >= 654
+#                                  AND reg_ens_vers LIKE '%_include2_kfold3%'
+#                          ''', 'Results')
+
 best_trials = dm.read('''SELECT *
                          FROM Entry_Optimize_Results
-                         WHERE trial_num >= 654
-                                 AND reg_ens_vers LIKE '%_include2_kfold3%'
-                         ''', 'Results')
-
-best_trials_new = dm.read('''SELECT *
-                         FROM Entry_Optimize_Results
                          ''', 'ResultsNew')
-best_trials = pd.concat([best_trials, best_trials_new], axis=0)
+# best_trials = pd.concat([best_trials, best_trials_old], axis=0)
 
-best_trials.loc[best_trials.avg_winnings > 25000, 'avg_winnings'] = 25000
+best_trials.loc[best_trials.avg_winnings > 15000, 'avg_winnings'] = 15000
 
 best_trials['non8_winnings'] = best_trials.avg_winnings
 best_trials.loc[(best_trials.week == 8) & (best_trials.year==2022), 'non8_winnings'] = 0 
 
-best_trials['non1_winnings'] = best_trials.non8_winnings
+best_trials['non1_winnings'] = best_trials.avg_winnings
 best_trials.loc[(best_trials.week == 1) & (best_trials.year==2022), 'non1_winnings'] = 0 
 
+best_trials['non6_winnings'] = best_trials.avg_winnings
+best_trials.loc[(best_trials.week == 6) & (best_trials.year==2024), 'non6_winnings'] = 0 
+
 best_trials['avg_winnings_sqrt_pre'] = best_trials.avg_winnings ** 0.5
+best_trials['over_500_winnings'] = 0
+best_trials.loc[best_trials.avg_winnings > 500, 'over_500_winnings'] = 1
+
+best_trials['over_1000_winnings'] = 0
+best_trials.loc[best_trials.avg_winnings > 1000, 'over_1000_winnings'] = 1
+
 
 best_trials = (
     best_trials
@@ -139,6 +148,9 @@ best_trials = (
           'avg_winnings_sqrt_pre': 'mean',
           'non8_winnings': 'mean',
           'non1_winnings': 'mean',
+          'non6_winnings': 'mean',
+          'over_500_winnings': 'mean',
+            'over_1000_winnings': 'mean',
           #'perc80': lambda x: np.percentile(x, 80)
           })
     .reset_index()
@@ -152,10 +164,14 @@ best_trials = (
           'avg_winnings_sqrt_pre': 'sum',
           'avg_winnings_sqrt_post': 'sum',
           'non8_winnings': 'sum',
-          'non1_winnings': 'sum',})
+          'non1_winnings': 'sum',
+            'non6_winnings': 'sum',
+          'over_500_winnings': 'sum',
+          'over_1000_winnings': 'sum',})
 )
 
-winnings_cols = ['avg_winnings', 'avg_winnings_sqrt_pre', 'avg_winnings_sqrt_post', 'non8_winnings', 'non1_winnings']
+winnings_cols = ['avg_winnings', 'avg_winnings_sqrt_pre', 'avg_winnings_sqrt_post', 'non8_winnings', 
+                 'non1_winnings','non6_winnings', 'over_500_winnings', 'over_1000_winnings']
 for c in winnings_cols:
     best_trials[c+'_rank'] = best_trials[c].rank(ascending=False)
 
@@ -170,8 +186,7 @@ best_trials.iloc[:50]
 
 params = dm.read('''SELECT *
                     FROM Entry_Optimize_Params
-                    WHERE trial_num >= 654
-                    ''', 'Results')
+                    ''', 'ResultsNew')
 param_vars = list(params.param.unique())
 params['param'] = params.param.astype('str') + '_' + params.param_option.astype('str')
 
@@ -179,15 +194,11 @@ params = params.pivot_table(index=['trial_num'], columns='param', values='option
 
 results = dm.read('''SELECT *
                     FROM Entry_Optimize_Results
-                    WHERE trial_num >= 654
-                          AND reg_ens_vers LIKE '%newp%'
-                          AND reg_ens_vers LIKE '%_include2_kfold3%'
-                          AND million_ens_vers LIKE '%_include2_kfold3%'
-                    ''', 'Results')
+                    ''', 'ResultsNew')
 
 results.loc[results.avg_winnings > 25000, 'avg_winnings'] = 25000
-results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] = \
-    results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] * 1.5
+# results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] = \
+#     results.loc[~((results.week.isin([1,8]))&(results.year==2022)), 'avg_winnings'] * 1.5
 
 # results.loc[((results.week==1)&(results.year==2022)), 'avg_winnings'] = \
 #     results.loc[((results.week==1)&(results.year==2022)), 'avg_winnings'] / 2
@@ -234,7 +245,7 @@ import shap
 shap_values = shap.TreeExplainer(model).shap_values(X)
 shap.summary_plot(shap_values, X, feature_names=X.columns, plot_size=(8,10), max_display=30, show=False)
 
-shap.dependence_plot("ownership_vers_variable_1", shap_values, X)
+shap.dependence_plot("overlap_constraint_plus_wts", shap_values, X)
 
 
 #%%
@@ -252,6 +263,7 @@ for pv in param_vars:
     for c in X.columns:
         if pv in c:
             drop_cols.append(c)
+            
 base_cols = [c for c in X.columns if c not in drop_cols]
 X_predict = pd.DataFrame()
 
@@ -282,7 +294,7 @@ for c in grp_cols:
 winnings_pr = winnings_pr.sort_values(by='winnings_pred', ascending=False).drop_duplicates().reset_index(drop=True)
 winnings_pr = winnings_pr.reset_index().rename(columns={'index': 'param_rank'})
 
-model_notes = 'newp_v2_onlykfold3_include2_non1_8_times1pt5'
+model_notes = 'param_test_v1'
 date_run = dt.datetime.now().strftime('%Y-%m-%d')
 winnings_pr = winnings_pr.assign(model_notes=model_notes, date_run=date_run)
 winnings_pr = winnings_pr.iloc[:5000]
@@ -291,8 +303,8 @@ winnings_pr
 #%%
 
 try:
-    dm.delete_from_db('SimParams', 'Entry_Optimize_Hyperparams', f"model_notes='{model_notes}' AND date_run='{date_run}'", create_backup=False)
-    dm.write_to_db(winnings_pr, 'SimParams','Entry_Optimize_Hyperparams', 'append')
+    dm.delete_from_db('SimParamsNew', 'Entry_Optimize_Hyperparams', f"model_notes='{model_notes}' AND date_run='{date_run}'", create_backup=False)
+    dm.write_to_db(winnings_pr, 'SimParamsNew','Entry_Optimize_Hyperparams', 'append')
 
 except:
     old_df = dm.read('''SELECT * FROM Entry_Optimize_Hyperparams WHERE param_rank < 5000''', 'SimParams')

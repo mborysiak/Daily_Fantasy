@@ -9,10 +9,11 @@ from DataPull_Helper import *
 pd.set_option('display.max_columns', 999)
 import shutil as su
 import lxml
+import yaml
 
 # +
 set_year = 2024
-set_week = 7
+set_week = 9
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -23,6 +24,14 @@ root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
 dm = DataManage(db_path)
 
+def read_config(file_path):
+    with open(file_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config
+
+# Assuming the config file is in the same directory as the Python script
+config_file = f'{root_path}/Scripts/config.yaml'
+config = read_config(config_file)
 
 
 def move_download_to_folder(root_path, folder, fname, week=''):
@@ -815,6 +824,219 @@ dm.delete_from_db('Pre_PlayerData', 'FantasyPoints_Defense', f"week={set_week} A
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPoints_Defense', 'append')
 
 #%%
+
+import pytz
+api_key = config['odds_api_key']
+sport = 'americanfootball_nfl' # use the sport_key from the /sports endpoint below, or use 'upcoming' to see the next 8 games across all sports
+region = 'us' # uk | us | eu | au. Multiple can be specified if comma delimited
+odds_format = 'decimal' # decimal | american
+date_format = 'iso' # iso | unix
+
+class OddsAPIPull:
+
+    def __init__(self, week, year, api_key, base_url, sport, region, odds_format, date_format, historical=False):
+        
+        self.week = week
+        self.year = year
+        self.api_key = api_key
+        self.sport = sport
+        self.region = region
+        self.odds_format = odds_format
+        self.date_format = date_format
+        self.historical = historical
+
+        if self.historical: 
+            self.base_url = f'{base_url}/historical/sports/'
+        else: 
+            self.base_url = f'{base_url}/sports/'
+
+    def get_response(self, r_pull):
+        if r_pull.status_code != 200:
+            print(f'Failed to get odds: status_code {r_pull.status_code}, response body {r_pull.text}')
+        else:
+            r_json = r_pull.json()
+            print('Number of events:', len(r_json))
+            print('Remaining requests', r_pull.headers['x-requests-remaining'])
+            print('Used requests', r_pull.headers['x-requests-used'])
+
+        return r_json
+
+    @staticmethod
+    def convert_utc_to_est(est_dt):
+        
+        # Define the EST timezone
+        est = pytz.timezone('US/Eastern')
+
+        # Localize the datetime object to EST
+        local_time_est = est.localize(est_dt)
+
+        # Convert the localized datetime to UTC
+        utc_time = local_time_est.astimezone(pytz.utc)
+        
+        return utc_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    @staticmethod
+    def get_weekday_name(date_string):
+        dt_utc = dt.datetime.strptime(date_string, "%Y-%m-%dT%H:%M:%SZ")
+        dt_utc = dt_utc.replace(tzinfo=pytz.UTC)
+
+        # Convert to EST
+        est_tz = pytz.timezone('America/New_York')
+        dt_est = dt_utc.astimezone(est_tz)
+
+        # Get the day name in EST
+        weekday_name = dt_est.strftime("%A")
+        return weekday_name
+
+    def pull_events(self, start_time, end_time):
+        
+        if start_time is not None: start_time = self.convert_utc_to_est(start_time)
+        if end_time is not None: end_time = self.convert_utc_to_est(end_time)
+
+        get_params = {
+                'api_key': self.api_key,
+                'regions': self.region,
+                'oddsFormat': self.odds_format,
+                'dateFormat': self.date_format,
+                'commenceTimeFrom': start_time,
+                'commenceTimeTo': end_time
+            }
+        
+        if self.historical:
+            get_params['date'] = start_time
+            self.start_time = start_time
+
+        events = requests.get(
+            f'{self.base_url}/{self.sport}/events',
+            params=get_params
+            )
+        
+        events_json = self.get_response(events)
+        if self.historical: events_json = events_json['data']
+
+        events_df = pd.DataFrame()
+        for e in events_json:
+            events_df = pd.concat([events_df, pd.DataFrame(e, index=[0])], axis=0)
+        
+        events_df['week'] = self.week
+        events_df['year'] = self.year
+        events_df['day_of_week'] = events_df.commence_time.apply(self.get_weekday_name)
+        events_df = events_df.rename(columns={'id': 'event_id'})
+
+        return events_df.reset_index(drop=True)
+    
+
+    def pull_lines(self, markets, event_id):
+
+        get_params={
+                    'api_key': self.api_key,
+                    'regions': self.region,
+                    'markets': markets,
+                    'oddsFormat': self.odds_format,
+                    'dateFormat': self.date_format,
+                }
+       
+        if self.historical:
+            get_params['date'] = self.start_time
+
+        odds = requests.get(
+                f'{self.base_url}/{self.sport}/events/{event_id}/odds',
+                params = get_params
+            )
+        
+        odds_json = self.get_response(odds)
+        if self.historical: odds_json = odds_json['data']
+
+        props = pd.DataFrame()
+        for odds in odds_json['bookmakers']:
+            bookmaker = odds['key']
+            market_props = odds['markets']
+            for cur_prop in market_props:
+                p = pd.DataFrame(cur_prop['outcomes'])
+                p['bookmaker'] = bookmaker
+                p['prop_type'] = cur_prop['key']
+                p['event_id'] = event_id
+
+                if cur_prop['key'] in ('spreads', 'h2h'):
+                    p = p.rename(columns={'name': 'description'})
+
+                props = pd.concat([props, p], axis=0)
+                
+
+        props = props.reset_index(drop=True)
+        props['week'] = self.week
+        props['year'] = self.year
+
+        return props
+
+    def all_market_odds(self, markets, events_df):
+
+        props = pd.DataFrame()
+        for event_id in events_df.event_id.values:
+            try:
+                print(event_id)
+                cur_props = self.pull_lines(markets, event_id)
+                props = pd.concat([props, cur_props], axis=0)
+            except:
+                print(f'Failed to get data for event_id {event_id}')
+
+        return props
+
+#%%
+
+pull_historical = False
+# set_week = 16
+# set_year = 2022
+
+base_url = 'https://api.the-odds-api.com/v4/'
+odds_api = OddsAPIPull(set_week, set_year, api_key, base_url, sport, region, odds_format, date_format, historical=pull_historical)
+
+# start_time = dt.datetime(2022, 12, 19, 5, 0, 0)
+start_time = dt.datetime.now()
+end_time = (start_time + dt.timedelta(hours=3*24))
+
+events_df = odds_api.pull_events(start_time=start_time, end_time=end_time)
+event_ids = tuple(events_df.event_id.unique()) + (0,)
+events_df
+
+#%%
+
+dm.delete_from_db('Pre_TeamData', 'Game_Events', f"week={set_week} and year={set_year} and event_id IN {event_ids}", create_backup=False)
+dm.write_to_db(events_df, 'Pre_TeamData', 'Game_Events', 'append')
+
+#%%
+
+stats = [
+        'player_pass_attempts', 'player_pass_completions', 'player_pass_interceptions', 'player_pass_longest_completion', 
+         'player_pass_rush_reception_tds', 'player_pass_rush_reception_yds', 'player_pass_tds', 'player_pass_yds', 'player_receptions',
+         'player_receptions', 'player_reception_longest', 'player_reception_yds', 'player_rush_attempts', 'player_rush_longest',
+         'player_rush_reception_tds', 'player_rush_reception_yds', 'player_rush_yds', 'player_1st_td', 'player_anytime_td'
+         ]
+
+markets = ','.join(stats)
+player_props = odds_api.all_market_odds(markets, events_df)
+player_props
+
+#%%
+
+stats = ['spreads', 'h2h', 'totals']
+markets = ','.join(stats)
+team_props = odds_api.all_market_odds(markets, events_df)
+team_props
+
+#%%
+event_ids = tuple(team_props.event_id.unique()) + (0,)
+dm.delete_from_db('Pre_TeamData', 'Game_Odds', f"week={set_week} and year={set_year} and event_id IN {event_ids}", create_backup=False)
+dm.write_to_db(team_props, 'Pre_TeamData', 'Game_Odds', 'append')
+
+event_ids = tuple(player_props.event_id.unique()) + (0,)
+dm.delete_from_db('Pre_PlayerData', 'Game_Odds', f"week={set_week} and year={set_year} and event_id IN {event_ids}", create_backup=False)
+dm.write_to_db(player_props, 'Pre_PlayerData', 'Game_Odds', 'append')
+
+# %%
+
+
+#%%
 # ## PFF Matchups
 
 def pff_matchups(label):
@@ -1032,7 +1254,7 @@ city_data  = dm.read(f'''SELECT a.home_team, a.gametime, a.gametime_unix, b.loca
                         WHERE week={set_week} 
                               AND year={set_year}''', 'Pre_TeamData')
 
-accu = '4B8LywkV5ABreulZ2f0DaXqGuuIhfJXI'
+accu = config['accu_api_key']
 weather_list = [] 
 
 for _, row in city_data.iterrows():
@@ -1196,7 +1418,6 @@ dm.delete_from_db('Pre_PlayerData', 'PlayerInjuries', f"week={set_week} AND year
 dm.write_to_db(df, 'Pre_PlayerData', 'PlayerInjuries', 'append')
 
 
-
 #%%
 # try:
 #     os.replace(f"/Users/mborysia/Downloads/dk-ownership.csv", 
@@ -1239,140 +1460,6 @@ dm.write_to_db(df, 'Pre_PlayerData', 'PlayerInjuries', 'append')
 
 # dm.delete_from_db('Pre_PlayerData', 'Projected_Ownership', f"week={set_week} AND year={set_year}", create_backup=False)
 # dm.write_to_db(df, 'Pre_PlayerData', 'Projected_Ownership', 'append')
-
-
-#%%
-
-try:
-    su.copyfile(f'//starbucks/amer/public/CoOp/CoOp831_Retail_Analytics/Pricing/Working/MBorysiak/DK/Lineups/{set_year}/week{set_week}/DKSalariesShowdown.csv',
-                f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv')   
-except:
-    print('No file to move')
-
-ids = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv',
-                  skiprows=7).dropna(axis=1)
-ids = ids[['Name', 'ID']].rename(columns={'ID': 'GoodId'})
-
-salary_id = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv',
-                        skiprows=7).dropna(axis=1)
-salary_id = pd.merge(salary_id, ids, on='Name', how='left')
-salary_id.loc[~salary_id.GoodId.isnull(), 'ID'] = salary_id.loc[~salary_id.GoodId.isnull(), 'GoodId']
-
-salary_id = salary_id.rename(columns={'Name': 'player', 'Salary': 'salary', 'ID': 'player_id', 'Roster Position': 'pos'})
-salary_id.player = salary_id.player.apply(dc.name_clean)
-
-defense = salary_id.loc[salary_id['Position']=='DST', ['TeamAbbrev', 'salary', 'player_id']]
-defense = defense.rename(columns={'TeamAbbrev': 'player'})
-max_d = defense.groupby('player').agg({'salary': 'max'}).reset_index()
-max_d['IsCPT'] = 1
-defense = pd.merge(defense, max_d, how='left', on=['player', 'salary'])
-defense['pos'] = np.where(defense.IsCPT==1, 'CPT', 'FLEX')
-defense = defense[['player', 'pos', 'salary', 'player_id']]
-
-salary_id = salary_id.loc[salary_id['Position'] != 'DST']
-salary_id = salary_id[['player', 'pos', 'salary', 'player_id']]
-salary_id = pd.concat([salary_id, defense.rename(columns={'TeamAbbrev': 'player'})], axis=0)
-
-salary = salary_id[['player', 'pos', 'salary']]
-salary = salary.assign(year=set_year).assign(league=set_week)
-salary = salary.drop_duplicates().reset_index(drop=True)
-
-salary.loc[salary.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
-
-ids = salary_id[['player', 'player_id']]
-ids = ids.assign(year=set_year).assign(league=set_week)
-ids.loc[ids.player=='Eli Mitchell', 'player'] = 'Elijah Mitchell'
-
-dm.delete_from_db('Simulation', 'Showdown_Salaries', f"league={set_week} AND year={set_year}")
-dm.write_to_db(salary, 'Simulation', 'Showdown_Salaries', 'append')
-
-dm.delete_from_db('Simulation', 'Showdown_Player_Ids', f"league={set_week} AND year={set_year}")
-dm.write_to_db(ids, 'Simulation', 'Showdown_Player_Ids', 'append')
-
-k_points = pd.read_csv(f'{root_path}/Data/OtherData/DK_Salaries/{set_year}/DKSalariesShowdown_week{set_week}.csv',
-                        skiprows=7).dropna(axis=1)
-
-k_points = k_points.loc[k_points.Position=='K', ['Name', 'AvgPointsPerGame']].drop_duplicates()
-k_points.columns = ['player', 'pred_fp_per_game']
-k_points.player = k_points.player.apply(dc.name_clean)
-
-k_points['std_dev'] = k_points.pred_fp_per_game / 1.5
-k_points['max_score'] = k_points.pred_fp_per_game * 3
-k_points['min_score'] = 0
-k_points['week'] = set_week
-k_points['year'] = set_year
-k_points['pos'] = 'K'
-
-k_points['model_type'] = 'full_model'
-vers = dm.read("SELECT version FROM Model_Predictions WHERE version IS NOT NULL", 'Simulation').iloc[-1]['version']
-k_points['version'] = vers
-dm.write_to_db(k_points, 'Simulation', 'Model_Predictions', 'append')
-
-# %%
-
-# def clean_alt_salary(df, sal):
-#     cols = ['player', 'position', 'year', 'week', 'salary', 'score', 'factor', 'rank']
-#     df.columns = cols
-#     df.salary = df.salary.apply(lambda x: int(x.replace('$', '')))
-
-#     if sal == 'fd': df.loc[df.position=='D', 'position'] = 'DST'
-#     df_pl = df[df.position != 'DST'].reset_index(drop=True)
-#     df_team = df[df.position == 'DST'].reset_index(drop=True)
-
-#     df_pl.player = df_pl.player.apply(lambda x: x.split(',')[1].lstrip() + ' ' + x.split(',')[0])
-#     df_pl.player = df_pl.player.apply(dc.name_clean)
-
-#     if sal == 'dk':
-#         df_team.player = df_team.player.apply(lambda x: x.replace(',', ''))
-#         df_team.player = df_team.player.map(full_team_map)
-#     else:    
-#         alt_team_map = {' '.join(k.split(' ')[:-1]): v for k, v in full_team_map.items()}
-#         df_team.player = df_team.player.map(alt_team_map)
-
-#     df_team['team'] = df_team.player
-#     df_team = df_team[['player', 'team', 'position', 'salary']].rename(columns={'salary': f'{sal}_salary'})
-
-#     teams = dm.read(f'''SELECT player, team
-#                         FROM (
-#                         SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
-#                             team,
-#                             row_number() OVER (PARTITION BY player ORDER BY year, week, projected_points DESC) rn 
-#                         FROM FantasyPros
-#                         ) WHERE rn=1''', 'Pre_PlayerData')
-
-#     df_pl = pd.merge(df_pl, teams, on=['player'])
-
-#     df_pl = df_pl[['player', 'team', 'position', 'salary']].rename(columns={'salary': f'{sal}_salary'})
-
-
-#     return df_pl, df_team
-
-# dk = pd.read_html('https://www.footballdiehards.com/fantasyfootball/dailygames/Draftkings-Salary-data.cfm')[0]
-# dk_pl, dk_team = clean_alt_salary(dk, 'dk')
-
-# fd = pd.read_html('https://www.footballdiehards.com/fantasyfootball/dailygames/Fanduel-Salary-data.cfm')[0]
-# fd_pl, fd_team = clean_alt_salary(fd, 'fd')
-
-
-# yahoo_pl = dm.read('''SELECT player, team, position, yahoo_salary
-#                           FROM Daily_Salaries
-#                           WHERE week=11 AND year=2021''', 'Pre_PlayerData')
-# yahoo_team = dm.read('''SELECT team, position, yahoo_salary
-#                         FROM Daily_Salaries
-#                         WHERE week=9 AND year=2021''', 'Pre_TeamData')
-# df_pl = pd.merge(dk_pl, fd_pl, on=['player', 'team', 'position'], how='left')
-# df_pl = pd.merge(df_pl, yahoo_pl, on=['player', 'team', 'position'], how='left')
-# df_pl = df_pl.assign(week=set_week).assign(year=set_year)
-
-# df_team = pd.merge(dk_team, fd_team, on=['player', 'team', 'position'], how='left')
-# df_team = pd.merge(df_team, yahoo_team, on=['team', 'position'], how='left')
-# df_team = df_team.assign(week=set_week).assign(year=set_year)
-
-# dm.delete_from_db('Pre_PlayerData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
-# dm.write_to_db(df_pl, 'Pre_PlayerData', 'Daily_Salaries', 'append')
-
-# dm.delete_from_db('Pre_TeamData', 'Daily_Salaries', f"week={set_week} AND year={set_year}")
-# dm.write_to_db(df_team, 'Pre_TeamData', 'Daily_Salaries', 'append')
 
 
 #%%

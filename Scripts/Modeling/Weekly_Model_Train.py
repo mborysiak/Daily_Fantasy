@@ -37,7 +37,7 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [7]
+run_weeks = [9]
 verbosity = 50
 run_params = {
     
@@ -707,47 +707,47 @@ def save_output_dict(out_dict, label, model_output_path):
 
 #%%
 
-# w = run_weeks[0]
-# run_params['set_week'] = w
-# run_params = get_last_run_week(w, run_params)
+w = run_weeks[0]
+run_params['set_week'] = w
+run_params = get_last_run_week(w, run_params)
 
-# if not os.path.exists(f"{root_path}/Scripts/Modeling/optuna/{run_params['set_year']}/week{run_params['set_week']}/"):
-#     os.makedirs(f"{root_path}/Scripts/Modeling/optuna/{run_params['set_year']}/week{run_params['set_week']}/")
+if not os.path.exists(f"{root_path}/Scripts/Modeling/optuna/{run_params['set_year']}/week{run_params['set_week']}/"):
+    os.makedirs(f"{root_path}/Scripts/Modeling/optuna/{run_params['set_year']}/week{run_params['set_week']}/")
 
-# run_params['last_study_db'] = f"sqlite:///optuna/{run_params['last_run_year']}/week{run_params['last_run_week']}/weekly_train_week{run_params['last_run_week']}_year{run_params['last_run_year']}.sqlite3"
-# run_params['study_db'] = f"sqlite:///optuna/{run_params['set_year']}/week{run_params['set_week']}/weekly_train_week{run_params['set_week']}_year{run_params['set_year']}.sqlite3"
+run_params['last_study_db'] = f"sqlite:///optuna/{run_params['last_run_year']}/week{run_params['last_run_week']}/weekly_train_week{run_params['last_run_week']}_year{run_params['last_run_year']}.sqlite3"
+run_params['study_db'] = f"sqlite:///optuna/{run_params['set_year']}/week{run_params['set_week']}/weekly_train_week{run_params['set_week']}_year{run_params['set_year']}.sqlite3"
 
-# func_params = []
-# adp_result_dict = {}
-# trial_times = pd.DataFrame()
-# all_model_output_path = {}
+func_params = []
+adp_result_dict = {}
+trial_times = pd.DataFrame()
+all_model_output_path = {}
 
-# set_pos = 'QB'
-# run_params['rush_pass'] = ''
-# run_params['n_splits'] = 5
-# run_params['model_type'] = 'full_model'
-# print(f"\n==================\n{set_pos} {model_type} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
+set_pos = 'QB'
+run_params['rush_pass'] = ''
+run_params['n_splits'] = 5
+run_params['model_type'] = 'full_model'
+print(f"\n==================\n{set_pos} {model_type} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
 
-# #==========
-# # Pull and clean compiled data
-# #==========
+#==========
+# Pull and clean compiled data
+#==========
 
-# # load data and filter down
-# pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
-# all_model_output_path[f'{set_pos}_{model_type}'] = model_output_path
-# df, run_params = load_data(model_type, set_pos, run_params)
-# df, run_params = create_game_date(df, run_params)
+# load data and filter down
+pkey, db_output, model_output_path = create_pkey_output_path(set_pos, run_params, model_type, vers)
+all_model_output_path[f'{set_pos}_{model_type}'] = model_output_path
+df, run_params = load_data(model_type, set_pos, run_params)
+df, run_params = create_game_date(df, run_params)
 
-# df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
-# print(df_train.loc[-10:, ['player', 'week', 'year', 'y_act']])
+df_train, df_predict, output_start, min_samples = train_predict_split(df, run_params)
+print(df_train.loc[-10:, ['player', 'week', 'year', 'y_act']])
 
-# func_params.extend(reg_params(df_train, min_samples, 5, run_params, set_pos, model_type))
+func_params.extend(reg_params(df_train, min_samples, 5, run_params, set_pos, model_type))
 
-# import time
-# start = time.time()
-# for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _  in func_params[3:4]:
-#     results = get_model_output(set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, 3)
-# time.time() - start
+import time
+start = time.time()
+for set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, n_iter, _  in func_params[3:4]:
+    results = get_model_output(set_pos, m, label, df, model_obj, run_params, i, min_samples, alpha, 3)
+time.time() - start
 
 
 #%%
