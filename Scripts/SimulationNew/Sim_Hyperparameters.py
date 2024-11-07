@@ -118,6 +118,7 @@ class FoldPredict:
 
 best_trials = dm.read('''SELECT *
                          FROM Entry_Optimize_Results
+                        --  WHERE NOT (week=8 and year=2022)
                          ''', 'ResultsNew')
 # best_trials = pd.concat([best_trials, best_trials_old], axis=0)
 
@@ -134,7 +135,7 @@ best_trials.loc[(best_trials.week == 6) & (best_trials.year==2024), 'non6_winnin
 
 best_trials['avg_winnings_sqrt_pre'] = best_trials.avg_winnings ** 0.5
 best_trials['over_500_winnings'] = 0
-best_trials.loc[best_trials.avg_winnings > 500, 'over_500_winnings'] = 1
+best_trials.loc[best_trials.avg_winnings > 300, 'over_500_winnings'] = 1
 
 best_trials['over_1000_winnings'] = 0
 best_trials.loc[best_trials.avg_winnings > 1000, 'over_1000_winnings'] = 1

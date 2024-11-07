@@ -328,13 +328,10 @@ class FullLineupSim:
             iters_run = 0
             success = False
             
-            while not success and iters_run < 5:
+            while not success and iters_run < 2:
 
                 self.set_position_counts(wr_flex_pct, rb_flex_pct)
                 iters_run += 1
-                if iters_run == 4: 
-                    max_overlap = 8
-                    overlap_constraint = 'plus_wts'
 
                 cur_pred_fps = self.sample_points(num_options, num_avg_pts)
                 cur_ownership = self.sample_ownership(num_options, num_avg_pts)
@@ -661,60 +658,6 @@ class FullLineupSim:
             print(f"{team}: {len(team_players)} players")
 
 
-# week = 6
-# year = 2024
-# pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
-# reg_ens_vers = 'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3'
-# std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
-# million_ens_vers = 'random_full_stack_newp_matt0_brier1_include2_kfold3'
-# full_model_rel_weight = 0.2
-# use_covar = False
-# covar_type = 'no_covar'
-# print_results = True
-
-# conn = sqlite3.connect("c:/Users/mborysia/OneDrive - Starbucks/Documents/Github/Simulation/Simulation.sqlite3")
-# sim = FullLineupSim(week, year, conn, pred_vers, reg_ens_vers, million_ens_vers,
-#                     std_dev_type, full_model_rel_weight, use_covar, covar_type, print_results)
-
-# previous_lineups = [
-#  ['Darnell Mooney',
-#   'Drake London',
-#   'IND',
-#   'Jalen Tolbert',
-#   'James Conner',
-#   'Josh Jacobs',
-#   'Kirk Cousins',
-#   'Kyle Pitts',
-#   'Najee Harris'],
-
-# ]
-
-# # Configurable parameters
-# ownership_vers = 'standard_ln'
-# pos_or_neg = 1
-# qb_wr_stack = 2
-# qb_te_stack = 0
-# min_opp_team = 0
-# max_salary_remain = 500
-# max_teams_lineup = 6  # Maximum number of teams in the lineup
-# max_overlap = 7  # Maximum number of players that can overlap with any previous lineup
-
-# to_add = []
-# to_drop = []
-
-# num_iters = 1
-# num_options = 50
-# num_avg_pts = 50
-
-# prev_qb_wt = 7
-
-# last_lineup, player_cnts = sim.run_sim(conn, to_add, to_drop, num_iters, ownership_vers, num_options, num_avg_pts,
-#                                        pos_or_neg, qb_wr_stack, qb_te_stack, min_opp_team, max_teams_lineup,
-#                                        max_salary_remain, max_overlap, prev_qb_wt, previous_lineups)
-
-# last_lineup, player_cnts
-
-
 #%%
 
 from joblib import Parallel, delayed
@@ -771,7 +714,8 @@ class RunSim:
 
     def calc_winnings(self, to_add):
         results = pd.DataFrame(to_add, columns=['player'])
-        results = pd.merge(results, self.player_stats, on='player')
+        results = pd.merge(results, self.player_stats, on='player', how='left')
+        results = results.fillna(0)
         total_pts = results.fantasy_pts.sum()
         idx_match = np.argmin(abs(self.prizes.Points - total_pts))
         prize_money = self.prizes.loc[idx_match, 'prize']
@@ -853,7 +797,11 @@ class RunSim:
         conn = self.create_conn()
         last_lineup = None
         i = 0
-        while last_lineup is None and i < 10:
+        while last_lineup is None and i < 6:
+            if i == 5:
+                p['max_overlap'] = 8
+                p['overlap_constraint'] = 'minus_one'
+                p['use_ownership'] = 0
             last_lineup, player_cnts = sim.run_sim(conn, to_add, to_drop, p['num_iters'], own_vers, p['num_options'], p['num_avg_pts'],
                                                 p['pos_or_neg'], p['qb_wr_stack'], p['qb_te_stack'], p['min_opp_team'], p['max_teams_lineup'],
                                                 p['max_salary_remain'], p['max_overlap'], p['prev_qb_wt'], p['prev_def_wt'], previous_lineups,
@@ -863,6 +811,9 @@ class RunSim:
 
         if player_cnts is not None:
             player_cnts = player_cnts[~player_cnts.player.isin(to_add)].reset_index(drop=True)
+
+        if last_lineup is None:
+            last_lineup = 9*['Failed']
         
         return last_lineup, player_cnts
                     
@@ -888,7 +839,6 @@ class RunSim:
                         pass
                 i += 1  # Increment the iteration counter    
 
-        if to_add is None: to_add = []
         return to_add
     
     def run_multiple_lineups(self, params, calc_winnings=False, parallelize=False, n_jobs=-1, verbose=0):
@@ -911,9 +861,7 @@ class RunSim:
             winnings_list = []
             player_results = pd.DataFrame()
             for i, lineup in enumerate(all_lineups):
-                
-                if len(lineup)<9: 
-                    continue
+            
                 winnings, player_results_cur = self.calc_winnings(lineup)
                 total_winnings += winnings
                 winnings_list.append(winnings)
@@ -928,10 +876,10 @@ class RunSim:
 
         return all_lineups
 
-#%%
+# #%%
 # week = 6
 # year = 2024
-# total_lineups = 10
+# total_lineups = 3
 
 # model_vers = {
 #             'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
@@ -961,7 +909,7 @@ class RunSim:
 #                         'standard_ln': 0.4},
 #     'max_teams_lineup': {8: 0.4, 6: 0.4, 4: 0.2},
 #     'max_salary_remain': {500: 1},
-#     'max_overlap': {6: 1}, 
+#     'max_overlap': {5: 1}, 
 #     'min_opp_team': {0: 0.3, 1: 0.5, 2: 0.2},
 #     'prev_qb_wt': {1: 1},
 #     'prev_def_wt': {9: 1},
@@ -985,22 +933,47 @@ class RunSim:
 
 # #%%
 
-# sim, p = rs.setup_sim(params[1])
+# sim, p = rs.setup_sim(params[2])
 
 # to_add = []
 # to_drop = []
-# previous_lineups = []
+# previous_lineups = [['Darnell Mooney',
+#   'Drake London',
+#   'Kirk Cousins',
+#   'Kyle Pitts',
+#   'Najee Harris',
+#   'Chuba Hubbard',
+#   'Bucky Irving',
+#   'TB',
+#   'Jayden Reed'],['Bijan Robinson',
+#   'Alvin Kamara',
+#   'Chris Olave',
+#   'NO',
+#   'Spencer Rattler',
+#   'Cade Otton',
+#   'Chris Godwin',
+#   'Josh Jacobs',
+#   'Romeo Doubs'],['IND',
+#   "Ja'Tavion Sanders",
+#   'Antonio Gibson',
+#   'Terry Mclaurin',
+#   'Derrick Henry',
+#   'Lamar Jackson',
+#   'Rashod Bateman',
+#   'Zay Flowers',
+#   'Tony Pollard'],['PIT',
+#   'Javonte Williams',
+#   'David Njoku',
+#   'Amon Ra St Brown',
+#   'David Montgomery',
+#   'Dak Prescott',
+#   'Jalen Tolbert',
+#   'Kavontae Turpin',
+#   'Jk Dobbins']]
 # rs.run_single_iter(sim, p, to_add, to_drop,previous_lineups)
 
 # #%%
 
 # rs.run_multiple_lineups(params, calc_winnings=True)
 
-# # %%
-
-# # %%
-
-# to_add = rs.run_full_lineup(params[1], to_add=[], to_drop=[], previous_lineups=previous_lineups)
-# # %%
-# to_add
-# # %%
+# # # %%

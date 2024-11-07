@@ -58,46 +58,6 @@ model_type = {
 
 }
 
-
-def winnings_importance(df):
-
-    df.loc[df.Contest=='ThreePointStance', ['total_winnings', 'max_winnings']] = df.loc[df.Contest=='ThreePointStance', ['total_winnings', 'max_winnings']] * 20 / 33
-    df.loc[df.Contest=='ScreenPass', ['total_winnings', 'max_winnings']] = df.loc[df.Contest=='ScreenPass', ['total_winnings', 'max_winnings']] * 20 / 15
-
-    X = df[['adjust_pos_counts', 'drop_player_multiple',  'drop_team_frac', 'top_n_choices', 
-            'week', 'covar_type', 'full_model_rel_weight', 'min_player_same_team', 'num_iters',
-            'pred_proba', 'pred_sera', 'pred_brier', 'pred_lowsample', 'proper_ensemble', 'pred_perc',
-            'pred_sera_wt', 'pred_rsq_wt', 'pred_matt_wt', 'pred_brier_wt', 'pred_calibrate',
-            'ens_sample_weights', 'ens_kbest', 'ens_randsample', 'ens_sera', 'ens_sera_wt', 'ens_rsq_wt',
-            'std_dev_type', 'sim_type',
-            'std_spline', 'std_quantile', 'std_experts', 'std_actuals', 'std_splquantile', 
-            'std_predictions', 'std_coef', 'std_isotonic', 'std_calibrate', 'std_class',
-            'std_matt_wt', 'std_brier_wt',
-            'Contest']].copy()
-
-    X['std_class'] = 0
-    X.loc[X.std_dev_type.str.contains('class'), 'std_class'] = 1
-
-    X['num_include'] = 1
-    X.loc[X.std_dev_type.str.contains('include2'), 'num_include'] = 2
-    X.loc[X.std_dev_type.str.contains('include3'), 'num_include'] = 3
-
-    # X.loc[X.min_player_same_team == 'Auto', 'min_player_same_team'] = 2.5
-    # X.min_player_same_team = X.min_player_same_team.astype('float')
-    X.drop_player_multiple = X.drop_player_multiple.astype('object')
-    def one_hot(X):
-        for c in ['week', 'covar_type', 'std_dev_type', 'sim_type', 'Contest', 'min_player_same_team', 'drop_player_multiple']:
-            X = pd.concat([X, pd.get_dummies(X[c], prefix=c, drop_first=False)], axis=1)
-            if c!='week':
-                X = X.drop(c, axis=1)
-        return X
-
-    X = one_hot(X).fillna(0)
-    y = df.max_winnings
-
-    return X, y
-
-
 def get_model_coef(X, y, m):
 
     if type(m) == sklearn.linear_model._ridge.Ridge or type(m) == sklearn.linear_model._coordinate_descent.ElasticNet:
@@ -152,78 +112,54 @@ def show_coef(all_coef, X_all):
 
 def entry_optimize_params(df, max_adjust, model_name):
 
-    adjust_winnings = df.groupby(['trial_num', 'entry_type']).agg(max_lineup_num=('lineup_num', 'max')).reset_index()
-
-    adjust_winnings.loc[adjust_winnings.entry_type=='millions_only', 'max_lineup_num'] = \
-        13 / (adjust_winnings.loc[adjust_winnings.entry_type=='millions_only', 'max_lineup_num'] + 1)
-    
-    adjust_winnings.loc[adjust_winnings.entry_type=='millions_playaction', 'max_lineup_num'] = \
-        30 / (adjust_winnings.loc[adjust_winnings.entry_type=='millions_playaction', 'max_lineup_num'] + 1)
-    
-    df = pd.merge(df, adjust_winnings.drop('entry_type', axis=1), on='trial_num')
-    df.winnings = df.winnings / df.max_lineup_num
     
     df.loc[df.winnings >= max_adjust, 'winnings'] = max_adjust
     # df.loc[(df.winnings >= 500) & (df.week==8) & (df.year==2022), 'winnings'] = 500
+
+    df.loc[df.use_ownership==1, 'ownership_vers'] = 'None'
+
+    df['max_overlap_effective_non_qb'] = df.max_overlap
+    df.loc[df.max_overlap=='plus_wts', 'max_overlap_effective_non_qb'] = \
+        df.loc[df.max_overlap=='plus_wts', 'max_overlap'] + \
+            df.loc[df.max_overlap=='plus_wts', 'prev_qb_wt'] + \
+                df.loc[df.max_overlap=='plus_wts', 'prev_def_wt']
+
+    df.loc[df.max_overlap=='minus_one', 'max_overlap_effective_non_qb'] = \
+        df.loc[df.max_overlap=='minus_one', 'max_overlap'] + \
+            df.loc[df.max_overlap=='minus_one', 'prev_qb_wt'] + \
+                df.loc[df.max_overlap=='minus_one', 'prev_def_wt'] - 2
+
+    df.loc[df.max_overlap=='div_two', 'max_overlap_effective_non_qb'] = \
+        df.loc[df.max_overlap=='div_two', 'max_overlap'] + \
+            (df.loc[df.max_overlap=='div_two', 'prev_qb_wt']/2) + \
+                (df.loc[df.max_overlap=='div_two', 'prev_def_wt']/2)
+
     
     str_cols = ['week', 'year', 'pred_vers', 'reg_ens_vers', 'million_ens_vers', 'std_dev_type']
     if model_name in ('enet', 'lasso',' ridge'):
         str_cols.extend( ['full_model_rel_weight', 'max_overlap', 'max_salary_remain', 'max_teams_lineup',
                           'min_opp_team', 'num_avg_pts', 'num_options', 'prev_qb_wt', 'qb_te_stack', 'qb_wr_stack',
-                          'wr_flex_pct', 'rb_flex_pct'])
+                          'wr_flex_pct', 'rb_flex_pct', 'use_ownership', 'max_overlap_effective_non_qb'])
     df[str_cols] = df[str_cols].astype('str')
 
-    df = df.drop(['trial_num', 'lineup_num', 'max_lineup_num'], axis=1)
+    df = df.drop(['trial_num'], axis=1)
 
     df.max_salary_remain = df.max_salary_remain.fillna(5000).astype('float').astype('int').astype('str')
     for c in df.columns:
         if df.dtypes[c] == 'object': 
             df = pd.concat([df, pd.get_dummies(df[c], prefix=c)], axis=1).drop(c, axis=1)
 
-    X = df.drop(['repeat_num', 'winnings'], axis=1)
+    X = df.drop(['repeat_num','winnings'], axis=1)
     y = df.winnings
 
     return X, y
-#%%
-df = dm.read('''SELECT *  
-                FROM Entry_Optimize_Params_Detail 
-                JOIN (
-                     SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, entry_type, trial_num, repeat_num
-                     FROM Entry_Optimize_Results
-                      ) USING (week, year, trial_num, repeat_num)
-                     WHERE week < 17
-                        --AND NOT (week=8 AND year=2022)
-                        --AND NOT (week=1 AND year=2022)
-                    )
-             
-                ''', 'ResultsNew')
-
-df.ownership_vers = df.ownership_vers.apply(lambda x: x.replace('{', '').replace('}', '').replace('0. ', '0.0 ').replace(':', '').replace(',',''))
-
-df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
-# df.loc[df.week!='8_2022', 'winnings'] = df.loc[df.week!='8_2022', 'winnings']*2
-
-model_type = {
- 'enet': ElasticNet(alpha=1, l1_ratio=0.1),
- 'lasso': Lasso(alpha=0.1),
- 'ridge': Ridge(alpha=100),
- 'rf': RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1),
- 'lgbm': LGBMRegressor(n_estimators=50, max_depth=5, learning_rate=0.05, min_samples_leaf=5, n_jobs=-1)
-
-}
-w=1
-model_name='lgbm'
-m = model_type[model_name] 
-X, y = entry_optimize_params(df, max_adjust=15000, model_name=model_name)
-coef_vals, X = get_model_coef(X, y, m)
-show_coef(coef_vals, X)
 
 #%%
 
 weeks = [
          2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16,
          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-         1,2,3,4,5,7,8,
+         1,2,3,4,5,7,8, 9, 
          6,
          1,
          8
@@ -231,7 +167,7 @@ weeks = [
 years = [
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
           2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-          2024, 2024, 2024, 2024, 2024, 2024, 2024,
+          2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024,
           2024,
           2022,
           2022
@@ -264,6 +200,36 @@ for w, yr in zip(weeks, years):
 
 show_coef(all_coef, X_all)
 
+#%%
+df = dm.read('''SELECT *  
+                FROM Entry_Optimize_Params_Detail 
+                JOIN (
+                     SELECT week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, entry_type, trial_num, repeat_num
+                     FROM Entry_Optimize_Results
+                      ) USING (week, year, trial_num, repeat_num)
+                     WHERE week < 17
+
+                ''', 'ResultsNew')
+
+df.ownership_vers = df.ownership_vers.apply(lambda x: x.replace('{', '').replace('}', '').replace('0. ', '0.0 ').replace(':', '').replace(',',''))
+
+df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
+# df.loc[df.week!='8_2022', 'winnings'] = df.loc[df.week!='8_2022', 'winnings']*2
+
+model_type = {
+ 'enet': ElasticNet(alpha=1, l1_ratio=0.1),
+ 'lasso': Lasso(alpha=0.1),
+ 'ridge': Ridge(alpha=100),
+ 'rf': RandomForestRegressor(n_estimators=150, max_depth=10, min_samples_leaf=10, n_jobs=-1),
+ 'lgbm': LGBMRegressor(n_estimators=50, max_depth=10, learning_rate=0.01, min_samples_leaf=25, n_jobs=-1)
+
+}
+w=1
+model_name='lgbm'
+m = model_type[model_name] 
+X, y = entry_optimize_params(df, max_adjust=15000, model_name=model_name)
+coef_vals, X = get_model_coef(X, y, m)
+show_coef(coef_vals, X)
 
 #%%
 

@@ -13,7 +13,7 @@ import yaml
 
 # +
 set_year = 2024
-set_week = 9
+set_week = 10
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -985,13 +985,12 @@ class OddsAPIPull:
 #%%
 
 pull_historical = False
-# set_week = 16
-# set_year = 2022
+set_week = 9
+set_year = 2024
 
 base_url = 'https://api.the-odds-api.com/v4/'
 odds_api = OddsAPIPull(set_week, set_year, api_key, base_url, sport, region, odds_format, date_format, historical=pull_historical)
 
-# start_time = dt.datetime(2022, 12, 19, 5, 0, 0)
 start_time = dt.datetime.now()
 end_time = (start_time + dt.timedelta(hours=3*24))
 
@@ -1010,7 +1009,7 @@ stats = [
         'player_pass_attempts', 'player_pass_completions', 'player_pass_interceptions', 'player_pass_longest_completion', 
          'player_pass_rush_reception_tds', 'player_pass_rush_reception_yds', 'player_pass_tds', 'player_pass_yds', 'player_receptions',
          'player_receptions', 'player_reception_longest', 'player_reception_yds', 'player_rush_attempts', 'player_rush_longest',
-         'player_rush_reception_tds', 'player_rush_reception_yds', 'player_rush_yds', 'player_1st_td', 'player_anytime_td'
+         'player_rush_reception_tds', 'player_rush_reception_yds', 'player_rush_yds','player_1st_td', 'player_anytime_td', 'player_tds_over', 'player_sacks'
          ]
 
 markets = ','.join(stats)
@@ -1035,6 +1034,89 @@ dm.write_to_db(player_props, 'Pre_PlayerData', 'Game_Odds', 'append')
 
 # %%
 
+pull_historical = True
+base_url = 'https://api.the-odds-api.com/v4/'
+
+# set_year = 2024
+# month_days = [
+#     [9, 5, 1],
+#     [9, 8, 1],
+#     [9, 12, 2],
+#     [9, 15, 2],
+#     [9, 19, 3],
+#     [9, 22, 3],
+#     [9, 26, 4],
+#     [9, 29, 4],
+#     [10, 3, 5],
+#     [10, 6, 5],
+#     [10, 10, 6],
+#     [10, 13, 6],
+#     [10, 17, 7],
+#     [10, 20, 7],
+#     [10, 24, 8],
+#     [10, 27, 8],
+#     # [10, 31, 9],
+#     # [11, 3, 9],
+# ]
+
+# set_year = 2023
+# month_days = [
+    # [9, 7, 1],
+    # [9, 10, 1],
+    # [9, 14, 2],
+    # [9, 17, 2],
+    # [9, 21, 3],
+    # [9, 24, 3],
+    # [9, 28, 4],
+    # [10, 1, 4],
+    # [10, 5, 5],
+    # [10, 8, 5],
+    # [10, 12, 6],
+    # [10, 15, 6],
+    # [10, 19, 7],
+    # [10, 22, 7],
+    # [10, 26, 8],
+    # [10, 29, 8],
+    # [11, 2, 9],
+    # [11, 5, 9],
+    # [11, 9, 10],
+    # [11, 12, 10],
+    # [11, 16, 11],
+    # [11, 19, 11],
+    # [11, 23, 12],
+    # [11, 26, 12],
+    # [11, 30, 13],
+    # [12, 3, 13],
+    # [12, 7, 14],
+    # [12, 10, 14],
+    # [12, 14, 15],
+    # [12, 17, 15],
+    # [12, 21, 16],
+    # [12, 24, 16],
+    # [12, 28, 17],
+    # [12, 31, 17]
+# ]
+
+# for month, day, set_week in month_days:
+#     odds_api = OddsAPIPull(set_week, set_year, api_key, base_url, sport, region, odds_format, date_format, historical=pull_historical)
+
+#     start_time = dt.datetime(set_year, month, day, 5, 0, 0)
+#     # start_time = dt.datetime.now()
+#     end_time = (start_time + dt.timedelta(hours=3*24))
+
+#     events_df = odds_api.pull_events(start_time=start_time, end_time=end_time)
+#     print(events_df)
+#     event_ids = tuple(events_df.event_id.unique()) + (0,)
+
+#     stats = ['player_tds_over', 'player_sacks']
+
+#     markets = ','.join(stats)
+#     player_props = odds_api.all_market_odds(markets, events_df)
+#     print(player_props.head())
+#     event_ids = tuple(player_props.event_id.unique()) + (0,)
+#     dm.delete_from_db('Pre_PlayerData', 'Game_Odds', f'''week={set_week} and year={set_year} and event_id IN {event_ids}  
+#                                                          and prop_type IN {tuple(stats)}''', create_backup=False)
+#     dm.write_to_db(player_props, 'Pre_PlayerData', 'Game_Odds', 'append')
 
 #%%
 # ## PFF Matchups

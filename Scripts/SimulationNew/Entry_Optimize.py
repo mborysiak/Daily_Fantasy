@@ -103,17 +103,22 @@ def pull_params_version(best_trial):
                        WHERE trial_num = {best_trial}''', 'ResultsNew')
     return vers
 
-trial_repeat = 58
-model_notes = f'Trial {trial_repeat} Repeat'
+entry_type = 'random_sample'
+total_lineups = 40
+sample_lineups = 20
+
+trial_repeat = None
+model_notes = f'Trial {trial_repeat}, Sample {sample_lineups}, Total {total_lineups}'
 num_rank = None
-manual_adjust = False
+manual_adjust = True
 
-d = pull_best_params(trial_repeat)
-pprint.pprint(d)
+if trial_repeat is not None:
+    d = pull_best_params(trial_repeat)
+    pprint.pprint(d)
 
-model_vers = pull_params_version(trial_repeat).drop('trial_num', axis=1).to_dict()
-model_vers = {k: v[0] for k,v in model_vers.items()}
-pprint.pprint(model_vers)
+    model_vers = pull_params_version(trial_repeat).drop('trial_num', axis=1).to_dict()
+    model_vers = {k: v[0] for k,v in model_vers.items()}
+    pprint.pprint(model_vers)
 
 # num_rank = None
 # # model_notes = 'param_test_v1'
@@ -126,40 +131,40 @@ pprint.pprint(model_vers)
 
 #     manual_adjust = True
 
-# if manual_adjust:
-#     model_vers = {'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
-#                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
-#                 'reg_ens_vers': 'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3',
-#                 'std_dev_type': 'spline_pred_class80_q80_matt0_brier1_kfold3',
-#     }
-#     d = {'covar_type': {'kmeans_pred_trunc': 0.0,
-#                 'kmeans_pred_trunc_new': 0.0,
-#                 'no_covar': 0.2,
-#                 'team_points_trunc': 0.8,
-#                 'team_points_trunc_avgproj': 0.0},
-#  'full_model_rel_weight': {0.2: 0.3, 5: 0.7},
-#  'lineups_per_param': {1: 1.0},
-#  'max_overlap': {3: 0.0, 5: 0.0, 7: 0.5, 8: 0.5, 9: 0.0, 11: 0.0, 13: 0.0},
-#  'max_salary_remain': {500: 0.0, 1000: 1.0},
-#  'max_teams_lineup': {4: 0.0, 5: 0.3, 6: 0.0, 8: 0.7},
-#  'min_opp_team': {0: 1.0, 1: 0.0, 2: 0.0},
-#  'num_avg_pts': {10: 0.0, 25: 0.0, 50: 0.0, 100: 0.2, 200: 0.0, 500: 0.8},
-#  'num_iters': {1: 1.0},
-#  'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 1.0},
-#  'overlap_constraint': {'div_two': 0.5, 'plus_wts': 0.5},
-#  'ownership_vers': {'mil_div_standard_ln': 0.0,
-#                     'mil_only': 0.4,
-#                     'mil_times_standard_ln': 0.6,
-#                     'standard_ln': 0.0},
-#  'ownership_vers_variable': {0: 1.0, 1: 0.0},
-#  'pos_or_neg': {1: 1.0},
-#  'prev_def_wt': {1: 1.0},
-#  'prev_qb_wt': {1: 0.0, 3: 0.5, 5: 0.0, 7: 0.5},
-#  'qb_te_stack': {0: 0.3, 1: 0.7},
-#  'qb_wr_stack': {0: 0.1, 1: 0.9, 2: 0.0},
-#  'rb_flex_pct': {0.3: 0.3, 0.4: 0.7},
-#  'use_ownership': {0: 0.3, 1: 0.7},
-#  'wr_flex_pct': {0.5: 0.5, 0.6: 0.5}}
+if manual_adjust:
+    model_vers = {'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
+                'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
+                'reg_ens_vers': 'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3',
+                'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3',
+    }
+    d = {'covar_type': {'kmeans_pred_trunc': 0.0,
+                'kmeans_pred_trunc_new': 0.0,
+                'no_covar': 0.3,
+                'team_points_trunc': 0.7,
+                'team_points_trunc_avgproj': 0.0},
+ 'full_model_rel_weight': {0.2: 0.3, 5: 0.7},
+ 'lineups_per_param': {1: 1.0},
+ 'max_overlap': {3: 0.0, 5: 0.0, 7: 0, 8: 1, 9: 0.0, 11: 0.0, 13: 0.0},
+ 'max_salary_remain': {500: 0.0, 1000: 1.0},
+ 'max_teams_lineup': {4: 0.0, 5: 0.2, 6: 0.0, 8: 0.8},
+ 'min_opp_team': {0: 1.0, 1: 0.0, 2: 0.0},
+ 'num_avg_pts': {10: 0.0, 25: 0.0, 50: 0.0, 100: 0.0, 200: 0.0, 500: 1.0},
+ 'num_iters': {1: 1.0},
+ 'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 1.0},
+ 'overlap_constraint': {'standard': 1},
+ 'ownership_vers': {'mil_div_standard_ln': 0.0,
+                    'mil_only': 0.3,
+                    'mil_times_standard_ln': 0.7,
+                    'standard_ln': 0},
+ 'ownership_vers_variable': {0: 1.0, 1: 0.0},
+ 'pos_or_neg': {1: 1.0},
+ 'prev_def_wt': {1: 1.0},
+ 'prev_qb_wt': {1: 0.0, 3: 0.5, 5: 0.0, 7: 0.5},
+ 'qb_te_stack': {0: 0.5, 1: 0.5},
+ 'qb_wr_stack': {0: 0.1, 1: 0.9, 2: 0.0},
+ 'rb_flex_pct': {0.3: 0.3, 0.4: 0.7},
+ 'use_ownership': {0: 0.6, 1: 0.4},
+ 'wr_flex_pct': {0.5: 0.5, 0.6: 0.5}}
  
 try: del d['num']
 except: pass
@@ -188,13 +193,13 @@ for k,v in d.items():
 set_weeks = [
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-   1, 2, 3, 4, 5, 6, 7, 8
+   1, 2, 3, 4, 5, 6, 7, 8, 9
 ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
       2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
+      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
 ]
 
 # set_weeks=[14]
@@ -211,10 +216,6 @@ pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
 adjust_winnings = False
 set_max_team = None
 
-entry_type = 'millions_only'
-if entry_type == 'millions_playaction': total_lineups = 30
-elif entry_type == 'millions_only': total_lineups = 15
-
 rs = RunSim(db_path, 1, 2022, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
 
 max_trial_num = dm.read("SELECT max(trial_num) FROM Entry_Optimize_Params_Detail", 'ResultsNew').values[0][0]
@@ -230,7 +231,26 @@ def run_weekly_sim(d, week, year, pred_vers, reg_ens_vers, million_ens_vers, std
     return winnings, player_results, params, winnings_list
 
 
-def objective(param_options, pred_vers, reg_ens_vers, std_dev_type, million_ens_vers, total_lineups, set_weeks, 
+def random_sample_winnings(w, pl, par, wl, total_lineups, sample_lineups):
+    
+    true_mask = sample_lineups*[True]
+    false_mask = (total_lineups-sample_lineups)*[False]
+    mask = true_mask + false_mask
+    np.random.shuffle(mask)
+
+    wl = list(np.array(wl)[mask])
+
+    lineups_num = pl.lineup_num.unique()[mask]
+    pl = pl[pl.lineup_num.isin(lineups_num)]
+
+    par = np.array(par)[mask]
+    par = list([list(p) for p in par])
+
+    w = np.sum(wl)
+    
+    return w, pl, par, wl
+
+def objective(param_options, pred_vers, reg_ens_vers, std_dev_type, million_ens_vers, total_lineups, sample_lineups, set_weeks, 
               set_years):
     
     output = Parallel(n_jobs=-1, verbose=0)(
@@ -243,12 +263,14 @@ def objective(param_options, pred_vers, reg_ens_vers, std_dev_type, million_ens_
     param_output = []
     winnings_list = []
     for w, pl, par, wl in output:
+        if entry_type == 'random_sample': 
+            w, pl, par, wl = random_sample_winnings(w, pl, par, wl, total_lineups, sample_lineups)
         total_winnings.append(w)
         player_results = pd.concat([player_results, pl])
         param_output.append(par)
         winnings_list.append(wl)
 
-    total_winnings = list(np.round(np.array(total_winnings) * 13 / total_lineups,1))
+    total_winnings = list(np.round(np.array(total_winnings) * 13 / sample_lineups,1))
 
     print('Total Winnings:', np.sum(total_winnings))
     win_dict = {f'{week}_{year}': t for week, year ,t in zip(set_weeks, set_years, total_winnings)}
@@ -319,8 +341,8 @@ with keep.running() as m:
 
         print('Repeat #', repeat_num, '\n==============\n')
 
-        weekly_winnings, player_results, param_output, winning_list = objective(d, pred_vers, reg_ens_vers, std_dev_type, million_ens_vers, total_lineups, 
-                                                                                set_weeks, set_years)
+        weekly_winnings, player_results, param_output, winning_list = objective(d, pred_vers, reg_ens_vers, std_dev_type, million_ens_vers, 
+                                                                                total_lineups, sample_lineups, set_weeks, set_years)
 
 
         output_results = format_output_results(weekly_winnings, set_weeks, set_years, pred_vers, reg_ens_vers, std_dev_type,
@@ -340,23 +362,34 @@ with keep.running() as m:
 
 
 #%%
-prev_qb_wt = 3
+prev_qb_wt = 1
 prev_def_wt = 1
 max_overlap = 8
 
 constraint_div = float(max_overlap+int(prev_qb_wt/2)+(prev_def_wt/2))
 constraint_minus = float(max_overlap+(prev_qb_wt-1)+(prev_def_wt-1))
+constraint_plus = float(max_overlap+(prev_qb_wt)+(prev_def_wt))
+constraint_standard = float(max_overlap)
 
+print('Divide By')
 print('if qb, other players:', constraint_div-prev_qb_wt)
 print('if not qb, other players:', constraint_div)
 
+print('Minus One')
 print('if qb, other players:', constraint_minus-prev_qb_wt)
 print('if not qb, other players:', constraint_minus)
 
+print('Plus Weights')
+print('if qb, other players:', constraint_plus-prev_qb_wt)
+print('if not qb, other players:', constraint_plus)
+
+print('Standard')
+print('if qb, other players:', constraint_standard)
+print('if not qb, other players:', constraint_standard)
 
 #%%
 
-to_delete_num=84
+to_delete_num=104
 
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Results', f'trial_num={to_delete_num}', create_backup=False)
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Lineups', f'trial_num={to_delete_num}', create_backup=False)
