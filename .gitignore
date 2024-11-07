@@ -169,3 +169,4 @@ Scripts/Modeling/optuna/weekly_predict.sqlite3
 Data/Databases/Model_Features_2024.sqlite3
 Scripts/config.yaml
 *.yaml
+Scripts/config.yaml
