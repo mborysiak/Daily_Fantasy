@@ -1,4 +1,6 @@
 
+odds_api_key: '262ce187f35c54537c2604af977c1d81'
+accu_api_key: '4B8LywkV5ABreulZ2f0DaXqGuuIhfJXI'
 
 run_weeks: [1, 2]
 run_years: [2022]

@@ -17,11 +17,11 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2024
-week=9
+week=10
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 20
+num_lineups = 30
 set_max_team = None
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
@@ -116,7 +116,7 @@ def create_database_output(my_team, j):
 #%%
 
 lineups_list = []
-for best_trials in (88,):
+for best_trials in (109,):
 
     opt_params = pull_best_params(best_trials)
     try:del opt_params['lineups_per_param']

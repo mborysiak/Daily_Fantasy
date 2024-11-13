@@ -119,21 +119,22 @@ def entry_optimize_params(df, max_adjust, model_name):
     df.loc[df.use_ownership==1, 'ownership_vers'] = 'None'
 
     df['max_overlap_effective_non_qb'] = df.max_overlap
-    df.loc[df.max_overlap=='plus_wts', 'max_overlap_effective_non_qb'] = \
-        df.loc[df.max_overlap=='plus_wts', 'max_overlap'] + \
-            df.loc[df.max_overlap=='plus_wts', 'prev_qb_wt'] + \
-                df.loc[df.max_overlap=='plus_wts', 'prev_def_wt']
+    df.loc[df.overlap_constraint=='plus_wts', 'max_overlap_effective_non_qb'] = \
+        df.loc[df.overlap_constraint=='plus_wts', 'max_overlap'] + \
+            df.loc[df.overlap_constraint=='plus_wts', 'prev_qb_wt'] + \
+                df.loc[df.overlap_constraint=='plus_wts', 'prev_def_wt']
 
-    df.loc[df.max_overlap=='minus_one', 'max_overlap_effective_non_qb'] = \
-        df.loc[df.max_overlap=='minus_one', 'max_overlap'] + \
-            df.loc[df.max_overlap=='minus_one', 'prev_qb_wt'] + \
-                df.loc[df.max_overlap=='minus_one', 'prev_def_wt'] - 2
+    df.loc[df.overlap_constraint=='minus_one', 'max_overlap_effective_non_qb'] = \
+        df.loc[df.overlap_constraint=='minus_one', 'max_overlap'] + \
+            df.loc[df.overlap_constraint=='minus_one', 'prev_qb_wt'] + \
+                df.loc[df.overlap_constraint=='minus_one', 'prev_def_wt'] - 2
 
-    df.loc[df.max_overlap=='div_two', 'max_overlap_effective_non_qb'] = \
-        df.loc[df.max_overlap=='div_two', 'max_overlap'] + \
-            (df.loc[df.max_overlap=='div_two', 'prev_qb_wt']/2) + \
-                (df.loc[df.max_overlap=='div_two', 'prev_def_wt']/2)
+    df.loc[df.overlap_constraint=='div_two', 'max_overlap_effective_non_qb'] = \
+        df.loc[df.overlap_constraint=='div_two', 'max_overlap'] + \
+            (df.loc[df.overlap_constraint=='div_two', 'prev_qb_wt']/2) + \
+                (df.loc[df.overlap_constraint=='div_two', 'prev_def_wt']/2)
 
+    df = df[df.max_overlap_effective_non_qb < 9].reset_index(drop=True)
     
     str_cols = ['week', 'year', 'pred_vers', 'reg_ens_vers', 'million_ens_vers', 'std_dev_type']
     if model_name in ('enet', 'lasso',' ridge'):

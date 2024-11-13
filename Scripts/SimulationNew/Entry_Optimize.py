@@ -7,6 +7,7 @@ from ff import general as ffgeneral
 from joblib import Parallel, delayed
 from wakepy import keep
 import pprint
+import gc
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -104,11 +105,11 @@ def pull_params_version(best_trial):
     return vers
 
 entry_type = 'random_sample'
-total_lineups = 40
+total_lineups = 30
 sample_lineups = 20
 
-trial_repeat = None
-model_notes = f'Trial {trial_repeat}, Sample {sample_lineups}, Total {total_lineups}'
+trial_repeat = 109
+model_notes = f'Trial {trial_repeat} More Prev, Sample {sample_lineups}, Total {total_lineups}'
 num_rank = None
 manual_adjust = True
 
@@ -142,30 +143,30 @@ if manual_adjust:
                 'no_covar': 0.3,
                 'team_points_trunc': 0.7,
                 'team_points_trunc_avgproj': 0.0},
- 'full_model_rel_weight': {0.2: 0.3, 5: 0.7},
- 'lineups_per_param': {1: 1.0},
- 'max_overlap': {3: 0.0, 5: 0.0, 7: 0, 8: 1, 9: 0.0, 11: 0.0, 13: 0.0},
- 'max_salary_remain': {500: 0.0, 1000: 1.0},
- 'max_teams_lineup': {4: 0.0, 5: 0.2, 6: 0.0, 8: 0.8},
- 'min_opp_team': {0: 1.0, 1: 0.0, 2: 0.0},
- 'num_avg_pts': {10: 0.0, 25: 0.0, 50: 0.0, 100: 0.0, 200: 0.0, 500: 1.0},
- 'num_iters': {1: 1.0},
- 'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 1.0},
- 'overlap_constraint': {'standard': 1},
- 'ownership_vers': {'mil_div_standard_ln': 0.0,
-                    'mil_only': 0.3,
-                    'mil_times_standard_ln': 0.7,
-                    'standard_ln': 0},
- 'ownership_vers_variable': {0: 1.0, 1: 0.0},
- 'pos_or_neg': {1: 1.0},
- 'prev_def_wt': {1: 1.0},
- 'prev_qb_wt': {1: 0.0, 3: 0.5, 5: 0.0, 7: 0.5},
- 'qb_te_stack': {0: 0.5, 1: 0.5},
- 'qb_wr_stack': {0: 0.1, 1: 0.9, 2: 0.0},
- 'rb_flex_pct': {0.3: 0.3, 0.4: 0.7},
- 'use_ownership': {0: 0.6, 1: 0.4},
- 'wr_flex_pct': {0.5: 0.5, 0.6: 0.5}}
- 
+        'full_model_rel_weight': {0.2: 0.3, 5: 0.7},
+        'max_overlap': {3: 0.0, 5: 0.0, 7: 0.0, 8: 1.0, 9: 0.0, 11: 0.0, 13: 0.0},
+        'max_salary_remain': {500: 0.0, 1000: 1.0},
+        'max_teams_lineup': {4: 0.0, 5: 0.0, 6: 0.0, 8: 1.0},
+        'min_opp_team': {0: 1.0, 1: 0.0, 2: 0.0},
+        'num_avg_pts': {10: 0.0, 25: 0.0, 50: 0.0, 100: 0.0, 200: 0.0, 500: 1.0},
+        'num_iters': {1: 1.0},
+        'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 1.0},
+        'overlap_constraint': {'standard': 1.0},
+        'ownership_vers': {'mil_div_standard_ln': 0.0,
+                            'mil_only': 0.4,
+                            'mil_times_standard_ln': 0.4,
+                            'standard_ln': 0.2},
+        'ownership_vers_variable': {0: 1.0, 1: 0.0},
+        'pos_or_neg': {1: 1.0},
+        'prev_def_wt': {1: 1},
+        'prev_qb_wt': {1: 0.6, 2: 0.2, 3: 0.2, 5: 0.0, 7: 0.0},
+        'qb_te_stack': {0: 0.6, 1: 0.4},
+        'qb_wr_stack': {0: 0.1, 1: 0.9, 2: 0.0},
+        'rb_flex_pct': {0.3: 0.3, 0.4: 0.7},
+        'use_ownership': {0: 0.6, 1: 0.4},
+        'wr_flex_pct': {0.5: 0.5, 0.6: 0.5}
+        }
+
 try: del d['num']
 except: pass
 
@@ -174,15 +175,10 @@ except: pass
 
 print('Num Rank:', num_rank)
 print('Model Notes:', model_notes)
-# pprint.pprint(model_vers)
-# pprint.pprint(d)
+pprint.pprint(model_vers)
+pprint.pprint(d)
 for k,v in d.items():
     print(k, np.sum(list(v.values())))
-
-# for c in winnings_pr.columns:
-#     unique_params = len(winnings_pr.loc[winnings_pr.param_rank < 500, c].drop_duplicates())
-#     if unique_params > 1:
-#         print(c, unique_params)
 
 #%%
 #===============
@@ -344,7 +340,6 @@ with keep.running() as m:
         weekly_winnings, player_results, param_output, winning_list = objective(d, pred_vers, reg_ens_vers, std_dev_type, million_ens_vers, 
                                                                                 total_lineups, sample_lineups, set_weeks, set_years)
 
-
         output_results = format_output_results(weekly_winnings, set_weeks, set_years, pred_vers, reg_ens_vers, std_dev_type,
                                                million_ens_vers, trial_num, repeat_num, entry_type, num_rank, model_notes, manual_adjust)
         dm.write_to_db(output_results, 'ResultsNew', 'Entry_Optimize_Results', 'append')
@@ -355,6 +350,9 @@ with keep.running() as m:
         param_output_df = detailed_param_output(rs, param_output, winning_list, set_weeks, set_years, trial_num, repeat_num)
         param_output_df.ownership_vers = param_output_df.ownership_vers.astype('str')
         dm.write_to_db(param_output_df, 'ResultsNew', 'Entry_Optimize_Params_Detail', 'append')
+
+        del weekly_winnings, player_results, param_output, winning_list, output_results, player_results_out, param_output_df
+        gc.collect()
 
     # save out the initial params that were set for randomization
     output = param_set_output(d)
@@ -389,7 +387,7 @@ print('if not qb, other players:', constraint_standard)
 
 #%%
 
-to_delete_num=104
+to_delete_num=108
 
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Results', f'trial_num={to_delete_num}', create_backup=False)
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Lineups', f'trial_num={to_delete_num}', create_backup=False)

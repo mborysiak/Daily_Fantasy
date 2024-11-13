@@ -122,7 +122,7 @@ best_trials = dm.read('''SELECT *
                          ''', 'ResultsNew')
 # best_trials = pd.concat([best_trials, best_trials_old], axis=0)
 
-best_trials.loc[best_trials.avg_winnings > 15000, 'avg_winnings'] = 15000
+best_trials.loc[best_trials.avg_winnings > 100000, 'avg_winnings'] = 100000
 
 best_trials['non8_winnings'] = best_trials.avg_winnings
 best_trials.loc[(best_trials.week == 8) & (best_trials.year==2022), 'non8_winnings'] = 0 
@@ -151,7 +151,7 @@ best_trials = (
           'non1_winnings': 'mean',
           'non6_winnings': 'mean',
           'over_500_winnings': 'mean',
-            'over_1000_winnings': 'mean',
+          'over_1000_winnings': 'mean',
           #'perc80': lambda x: np.percentile(x, 80)
           })
     .reset_index()

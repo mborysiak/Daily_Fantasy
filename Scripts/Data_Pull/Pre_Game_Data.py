@@ -292,6 +292,11 @@ player_pos_team = dm.read(f'''SELECT player, team, pos, fp_rank
                               WHERE week={set_week} AND year={set_year}
                            ''', 'Pre_PlayerData')
 
+extra_d = pd.DataFrame(team_map, index=[0]).T.reset_index()
+extra_d.columns = ['player', 'team']
+extra_d = extra_d.assign(pos='DST')
+player_pos_team = pd.concat([player_pos_team, extra_d], axis=0)
+
 print('Before Dups:', player_pos_team[player_pos_team.duplicated(subset=['player'], keep=False)])
 
 player_pos_team = player_pos_team.sort_values(by=['player', 'team', 'pos', 'fp_rank']).reset_index(drop=True)
@@ -985,7 +990,7 @@ class OddsAPIPull:
 #%%
 
 pull_historical = False
-set_week = 9
+set_week = 10
 set_year = 2024
 
 base_url = 'https://api.the-odds-api.com/v4/'
@@ -1009,7 +1014,8 @@ stats = [
         'player_pass_attempts', 'player_pass_completions', 'player_pass_interceptions', 'player_pass_longest_completion', 
          'player_pass_rush_reception_tds', 'player_pass_rush_reception_yds', 'player_pass_tds', 'player_pass_yds', 'player_receptions',
          'player_receptions', 'player_reception_longest', 'player_reception_yds', 'player_rush_attempts', 'player_rush_longest',
-         'player_rush_reception_tds', 'player_rush_reception_yds', 'player_rush_yds','player_1st_td', 'player_anytime_td', 'player_tds_over', 'player_sacks'
+         'player_rush_reception_tds', 'player_rush_reception_yds', 'player_rush_yds','player_1st_td', 'player_anytime_td', 
+         'player_tds_over', 'player_sacks'
          ]
 
 markets = ','.join(stats)
@@ -1036,6 +1042,9 @@ dm.write_to_db(player_props, 'Pre_PlayerData', 'Game_Odds', 'append')
 
 pull_historical = True
 base_url = 'https://api.the-odds-api.com/v4/'
+
+set_year = 2024
+month_days = [[11, 7, 10]]
 
 # set_year = 2024
 # month_days = [
@@ -1108,7 +1117,13 @@ base_url = 'https://api.the-odds-api.com/v4/'
 #     print(events_df)
 #     event_ids = tuple(events_df.event_id.unique()) + (0,)
 
-#     stats = ['player_tds_over', 'player_sacks']
+#     stats = [
+#         'player_pass_attempts', 'player_pass_completions', 'player_pass_interceptions', 'player_pass_longest_completion', 
+#          'player_pass_rush_reception_tds', 'player_pass_rush_reception_yds', 'player_pass_tds', 'player_pass_yds', 'player_receptions',
+#          'player_receptions', 'player_reception_longest', 'player_reception_yds', 'player_rush_attempts', 'player_rush_longest',
+#          'player_rush_reception_tds', 'player_rush_reception_yds', 'player_rush_yds','player_1st_td', 'player_anytime_td', 
+#          'player_tds_over', 'player_sacks'
+#          ]
 
 #     markets = ','.join(stats)
 #     player_props = odds_api.all_market_odds(markets, events_df)
