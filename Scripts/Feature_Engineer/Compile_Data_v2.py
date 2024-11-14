@@ -548,7 +548,7 @@ def log_rank_cols(df):
 def rolling_proj_stats(df):
     df = forward_fill(df)
     proj_cols = [c for c in df.columns if 'ffa' in c or 'rank' in c or 'fc' in c or 'proj' in c \
-                 or 'fft' in c or 'expert' in c or 'points' in c or 'fdta' in c or 'nf' in c
+                 or 'fft' in c or 'expert' in c or 'points' in c or 'fdta' in c
                  or 'vegas' in c or 'etr' in c or 'fpts' in c]
     df = add_rolling_stats(df, ['player'], proj_cols)
 
@@ -2425,10 +2425,10 @@ def fill_vegas_stats(df, player_vegas_stats, pos):
             df[['player_receptions_ev_poisson', 'player_receptions_ev_trunc_norm']].mean(axis=1) * 1
         )
 
-    df['avg_vegas_proj_points'] = 0.8*df.avg_proj_points + 0.2*df.vegas_proj_points
-    
-    df['good_avg_proj_points'] = df[['etr_proj_points', 'fpts_proj_points', 'vegas_proj_points', 
-                                     'fdta_proj_points', 'projected_points', 'nf_proj_points']].mean(axis=1)
+    if pos != 'Defense':
+        df['avg_vegas_proj_points'] = 0.8*df.avg_proj_points + 0.2*df.vegas_proj_points
+        df['good_avg_proj_points'] = df[['etr_proj_points', 'fpts_proj_points', 'vegas_proj_points', 
+                                        'fdta_proj_points', 'projected_points', 'nf_proj_points']].mean(axis=1)
     
     return df
 
@@ -2736,8 +2736,8 @@ defense = defense.rename(columns={'player': 'defTeam'})
 defense = consensus_fill(defense, is_dst=True)
 defense = fill_ratio_nulls(defense)
 
-player_vegas_stats = get_all_vegas_stats(pos)
-defense = fill_vegas_stats(defense, player_vegas_stats, pos)
+player_vegas_stats = get_all_vegas_stats('Defense')
+defense = fill_vegas_stats(defense, player_vegas_stats, 'Defense')
 
 defense = log_rank_cols(defense)
 defense = rolling_proj_stats(defense.rename(columns={'defTeam':'player'}))
@@ -2867,85 +2867,138 @@ accuracy = accuracy.sort_values(by=['pos', 'r2'], ascending=[True, False])
 accuracy
 #%%
 
+from skmodel import SciKitModel
+from hyperopt import Trials
+from sklearn.metrics import r2_score
+import datetime as dt
 
-accuracy
 
-# %%
-# TO DO LIST
-# - add in PFF scores
-# - add in snaps and snap share
+def year_week_to_date(x):
+    return int(dt.datetime(x[0], 1, x[1]).strftime('%Y%m%d'))
+
+
+def get_cv_time_input(df, back_weeks, test_year, test_week):
+    df = df[(df.year < test_year) | \
+            (
+              (df.year==test_year) & \
+              (df.week<=test_week)
+            )]
+    max_date = str(df.game_date.max())
+    year = int(max_date[:4])
+    week = int(max_date[-2:])
+
+    for i in range(back_weeks):
+        if week > 1:
+            week -= 1
+        else:
+            year -= 1
+            week = 17
+    cv_time_input = int(dt.datetime(year, 1, week).strftime('%Y%m%d'))
+    cv_time_input = np.max([cv_time_input, 20200114])
+    print(f'Begin Validation Using {cv_time_input}')
+    return cv_time_input
+
+
+def create_game_date(df, pos, test_year, test_week):
+    
+    # set up the date column for sorting
+    df['game_date'] = df[['year', 'week']].apply(year_week_to_date, axis=1)
+    cv_time_input = get_cv_time_input(df, 32, test_year, test_week)
+    train_time_split = int(dt.datetime(test_year, 1, test_week).strftime('%Y%m%d'))
+
+    return df, cv_time_input, train_time_split
+
+
+
+
+
+pos = 'WR'
+test_week = 10
+test_year = 2024
+
+model_obj = 'reg'
+alpha = 0.8
+if model_obj =='class': proba = True
+else: proba = False
+
+Xy = dm.read(f'''SELECT * FROM Backfill_{pos}_Week{test_week}''', f'Model_Features_{test_year}')
+Xy = Xy.sort_values(by=['year', 'week']).reset_index(drop=True)
+
+Xy, cv_time_input, train_time_split = create_game_date(Xy, pos, test_year, test_week)
+train = Xy[Xy.game_date < train_time_split]
+pred = Xy[Xy.game_date >= train_time_split]
+
+preds = []
+actuals = []
+
+skm = SciKitModel(train, model_obj=model_obj, alpha=alpha, hp_algo='atpe')
+to_drop = list(train.dtypes[train.dtypes=='object'].index)
+X, y = skm.Xy_split('y_act', to_drop = to_drop)
+
+if proba:
+    p = 'select_perc_c'
+    kb = 'k_best_c'
+    m = 'lr_c'
+else:
+    p = 'select_perc'
+    kb = 'k_best'
+    m = 'enet'
+
+pipe = skm.model_pipe([skm.piece('random_sample'),
+                        skm.piece('std_scale'), 
+                        skm.piece(p),
+                        skm.feature_union([
+                                       skm.piece('agglomeration'), 
+                                        skm.piece(f'{kb}_fu'),
+                                        skm.piece('pca')
+                                        ]),
+                        skm.piece(kb),
+                        skm.piece(m)
+                    ])
+
+params = skm.default_params(pipe, 'bayes')
+
+# pipe.steps[-1][-1].set_params(**{'loss_function': f'Quantile:alpha={alpha}'})
+best_models, oof_data, param_scores, _ = skm.time_series_cv(pipe, X, y, params, n_iter=10,
+                                                                col_split='game_date',n_splits=5,
+                                                                time_split=cv_time_input, alpha=alpha,
+                                                                bayes_rand='bayes', proba=proba,
+                                                                sample_weight=False, trials=Trials(),
+                                                                random_seed=64893)
+
+print('R2 score:', r2_score(oof_data['full_hold']['y_act'], oof_data['full_hold']['pred']))
+oof_data['full_hold'].plot.scatter(x='pred', y='y_act')
+# try: show_calibration_curve(oof_data['full_hold'].y_act, oof_data['full_hold'].pred, n_bins=6)
+# except: pass
 
 #%%
 
-#==================
-# Team Points Predictions
-#==================
-output['avg_pts'] = output[['ProjPts', 'fantasyPoints', 'projected_points']].mean(axis=1)
-output = output.sort_values(by=['year', 'week', 'team', 'avg_pts'],
-                            ascending=[True, True, True, False]).reset_index(drop=True)
+oof_data['full_hold'].sort_values(by='pred', ascending=False).iloc[:50]
+# oof_data['full_hold'][(oof_data['full_hold'].pred >15) & (oof_data['full_hold'].y_act < 7)]
 
-team_pts = output.groupby(['year', 'week', 'team']).agg({'avg_pts': 'sum', 'y_act': 'sum'}).reset_index()
-
-team_off = dm.read("SELECT * FROM Defense_Data_Week{WEEK}", f'Model_Features_{YEAR}').drop('y_act', axis=1)
-team_off = team_off.rename(columns={'player': 'defTeam', 'offTeam': 'team'})
-team_off = pd.merge(team_pts, team_off, on=['team', 'week', 'year'])
-team_off = team_off.rename(columns={'team': 'player'})
-team_off['team'] = team_off.player
-
-print('Unique team-week-years:', team_off[['player', 'week', 'year']].drop_duplicates().shape[0])
-print('Team Counts by Week:', team_off[['year', 'week', 'player']].drop_duplicates().groupby(['year', 'week'])['player'].count())
-
-dm.write_to_db(team_off, f'Model_Features_{YEAR}', f'Team_Offense_Data_Week{WEEK}', if_exist='replace')
-
-#%%
-
-#==================
-# Find missing players
-#==================
-cur_pos = 'RB'
-
-dk_sal = dm.read('''SELECT player, team, week, year, dk_salary
-                    FROM Daily_Salaries
-                    WHERE dk_salary > 5500 
-                          AND position='QB'
-                    UNION
-                    SELECT player, team, week, year, dk_salary
-                    FROM Daily_Salaries
-                    WHERE dk_salary > 4500 
-                          AND position!='QB' ''', "Pre_PlayerData")
-
-pff = dm.read('''SELECT player, offTeam team, week, year, expertConsensus, fantasyPoints, `Proj Pts` ProjPts
-                    FROM PFF_Expert_Ranks
-                    JOIN (SELECT player, week, year, fantasyPoints
-                        FROM PFF_Proj_Ranks)
-                        USING (player, week, year) ''', "Pre_PlayerData")
-
-inj = dm.read('''SELECT player, week, year, 1 as is_out
-                 FROM PlayerInjuries
-                 WHERE game_status IN ('Out', 'Doubtful') 
-                       AND pos in ('QB', 'RB', 'WR', 'TE')''', 'Pre_PlayerData')
-
-data = pd.merge(dk_sal, pff, on=['player', 'team', 'week', 'year'], how='left')
-data = pd.merge(data, inj, on=['player',  'week', 'year'], how='left')
-data.is_out = data.is_out.fillna(0)
-data
-# missing_game = data.loc[(data.is_out==1) | (data.expertConsensus.isnull()),
-#                         ['player', 'team', 'week', 'year', 'dk_salary']]
-
-# pos = dm.read('''SELECT DISTINCT player, team, year, pos
-#                  FROM FantasyPros
-#                  ''', "Pre_PlayerData")
-
-# missing_game = pd.merge(missing_game, pos, on=['player', 'team', 'year'])
-# missing_game = missing_game.groupby(['team', 'pos', 'week', 'year']).agg({'dk_salary': 'sum'}).reset_index()
-# missing_game = missing_game.rename(columns={'dk_salary': 'missing_salary'})
-# missing_game_pos = missing_game[missing_game.pos==cur_pos].drop('pos', axis=1)
-
-# xx = pd.merge(df, missing_game_pos, on=['team', 'week', 'year'], how='left').fillna({'missing_salary': 0})
-
-# missing_game[missing_game.team=='SEA'].iloc[:50]
 # %%
 
-# Chase Brown
-# Mitch Trubiskey
-# Chris Rodriguez
+pred = pred.fillna({'games': 16})
+try: pred['pred'] = best_models[-1].fit(X,y).predict_proba(pred[X.columns].fillna(pred.mean()))[:,1]
+except: pred['pred'] = best_models[-1].fit(X,y).predict(pred[X.columns].fillna(pred.mean()))
+pred[['player', 'year', 'pred']].sort_values(by='pred', ascending=False).iloc[:35]
+
+# %%
+
+import matplotlib.pyplot as plt
+
+pipeline = best_models[3]
+pipeline.fit(X,y)
+# Extract the coefficients
+log_reg = pipeline.named_steps[m]
+try:
+    log_reg.coef_.shape[1]
+    coefficients = log_reg.coef_[0]
+except: coefficients = log_reg.coef_
+
+# Get the feature names from SelectKBest
+selected_features = pipeline.named_steps[kb].get_support(indices=True)
+
+coef = pd.Series(coefficients, index=X.columns[selected_features])
+coef[np.abs(coef) > 0.01].sort_values().plot(kind = 'barh', figsize=(10, 10))
+# %%
