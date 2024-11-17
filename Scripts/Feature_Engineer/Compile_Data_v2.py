@@ -2795,7 +2795,7 @@ dm.write_to_db(defense, f'Model_Features_{YEAR}', f'Defense_Data_Week{WEEK}', if
 
 #%%
 
-chk_week = 10
+chk_week = 11
 backfill_chk = dm.read(f'''SELECT player 
                            FROM Backfill_QB_Week{WEEK} 
                            WHERE week={chk_week} AND year={YEAR}
@@ -2823,7 +2823,7 @@ WEEK = 11
 accuracy = []
 for pos in ['QB', 'RB', 'WR', 'TE']:
     print(pos)
-    df = dm.read(f'''SELECT * FROM Backfill_{pos}_Week{WEEK} WHERE year >= 2024''', f'Model_Features_{YEAR}')
+    df = dm.read(f'''SELECT * FROM Backfill_{pos}_Week{WEEK} WHERE year >= 2023''', f'Model_Features_{YEAR}')
     # player_vegas_stats = get_all_vegas_stats(pos)
     # df = fill_vegas_stats(df, player_vegas_stats, pos)
 
@@ -2910,10 +2910,8 @@ def create_game_date(df, pos, test_year, test_week):
 
 
 
-
-
-pos = 'WR'
-test_week = 10
+pos = 'QB'
+test_week = 11
 test_year = 2024
 
 model_obj = 'reg'
@@ -2921,7 +2919,10 @@ alpha = 0.8
 if model_obj =='class': proba = True
 else: proba = False
 
-Xy = dm.read(f'''SELECT * FROM Backfill_{pos}_Week{test_week}''', f'Model_Features_{test_year}')
+# Xy = dm.read(f'''SELECT * FROM Backfill_{pos}_Week{test_week}''', f'Model_Features_{test_year}')
+Xy1 = dm.read(f'''SELECT * FROM {pos}_Data_Week{test_week}''', f'Model_Features_{test_year}')
+Xy2 = dm.read(f'''SELECT * FROM {pos}_Data_Week{test_week}_v2''', f'Model_Features_{test_year}')
+Xy = pd.concat([Xy1, Xy2], axis=1)
 Xy = Xy.sort_values(by=['year', 'week']).reset_index(drop=True)
 
 Xy, cv_time_input, train_time_split = create_game_date(Xy, pos, test_year, test_week)
@@ -2942,16 +2943,16 @@ if proba:
 else:
     p = 'select_perc'
     kb = 'k_best'
-    m = 'enet'
+    m = 'lgbm'
 
 pipe = skm.model_pipe([skm.piece('random_sample'),
                         skm.piece('std_scale'), 
-                        skm.piece(p),
-                        skm.feature_union([
-                                       skm.piece('agglomeration'), 
-                                        skm.piece(f'{kb}_fu'),
-                                        skm.piece('pca')
-                                        ]),
+                        # skm.piece(p),
+                        # skm.feature_union([
+                        #                skm.piece('agglomeration'), 
+                        #                 skm.piece(f'{kb}_fu'),
+                        #                 skm.piece('pca')
+                        #                 ]),
                         skm.piece(kb),
                         skm.piece(m)
                     ])
@@ -2978,27 +2979,39 @@ oof_data['full_hold'].sort_values(by='pred', ascending=False).iloc[:50]
 
 # %%
 
-pred = pred.fillna({'games': 16})
-try: pred['pred'] = best_models[-1].fit(X,y).predict_proba(pred[X.columns].fillna(pred.mean()))[:,1]
-except: pred['pred'] = best_models[-1].fit(X,y).predict(pred[X.columns].fillna(pred.mean()))
+try: 
+    pred['pred'] = best_models[-1].fit(X,y).predict_proba(pred[X.columns].fillna(pred.mean()))[:,1]
+except: 
+    pred['pred'] = best_models[-1].fit(X,y).predict(pred[X.columns].fillna(pred.mean()))
+
 pred[['player', 'year', 'pred']].sort_values(by='pred', ascending=False).iloc[:35]
 
 # %%
 
 import matplotlib.pyplot as plt
 
-pipeline = best_models[3]
+pipeline = best_models[0]
 pipeline.fit(X,y)
 # Extract the coefficients
 log_reg = pipeline.named_steps[m]
+
 try:
     log_reg.coef_.shape[1]
     coefficients = log_reg.coef_[0]
-except: coefficients = log_reg.coef_
+except: 
+    try:
+        coefficients = log_reg.coef_
+    except:
+        coefficients = log_reg.feature_importances_
 
 # Get the feature names from SelectKBest
+rand_features = pipeline.steps[0][1].columns
+X_out = X[rand_features]
 selected_features = pipeline.named_steps[kb].get_support(indices=True)
 
-coef = pd.Series(coefficients, index=X.columns[selected_features])
-coef[np.abs(coef) > 0.01].sort_values().plot(kind = 'barh', figsize=(10, 10))
+coef = pd.Series(coefficients, index=X_out.columns[selected_features])
+coef[np.abs(coef) > 0.01].sort_values().plot(kind = 'barh', figsize=(8, 30))
+# %%
+
+
 # %%

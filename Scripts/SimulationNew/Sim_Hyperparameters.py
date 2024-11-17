@@ -122,7 +122,7 @@ best_trials = dm.read('''SELECT *
                          ''', 'ResultsNew')
 # best_trials = pd.concat([best_trials, best_trials_old], axis=0)
 
-best_trials.loc[best_trials.avg_winnings > 100000, 'avg_winnings'] = 100000
+best_trials.loc[best_trials.avg_winnings > 50000, 'avg_winnings'] = 50000
 
 best_trials['non8_winnings'] = best_trials.avg_winnings
 best_trials.loc[(best_trials.week == 8) & (best_trials.year==2022), 'non8_winnings'] = 0 

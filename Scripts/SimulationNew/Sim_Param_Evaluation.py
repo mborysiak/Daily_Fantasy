@@ -140,7 +140,8 @@ def entry_optimize_params(df, max_adjust, model_name):
     if model_name in ('enet', 'lasso',' ridge'):
         str_cols.extend( ['full_model_rel_weight', 'max_overlap', 'max_salary_remain', 'max_teams_lineup',
                           'min_opp_team', 'num_avg_pts', 'num_options', 'prev_qb_wt', 'qb_te_stack', 'qb_wr_stack',
-                          'wr_flex_pct', 'rb_flex_pct', 'use_ownership', 'max_overlap_effective_non_qb'])
+                          'wr_flex_pct', 'rb_flex_pct', 'use_ownership', 'max_overlap_effective_non_qb',
+                          'prev_def_wt'])
     df[str_cols] = df[str_cols].astype('str')
 
     df = df.drop(['trial_num'], axis=1)
@@ -160,7 +161,7 @@ def entry_optimize_params(df, max_adjust, model_name):
 weeks = [
          2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16,
          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-         1,2,3,4,5,7,8, 9, 
+         1,2,3,4,5,7,8, 9, 10,
          6,
          1,
          8
@@ -168,7 +169,7 @@ weeks = [
 years = [
           2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 
           2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-          2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024,
+          2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024,
           2024,
           2022,
           2022
@@ -185,7 +186,6 @@ for w, yr in zip(weeks, years):
                           ) USING (week, year, trial_num, repeat_num)
                      WHERE week = {w}
                            AND year = {yr}
-                           AND trial_num > 57
                      ''', 'ResultsNew')
     df['week'] = df.week.astype(str) + '_' + df.year.astype(str)
     # df.loc[df.week!='8_2022', 'winnings'] = df.loc[df.week!='8_2022', 'winnings']*2
@@ -194,7 +194,7 @@ for w, yr in zip(weeks, years):
     m = model_type[model_name]
     # if w == 8 and yr==2022: max_adjust = 1000
     # else: max_adjust = 10000
-    max_adjust = 15000
+    max_adjust = 5000
     X, y = entry_optimize_params(df, max_adjust=max_adjust, model_name=model_name)
     coef_vals, X = get_model_coef(X, y, m)
     all_coef, X_all = join_coef(i, all_coef, coef_vals, X_all, X, model_name); i+=1

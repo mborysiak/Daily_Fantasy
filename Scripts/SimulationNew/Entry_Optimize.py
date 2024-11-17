@@ -105,11 +105,11 @@ def pull_params_version(best_trial):
     return vers
 
 entry_type = 'random_sample'
-total_lineups = 30
+total_lineups = 20
 sample_lineups = 20
 
 trial_repeat = 109
-model_notes = f'Trial {trial_repeat} More Prev, Sample {sample_lineups}, Total {total_lineups}'
+model_notes = f'Trial {trial_repeat} Tweaks, Sample {sample_lineups}, Total {total_lineups}'
 num_rank = None
 manual_adjust = True
 
@@ -136,14 +136,14 @@ if manual_adjust:
     model_vers = {'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
                 'reg_ens_vers': 'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3',
-                'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3',
+                'std_dev_type': 'spline_pred_class80_q80_matt0_brier1_kfold3',
     }
     d = {'covar_type': {'kmeans_pred_trunc': 0.0,
                 'kmeans_pred_trunc_new': 0.0,
-                'no_covar': 0.3,
-                'team_points_trunc': 0.7,
+                'no_covar': 0.4,
+                'team_points_trunc': 0.6,
                 'team_points_trunc_avgproj': 0.0},
-        'full_model_rel_weight': {0.2: 0.3, 5: 0.7},
+        'full_model_rel_weight': {0.2: 0.4, 5: 0.6},
         'max_overlap': {3: 0.0, 5: 0.0, 7: 0.0, 8: 1.0, 9: 0.0, 11: 0.0, 13: 0.0},
         'max_salary_remain': {500: 0.0, 1000: 1.0},
         'max_teams_lineup': {4: 0.0, 5: 0.0, 6: 0.0, 8: 1.0},
@@ -153,18 +153,18 @@ if manual_adjust:
         'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 1.0},
         'overlap_constraint': {'standard': 1.0},
         'ownership_vers': {'mil_div_standard_ln': 0.0,
-                            'mil_only': 0.4,
-                            'mil_times_standard_ln': 0.4,
-                            'standard_ln': 0.2},
+                            'mil_only': 0,
+                            'mil_times_standard_ln': 0.7,
+                            'standard_ln': 0.3},
         'ownership_vers_variable': {0: 1.0, 1: 0.0},
         'pos_or_neg': {1: 1.0},
-        'prev_def_wt': {1: 1},
-        'prev_qb_wt': {1: 0.6, 2: 0.2, 3: 0.2, 5: 0.0, 7: 0.0},
-        'qb_te_stack': {0: 0.6, 1: 0.4},
+        'prev_def_wt': {1: 0.5, 2: 0.5, 3: 0},
+        'prev_qb_wt': {1: 1, 2: 0, 3: 0, 5: 0.0, 7: 0.0},
+        'qb_te_stack': {0: 0.3, 1: 0.7},
         'qb_wr_stack': {0: 0.1, 1: 0.9, 2: 0.0},
-        'rb_flex_pct': {0.3: 0.3, 0.4: 0.7},
-        'use_ownership': {0: 0.6, 1: 0.4},
-        'wr_flex_pct': {0.5: 0.5, 0.6: 0.5}
+        'rb_flex_pct': {0.3: 0.2, 0.4: 0.8},
+        'use_ownership': {0: 0.3, 1: 0.7},
+        'wr_flex_pct': {0.5: 0.2, 0.6: 0.8}
         }
 
 try: del d['num']
@@ -189,13 +189,13 @@ for k,v in d.items():
 set_weeks = [
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-   1, 2, 3, 4, 5, 6, 7, 8, 9
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
       2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
+      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
 ]
 
 # set_weeks=[14]

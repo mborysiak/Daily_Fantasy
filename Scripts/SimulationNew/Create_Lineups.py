@@ -17,11 +17,11 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2024
-week=10
+week=11
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-num_lineups = 30
+num_lineups = 20
 set_max_team = None
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
@@ -71,7 +71,9 @@ def clean_lineup_list(lineups_list, player_data):
     lineups = lineups.sort_values(by='TeamNum').reset_index(drop=True)
     return lineups
 
-def create_database_output(my_team, j):
+def create_database_output(my_team):
+
+    my_team = my_team.sort_values(by=['Position', 'Player']).reset_index(drop=True)
 
     ids = dm.read(f"SELECT * FROM Player_Ids WHERE year={year} AND week={week}", "Simulation")
     my_team_ids = my_team.rename(columns={'Player': 'player'}).copy()
@@ -91,7 +93,7 @@ def create_database_output(my_team, j):
         'DST': 'fDST'
     }
     dk_output.Position = dk_output.Position.map(pos_map)
-    dk_output = dk_output.sort_values(by='Position').reset_index(drop=True)
+    dk_output = dk_output.sort_values(by=['Position', 'player']).reset_index(drop=True)
     pos_map_rev = {v: k for k,v in pos_map.items()}
     dk_output.Position = dk_output.Position.map(pos_map_rev)
 
@@ -105,25 +107,23 @@ def create_database_output(my_team, j):
     dk_output['year'] = year
     dk_output['week'] = week
 
-    if j < 10:
-        dk_output['contest'] = 'Million'
-    else:
-        dk_output['contest'] = 'Screen Pass'
+    return dk_output
 
 
-    dm.write_to_db(dk_output, 'Simulation', 'Automated_Lineups', 'append')
 
 #%%
 
 lineups_list = []
-for best_trials in (109,):
+lineup_info = pd.DataFrame()
+best_trials = [109, 121]
+for bt in (109,121):
 
-    opt_params = pull_best_params(best_trials)
+    opt_params = pull_best_params(bt)
     try:del opt_params['lineups_per_param']
     except:pass
     pprint.pprint(opt_params)
 
-    best_vers = pull_params_version(best_trials)
+    best_vers = pull_params_version(bt)
     pred_vers = best_vers.pred_vers.values[0]
     reg_ens_vers = best_vers.reg_ens_vers.values[0]
     million_ens_vers = best_vers.million_ens_vers.values[0]
@@ -137,7 +137,10 @@ for best_trials in (109,):
     lineups_list_cur = rs.run_multiple_lineups(params, calc_winnings=False, parallelize=False, n_jobs=-1, verbose=0)
     lineups_list.extend(lineups_list_cur)
 
-#%%
+    lineup_info_cur = pd.DataFrame([i+1 for i in range(num_lineups)], columns=['lineup_num'])
+    lineup_info_cur['trial_num'] = bt
+    lineup_info = pd.concat([lineup_info, lineup_info_cur], axis=0).reset_index(drop=True)
+
 # get the player data
 rs_pd = RunSim(db_path, week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, 1)
 player_data_param = copy.deepcopy(opt_params)
@@ -145,16 +148,26 @@ player_data_param = rs.generate_param_list(player_data_param)
 sim, _ = rs.setup_sim(player_data_param[0])
 player_data = sim.player_data.copy()
 
-#%%
 lineups = clean_lineup_list(lineups_list, player_data)
-# lineups = lineups.sample(frac=1)
 
-dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={week}', create_backup=False)
-for j, i in enumerate(lineups.TeamNum.unique()):
-    if len(lineups[lineups.TeamNum==i]) == 9:
-        create_database_output(lineups[lineups.TeamNum==i], j)
+dk_output = pd.DataFrame()
+for t in lineups.TeamNum.unique():
+    if len(lineups[lineups.TeamNum==t]) == 9:
+        dk_output_cur = create_database_output(lineups[lineups.TeamNum==t])
+        dk_output = pd.concat([dk_output, dk_output_cur], axis=0)
     else:
         print('Incomplete Lineup')
+
+dk_output = dk_output.reset_index(drop=True)
+dk_output = pd.concat([dk_output, lineup_info], axis=1)
+
+print('Number Duplicates', dk_output.shape[0]-dk_output.drop_duplicates(subset=[0, 1, 2, 3, 4, 5, 6, 7, 8]).shape[0])
+dk_output
+
+#%%
+
+dm.delete_from_db('Simulation', 'Automated_Lineups', f'year={year} AND week={week}', create_backup=False)
+dm.write_to_db(dk_output, 'Simulation', 'Automated_Lineups', 'append')
 
 # %%
 import datetime as dt
@@ -181,6 +194,8 @@ for t in ['Predicted_Ownership', 'Mean_Ownership', 'Gambling_Lines', 'Vegas_Poin
           'Salaries', 'Player_Teams', 'Player_Ids', 'Automated_Lineups']:
 
     df = dm.read(f"SELECT * FROM {t} WHERE year={year} and week={week}", 'Simulation')
+    if t == 'Automated_Lineups':
+        df = df[df.trial_num== best_trials[1]].reset_index(drop=True)
     dm_app.write_to_db(df, 'Simulation_App', t, 'replace')
 
 for t in ['Model_Predictions', 'Covar_Means', 'Covar_Matrix']:
