@@ -13,7 +13,7 @@ import yaml
 
 # +
 set_year = 2024
-set_week = 11
+set_week = 12
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -1042,7 +1042,7 @@ pull_historical = True
 base_url = 'https://api.the-odds-api.com/v4/'
 
 set_year = 2024
-month_days = [[11, 14, 11]]
+month_days = [[11, 21, set_week]]
 
 # set_year = 2024
 # month_days = [

@@ -22,7 +22,7 @@ million_ens_vers = 'random_full_stack_newp_matt0_brier1_include2_kfold3'
 ownership_vers = 'standard_ln'
 
 set_year = 2024
-set_week = 11
+set_week = 12
 contest = 'Million'
 include_dst = True
 run_owner_model = True

@@ -8,6 +8,7 @@ from joblib import Parallel, delayed
 from wakepy import keep
 import pprint
 import gc
+import psutil
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -108,8 +109,8 @@ entry_type = 'random_sample'
 total_lineups = 20
 sample_lineups = 20
 
-trial_repeat = 109
-model_notes = f'Trial {trial_repeat} Tweaks, Sample {sample_lineups}, Total {total_lineups}'
+trial_repeat = 121
+model_notes = f'Trial {trial_repeat} Auto Flex, Sample {sample_lineups}, Total {total_lineups}'
 num_rank = None
 manual_adjust = True
 
@@ -136,36 +137,36 @@ if manual_adjust:
     model_vers = {'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
                 'reg_ens_vers': 'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3',
-                'std_dev_type': 'spline_pred_class80_q80_matt0_brier1_kfold3',
+                'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3',
     }
     d = {'covar_type': {'kmeans_pred_trunc': 0.0,
                 'kmeans_pred_trunc_new': 0.0,
-                'no_covar': 0.4,
-                'team_points_trunc': 0.6,
+                'no_covar': 0.5,
+                'team_points_trunc': 0.5,
                 'team_points_trunc_avgproj': 0.0},
-        'full_model_rel_weight': {0.2: 0.4, 5: 0.6},
-        'max_overlap': {3: 0.0, 5: 0.0, 7: 0.0, 8: 1.0, 9: 0.0, 11: 0.0, 13: 0.0},
-        'max_salary_remain': {500: 0.0, 1000: 1.0},
-        'max_teams_lineup': {4: 0.0, 5: 0.0, 6: 0.0, 8: 1.0},
-        'min_opp_team': {0: 1.0, 1: 0.0, 2: 0.0},
-        'num_avg_pts': {10: 0.0, 25: 0.0, 50: 0.0, 100: 0.0, 200: 0.0, 500: 1.0},
-        'num_iters': {1: 1.0},
-        'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 1.0},
-        'overlap_constraint': {'standard': 1.0},
-        'ownership_vers': {'mil_div_standard_ln': 0.0,
-                            'mil_only': 0,
-                            'mil_times_standard_ln': 0.7,
-                            'standard_ln': 0.3},
-        'ownership_vers_variable': {0: 1.0, 1: 0.0},
-        'pos_or_neg': {1: 1.0},
-        'prev_def_wt': {1: 0.5, 2: 0.5, 3: 0},
-        'prev_qb_wt': {1: 1, 2: 0, 3: 0, 5: 0.0, 7: 0.0},
-        'qb_te_stack': {0: 0.3, 1: 0.7},
-        'qb_wr_stack': {0: 0.1, 1: 0.9, 2: 0.0},
-        'rb_flex_pct': {0.3: 0.2, 0.4: 0.8},
-        'use_ownership': {0: 0.3, 1: 0.7},
-        'wr_flex_pct': {0.5: 0.2, 0.6: 0.8}
-        }
+ 'full_model_rel_weight': {0.2: 0.5, 5: 0.5},
+ 'lineups_per_param': {1: 1.0},
+ 'max_overlap': {3: 0.0, 5: 0.0, 7: 0.0, 8: 1.0, 9: 0.0, 11: 0.0, 13: 0.0},
+ 'max_salary_remain': {500: 0.0, 1000: 1.0},
+ 'max_teams_lineup': {4: 0.0, 5: 0.0, 6: 0.0, 8: 1.0},
+ 'min_opp_team': {0: 1.0, 1: 0.0, 2: 0.0},
+ 'num_avg_pts': {10: 0.0, 25: 0.0, 50: 0.0, 100: 0.0, 200: 0.0, 500: 1.0},
+ 'num_iters': {1: 1.0},
+ 'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 1.0},
+ 'overlap_constraint': {'standard': 1.0},
+ 'ownership_vers': {'mil_div_standard_ln': 0.0,
+                    'mil_only': 0.0,
+                    'mil_times_standard_ln': 0.7,
+                    'standard_ln': 0.3},
+ 'ownership_vers_variable': {0: 1.0, 1: 0.0},
+ 'pos_or_neg': {1: 1.0},
+ 'prev_def_wt': {1: 1.0},
+ 'prev_qb_wt': {1: 1.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.0},
+ 'qb_te_stack': {0: 0.3, 1: 0.7},
+ 'qb_wr_stack': {0: 0.1, 1: 0.9, 2: 0.0},
+ 'rb_flex_pct': {0.3: 0.8, 0.4: 0.2},
+ 'use_ownership': {0: 0.3, 1: 0.7},
+ 'wr_flex_pct': {0.5: 0, 0.6: 0.3, 'auto': 0.7}}
 
 try: del d['num']
 except: pass
@@ -189,13 +190,13 @@ for k,v in d.items():
 set_weeks = [
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
 ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
       2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
+      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
 ]
 
 # set_weeks=[14]
@@ -219,12 +220,16 @@ trial_num = max_trial_num + 1
 
 
 def run_weekly_sim(d, week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups):
+    try:
+        rs = RunSim(db_path, week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
+        params = rs.generate_param_list(d)
+        winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=False)
+        return winnings, player_results, params, winnings_list
 
-    rs = RunSim(db_path, week, year, pred_vers, reg_ens_vers, million_ens_vers, std_dev_type, total_lineups)
-    params = rs.generate_param_list(d)
-    winnings, player_results, winnings_list = rs.run_multiple_lineups(params, calc_winnings=True, parallelize=False)
-
-    return winnings, player_results, params, winnings_list
+    finally:
+        # Clean up large objects
+        del rs, params
+        gc.collect()
 
 
 def random_sample_winnings(w, pl, par, wl, total_lineups, sample_lineups):
@@ -248,33 +253,39 @@ def random_sample_winnings(w, pl, par, wl, total_lineups, sample_lineups):
 
 def objective(param_options, pred_vers, reg_ens_vers, std_dev_type, million_ens_vers, total_lineups, sample_lineups, set_weeks, 
               set_years):
+
+    try: 
+        n_jobs = max(psutil.cpu_count() - 1, 1)
     
-    output = Parallel(n_jobs=-1, verbose=0)(
-                                delayed(run_weekly_sim)(param_options, week, year, pred_vers, reg_ens_vers, 
-                                                        million_ens_vers, std_dev_type, total_lineups) for
-                                week, year in zip(set_weeks, set_years)
-                                )
-    total_winnings = []
-    player_results = pd.DataFrame()
-    param_output = []
-    winnings_list = []
-    for w, pl, par, wl in output:
-        if entry_type == 'random_sample': 
-            w, pl, par, wl = random_sample_winnings(w, pl, par, wl, total_lineups, sample_lineups)
-        total_winnings.append(w)
-        player_results = pd.concat([player_results, pl])
-        param_output.append(par)
-        winnings_list.append(wl)
+        output = Parallel(n_jobs=n_jobs, verbose=0, max_nbytes='0.5G')(
+                                    delayed(run_weekly_sim)(param_options, week, year, pred_vers, reg_ens_vers, 
+                                                            million_ens_vers, std_dev_type, total_lineups) for
+                                    week, year in zip(set_weeks, set_years)
+                                    )
+        total_winnings = []
+        player_results = pd.DataFrame()
+        param_output = []
+        winnings_list = []
+        for w, pl, par, wl in output:
+            if entry_type == 'random_sample': 
+                w, pl, par, wl = random_sample_winnings(w, pl, par, wl, total_lineups, sample_lineups)
+            total_winnings.append(w)
+            player_results = pd.concat([player_results, pl])
+            param_output.append(par)
+            winnings_list.append(wl)
 
-    total_winnings = list(np.round(np.array(total_winnings) * 13 / sample_lineups,1))
+        total_winnings = list(np.round(np.array(total_winnings) * 13 / sample_lineups,1))
 
-    print('Total Winnings:', np.sum(total_winnings))
-    win_dict = {f'{week}_{year}': t for week, year ,t in zip(set_weeks, set_years, total_winnings)}
-    print_df = pd.DataFrame(win_dict, index=[0]).T.reset_index()
-    print_df.columns = ['date', 'winnings']
-    print(print_df)
+        print('Total Winnings:', np.sum(total_winnings))
+        win_dict = {f'{week}_{year}': t for week, year ,t in zip(set_weeks, set_years, total_winnings)}
+        print_df = pd.DataFrame(win_dict, index=[0]).T.reset_index()
+        print_df.columns = ['date', 'winnings']
+        print(print_df)
 
-    return total_winnings, player_results, param_output, winnings_list
+        return total_winnings, player_results, param_output, winnings_list
+    
+    finally:
+        gc.collect()
 
 
 def format_output_results(weekly_winnings, set_weeks, set_years, pred_vers, reg_ens_vers, std_dev_type, 
@@ -387,7 +398,7 @@ print('if not qb, other players:', constraint_standard)
 
 #%%
 
-to_delete_num=108
+to_delete_num=127
 
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Results', f'trial_num={to_delete_num}', create_backup=False)
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Lineups', f'trial_num={to_delete_num}', create_backup=False)

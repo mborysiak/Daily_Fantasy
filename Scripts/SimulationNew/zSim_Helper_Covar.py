@@ -7,6 +7,7 @@ from cvxopt.glpk import ilp
 from scipy.stats import beta
 import random
 import sqlite3
+import gc
 
 class FullLineupSim:
     def __init__(self, week, year, conn, pred_vers, reg_ens_vers, million_ens_vers,
@@ -24,6 +25,7 @@ class FullLineupSim:
         self.salary_cap = 50000
         self.covar_type = covar_type
         self.print_results = print_results
+        self.num_pos = 9
         
         
         if self.use_covar: 
@@ -319,7 +321,9 @@ class FullLineupSim:
         
         self.conn = conn
         self.prepare_data(ownership_vers, num_options, pos_or_neg)
-        
+        if wr_flex_pct == 'auto': self.flex_mode = 'auto'
+        else: self.flex_mode = 'fixed'
+
         player_counts = {player: 0 for player in self.player_data['player']}
         successful_iterations = 0
         
@@ -329,8 +333,11 @@ class FullLineupSim:
             success = False
             
             while not success and iters_run < 5:
-
-                self.set_position_counts(wr_flex_pct, rb_flex_pct)
+                
+                self.position_counts = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
+                if self.flex_mode == 'fixed':
+                    self.set_position_counts(float(wr_flex_pct), rb_flex_pct)
+                
                 iters_run += 1
                 if iters_run == 4: 
                     max_overlap = 8
@@ -393,12 +400,6 @@ class FullLineupSim:
 
         self.ownerships = self.get_predictions('pred_ownership', ownership=True, num_options=num_options+1)
 
-    def set_position_counts(self, wr_flex_pct, rb_flex_pct):
-        flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[rb_flex_pct, wr_flex_pct, 1 - rb_flex_pct - wr_flex_pct])
-        # flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[0.37, 0.51, 0.12])
-        self.position_counts = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
-        self.position_counts[flex_pos] += 1
-        self.num_pos = float(np.sum(list(self.position_counts.values())))
 
     def setup_optimization_problem(self, to_add, to_drop, cur_pred_fps, cur_ownership, qb_wr_stack, qb_te_stack, min_opp_team, 
                                    max_teams_lineup, max_salary_remain, max_overlap, prev_qb_wt, prev_def_wt, previous_lineups,
@@ -416,22 +417,59 @@ class FullLineupSim:
 
     def create_objective_function(self, cur_pred_fps):
         return matrix(list(-cur_pred_fps) + [0] * len(self.unique_teams), tc='d')
+    
 
+    def set_position_counts(self, wr_flex_pct, rb_flex_pct):
+        # Base position requirements (without FLEX)
+        flex_pos = np.random.choice(['RB', 'WR', 'TE'], 
+                                p=[rb_flex_pct, wr_flex_pct, 1 - rb_flex_pct - wr_flex_pct])
+        self.position_counts[flex_pos] += 1
+        self.num_pos = 9.0
+
+    
     def create_equality_constraints(self):
         A = []
         b = []
 
-        # Constraint: Exact number of players
+        # Constraint: Exact total number of players (always 9)
         A.append([1.0] * self.n_players + [0.0] * len(self.unique_teams))
-        b.append(self.num_pos)
+        b.append(9.0)  # Explicitly set to 9 players
 
-        # Constraints for exact number of players per position
-        for pos, count in self.position_counts.items():
-            constraint = [1.0 if p == pos else 0.0 for p in self.positions] + [0.0] * len(self.unique_teams)
-            A.append(constraint)
-            b.append(float(count))
+        if self.flex_mode == 'auto':
+            # Exact position requirements for QB and DEF
+            for pos in ['QB', 'DEF']:
+                constraint = [1.0 if p == pos else 0.0 for p in self.positions] + [0.0] * len(self.unique_teams)
+                A.append(constraint)
+                b.append(float(self.position_counts[pos]))
+
+            # Total RB/WR/TE must equal base requirements plus one (7 total)
+            flex_constraint = []
+            for pos in self.positions:
+                if pos in ['RB', 'WR', 'TE']:
+                    flex_constraint.append(1.0)
+                else:
+                    flex_constraint.append(0.0)
+                    
+            flex_constraint.extend([0.0] * len(self.unique_teams))
+            A.append(flex_constraint)
+            base_flex_total = sum([self.position_counts[pos] for pos in ['RB', 'WR', 'TE']])
+            b.append(float(base_flex_total + 1))  # Should equal 7 (6 base + 1 flex)
+        else:
+            # Fixed position constraints
+            for pos, count in self.position_counts.items():
+                constraint = [1.0 if p == pos else 0.0 for p in self.positions] + [0.0] * len(self.unique_teams)
+                A.append(constraint)
+                b.append(float(count))
 
         return matrix(A, tc='d'), matrix(b, tc='d')
+    
+    def flex_constraint(self, G, h):
+        for pos in ['RB', 'WR', 'TE']:
+            constraint = [-1.0 if p == pos else 0.0 for p in self.positions] + [0.0] * len(self.unique_teams)
+            G.append(constraint)
+            h.append(-float(self.position_counts[pos]))
+        return G, h
+
 
     def create_inequality_constraints(self, to_add, to_drop, cur_ownership, n_variables, qb_wr_stack, qb_te_stack, 
                                       min_opp_team, max_teams_lineup, max_salary_remain, max_overlap, prev_qb_wt,
@@ -443,6 +481,7 @@ class FullLineupSim:
         self.add_forced_players_constraint(G, h, n_variables, to_add)
         self.add_excluded_players_constraint(G, h, n_variables, to_drop)
         self.add_qb_dst_constraint(G, h, n_variables)
+        if self.flex_mode == 'auto': self.flex_constraint(G, h)
 
         if len(to_add) <= 7:
             if use_ownership==1: 
@@ -454,6 +493,54 @@ class FullLineupSim:
             self.add_overlap_constraint(G, h, n_variables, max_overlap, previous_lineups, prev_qb_wt, prev_def_wt, overlap_constraint)
             
         return matrix(np.array(G), tc='d'), matrix(h, tc='d')
+    
+
+
+    # def set_position_counts(self, wr_flex_pct, rb_flex_pct):
+    #     flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[rb_flex_pct, wr_flex_pct, 1 - rb_flex_pct - wr_flex_pct])
+    #     # flex_pos = np.random.choice(['RB', 'WR', 'TE'], p=[0.37, 0.51, 0.12])
+    #     self.position_counts = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
+    #     self.position_counts[flex_pos] += 1
+    #     self.num_pos = float(np.sum(list(self.position_counts.values())))
+
+
+    # def create_equality_constraints(self):
+    #     A = []
+    #     b = []
+
+    #     # Constraint: Exact number of players
+    #     A.append([1.0] * self.n_players + [0.0] * len(self.unique_teams))
+    #     b.append(self.num_pos)
+
+    #     # Constraints for exact number of players per position
+    #     for pos, count in self.position_counts.items():
+    #         constraint = [1.0 if p == pos else 0.0 for p in self.positions] + [0.0] * len(self.unique_teams)
+    #         A.append(constraint)
+    #         b.append(float(count))
+
+    #     return matrix(A, tc='d'), matrix(b, tc='d')
+
+    # def create_inequality_constraints(self, to_add, to_drop, cur_ownership, n_variables, qb_wr_stack, qb_te_stack, 
+    #                                   min_opp_team, max_teams_lineup, max_salary_remain, max_overlap, prev_qb_wt,
+    #                                   prev_def_wt, previous_lineups, use_ownership, overlap_constraint):
+    #     G = []
+    #     h = []
+
+    #     self.add_salary_constraint(G, h, max_salary_remain)
+    #     self.add_forced_players_constraint(G, h, n_variables, to_add)
+    #     self.add_excluded_players_constraint(G, h, n_variables, to_drop)
+    #     self.add_qb_dst_constraint(G, h, n_variables)
+
+    #     if len(to_add) <= 7:
+    #         if use_ownership==1: 
+    #             print('Using ownership')
+    #             self.add_ownership_constraint(G, h, cur_ownership)
+    #         self.add_stacking_constraints(G, h, n_variables, qb_wr_stack, qb_te_stack)
+    #         self.add_opposing_team_constraint(G, h, n_variables, min_opp_team)
+    #         self.add_max_teams_constraint(G, h, n_variables, max_teams_lineup)
+    #         self.add_overlap_constraint(G, h, n_variables, max_overlap, previous_lineups, prev_qb_wt, prev_def_wt, overlap_constraint)
+            
+    #     return matrix(np.array(G), tc='d'), matrix(h, tc='d')
     
 
     def add_salary_constraint(self, G, h, max_salary_remain):
@@ -835,6 +922,7 @@ class RunSim:
                 i += 1  # Increment the iteration counter    
 
         if to_add is None: to_add = []
+        del sim; gc.collect()
         return to_add
     
     def run_multiple_lineups(self, params, calc_winnings=False, parallelize=False, n_jobs=-1, verbose=0):
@@ -874,8 +962,8 @@ class RunSim:
 
         return all_lineups
 
-#%%
-# week = 6
+# #%%
+# week = 11
 # year = 2024
 # total_lineups = 10
 
@@ -911,8 +999,15 @@ class RunSim:
 #     'min_opp_team': {0: 0.3, 1: 0.5, 2: 0.2},
 #     'prev_qb_wt': {1: 1},
 #     'prev_def_wt': {9: 1},
-#     'wr_flex_pct': {0: 1},
-#     'rb_flex_pct': {1: 1},
+#     'wr_flex_pct': {
+#                     0: 0,
+#                     0.6: 0.5,
+#                     'auto': 0.5
+#                     },
+#     'rb_flex_pct': {
+#                     0.4: 0,
+#                     0: 1
+#                     },
 #     'use_ownership': {0: 0.5, 1: 0.5},
 #     'overlap_constraint': {'div_two': 1, 'minus_one': 0., 'plus_wts': 0, 'standard': 0},
 #     }
@@ -931,22 +1026,19 @@ class RunSim:
 
 # #%%
 
-# sim, p = rs.setup_sim(params[1])
+# sim, p = rs.setup_sim(params[0])
 
 # to_add = []
 # to_drop = []
 # previous_lineups = []
-# rs.run_single_iter(sim, p, to_add, to_drop,previous_lineups)
+# l1, l2 = rs.run_single_iter(sim, p, to_add, to_drop,previous_lineups)
+# l2 = pd.merge(l2, sim.player_data[['player', 'pos']], on='player')
+# print(l2.groupby('pos').size())
+# l2
 
 # #%%
 
 # rs.run_multiple_lineups(params, calc_winnings=True)
-
-# # %%
-
-# # %%
-
+# #%%
 # to_add = rs.run_full_lineup(params[1], to_add=[], to_drop=[], previous_lineups=previous_lineups)
-# # %%
 # to_add
-# # %%
