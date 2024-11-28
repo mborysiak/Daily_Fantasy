@@ -17,7 +17,7 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2024
-week=12
+week=13
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -115,8 +115,8 @@ def create_database_output(my_team):
 
 lineups_list = []
 lineup_info = pd.DataFrame()
-best_trials = [109, 121]
-for bt in (109,121):
+best_trials = [126]# [109, 121]
+for bt in (126,):#(109,121):
 
     opt_params = pull_best_params(bt)
     try:del opt_params['lineups_per_param']

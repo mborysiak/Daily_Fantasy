@@ -817,7 +817,8 @@ class RunSim:
                                         FROM Contest_Results
                                         WHERE week={week}
                                             AND year={year}
-                                            AND Contest='Million' ''', results_conn)
+                                            AND Contest='Million'
+                                            AND `Rank`<75000 ''', results_conn)
         return prizes
     
     @staticmethod
@@ -1042,3 +1043,5 @@ class RunSim:
 # #%%
 # to_add = rs.run_full_lineup(params[1], to_add=[], to_drop=[], previous_lineups=previous_lineups)
 # to_add
+
+# # %%

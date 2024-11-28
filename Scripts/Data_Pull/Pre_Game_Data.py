@@ -13,7 +13,7 @@ import yaml
 
 # +
 set_year = 2024
-set_week = 12
+set_week = 13
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -995,7 +995,7 @@ base_url = 'https://api.the-odds-api.com/v4/'
 odds_api = OddsAPIPull(set_week, set_year, api_key, base_url, sport, region, odds_format, date_format, historical=pull_historical)
 
 start_time = dt.datetime.now()
-end_time = (start_time + dt.timedelta(hours=3.5*24))
+end_time = (start_time + dt.timedelta(hours=3*24))
 
 events_df = odds_api.pull_events(start_time=start_time, end_time=end_time)
 event_ids = tuple(events_df.event_id.unique()) + (0,)
@@ -1035,6 +1035,7 @@ dm.write_to_db(team_props, 'Pre_TeamData', 'Game_Odds', 'append')
 event_ids = tuple(player_props.event_id.unique()) + (0,)
 dm.delete_from_db('Pre_PlayerData', 'Game_Odds', f"week={set_week} and year={set_year} and event_id IN {event_ids}", create_backup=False)
 dm.write_to_db(player_props, 'Pre_PlayerData', 'Game_Odds', 'append')
+
 
 # %%
 

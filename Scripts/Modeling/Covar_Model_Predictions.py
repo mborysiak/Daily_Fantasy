@@ -372,7 +372,7 @@ covar_type = 'team_points_trunc'
 #     2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
 # ]
 
-set_weeks = [12]
+set_weeks = [13]
 set_years = [2024]
 
 pred_versions = [

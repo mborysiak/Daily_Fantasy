@@ -137,14 +137,14 @@ if manual_adjust:
     model_vers = {'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
                 'pred_vers': 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb',
                 'reg_ens_vers': 'random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3',
-                'std_dev_type': 'spline_class80_q80_matt0_brier1_kfold3',
+                'std_dev_type': 'spline_pred_class80_q80_matt0_brier1_kfold3',
     }
     d = {'covar_type': {'kmeans_pred_trunc': 0.0,
                 'kmeans_pred_trunc_new': 0.0,
-                'no_covar': 0.5,
-                'team_points_trunc': 0.5,
+                'no_covar': 0.3,
+                'team_points_trunc': 0.7,
                 'team_points_trunc_avgproj': 0.0},
- 'full_model_rel_weight': {0.2: 0.5, 5: 0.5},
+ 'full_model_rel_weight': {0.2: 0.3, 5: 0.7},
  'lineups_per_param': {1: 1.0},
  'max_overlap': {3: 0.0, 5: 0.0, 7: 0.0, 8: 1.0, 9: 0.0, 11: 0.0, 13: 0.0},
  'max_salary_remain': {500: 0.0, 1000: 1.0},
@@ -156,17 +156,17 @@ if manual_adjust:
  'overlap_constraint': {'standard': 1.0},
  'ownership_vers': {'mil_div_standard_ln': 0.0,
                     'mil_only': 0.0,
-                    'mil_times_standard_ln': 0.7,
-                    'standard_ln': 0.3},
+                    'mil_times_standard_ln': 0.5,
+                    'standard_ln': 0.5},
  'ownership_vers_variable': {0: 1.0, 1: 0.0},
  'pos_or_neg': {1: 1.0},
  'prev_def_wt': {1: 1.0},
  'prev_qb_wt': {1: 1.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.0},
- 'qb_te_stack': {0: 0.3, 1: 0.7},
- 'qb_wr_stack': {0: 0.1, 1: 0.9, 2: 0.0},
- 'rb_flex_pct': {0.3: 0.8, 0.4: 0.2},
+ 'qb_te_stack': {0: 0.4, 1: 0.6},
+ 'qb_wr_stack': {0: 0, 1: 1, 2: 0.0},
+ 'rb_flex_pct': {0.3: 0.7, 0.4: 0.3},
  'use_ownership': {0: 0.3, 1: 0.7},
- 'wr_flex_pct': {0.5: 0, 0.6: 0.3, 'auto': 0.7}}
+ 'wr_flex_pct': {0.5: 0, 0.6: 0.7, 'auto': 0.3}}
 
 try: del d['num']
 except: pass
@@ -190,13 +190,13 @@ for k,v in d.items():
 set_weeks = [
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
       2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
+      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
 ]
 
 # set_weeks=[14]
@@ -255,9 +255,8 @@ def objective(param_options, pred_vers, reg_ens_vers, std_dev_type, million_ens_
               set_years):
 
     try: 
-        n_jobs = max(psutil.cpu_count() - 1, 1)
-    
-        output = Parallel(n_jobs=n_jobs, verbose=0, max_nbytes='0.5G')(
+
+        output = Parallel(n_jobs=12, verbose=0, max_nbytes='0.5G')(
                                     delayed(run_weekly_sim)(param_options, week, year, pred_vers, reg_ens_vers, 
                                                             million_ens_vers, std_dev_type, total_lineups) for
                                     week, year in zip(set_weeks, set_years)
@@ -398,7 +397,7 @@ print('if not qb, other players:', constraint_standard)
 
 #%%
 
-to_delete_num=127
+to_delete_num=130
 
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Results', f'trial_num={to_delete_num}', create_backup=False)
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Lineups', f'trial_num={to_delete_num}', create_backup=False)
