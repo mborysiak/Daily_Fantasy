@@ -1,15 +1,19 @@
 ﻿Player,Position,Injuries,Practice Status,Game Status
-Ryan Bates,G,Concussion,Limited Participation in Practice,Out
+Ryan Bates,G,Concussion,Did Not Participate In Practice,Out
 Elijah Hicks,S,Ankle,Did Not Participate In Practice,Out
 Lions,,,,
 Player,Position,Injuries,Practice Status,Game Status
 Terrion Arnold,CB,,Full Participation in Practice,
 Carlton Davis,CB,"Knee, Thumb",Did Not Participate In Practice,Out
 Taylor Decker,T,Knee,Did Not Participate In Practice,Out
-David Montgomery,RB,Shoulder,Limited Participation in Practice,Questionable
+David Montgomery,RB,Shoulder,Full Participation in Practice,Questionable
+Levi Onwuzurike,DE,Hamstring,,Out
+Joshua Paschal,DE,Knee,,Out
 Kalif Raymond,WR,Foot,Did Not Participate In Practice,Out
 D.J. Reader,DT,,Full Participation in Practice,
-Amon-Ra St. Brown,WR,Knee,Limited Participation in Practice,Questionable
+Malcolm Rodriguez,LB,Knee,,Questionable
+Amon-Ra St. Brown,WR,Knee,Full Participation in Practice,Questionable
+Mekhi Wingo,DT,Knee,,Questionable
 4:30 PM,,,,
 EST,,,,
 ,,,,
@@ -18,43 +22,46 @@ EST,,,,
 ,,,,
 Giants,,,,
 ,,,,
-(2-9),,,,
+(2-10),,,,
 ,,,,
 Cowboys,,,,
 ,,,,
-(4-7),,,,
+(5-7),,,,
 Giants,,,,
 Player,Position,Injuries,Practice Status,Game Status
 Deonte Banks,CB,Rib,Limited Participation in Practice,Questionable
-DJ Davidson,DT,,Limited Participation in Practice,
-Tommy DeVito,QB,Right Forearm,Limited Participation in Practice,Questionable
+DJ Davidson,DT,Shoulder,Limited Participation in Practice,Questionable
+Tommy DeVito,QB,Right Forearm,Did Not Participate In Practice,Questionable
 Jermaine Eluemunor,T,Quadricep,Did Not Participate In Practice,Out
 Theo Johnson,TE,,Limited Participation in Practice,
-Dexter Lawrence,DT,,Full Participation in Practice,
+Dexter Lawrence,DT,Elbow,Full Participation in Practice,Out
 Micah McFadden,LB,,Limited Participation in Practice,
 Evan Neal,T,,Limited Participation in Practice,
 Tyler Nubin,S,,Limited Participation in Practice,
+Rakeem Nunez-Roches,DT,Neck,,Out
 Azeez Ojulari,DE,,Did Not Participate In Practice,
 Armon Watts,DT,Shoulder,Did Not Participate In Practice,Out
 Cowboys,,,,
 Player,Position,Injuries,Practice Status,Game Status
-DaRon Bland,CB,,Limited Participation in Practice,
+DaRon Bland,CB,,Full Participation in Practice,
+Josh Butler,CB,Knee,,Out
 Caelen Carson,CB,Shoulder,Did Not Participate In Practice,Out
-Brandin Cooks,WR,,Limited Participation in Practice,
-Trevon Diggs,CB,"Groin, Knee",Did Not Participate In Practice,Questionable
+Brandin Cooks,WR,,Full Participation in Practice,
+Trevon Diggs,CB,"Groin, Knee",Limited Participation in Practice,Questionable
 Chuma Edoga,T,,Full Participation in Practice,
 Jake Ferguson,TE,Concussion,Did Not Participate In Practice,Out
-Tyler Guyton,T,,Full Participation in Practice,
+Tyler Guyton,T,"Ankle, Knee",Full Participation in Practice,Questionable
 Eric Kendricks,LB,"Groin, Shoulder",Did Not Participate In Practice,Questionable
 Marshawn Kneeland,DE,Knee,Did Not Participate In Practice,Doubtful
-CeeDee Lamb,WR,,Limited Participation in Practice,
+CeeDee Lamb,WR,,Full Participation in Practice,
 Jourdan Lewis,CB,,Full Participation in Practice,
 Hunter Luepke,FB,,Full Participation in Practice,
 Zack Martin,G,"Ankle, Shoulder",Did Not Participate In Practice,Out
 Asim Richards,T,Ankle,Did Not Participate In Practice,Out
-Cooper Rush,QB,,Limited Participation in Practice,
-Tyler Smith,G,,Limited Participation in Practice,
-Nick Vigil,LB,Foot,Did Not Participate In Practice,Questionable
+Cooper Rush,QB,,Full Participation in Practice,
+Tyler Smith,G,,Full Participation in Practice,
+Juanyeh Thomas,S,Knee,,Out
+Nick Vigil,LB,Foot,Limited Participation in Practice,Questionable
 8:20 PM,,,,
 EST,,,,
 ,,,,
@@ -63,39 +70,44 @@ EST,,,,
 ,,,,
 Dolphins,,,,
 ,,,,
-(5-6),,,,
+(5-7),,,,
 ,,,,
 Packers,,,,
 ,,,,
-(8-3),,,,
+(9-3),,,,
 Dolphins,,,,
 Player,Position,Injuries,Practice Status,Game Status
-Terron Armstead,T,Knee,Did Not Participate In Practice,Questionable
+Terron Armstead,T,Knee,Limited Participation in Practice,Questionable
 Tyus Bowser,LB,"Knee, Calf",Did Not Participate In Practice,Out
-Calais Campbell,DE,,Limited Participation in Practice,
+Calais Campbell,DE,,Full Participation in Practice,
 Kendall Fuller,CB,Concussion,Did Not Participate In Practice,Out
 Julian Hill,TE,,Full Participation in Practice,
-Tyreek Hill,WR,,Did Not Participate In Practice,
+Tyreek Hill,WR,,Full Participation in Practice,
 Jevon Holland,S,,Full Participation in Practice,
-Alec Ingold,FB,,Limited Participation in Practice,
-Benito Jones,DT,,Limited Participation in Practice,
+Alec Ingold,FB,,Full Participation in Practice,
+Benito Jones,DT,,Full Participation in Practice,
 Robert Jones,G,,Full Participation in Practice,
-Jordan Poyer,S,,Limited Participation in Practice,
-Jalen Ramsey,CB,,Limited Participation in Practice,
+Kader Kohou,CB,"Back, gameday concussion protocol evaluation",,Questionable
+Kendall Lamm,T,"Elbow, Back",,Questionable
+Jordan Poyer,S,,Full Participation in Practice,
+Jalen Ramsey,CB,,Full Participation in Practice,
+Cam Smith,CB,Shoulder,,Out
 Anthony Walker,LB,Hamstring,Did Not Participate In Practice,Out
-Isaiah Wynn,G,,Limited Participation in Practice,
+Isaiah Wynn,G,,Full Participation in Practice,
 Packers,,,,
 Player,Position,Injuries,Practice Status,Game Status
 Jaire Alexander,CB,Knee,Did Not Participate In Practice,Out
+Corey Ballentine,CB,Knee,,Out
 Kenny Clark,DT,,Full Participation in Practice,
 Edgerrin Cooper,LB,Hamstring,Did Not Participate In Practice,Out
 Romeo Doubs,WR,Concussion,Did Not Participate In Practice,Out
-John FitzPatrick,TE,Back,Did Not Participate In Practice,Questionable
-Josh Jacobs,RB,,Limited Participation in Practice,
+John FitzPatrick,TE,Back,Limited Participation in Practice,Questionable
+Josh Jacobs,RB,,Full Participation in Practice,
 Elgton Jenkins,G,,Full Participation in Practice,
-Isaiah McDuffie,LB,Ankle,Did Not Participate In Practice,Questionable
-Xavier McKinney,S,,Did Not Participate In Practice,
-Josh Myers,C,Pectoral,Limited Participation in Practice,Questionable
+Isaiah McDuffie,LB,Ankle,Limited Participation in Practice,Questionable
+Xavier McKinney,S,,Full Participation in Practice,
+Arron Mosby,DE,Concussion,,Questionable
+Josh Myers,C,Pectoral,Full Participation in Practice,Questionable
 Rasheed Walker,T,,Full Participation in Practice,
 "FRIDAY, NOVEMBER 29TH",,,,
 3:00 PM,,,,
@@ -106,32 +118,485 @@ Prime Video,,,,
 ,,,,
 Raiders,,,,
 ,,,,
-(2-9),,,,
+(2-10),,,,
 ,,,,
 Chiefs,,,,
 ,,,,
-(10-1),,,,
+(11-1),,,,
 Raiders,,,,
 Player,Position,Injuries,Practice Status,Game Status
 Jakorian Bennett,CB,,Did Not Participate In Practice,
 Harrison Bryant,TE,,Full Participation in Practice,
-Nate Hobbs,CB,,Did Not Participate In Practice,
+Nate Hobbs,CB,Ankle,Did Not Participate In Practice,Out
 Andre James,C,,Full Participation in Practice,
-Alexander Mattison,RB,,Limited Participation in Practice,
-Jordan Meredith,G,,Limited Participation in Practice,
+Alexander Mattison,RB,Ankle,Limited Participation in Practice,Questionable
+Jordan Meredith,G,,Full Participation in Practice,
 Gardner Minshew,QB,,Did Not Participate In Practice,
 Aidan O'Connell,QB,,Full Participation in Practice,
 Tre Tucker,WR,,Limited Participation in Practice,
-Zamir White,RB,,Did Not Participate In Practice,
+Zamir White,RB,Quadricep,Did Not Participate In Practice,Out
 Cody Whitehair,G,,Full Participation in Practice,
 Chiefs,,,,
 Player,Position,Injuries,Practice Status,Game Status
+Leo Chenal,LB,,Full Participation in Practice,
 Chamarri Conner,S,,Full Participation in Practice,
 Kareem Hunt,RB,,Full Participation in Practice,
-Cam Jones,LB,,Did Not Participate In Practice,
+Cam Jones,LB,Illness,Full Participation in Practice,Questionable
 Charles Omenihu,DE,,Full Participation in Practice,
 Isiah Pacheco,RB,,Full Participation in Practice,
 Christian Roland-Wallace,CB,,Full Participation in Practice,
-Spencer Shrader,K,,Did Not Participate In Practice,
+Spencer Shrader,K,Right Hamstring,Did Not Participate In Practice,Out
 JuJu Smith-Schuster,WR,,Full Participation in Practice,
 Jawaan Taylor,T,,Full Participation in Practice,
+"SUNDAY, DECEMBER 1ST",,,,
+1:00 PM,,,,
+EST,,,,
+,,,,
+FOX,,,,
+,,,,
+,,,,
+Seahawks,,,,
+,,,,
+(6-5),,,,
+,,,,
+Jets,,,,
+,,,,
+(3-8),,,,
+Seahawks,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Pharaoh Brown,TE,,Full Participation in Practice,
+Noah Fant,TE,,Full Participation in Practice,
+AJ Finley,S,Ankle,Limited Participation in Practice,Questionable
+Stone Forsythe,T,Hand,Full Participation in Practice,Out
+Johnathan Hankins,DT,,Did Not Participate In Practice,
+Rayshawn Jenkins,S,,Full Participation in Practice,
+Dre'Mont Jones,LB,,Full Participation in Practice,
+Ernest Jones,LB,,Limited Participation in Practice,
+Tyler Lockett,WR,,Did Not Participate In Practice,
+Abraham Lucas,T,,Did Not Participate In Practice,
+DK Metcalf,WR,,Did Not Participate In Practice,
+Uchenna Nwosu,LB,Thigh,Limited Participation in Practice,Out
+Jarran Reed,DT,,Full Participation in Practice,
+Brady Russell,TE,Foot,Did Not Participate In Practice,Questionable
+Laviska Shenault Jr.,WR,,Full Participation in Practice,
+Laken Tomlinson,G,,Full Participation in Practice,
+Leonard Williams,DT,,Did Not Participate In Practice,
+Jets,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Malachi Corley,WR,,Full Participation in Practice,
+Breece Hall,RB,Knee,Limited Participation in Practice,Questionable
+Jake Hanson,G,Hamstring,Limited Participation in Practice,Questionable
+Morgan Moses,T,,Limited Participation in Practice,
+C.J. Mosley,LB,Neck,Full Participation in Practice,Questionable
+Xavier Newman-Johnson,G,Concussion,Full Participation in Practice,Questionable
+D.J. Reed,CB,,Full Participation in Practice,
+Tyron Smith,T,Neck,Did Not Participate In Practice,Out
+Qwan'tez Stiggers,CB,,Full Participation in Practice,
+Alijah Vera-Tucker,G,,Full Participation in Practice,
+1:00 PM,,,,
+EST,,,,
+,,,,
+CBS,,,,
+,,,,
+,,,,
+Titans,,,,
+,,,,
+(3-8),,,,
+,,,,
+Commanders,,,,
+,,,,
+(7-5),,,,
+Titans,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Chidobe Awuzie,CB,Groin,Limited Participation in Practice,Out
+Jarvis Brownlee Jr.,CB,,Full Participation in Practice,
+Luke Gifford,LB,,Did Not Participate In Practice,
+Justin Hardee,CB,,Limited Participation in Practice,
+Amani Hooker,S,,Full Participation in Practice,
+Arden Key,LB,,Full Participation in Practice,
+Harold Landry,LB,,Full Participation in Practice,
+Roger McCreary,CB,,Limited Participation in Practice,
+Calvin Ridley,WR,,Full Participation in Practice,
+Jeffery Simmons,DT,,Full Participation in Practice,
+Tyjae Spears,RB,Concussion,Full Participation in Practice,Questionable
+Leroy Watson IV,T,Back,Did Not Participate In Practice,Out
+Commanders,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Nick Allegretti,G,,Full Participation in Practice,
+Noah Brown,WR,,Did Not Participate In Practice,
+Austin Ekeler,RB,Concussion,Did Not Participate In Practice,Out
+Zach Ertz,TE,,Did Not Participate In Practice,
+Clelin Ferrell,DE,,Limited Participation in Practice,
+Dante Fowler Jr.,LB,,Limited Participation in Practice,
+Noah Igbinoghene,CB,,Full Participation in Practice,
+Marshon Lattimore,CB,Hamstring,Limited Participation in Practice,Doubtful
+Jordan Magee,LB,,Full Participation in Practice,
+Brian Robinson,RB,,Limited Participation in Practice,
+Andrew Wylie,T,Concussion,Limited Participation in Practice,Out
+1:00 PM,,,,
+EST,,,,
+,,,,
+FOX,,,,
+,,,,
+,,,,
+Texans,,,,
+,,,,
+(7-5),,,,
+,,,,
+Jaguars,,,,
+,,,,
+(2-9),,,,
+Texans,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Azeez Al-Shaair,LB,,Limited Participation in Practice,
+Will Anderson Jr.,DE,,Limited Participation in Practice,
+Denico Autry,DE,,Limited Participation in Practice,
+Nico Collins,WR,,Limited Participation in Practice,
+Foley Fatukasi,DT,Foot,Did Not Participate In Practice,Out
+Blake Fisher,T,,Full Participation in Practice,
+Xavier Hutchinson,WR,Shoulder,Limited Participation in Practice,Questionable
+Shaq Mason,G,,Limited Participation in Practice,
+Jalen Pitre,S,Shoulder,Did Not Participate In Practice,Out
+Teagan Quitoriano,TE,,Limited Participation in Practice,
+Laremy Tunsil,T,,Limited Participation in Practice,
+Jimmie Ward,S,,Full Participation in Practice,
+Jaguars,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Yasir Abdullah,LB,Hamstring,Did Not Participate In Practice,Out
+Tank Bigsby,RB,,Full Participation in Practice,
+Tyson Campbell,CB,,Limited Participation in Practice,
+Trevor Lawrence,QB,Left Shoulder,Limited Participation in Practice,Questionable
+Brandon Scherff,G,,Full Participation in Practice,
+1:00 PM,,,,
+EST,,,,
+,,,,
+FOX,,,,
+,,,,
+,,,,
+Cardinals,,,,
+,,,,
+(6-5),,,,
+,,,,
+Vikings,,,,
+,,,,
+(9-2),,,,
+Cardinals,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Kelvin Beachum,T,,Full Participation in Practice,
+Emari Demercado,RB,Back,Limited Participation in Practice,Questionable
+Darius Robinson,DT,Calf,Limited Participation in Practice,Questionable
+Jalen Thompson,S,Ankle,Limited Participation in Practice,Questionable
+Jonah Williams,T,,Limited Participation in Practice,
+Vikings,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Jonathan Bullard,DT,,Full Participation in Practice,
+Kamu Grugier-Hill,LB,,Full Participation in Practice,
+Patrick Jones II,DE,,Limited Participation in Practice,
+Josh Oliver,TE,Ankle,Did Not Participate In Practice,Out
+Harrison Phillips,DT,,Full Participation in Practice,
+Brandon Powell,WR,,Full Participation in Practice,
+Cam Robinson,T,Foot,Limited Participation in Practice,Questionable
+Andrew Van Ginkel,DE,,Limited Participation in Practice,
+Jay Ward,S,Elbow,Did Not Participate In Practice,Out
+1:00 PM,,,,
+EST,,,,
+,,,,
+CBS,,,,
+,,,,
+,,,,
+Chargers,,,,
+,,,,
+(7-4),,,,
+,,,,
+Falcons,,,,
+,,,,
+(6-5),,,,
+Chargers,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Will Dissly,TE,,Limited Participation in Practice,
+J.K. Dobbins,RB,Knee,Did Not Participate In Practice,Out
+Alohi Gilman,S,Hamstring,Did Not Participate In Practice,Out
+Cam Hart,CB,Ankle,Did Not Participate In Practice,Out
+Khalil Mack,DE,,Full Participation in Practice,
+Denzel Perryman,LB,Groin,Did Not Participate In Practice,Out
+Falcons,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Troy Andersen,LB,,Full Participation in Practice,
+JD Bertrand,LB,,Full Participation in Practice,
+Dee Alford,CB,,Full Participation in Practice,
+Antonio Hamilton,CB,,Limited Participation in Practice,
+Zach Harrison,DE,,Limited Participation in Practice,
+KhaDarel Hodge,WR,,Limited Participation in Practice,
+Mike Hughes,CB,Neck,Limited Participation in Practice,Out
+Matthew Judon,LB,,Limited Participation in Practice,
+Kevin King,CB,,Full Participation in Practice,
+Younghoe Koo,K,,Limited Participation in Practice,
+Nate Landman,LB,,Limited Participation in Practice,
+Chris Lindstrom,G,,Limited Participation in Practice,
+Drake London,WR,,Limited Participation in Practice,
+Jase McClellan,RB,Knee,Limited Participation in Practice,Out
+Darnell Mooney,WR,,Full Participation in Practice,
+Clark Phillips III,CB,,Limited Participation in Practice,
+Casey Washington,WR,,Full Participation in Practice,
+Charlie Woerner,TE,,Full Participation in Practice,
+1:00 PM,,,,
+EST,,,,
+,,,,
+CBS,,,,
+,,,,
+,,,,
+Steelers,,,,
+,,,,
+(8-3),,,,
+,,,,
+Bengals,,,,
+,,,,
+(4-7),,,,
+Steelers,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Montravius Adams,DT,Knee,Limited Participation in Practice,Out
+Keeanu Benton,DT,,Limited Participation in Practice,
+Cameron Heyward,DT,,Did Not Participate In Practice,
+Alex Highsmith,LB,Ankle,Limited Participation in Practice,Doubtful
+Damontae Kazee,S,,Did Not Participate In Practice,
+Larry Ogunjobi,DT,,Full Participation in Practice,
+Isaac Seumalo,G,,Full Participation in Practice,
+Cory Trice Jr.,CB,Hamstring,Limited Participation in Practice,Out
+Bengals,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Joe Bachie,LB,,Limited Participation in Practice,
+Orlando Brown,T,Fibula,Limited Participation in Practice,Questionable
+Joe Burrow,QB,,Full Participation in Practice,
+Tee Higgins,WR,,Limited Participation in Practice,
+B.J. Hill,DT,,Full Participation in Practice,
+Charlie Jones,WR,Groin,Limited Participation in Practice,Doubtful
+Amarius Mims,T,,Limited Participation in Practice,
+Sheldon Rankins,DT,Illness,Did Not Participate In Practice,Out
+Logan Wilson,LB,Knee,Did Not Participate In Practice,Questionable
+1:00 PM,,,,
+EST,,,,
+,,,,
+CBS,,,,
+,,,,
+,,,,
+Colts,,,,
+,,,,
+(5-7),,,,
+,,,,
+Patriots,,,,
+,,,,
+(3-9),,,,
+Colts,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Mo Alie-Cox,TE,,Full Participation in Practice,
+Tanor Bortolini,C,Concussion,Did Not Participate In Practice,Out
+Josh Downs,WR,Shoulder,Did Not Participate In Practice,Out
+Ashton Dulin,WR,Ankle,Did Not Participate In Practice,Out
+Alec Pierce,WR,Foot,Did Not Participate In Practice,Questionable
+Michael Pittman,WR,,Full Participation in Practice,
+Bernhard Raimann,T,,Full Participation in Practice,
+Braden Smith,T,Not injury related - personal matter,Did Not Participate In Practice,Out
+Dalton Tucker,G,,Full Participation in Practice,
+Patriots,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Christian Barmore,DT,,Limited Participation in Practice,
+Demario Douglas,WR,Ankle,Limited Participation in Practice,Questionable
+Kyle Dugger,S,Ankle,Limited Participation in Practice,Questionable
+Daniel Ekuale,DT,,Limited Participation in Practice,
+Christian Elliss,LB,Knee,Limited Participation in Practice,Questionable
+Christian Gonzalez,CB,,Full Participation in Practice,
+Anfernee Jennings,LB,Knee,Limited Participation in Practice,Questionable
+Vederian Lowe,T,Shoulder,Limited Participation in Practice,Questionable
+Marte Mapu,LB,,Full Participation in Practice,
+Jabrill Peppers,S,Knee,Limited Participation in Practice,Questionable
+Jaquelin Roy,DT,Neck,Limited Participation in Practice,Questionable
+Cole Strange,G,Knee,Limited Participation in Practice,Out
+Sione Takitaki,LB,"Knee, Neck",Limited Participation in Practice,Questionable
+Keion White,DE,,Limited Participation in Practice,
+Deatrich Wise,DE,Foot,Limited Participation in Practice,Questionable
+4:05 PM,,,,
+EST,,,,
+,,,,
+FOX,,,,
+,,,,
+,,,,
+Buccaneers,,,,
+,,,,
+(5-6),,,,
+,,,,
+Panthers,,,,
+,,,,
+(3-8),,,,
+Buccaneers,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Mike Evans,WR,,Full Participation in Practice,
+William Gholston,DE,,Full Participation in Practice,
+Troy Hill,CB,"Ankle, Foot",Did Not Participate In Practice,Questionable
+Tykee Smith,S,Knee,Did Not Participate In Practice,Out
+Joe Tryon-Shoyinka,LB,Ankle,Limited Participation in Practice,Doubtful
+Markees Watts,LB,Knee,Full Participation in Practice,Out
+Jordan Whitehead,S,Pectoral,Did Not Participate In Practice,Out
+Tristan Wirfs,T,"Knee, Foot",Limited Participation in Practice,Questionable
+Panthers,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Amare Barno,LB,Knee,Limited Participation in Practice,Questionable
+Jadeveon Clowney,LB,Knee,Did Not Participate In Practice,Questionable
+Jalen Coker,WR,Quadricep,Did Not Participate In Practice,Out
+Caleb Farley,CB,Shoulder,Limited Participation in Practice,Questionable
+Josey Jewell,LB,,Full Participation in Practice,
+Lonnie Johnson,S,,Full Participation in Practice,
+Taylor Moton,T,,Did Not Participate In Practice,
+LaBryan Ray,DE,,Full Participation in Practice,
+A'Shawn Robinson,DE,,Full Participation in Practice,
+Ja'Tavion Sanders,TE,Neck,Did Not Participate In Practice,Out
+Nick Scott,S,Hamstring,Limited Participation in Practice,Questionable
+Adam Thielen,WR,,Full Participation in Practice,
+D.J. Wonnum,LB,,Limited Participation in Practice,
+4:05 PM,,,,
+EST,,,,
+,,,,
+FOX,,,,
+,,,,
+,,,,
+Rams,,,,
+,,,,
+(5-6),,,,
+,,,,
+Saints,,,,
+,,,,
+(4-7),,,,
+Rams,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Rob Havenstein,T,,Full Participation in Practice,
+Tyler Higbee,TE,Knee,Limited Participation in Practice,Out
+Alaric Jackson,T,Foot,Did Not Participate In Practice,Questionable
+KT Leveston,T,Ankle,Full Participation in Practice,Out
+Charles Woods,CB,,Full Participation in Practice,
+Saints,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Tanoh Kpassagnon,DE,Achilles,Full Participation in Practice,Questionable
+Erik McCoy,C,Groin,Did Not Participate In Practice,Questionable
+Foster Moreau,TE,,Limited Participation in Practice,
+Lucas Patrick,G,Calf,Did Not Participate In Practice,Out
+Pete Werner,LB,,Full Participation in Practice,
+Jamaal Williams,RB,Groin,Limited Participation in Practice,Questionable
+4:25 PM,,,,
+EST,,,,
+,,,,
+CBS,,,,
+,,,,
+,,,,
+Eagles,,,,
+,,,,
+(9-2),,,,
+,,,,
+Ravens,,,,
+,,,,
+(8-4),,,,
+Eagles,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Saquon Barkley,RB,,Full Participation in Practice,
+Mekhi Becton,T,,Full Participation in Practice,
+Landon Dickerson,G,,Full Participation in Practice,
+Lane Johnson,T,,Full Participation in Practice,
+Cam Jurgens,G,,Full Participation in Practice,
+Jordan Mailata,T,,Full Participation in Practice,
+Kelee Ringo,CB,,Limited Participation in Practice,
+Darius Slay,CB,Concussion,Did Not Participate In Practice,Out
+DeVonta Smith,WR,Hamstring,Limited Participation in Practice,Questionable
+Josh Sweat,LB,,Full Participation in Practice,
+Ravens,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Travis Jones,DT,,Did Not Participate In Practice,
+Sanoussi Kane,S,,Full Participation in Practice,
+Charlie Kolar,TE,Forearm,Did Not Participate In Practice,Out
+Arthur Maulet,CB,"Calf, Knee",Did Not Participate In Practice,Out
+Michael Pierce,DT,Calf,Limited Participation in Practice,Questionable
+Roquan Smith,LB,,Limited Participation in Practice,
+T.J. Tampa,CB,Ankle,Limited Participation in Practice,Questionable
+Kyle Van Noy,LB,"Hamstring, Neck",Did Not Participate In Practice,Doubtful
+Broderick Washington,DE,,Did Not Participate In Practice,
+8:20 PM,,,,
+EST,,,,
+,,,,
+"NBC, UNIVERSO, TELEXITOS",,,,
+,,,,
+,,,,
+49ers,,,,
+,,,,
+(5-6),,,,
+,,,,
+Bills,,,,
+,,,,
+(9-2),,,,
+49ers,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Aaron Banks,G,Concussion,Did Not Participate In Practice,Out
+Nick Bosa,DE,"Hip, Oblique",Did Not Participate In Practice,Out
+Chris Conley,WR,Knee,Limited Participation in Practice,Questionable
+Jacob Cowing,WR,,Full Participation in Practice,
+Jordan Elliott,DT,Concussion,Did Not Participate In Practice,Out
+Demetrius Flannigan-Fowles,LB,Knee,Did Not Participate In Practice,Questionable
+Kevin Givens,DT,Groin,Limited Participation in Practice,Questionable
+Renardo Green,CB,Neck,Limited Participation in Practice,Questionable
+Dre Greenlaw,LB,Achilles,Limited Participation in Practice,Out
+Deommodore Lenoir,CB,Knee,Did Not Participate In Practice,Out
+Christian McCaffrey,RB,,Full Participation in Practice,
+Dominick Puni,G,,Limited Participation in Practice,
+Brock Purdy,QB,Right Shoulder,Limited Participation in Practice,Questionable
+Charvarius Ward,CB,,Full Participation in Practice,
+Trent Williams,T,Ankle,Did Not Participate In Practice,Out
+Bills,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Terrel Bernard,LB,,Full Participation in Practice,
+Spencer Brown,T,,Full Participation in Practice,
+DeWayne Carter,DT,Wrist,Full Participation in Practice,Questionable
+Keon Coleman,WR,Wrist,Limited Participation in Practice,Questionable
+Amari Cooper,WR,,Full Participation in Practice,
+Kaiir Elam,CB,,Full Participation in Practice,
+Reggie Gilliam,FB,,Full Participation in Practice,
+Tylan Grable,T,Groin,Full Participation in Practice,Out
+Mack Hollins,WR,,Full Participation in Practice,
+DaQuan Jones,DT,,Full Participation in Practice,
+Dalton Kincaid,TE,Knee,Did Not Participate In Practice,Out
+Matt Milano,LB,Biceps,Full Participation in Practice,Questionable
+Quintin Morris,TE,,Full Participation in Practice,
+Taylor Rapp,S,,Full Participation in Practice,
+Curtis Samuel,WR,,Full Participation in Practice,
+Casey Toohill,DE,,Full Participation in Practice,
+Dorian Williams,LB,,Full Participation in Practice,
+"MONDAY, DECEMBER 2ND",,,,
+8:15 PM,,,,
+EST,,,,
+,,,,
+"ESPN, ESPN DEPORTES",,,,
+,,,,
+,,,,
+Browns,,,,
+,,,,
+(3-8),,,,
+,,,,
+Broncos,,,,
+,,,,
+(7-5),,,,
+Browns,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Joel Bitonio,G,,Full Participation in Practice,
+Myles Harden,CB,,Limited Participation in Practice,
+Maurice Hurst,DT,,Full Participation in Practice,
+Germain Ifedi,G,,Limited Participation in Practice,
+Jerry Jeudy,WR,,Full Participation in Practice,
+Greg Newsome II,CB,,Limited Participation in Practice,
+Geoff Swaim,TE,,Did Not Participate In Practice,
+Juan Thornhill,S,,Did Not Participate In Practice,
+Cedric Tillman,WR,,Did Not Participate In Practice,
+Jedrick Wills,T,,Did Not Participate In Practice,
+Broncos,,,,
+Player,Position,Injuries,Practice Status,Game Status
+Zach Allen,DE,,Full Participation in Practice,
+John Franklin-Myers,DE,,Limited Participation in Practice,
+Brandon Jones,S,,Full Participation in Practice,
+P.J. Locke,S,,Full Participation in Practice,
+Riley Moss,CB,,Did Not Participate In Practice,
+Bo Nix,QB,,Limited Participation in Practice,
+Josh Reynolds,WR,,Full Participation in Practice,

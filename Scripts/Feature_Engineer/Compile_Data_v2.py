@@ -2972,8 +2972,6 @@ oof_data['full_hold'].plot.scatter(x='pred', y='y_act')
 # try: show_calibration_curve(oof_data['full_hold'].y_act, oof_data['full_hold'].pred, n_bins=6)
 # except: pass
 
-#%%
-
 oof_data['full_hold'].sort_values(by='pred', ascending=False).iloc[:50]
 # oof_data['full_hold'][(oof_data['full_hold'].pred >15) & (oof_data['full_hold'].y_act < 7)]
 
@@ -2988,29 +2986,33 @@ pred[['player', 'year', 'pred']].sort_values(by='pred', ascending=False).iloc[:3
 
 # %%
 
+
 import matplotlib.pyplot as plt
 
-pipeline = best_models[0]
-pipeline.fit(X,y)
-# Extract the coefficients
-log_reg = pipeline.named_steps[m]
+for i in range(4):
+    pipeline = best_models[i]
+    pipeline.fit(X,y)
+    # Extract the coefficients
+    log_reg = pipeline.named_steps[m]
 
-try:
-    log_reg.coef_.shape[1]
-    coefficients = log_reg.coef_[0]
-except: 
     try:
-        coefficients = log_reg.coef_
-    except:
-        coefficients = log_reg.feature_importances_
+        log_reg.coef_.shape[1]
+        coefficients = log_reg.coef_[0]
+    except: 
+        try:
+            coefficients = log_reg.coef_
+        except:
+            coefficients = log_reg.feature_importances_
 
-# Get the feature names from SelectKBest
-rand_features = pipeline.steps[0][1].columns
-X_out = X[rand_features]
-selected_features = pipeline.named_steps[kb].get_support(indices=True)
+    # Get the feature names from SelectKBest
+    rand_features = pipeline.steps[0][1].columns
+    X_out = X[rand_features]
+    selected_features = pipeline.named_steps[kb].get_support(indices=True)
 
-coef = pd.Series(coefficients, index=X_out.columns[selected_features])
-coef[np.abs(coef) > 0.01].sort_values().plot(kind = 'barh', figsize=(8, 30))
+    coef = pd.Series(coefficients, index=X_out.columns[selected_features])
+    coef = coef[np.abs(coef) > 0.01].sort_values()
+    coef.plot(kind = 'barh', figsize=(8, len(coef)/3))
+    plt.show()
 # %%
 
 

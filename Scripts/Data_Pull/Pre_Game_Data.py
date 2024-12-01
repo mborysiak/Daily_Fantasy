@@ -995,7 +995,7 @@ base_url = 'https://api.the-odds-api.com/v4/'
 odds_api = OddsAPIPull(set_week, set_year, api_key, base_url, sport, region, odds_format, date_format, historical=pull_historical)
 
 start_time = dt.datetime.now()
-end_time = (start_time + dt.timedelta(hours=3*24))
+end_time = (start_time + dt.timedelta(hours=3.5*24))
 
 events_df = odds_api.pull_events(start_time=start_time, end_time=end_time)
 event_ids = tuple(events_df.event_id.unique()) + (0,)
@@ -1105,33 +1105,33 @@ month_days = [[11, 21, set_week]]
     # [12, 31, 17]
 # ]
 
-for month, day, set_week in month_days:
-    odds_api = OddsAPIPull(set_week, set_year, api_key, base_url, sport, region, odds_format, date_format, historical=pull_historical)
+# for month, day, set_week in month_days:
+#     odds_api = OddsAPIPull(set_week, set_year, api_key, base_url, sport, region, odds_format, date_format, historical=pull_historical)
 
-    start_time = dt.datetime(set_year, month, day, 5, 0, 0)
-    # start_time = dt.datetime.now()
-    end_time = (start_time + dt.timedelta(hours=3*24))
+#     start_time = dt.datetime(set_year, month, day, 5, 0, 0)
+#     # start_time = dt.datetime.now()
+#     end_time = (start_time + dt.timedelta(hours=3*24))
 
-    events_df = odds_api.pull_events(start_time=start_time, end_time=end_time)
-    print(events_df)
-    event_ids = tuple(events_df.event_id.unique()) + (0,)
+#     events_df = odds_api.pull_events(start_time=start_time, end_time=end_time)
+#     print(events_df)
+#     event_ids = tuple(events_df.event_id.unique()) + (0,)
 
-    stats = [
-        'player_pass_attempts', 'player_pass_completions', 'player_pass_interceptions', 'player_pass_longest_completion', 
-         'player_pass_rush_reception_tds', 'player_pass_rush_reception_yds', 'player_pass_tds', 'player_pass_yds', 'player_receptions',
-         'player_receptions', 'player_reception_longest', 'player_reception_yds', 'player_rush_attempts', 'player_rush_longest',
-         'player_rush_reception_tds', 'player_rush_reception_yds', 'player_rush_yds','player_1st_td', 'player_anytime_td', 
-         'player_tds_over', 'player_sacks'
-         ]
+#     stats = [
+#         'player_pass_attempts', 'player_pass_completions', 'player_pass_interceptions', 'player_pass_longest_completion', 
+#          'player_pass_rush_reception_tds', 'player_pass_rush_reception_yds', 'player_pass_tds', 'player_pass_yds', 'player_receptions',
+#          'player_receptions', 'player_reception_longest', 'player_reception_yds', 'player_rush_attempts', 'player_rush_longest',
+#          'player_rush_reception_tds', 'player_rush_reception_yds', 'player_rush_yds','player_1st_td', 'player_anytime_td', 
+#          'player_tds_over', 'player_sacks'
+#          ]
 
-    markets = ','.join(stats)
-    player_props = odds_api.all_market_odds(markets, events_df)
-    print(player_props.head())
-    event_ids = tuple(player_props.event_id.unique()) + (0,)
+#     markets = ','.join(stats)
+#     player_props = odds_api.all_market_odds(markets, events_df)
+#     print(player_props.head())
+#     event_ids = tuple(player_props.event_id.unique()) + (0,)
     
-    dm.delete_from_db('Pre_PlayerData', 'Game_Odds', f'''week={set_week} and year={set_year} and event_id IN {event_ids}  
-                                                         and prop_type IN {tuple(stats)}''', create_backup=False)
-    dm.write_to_db(player_props, 'Pre_PlayerData', 'Game_Odds', 'append')
+#     dm.delete_from_db('Pre_PlayerData', 'Game_Odds', f'''week={set_week} and year={set_year} and event_id IN {event_ids}  
+#                                                          and prop_type IN {tuple(stats)}''', create_backup=False)
+#     dm.write_to_db(player_props, 'Pre_PlayerData', 'Game_Odds', 'append')
 
 #%%
 # ## PFF Matchups

@@ -115,8 +115,8 @@ def create_database_output(my_team):
 
 lineups_list = []
 lineup_info = pd.DataFrame()
-best_trials = [126]# [109, 121]
-for bt in (126,):#(109,121):
+best_trials = [121, 109]
+for bt in tuple(best_trials):
 
     opt_params = pull_best_params(bt)
     try:del opt_params['lineups_per_param']
