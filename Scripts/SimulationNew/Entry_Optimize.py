@@ -106,13 +106,13 @@ def pull_params_version(best_trial):
     return vers
 
 entry_type = 'random_sample'
-total_lineups = 20
+total_lineups = 25
 sample_lineups = 20
 
-trial_repeat = 121
-model_notes = f'Trial {trial_repeat} Auto Flex, Sample {sample_lineups}, Total {total_lineups}'
+trial_repeat = 126
+model_notes = f'Trial {trial_repeat}, Sample {sample_lineups}, Total {total_lineups}'
 num_rank = None
-manual_adjust = True
+manual_adjust = False
 
 if trial_repeat is not None:
     d = pull_best_params(trial_repeat)
@@ -141,32 +141,32 @@ if manual_adjust:
     }
     d = {'covar_type': {'kmeans_pred_trunc': 0.0,
                 'kmeans_pred_trunc_new': 0.0,
-                'no_covar': 0.3,
-                'team_points_trunc': 0.7,
+                'no_covar': 0.4,
+                'team_points_trunc': 0.6,
                 'team_points_trunc_avgproj': 0.0},
  'full_model_rel_weight': {0.2: 0.3, 5: 0.7},
  'lineups_per_param': {1: 1.0},
  'max_overlap': {3: 0.0, 5: 0.0, 7: 0.0, 8: 1.0, 9: 0.0, 11: 0.0, 13: 0.0},
  'max_salary_remain': {500: 0.0, 1000: 1.0},
  'max_teams_lineup': {4: 0.0, 5: 0.0, 6: 0.0, 8: 1.0},
- 'min_opp_team': {0: 1.0, 1: 0.0, 2: 0.0},
- 'num_avg_pts': {10: 0.0, 25: 0.0, 50: 0.0, 100: 0.0, 200: 0.0, 500: 1.0},
+ 'min_opp_team': {0: 0.8, 1: 0.2, 2: 0.0},
+ 'num_avg_pts': {10: 0.0, 25: 0.0, 50: 0.0, 100: 0.0, 200: 0.0, 500: 0.5, 1000: 0.5},
  'num_iters': {1: 1.0},
- 'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 1.0},
+ 'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 0.5, 3000: 0.5},
  'overlap_constraint': {'standard': 1.0},
  'ownership_vers': {'mil_div_standard_ln': 0.0,
                     'mil_only': 0.0,
-                    'mil_times_standard_ln': 0.5,
-                    'standard_ln': 0.5},
+                    'mil_times_standard_ln': 0.4,
+                    'standard_ln': 0.6},
  'ownership_vers_variable': {0: 1.0, 1: 0.0},
  'pos_or_neg': {1: 1.0},
  'prev_def_wt': {1: 1.0},
  'prev_qb_wt': {1: 1.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.0},
  'qb_te_stack': {0: 0.4, 1: 0.6},
  'qb_wr_stack': {0: 0, 1: 1, 2: 0.0},
- 'rb_flex_pct': {0.3: 0.7, 0.4: 0.3},
- 'use_ownership': {0: 0.3, 1: 0.7},
- 'wr_flex_pct': {0.5: 0, 0.6: 0.7, 'auto': 0.3}}
+ 'rb_flex_pct': {0.25: 0.5, 0.35: 0.5, 0.4: 0},
+ 'use_ownership': {0: 0.4, 1: 0.6},
+ 'wr_flex_pct': {0.5: 0, 0.6: 0.5, 0.65: 0.5, 'auto': 0}}
 
 try: del d['num']
 except: pass
@@ -190,13 +190,13 @@ for k,v in d.items():
 set_weeks = [
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
 ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
       2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
+      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
 ]
 
 # set_weeks=[14]
@@ -397,7 +397,7 @@ print('if not qb, other players:', constraint_standard)
 
 #%%
 
-to_delete_num=130
+to_delete_num=146
 
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Results', f'trial_num={to_delete_num}', create_backup=False)
 dm.delete_from_db('ResultsNew', 'Entry_Optimize_Lineups', f'trial_num={to_delete_num}', create_backup=False)

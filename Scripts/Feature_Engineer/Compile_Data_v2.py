@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2024
-WEEK = 13
+WEEK = 14
 
 import pandas as pd 
 import numpy as np
@@ -2795,7 +2795,7 @@ dm.write_to_db(defense, f'Model_Features_{YEAR}', f'Defense_Data_Week{WEEK}', if
 
 #%%
 
-chk_week = 13
+chk_week = 14
 backfill_chk = dm.read(f'''SELECT player 
                            FROM Backfill_QB_Week{WEEK} 
                            WHERE week={chk_week} AND year={YEAR}
@@ -2819,11 +2819,11 @@ sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).il
 
 from sklearn.metrics import r2_score, mean_squared_error
 
-WEEK = 13
+WEEK = 14
 accuracy = []
 for pos in ['QB', 'RB', 'WR', 'TE']:
     print(pos)
-    df = dm.read(f'''SELECT * FROM Backfill_{pos}_Week{WEEK} WHERE year >= 2023''', f'Model_Features_{YEAR}')
+    df = dm.read(f'''SELECT * FROM Backfill_{pos}_Week{WEEK} WHERE year >= 2024''', f'Model_Features_{YEAR}')
     # player_vegas_stats = get_all_vegas_stats(pos)
     # df = fill_vegas_stats(df, player_vegas_stats, pos)
 

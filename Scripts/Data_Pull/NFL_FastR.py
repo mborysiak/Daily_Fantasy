@@ -87,7 +87,7 @@ data = data.sort_values(by='epa', ascending=False).reset_index(drop=True)
 
 defense = data.copy()
 defense = defense.loc[defense.season_type=='REG'].reset_index(drop=True)
-data = data[(data.play_type.isin(['run', 'pass'])) & \
+data = data[(data.play_type.isin(['run', 'pass', 'qb_kneel'])) & \
             (data.season_type=='REG')].reset_index(drop=True)
 
 #---------------
@@ -122,7 +122,7 @@ cols = ['season', 'week', 'season_type', 'game_id', 'spread_line', 'total_line',
         'rusher_player_age', 'rusher_player_college_name',
         'rusher_player_height', 'rusher_player_weight',
         'passer_player_age', 'passer_player_college_name', 
-        'passer_player_height', 'passer_player_weight']
+        'passer_player_height', 'passer_player_weight', 'two_point_conv_result']
 
 data = data.loc[data.season_type=='REG', cols]
 
@@ -176,6 +176,10 @@ defense['goal_to_go'] = np.where(defense.yardline_100 <= 10, 1, 0)
 defense['goalline'] = np.where(defense.yardline_100 <= 5, 1, 0)
 defense['third_fourth'] = np.where(defense.down.isin([3, 4]), 1, 0)
 
+data['rush_two_point_conv'] = np.where((data.two_point_conv_result=='success') & (data.play_type=='run'), 1, 0)
+data['pass_two_point_conv'] = np.where((data.two_point_conv_result=='success') & (data.play_type=='pass'), 1, 0)
+data.loc[data.two_point_conv_result=='success', 'yards_gained'] = 0
+
 for c_sub in ['red_zone', 'goal_to_go', 'goalline', 'third_fourth']:
     for c_stat in ['yards_gained', 'pass_attempt', 'complete_pass', 'rush_attempt', 'rush_touchdown', 'pass_touchdown',
                    'ep', 'epa', 'wpa', 'cpoe', 'cp', 'tackled_for_loss']:
@@ -208,6 +212,7 @@ rec_sum_cols = ['shotgun', 'no_huddle', 'pass_attempt',
                 'goalline_wpa', 'goalline_cpoe', 'goalline_cp',
                 'third_fourth_yards_gained', 'third_fourth_pass_attempt', 'third_fourth_complete_pass',
                 'third_fourth_ep', 'third_fourth_epa', 'third_fourth_wpa', 'third_fourth_cpoe', 'third_fourth_cp',
+                'pass_two_point_conv'
                 ]
 
 rec_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
@@ -245,12 +250,13 @@ rush_sum_cols = ['shotgun', 'no_huddle', 'rush_attempt', 'first_down',
             'goalline_ep', 'goalline_epa', 'goalline_wpa', 'goalline_tackled_for_loss',
             
             'third_fourth_yards_gained', 'third_fourth_rush_attempt', 'third_fourth_rush_touchdown',
-            'third_fourth_ep', 'third_fourth_epa', 'third_fourth_wpa', 'third_fourth_tackled_for_loss'
+            'third_fourth_ep', 'third_fourth_epa', 'third_fourth_wpa', 'third_fourth_tackled_for_loss',
 
+            'rush_two_point_conv'
             ]
 
 rush_mean_cols = ['td_prob', 'wp', 'wpa', 'ep', 'epa', 'yardline_100',
-             'yards_gained', 'ydstogo']
+                  'yards_gained', 'ydstogo']
 
 gcols =  ['week', 'season', 'posteam', 'rusher_player_name']
 rush_sum = get_agg_stats(data, gcols, rush_sum_cols, 'sum', prefix='rush')
@@ -271,7 +277,8 @@ all_stats['rush_yd_100_bonus'] = np.where(all_stats.rush_yards_gained_sum >= 100
 all_stats['fumble_lost'] = all_stats.rush_fumble_lost_sum + all_stats.rec_fumble_lost_sum
 
 if dbname == 'FastR_Beta':
-    fp_cols = {'rec_complete_pass_sum': 0.5, 
+    fp_cols = {
+                'rec_complete_pass_sum': 0.5, 
                 'rec_yards_gained_sum': 0.1,
                 'rush_yards_gained_sum': 0.1,  
                 'rec_pass_touchdown_sum': 7, 
@@ -281,14 +288,18 @@ if dbname == 'FastR_Beta':
                 'fumble_lost': -2,
                }
 else:
-    fp_cols = {'rec_complete_pass_sum': 1, 
+    fp_cols = {
+                'rec_complete_pass_sum': 1, 
                 'rec_yards_gained_sum': 0.1,
                 'rush_yards_gained_sum': 0.1,  
                 'rec_pass_touchdown_sum': 6, 
                 'rush_rush_touchdown_sum': 6,
                 'rec_yd_100_bonus': 3, 
                 'rush_yd_100_bonus': 3,
-                'fumble_lost': -1}
+                'fumble_lost': -1,
+                'rush_rush_two_point_conv_sum': 2,
+                'rec_pass_two_point_conv_sum': 2
+            }
     
 all_stats = calc_fp(all_stats, fp_cols)
 
@@ -345,6 +356,8 @@ qb_sum_cols = ['shotgun', 'no_huddle', 'pass_attempt',
             'goalline_wpa', 'goalline_cpoe', 'goalline_cp',
             'third_fourth_yards_gained', 'third_fourth_pass_attempt', 'third_fourth_complete_pass',
             'third_fourth_ep', 'third_fourth_epa', 'third_fourth_wpa', 'third_fourth_cpoe', 'third_fourth_cp',
+
+            'pass_two_point_conv'
             ]
 
 qb_mean_cols = ['spread_line', 'total_line', 'vegas_wp', 
@@ -388,7 +401,8 @@ qb['pass_yd_300_bonus'] = np.where(qb.pass_yards_gained_sum >= 300, 1, 0)
 qb['fumble_lost'] = qb.pass_fumble_lost_sum + qb.rush_fumble_lost_sum
 
 if dbname == 'FastR_Beta':
-    fp_cols = {'pass_yards_gained_sum': 0.04, 
+    fp_cols = {
+                'pass_yards_gained_sum': 0.04, 
                 'pass_pass_touchdown_sum': 5, 
                 'pass_interception_sum': -2,
                 'fumble_lost': -2,
@@ -400,14 +414,18 @@ if dbname == 'FastR_Beta':
                 }
 else:
 
-    fp_cols = {'pass_yards_gained_sum': 0.04, 
+    fp_cols = {
+                'pass_yards_gained_sum': 0.04, 
                 'pass_pass_touchdown_sum': 4, 
                 'pass_interception_sum': -1,
                 'fumble_lost': -1,
                 'rush_yards_gained_sum': 0.1, 
                 'rush_rush_touchdown_sum': 6,
                 'rush_yd_100_bonus': 3,
-                'pass_yd_300_bonus': 3}
+                'pass_yd_300_bonus': 3,
+                'rush_rush_two_point_conv_sum': 2,
+                'pass_pass_two_point_conv_sum': 2
+                }
     
 qb = calc_fp(qb, fp_cols)
 
@@ -426,13 +444,16 @@ if dbname == 'FastR_Beta':
 else:
     rush_fp_cols = {'rush_yards_gained_sum': 0.1, 
                     'rush_rush_touchdown_sum': 6,
-                    'rush_yd_100_bonus': 3}
+                    'rush_yd_100_bonus': 3,
+                    'rush_rush_two_point_conv_sum': 2}
 
     pass_fp_cols = {'pass_yards_gained_sum': 0.04, 
                     'pass_pass_touchdown_sum': 4, 
                     'pass_interception_sum': -1,
                     'fumble_lost': -1,
-                    'pass_yd_300_bonus': 3}
+                    'pass_yd_300_bonus': 3,
+                    'pass_pass_two_point_conv_sum': 2
+                    }
 
 qb = calc_fp_qb(qb, rush_fp_cols, 'rush')
 qb = calc_fp_qb(qb, pass_fp_cols, 'pass')
