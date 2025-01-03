@@ -963,10 +963,10 @@ class RunSim:
 
         return all_lineups
 
-# #%%
-# week = 11
+#%%
+# week = 15
 # year = 2024
-# total_lineups = 10
+# total_lineups = 5
 
 # model_vers = {
 #             'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
@@ -982,35 +982,35 @@ class RunSim:
 #                     'no_covar': 0.3,
 #                     'team_points_trunc': 0.7,
 #                     'team_points_trunc_avgproj': 0.0},
-#     'full_model_rel_weight': {0.2: 0.6, 5: 0.4},
+#     'full_model_rel_weight': {0.2: 0.3, 5: 0.7},
 #     'pos_or_neg': {1: 1},
-#     'qb_wr_stack': {0: 0.1, 1: 0.5, 2: 0.4},
-#     'qb_te_stack': {0: 0.7, 1: 0.3},
+#     'qb_wr_stack': {0: 0., 1: 1, 2: 0.},
+#     'qb_te_stack': {0: 0.6, 1: 0.4},
 #     'num_options': {50: 1},
 #     'num_avg_pts': {50: 1},
 #     'num_iters': {1: 1},
 #     'ownership_vers_variable': {0: 1.0, 1: 0},
 #     'ownership_vers': {'mil_div_standard_ln': 0,
-#                         'mil_only': 0.3,
-#                         'mil_times_standard_ln': 0.3,
+#                         'mil_only': 0.,
+#                         'mil_times_standard_ln': 0.6,
 #                         'standard_ln': 0.4},
-#     'max_teams_lineup': {8: 0.4, 6: 0.4, 4: 0.2},
+#     'max_teams_lineup': {8: 1, 6: 0., 4: 0.},
 #     'max_salary_remain': {500: 1},
-#     'max_overlap': {6: 1}, 
-#     'min_opp_team': {0: 0.3, 1: 0.5, 2: 0.2},
+#     'max_overlap': {8: 1}, 
+#     'min_opp_team': {0: 1, 1: 0., 2: 0.},
 #     'prev_qb_wt': {1: 1},
-#     'prev_def_wt': {9: 1},
+#     'prev_def_wt': {1: 1},
 #     'wr_flex_pct': {
 #                     0: 0,
 #                     0.6: 0.5,
 #                     'auto': 0.5
 #                     },
 #     'rb_flex_pct': {
-#                     0.4: 0,
-#                     0: 1
+#                     0.3: 1,
+#                     0: 0
 #                     },
 #     'use_ownership': {0: 0.5, 1: 0.5},
-#     'overlap_constraint': {'div_two': 1, 'minus_one': 0., 'plus_wts': 0, 'standard': 0},
+#     'overlap_constraint': {'div_two': 0, 'minus_one': 0., 'plus_wts': 0, 'standard': 1},
 #     }
 
 # print(f'Running week {week} for year {year}')
@@ -1044,4 +1044,3 @@ class RunSim:
 # to_add = rs.run_full_lineup(params[1], to_add=[], to_drop=[], previous_lineups=previous_lineups)
 # to_add
 
-# # %%

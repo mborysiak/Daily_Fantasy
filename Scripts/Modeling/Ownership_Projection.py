@@ -22,7 +22,7 @@ million_ens_vers = 'random_full_stack_newp_matt0_brier1_include2_kfold3'
 ownership_vers = 'standard_ln'
 
 set_year = 2024
-set_week = 14
+set_week = 17
 contest = 'Million'
 include_dst = True
 run_owner_model = True
@@ -917,3 +917,5 @@ for ownership_vers in ['standard_ln', 'mil_times_standard_ln', 'mil_div_standard
 # val_fdata['ownership_vers'] = ownership_vers
 # dm.delete_from_db('Validations', 'Predicted_Ownership_Validation', f"ownership_vers='{ownership_vers}'", create_backup=False)
 # dm.write_to_db(val_fdata, 'Validations', 'Predicted_Ownership_Validation', 'append')
+
+# %%

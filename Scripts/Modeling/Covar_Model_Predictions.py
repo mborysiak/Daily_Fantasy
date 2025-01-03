@@ -372,7 +372,7 @@ covar_type = 'team_points_trunc'
 #     2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023
 # ]
 
-set_weeks = [14]
+set_weeks = [17]
 set_years = [2024]
 
 pred_versions = [
@@ -397,8 +397,8 @@ std_dev_types = [
                 #  'spline_pred_q80_matt0_brier1_kfold3',
                 #  'spline_class80_q80_matt0_brier1_kfold3',
                   'spline_pred_class80_q80_matt0_brier1_kfold3',
-                 'spline_pred_class80_matt0_brier1_kfold3',
-                 'spline_pred_q80_matt0_brier1_kfold3',
+                #  'spline_pred_class80_matt0_brier1_kfold3',
+                #  'spline_pred_q80_matt0_brier1_kfold3',
                  'spline_class80_q80_matt0_brier1_kfold3',
                  ]
 

@@ -10,10 +10,11 @@ pd.set_option('display.max_columns', 999)
 import shutil as su
 import lxml
 import yaml
+import requests
+from io import StringIO
 
-# +
 set_year = 2024
-set_week = 14
+set_week = 18
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -314,6 +315,20 @@ df = pd.merge(df, player_pos_team, on=['player', 'team', 'pos'])
 dm.delete_from_db('Pre_PlayerData', 'FantasyPros', f"week={set_week} and year={set_year}", create_backup=False)
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyPros', 'append')
 
+teams = dm.read(f'''SELECT player, team, week, year
+                    FROM (
+                    SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
+                                team,
+                                week, 
+                                year,
+                                rank() OVER (PARTITION BY player, year, week
+                                                   ORDER BY  projected_points DESC) rn 
+                    FROM FantasyPros
+                    ) WHERE rn=1''', 'Pre_PlayerData').drop_duplicates()
+
+dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'replace')
+
+
 #%%
 
 def pff_proj(label_pre, label_post, folder, rep=True):
@@ -494,7 +509,7 @@ df = pd.merge(df, player_pos_team, on=['player', 'team', 'position'])
 
 
 check_new_data(df, 'FFA_RawStats', 'Pre_PlayerData')
-dm.delete_from_db('Pre_PlayerData', 'FFA_RawStats', f"week={set_week} AND year={set_year}", create_backup=True)
+dm.delete_from_db('Pre_PlayerData', 'FFA_RawStats', f"week={set_week} AND year={set_year}", create_backup=False)
 cols = dm.read("SELECT * FROM FFA_RawStats", 'Pre_PlayerData').columns
 df = df[cols]
 dm.write_to_db(df, 'Pre_PlayerData', 'FFA_RawStats', 'append')
@@ -519,6 +534,7 @@ dm.write_to_db(output, 'Pre_PlayerData', 'FFToday_Projections', 'append')
 #%%
 
 df = pull_fantasy_data(set_week)
+player_pos_team = player_pos_team.rename(columns={'pos': 'position'})
 df = pd.merge(df, player_pos_team, on=['player', 'team', 'position'])
 
 check_new_data(df, 'FantasyData', 'Pre_PlayerData')
@@ -533,17 +549,18 @@ dm.delete_from_db('Pre_PlayerData', 'FantasyData_Defense', f"week={set_week} AND
 dm.write_to_db(df, 'Pre_PlayerData', 'FantasyData_Defense', 'append')
 
 #%%
-# df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
-# df = format_fantasy_cruncher(df, set_week, set_year)
-# col = dm.read("SELECT * FROM FantasyCruncher", 'Pre_PlayerData').columns
-# df = df[[c for c in df.columns if c in col]]
 
-# dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
-# dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
+df = move_download_to_folder(root_path, 'FantasyCruncher', f'draftkings_NFL_{set_year}-week-{set_week}_players.csv')
+df = format_fantasy_cruncher(df, set_week, set_year)
+col = dm.read("SELECT * FROM FantasyCruncher", 'Pre_PlayerData').columns
+df = df[[c for c in df.columns if c in col]]
+check_new_data(df, 'FantasyCruncher', 'Pre_PlayerData')
+
+dm.delete_from_db('Pre_PlayerData', 'FantasyCruncher', f"week={set_week} AND year={set_year}", create_backup=False)
+dm.write_to_db(df, 'Pre_PlayerData', 'FantasyCruncher', 'append')
 
 #%%
-import requests
-from io import StringIO
+
 
 url = 'https://www.numberfire.com/nfl/fantasy/fantasy-football-projections'
 response = requests.get(url, verify=False)
@@ -995,7 +1012,7 @@ base_url = 'https://api.the-odds-api.com/v4/'
 odds_api = OddsAPIPull(set_week, set_year, api_key, base_url, sport, region, odds_format, date_format, historical=pull_historical)
 
 start_time = dt.datetime.now()
-end_time = (start_time + dt.timedelta(hours=3.5*24))
+end_time = (start_time + dt.timedelta(hours=5*24))
 
 events_df = odds_api.pull_events(start_time=start_time, end_time=end_time)
 event_ids = tuple(events_df.event_id.unique()) + (0,)
@@ -1036,14 +1053,43 @@ event_ids = tuple(player_props.event_id.unique()) + (0,)
 dm.delete_from_db('Pre_PlayerData', 'Game_Odds', f"week={set_week} and year={set_year} and event_id IN {event_ids}", create_backup=False)
 dm.write_to_db(player_props, 'Pre_PlayerData', 'Game_Odds', 'append')
 
+for pos in ['QB', 'RB', 'WR', 'TE']:
+    df = get_all_vegas_stats(pos, set_week, set_year)
+    df = df.dropna(thresh=df.shape[1]*0.5).reset_index(drop=True)
+    dm.write_to_db(df, 'Pre_PlayerData', f'Vegas_Clean_{pos}', 'replace')
 
+#%%
+
+over_lines = dm.read(f'''
+                        SELECT event_id, AVG(point) as over_under 
+                        FROM Game_Odds 
+                        WHERE prop_type='totals' 
+                              AND name='Over'
+                              AND week={set_week}
+                              AND year={set_year}  
+                              AND price > 1.8
+                              AND price < 2.01
+                        GROUP BY event_id 
+                     ''', 'Pre_TeamData')
+
+spread = dm.read(f'''
+                    SELECT event_id, description, AVG(point) as point
+                    FROM Game_Odds 
+                    WHERE prop_type='spreads' 
+                            AND week={set_week}
+                            AND year={set_year}  
+                    GROUP BY event_id, description
+                    ''', 'Pre_TeamData')
+
+spread = pd.pivot_table(spread, index=['event_id', 'description'], values='point').reset_index()
+spread
 # %%
 
 pull_historical = True
 base_url = 'https://api.the-odds-api.com/v4/'
 
 set_year = 2024
-month_days = [[12, 5, set_week]]
+month_days = [[12, 25, set_week]]
 
 # set_year = 2024
 # month_days = [
@@ -1178,23 +1224,6 @@ for t, d in zip(['WR_CB', 'TE', 'Oline_Dline'], [wr_cb, te, ol_dl]):
     dm.delete_from_db('Pre_PlayerData', f'PFF_{t}_Matchups', f"week={set_week} and year={set_year}")
     dm.write_to_db(d, 'Pre_PlayerData', f'PFF_{t}_Matchups', if_exist='append')
 
-
-
-
-#%%
-
-teams = dm.read(f'''SELECT player, team, week, year
-                    FROM (
-                    SELECT CASE WHEN pos!='DST' THEN player ELSE team END player, 
-                                team,
-                                week, 
-                                year,
-                                rank() OVER (PARTITION BY player, year, week
-                                                   ORDER BY  projected_points DESC) rn 
-                    FROM FantasyPros
-                    ) WHERE rn=1''', 'Pre_PlayerData').drop_duplicates()
-
-dm.write_to_db(teams, 'Simulation', 'Player_Teams', 'replace')
 
 
 #%%

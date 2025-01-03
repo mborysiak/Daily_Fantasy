@@ -1,7 +1,7 @@
 #%%
 
 YEAR = 2024
-WEEK = 14
+WEEK = 17
 
 import pandas as pd 
 import numpy as np
@@ -178,6 +178,7 @@ def fantasy_pros_new(pos):
                     FROM FantasyPros 
                     WHERE pos='{pos}' 
                           AND team is NOT NULL
+                          AND year >= 2021
                          ''', 'Pre_PlayerData')
     fp = name_cleanup(fp)
     if pos == 'DST': fp = fp.drop('player', axis=1).rename(columns={'team': 'player'})
@@ -377,40 +378,6 @@ def fantasy_points_projection_def(df):
 
     return df
 
-team_d_map = {
- 'Arizona Cardinals': 'ARI','Arizona': 'ARI','Ari': 'ARI',
- 'Atlanta Falcons': 'ATL','Atlanta': 'ATL','Atl': 'ATL', 'Atl Falcons': 'ATL',
- 'Baltimore Ravens': 'BAL','Baltimore': 'BAL','Bal': 'BAL',
- 'Buffalo Bills': 'BUF','Buffalo': 'BUF','Buf': 'BUF',
- 'Carolina Panthers': 'CAR','Carolina': 'CAR','Car': 'CAR',
- 'Chicago Bears': 'CHI','Chicago': 'CHI','Chi': 'CHI',
- 'Cincinnati Bengals': 'CIN','Cincinnati': 'CIN', 'Cin': 'CIN', 'Cin Bengals': 'CIN',
- 'Cleveland Browns': 'CLE','Cleveland': 'CLE','Cle': 'CLE','Cle Browns': 'CLE',
- 'Dallas Cowboys': 'DAL','Dallas': 'DAL', 'Dal': 'DAL',
- 'Denver Broncos': 'DEN','Denver': 'DEN','Den': 'DEN',
- 'Detroit Lions': 'DET','Detroit': 'DET', 'Det': 'DET',
- 'Green Bay Packers': 'GB','Green Bay': 'GB','Gb': 'GB',
- 'Houston Texans': 'HOU','Houston': 'HOU','Hou': 'HOU',
- 'Indianapolis Colts': 'IND','Indianapolis': 'IND','Ind': 'IND',
- 'Jacksonville Jaguars': 'JAC','Jacksonville': 'JAC','Jac': 'JAC',
- 'Kansas City Chiefs': 'KC','Kansas City': 'KC','Kc': 'KC','Kansas City Cheifs': 'KC',
- 'Los Angeles Chargers': 'LAC','La Chargers': 'LAC','Lac': 'LAC','Los Angeles Chargers Chargers': 'LAC',
- 'Los Angeles Rams Rams': 'LAR','Los Angeles Rams': 'LAR','La Rams': 'LAR','Lar': 'LAR',
- 'Miami Dolphins': 'MIA','Miami': 'MIA','Mia': 'MIA',
- 'Minnesota Vikings': 'MIN','Minnesota': 'MIN','Min': 'MIN',
- 'New England Patriots': 'NE','New England': 'NE','Ne': 'NE',
- 'New Orleans Saints': 'NO','New Orleans': 'NO','No': 'NO', 'Saints': 'NO',
- 'New York Giants': 'NYG','Ny Giants': 'NYG','Nyg': 'NYG',
- 'New York Jets': 'NYJ','Ny Jets': 'NYJ','Nyj': 'NYJ','New York Jets Jets': 'NYJ','New York Giants Giants': 'NYG',
- 'Oakland Raiders': 'LVR','Las Vegas Raiders': 'LVR','Las Vegas': 'LVR','Lvr': 'LVR',
- 'Philadelphia Eagles': 'PHI','Philadelphia': 'PHI','Phi': 'PHI',
- 'Pittsburgh Steelers': 'PIT','Pittsburgh': 'PIT','Pit': 'PIT',
- 'San Francisco 49ers': 'SF','San Francisco': 'SF','Sf': 'SF','San Francisco 49Ers': 'SF',
- 'Seattle Seahawks': 'SEA','Seattle': 'SEA', 'Sea': 'SEA',
- 'Tampa Bay Buccaneers': 'TB','Tampa Bay': 'TB','Tb': 'TB',
- 'Tennessee Titans': 'TEN','Tennessee': 'TEN','Ten': 'TEN',
- 'Washington Redskins': 'WAS','Washington': 'WAS','Was': 'WAS',
- 'Washington Football Team': 'WAS','Washington Commanders': 'WAS'}
 
 def consensus_fill(df, is_dst=False):
 
@@ -2073,273 +2040,9 @@ def non_qb_team_pos_rank():
     return  team_pos_rank[['player', 'pos', 'pos_rank', 'team', 'week', 'year']]
 
 
-def get_stat_constraints(past_data, pos, stat_cols):
-
-    if pos in ('RB', 'WR', 'TE'): filter_str = '(rec_pass_attempt_sum + rush_rush_attempt_sum) > 5'
-    elif pos == 'QB': filter_str = '(pass_pass_attempt_sum + rush_rush_attempt_sum) > 15'
-    else: filter_str = 'week > 0'
-
-    player_data = dm.read(f'''SELECT * 
-                              FROM {pos}_Stats 
-                              WHERE week < 17
-                                        AND season >= 2020
-                                        AND {filter_str}
-                                    ''', 'FastR').rename(columns={'season': 'year'})
-    
-    if pos == 'QB': player_data['rec_pass_touchdown_sum'] = 0
-    if pos == 'Defense': player_data = player_data.rename(columns={'defteam': 'player'})
-    
-    player_data = pd.merge(past_data, player_data, on=['player', 'week', 'year'])
-    stat_mean = player_data[stat_cols].sum(axis=1).mean()
-    stat_std = player_data[stat_cols].sum(axis=1).std()
-    stat_min = player_data[stat_cols].sum(axis=1).min()
-    stat_max = player_data[stat_cols].sum(axis=1).max()
-
-    stat_cv = stat_std / stat_mean
-
-    return stat_mean, stat_cv, stat_min, stat_max
-
-
-def trunc_normal(mean_val, sdev, min_sc, max_sc, num_samples=500):
-
-    import scipy.stats as stats
-
-    # create truncated distribution
-    lower_bound = (min_sc - mean_val) / sdev, 
-    upper_bound = (max_sc - mean_val) / sdev
-    trunc_dist = stats.truncnorm(lower_bound, upper_bound, loc=mean_val, scale=sdev)
-    
-    estimates = trunc_dist.rvs(num_samples)
-
-    return estimates
-
-
-class PlayerPropsCalculator:
-    """
-    Vectorized calculator for player props expected values using 
-    Poisson and Truncated Normal distributions.
-    """
-    
-    def __init__(self, 
-                 max_iterations: int = 20, 
-                 max_lambda: float = 50.0):
-        """
-        Initialize calculator with configuration parameters.
-        
-        Args:
-            max_iterations: Maximum iterations for binary search
-            max_lambda: Maximum lambda value for Poisson
-
-        """
-        self.max_iterations = max_iterations
-        self.max_lambda = max_lambda
-        
-   
-    
-    def calculate_discrete_probabilities_vectorized(self, lambda_params: np.ndarray, 
-                                                  thresholds: np.ndarray) -> Dict[str, np.ndarray]:
-        """
-        Vectorized calculation of discrete probabilities for Poisson.
-        """
-        floor_thresholds = np.floor(thresholds).astype(int)
-        ceil_thresholds = np.ceil(thresholds).astype(int)
-        
-        floor_probs = poisson.cdf(floor_thresholds, lambda_params)
-        ceil_probs = poisson.cdf(ceil_thresholds, lambda_params)
-        weights = ceil_thresholds - thresholds
-        
-        return {
-            'floor_probs': floor_probs,
-            'ceil_probs': ceil_probs,
-            'weights': weights
-        }
-    
-    def find_poisson_parameters_vectorized(self, points: np.ndarray, 
-                                         target_probs: np.ndarray) -> np.ndarray:
-        """
-        Vectorized binary search to find lambda parameters.
-        """
-        low = np.zeros_like(points)
-        high = np.full_like(points, self.max_lambda)
-        
-        for _ in range(self.max_iterations):
-            mid = (low + high) / 2
-            probs = self.calculate_discrete_probabilities_vectorized(mid, points)
-            interpolated_probs = (
-                probs['floor_probs'] * probs['weights'] + 
-                probs['ceil_probs'] * (1 - probs['weights'])
-            )
-            over_probs = 1 - interpolated_probs
-            high = np.where(over_probs > target_probs, mid, high)
-            low = np.where(over_probs <= target_probs, mid, low)
-        
-        return (low + high) / 2
-
-    def calculate_truncnorm_ev_vectorized(self, means: np.ndarray, 
-                                        stds: np.ndarray) -> np.ndarray:
-        """
-        Calculate expected values for truncated normal with configured bounds.
-        """
-        min_value = self.truncnorm_config['min_value']
-        max_value = self.truncnorm_config['max_value']
-        
-        # Calculate normalized bounds
-        a = (min_value - means) / stds
-        b = (max_value - means) / stds
-        
-        # Calculate expected value using truncated normal formula
-        expected_values = truncnorm.mean(a, b, loc=means, scale=stds)
-        
-        return expected_values
-    
-    def process_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Process entire DataFrame of player props using vectorized operations.
-        """
-        required_columns = {'point', 'price', 'prop_type', 'week', 'year'}
-        missing_columns = required_columns - set(df.columns)
-        if missing_columns:
-            raise ValueError(f"Missing required columns: {missing_columns}")
-        
-        result_df = df.copy()
-        result_df['point'] = pd.to_numeric(result_df['point'], errors='coerce')
-        result_df['price'] = pd.to_numeric(result_df['price'], errors='coerce')
-        
-        valid_mask = (
-            ~result_df['point'].isna() & 
-            ~result_df['price'].isna() & 
-            (result_df['price'] > 1) & 
-            (result_df['point'] > 0)
-        )
-        
-        # Initialize columns
-        result_df['ev_poisson'] = np.nan
-        
-        if valid_mask.any():
-            points = result_df.loc[valid_mask, 'point'].values
-            prices = result_df.loc[valid_mask, 'price'].values
-            implied_probs = 1 / prices
-            
-            # Poisson calculations
-            lambda_params = self.find_poisson_parameters_vectorized(points, implied_probs)
-            poisson_evs = lambda_params
-            
-            # Assign results
-            result_df.loc[valid_mask, 'ev_poisson'] = poisson_evs
-        
-        return result_df
-    
-def cleanup_vegas_names(df):
-    df['is_defense'] = 0
-    df.loc[df.description.str.contains('Defense|D/ST'), 'is_defense'] = 1
-    df_def = df[df.is_defense==1].copy()
-    df = df[df.is_defense==0].copy()
-
-    df.description = df.description.apply(dc.name_clean)
-    df_def.description = df_def.description.apply(dc.name_clean).apply(lambda x: x.split('Defense')[0].split('D/St')[0]).str.strip()
-    print('Missing D mappings:', [c for c in df_def.description.unique() if c not in team_d_map.keys()])
-    df_def.description = df_def.description.map(team_d_map)
-
-    df = pd.concat([df, df_def], axis=0)
-    df = df.drop(['is_defense'], axis=1)
-    df = df.rename(columns={'description': 'player'})
-
-    return df
-
-def pull_vegas_stats(prop_types, pos):
-    
-    df = dm.read(f'''SELECT *
-                     FROM Game_Odds
-                     WHERE prop_type IN {prop_types}
-                           AND name IN ('Over', 'Yes')
-                ''', 'Pre_PlayerData')
-    
-    df.loc[df.prop_type == 'player_anytime_td', 'point'] = 0.5
-    df = cleanup_vegas_names(df)
-
-    if pos == 'Defense': 
-        pos = 'DST'
-        player_col = 'team'
-    else: 
-        player_col = 'player'
-    fp = dm.read(f'''
-                    SELECT {player_col} player, week, year
-                    FROM FantasyPros
-                    WHERE pos='{pos}'
-                 ''', 'Pre_PlayerData')
-    
-    df = pd.merge(df, fp, on=['player', 'week', 'year'], how='inner')
-
-    return df
-
 def get_all_vegas_stats(pos):
-
-    pos_stats = {
-    
-    'QB': [
-            [('player_pass_tds', 0), ['pass_pass_touchdown_sum']],
-            [('player_pass_yds', 0), ['pass_yards_gained_sum']],
-            [('player_pass_attempts', 0), ['pass_pass_attempt_sum']],
-            [('player_pass_completions', 0), ['pass_complete_pass_sum']],
-            [('player_pass_interceptions', 0), ['pass_interception_sum']],
-
-            [('player_anytime_td', 'player_tds_over'), ['rush_rush_touchdown_sum', 'rec_pass_touchdown_sum']],
-            [('player_rush_yds', 0),['rush_yards_gained_sum']],
-            [('player_rush_attempts', 0), ['rush_rush_attempt_sum']]
-    ],
-    'RB': [
-            [('player_anytime_td', 'player_tds_over'), ['rush_rush_touchdown_sum', 'rec_pass_touchdown_sum']],
-            [('player_rush_yds', 0), ['rush_yards_gained_sum']],
-            [('player_reception_yds', 0), ['rec_yards_gained_sum']],
-            [('player_rush_attempts', 0), ['rush_rush_attempt_sum']],
-            [('player_receptions', 0), ['rec_complete_pass_sum']]
-        ],
-    'WR': [
-            [('player_anytime_td', 'player_tds_over'), ['rush_rush_touchdown_sum', 'rec_pass_touchdown_sum']],
-            [('player_reception_yds', 0), ['rec_yards_gained_sum']],
-            [('player_rush_attempts', 0), ['rush_rush_attempt_sum']],
-            [('player_receptions', 0), ['rec_complete_pass_sum']],
-            [('player_rush_yds', 0), ['rush_yards_gained_sum']]
-        ],
-    'TE': [
-            [('player_anytime_td', 'player_tds_over'), ['rush_rush_touchdown_sum', 'rec_pass_touchdown_sum']],
-            [('player_reception_yds', 0), ['rec_yards_gained_sum']],
-            [('player_receptions', 0), ['rec_complete_pass_sum']],
-            [('player_rush_yds', 0), ['rush_yards_gained_sum']]
-        ],
-
-    'Defense': [
-        [('player_anytime_td', 'player_tds_over'), ['return_touchdown', 'def_td']]
-        ]
-    }
-
-    if pos == 'Defense':
-        past_data = dm.read(f'''SELECT player, week, year
-                                FROM Defense_Data_Week{WEEK-1}
-                        ''', f'Model_Features_{YEAR}')
-    else:
-        past_data = dm.read(f'''SELECT player, week, year
-                                FROM Backfill_{pos}_Week{WEEK-1}
-                            ''', f'Model_Features_{YEAR}')
-    i = 0
-    for prop_types, stat_cols in pos_stats[pos]:
-        odds = pull_vegas_stats(prop_types, pos)
-        _, stat_cv, stat_min, stat_max = get_stat_constraints(past_data, pos, stat_cols)
-        odds['ev_trunc_norm'] = np.nan
-        for point in odds.point.unique():
-            td_dist = trunc_normal(point, point*stat_cv, stat_min, stat_max, num_samples=10000)
-            odds.loc[odds.point==point, 'ev_trunc_norm'] = np.percentile(td_dist, 100/odds.loc[odds.point==point, 'price'])
-
-        calculator = PlayerPropsCalculator(max_lambda=odds.point.max())
-        odds = calculator.process_dataframe(odds)
-        odds = odds.pivot_table(index=['player', 'year', 'week'], columns='prop_type', values=['ev_trunc_norm', 'ev_poisson']).reset_index()
-        odds.columns = [f"{c[1]}_{c[0]}" if c[1]!='' else c[0] for c in odds.columns]
-        if i == 0: player_vegas_stats = odds.copy()
-        else: player_vegas_stats = pd.merge(player_vegas_stats, odds, on=['player', 'week', 'year'], how='outer')
-        i += 1
-
-    return player_vegas_stats
-
+    df = dm.read(f'''SELECT * FROM Vegas_Clean_{pos} ''', 'Pre_PlayerData')
+    return df
 
 def fill_vegas_stats(df, player_vegas_stats, pos):
 
@@ -2495,7 +2198,7 @@ def qb_pull(rush_or_pass):
 
     df = add_rz_stats_qb(df); print(df.shape[0])
     df = add_qbr(df); print(df.shape[0])
-    df = add_qb_adv(df); print(df.shape[0])
+    # df = add_qb_adv(df); print(df.shape[0])
     df = add_next_gen(df, 'Passing'); print(df.shape[0])
 
     # merge self team and opposing team stats
@@ -2583,11 +2286,11 @@ for pos in ['RB', 'WR', 'TE']:
 
     # add advanced stats
     df = add_rz_stats(df); print(df.shape[0])
-    df = advanced_rec_stats(df)
+    # df = advanced_rec_stats(df)
     if pos in ('WR', 'TE'):
         df = add_next_gen(df, 'Receiving'); print('next_gen', df.shape[0])
     if pos == 'RB': 
-        df = advanced_rb_stats(df)
+        # df = advanced_rb_stats(df)
         df = add_next_gen(df, 'Rushing'); print(df.shape[0])
 
     df = def_pts_allowed(df); print(df.shape[0])
@@ -2731,8 +2434,6 @@ defense = fantasy_points_projection_def(defense)
 defense = etr_projection_def(defense)
 defense = defense.rename(columns={'player': 'defTeam'})
 
-
-
 defense = consensus_fill(defense, is_dst=True)
 defense = fill_ratio_nulls(defense)
 
@@ -2795,7 +2496,7 @@ dm.write_to_db(defense, f'Model_Features_{YEAR}', f'Defense_Data_Week{WEEK}', if
 
 #%%
 
-chk_week = 14
+chk_week = 17
 backfill_chk = dm.read(f'''SELECT player 
                            FROM Backfill_QB_Week{WEEK} 
                            WHERE week={chk_week} AND year={YEAR}
@@ -2819,39 +2520,53 @@ sal[~sal.player.isin(backfill_chk)].sort_values(by='salary', ascending=False).il
 
 from sklearn.metrics import r2_score, mean_squared_error
 
-WEEK = 14
+WEEK = 17
 accuracy = []
-for pos in ['QB', 'RB', 'WR', 'TE']:
+for pos in ['QB', 'RB', 'WR', 'TE', 'Defense']:
     print(pos)
-    df = dm.read(f'''SELECT * FROM Backfill_{pos}_Week{WEEK} WHERE year >= 2024''', f'Model_Features_{YEAR}')
+    if pos == 'Defense': df = dm.read(f'''SELECT * FROM Defense_Data_Week{WEEK} WHERE year >= 2023''', f'Model_Features_{YEAR}')
+    else: df = dm.read(f'''SELECT * FROM Backfill_{pos}_Week{WEEK} WHERE year >= 2023''', f'Model_Features_{YEAR}')
     # player_vegas_stats = get_all_vegas_stats(pos)
     # df = fill_vegas_stats(df, player_vegas_stats, pos)
 
-    pts_cols = ['projected_points', 'fantasyPoints', 'ProjPts', 'ffa_points',# 'fft_proj_pts',
+    pts_cols = ['projected_points', 'fantasyPoints', 'ProjPts', 'ffa_points', 'fc_proj_fantasy_pts_fc',
                 'fdta_proj_points', 'nf_proj_points', 'etr_proj_points', 'fpts_proj_points', 
                 'vegas_proj_points', 'avg_proj_points', 'avg_vegas_proj_points', 'good_avg_proj_points']
     
+    if pos == 'Defense': model_type = 'full_model'
+    else: model_type = 'backfill'
+    
     pred = dm.read(f'''SELECT player, week, year, pred_fp_per_game
-                            FROM Model_Predictions
-                            WHERE model_type = 'backfill'
-                                --AND year=2024
-                                AND std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
-                                AND pos = '{pos}'
-                                AND reg_ens_vers='random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3'
-                                AND pred_vers='sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
-                        ''', 'Simulation')
+                        FROM Model_Predictions
+                        WHERE model_type = '{model_type}'
+                            --AND year=2024
+                            AND std_dev_type = 'spline_class80_q80_matt0_brier1_kfold3'
+                            AND pos = '{pos}'
+                            AND reg_ens_vers='random_full_stack_newp_sera0_rsq0_mse1_include2_kfold3'
+                            AND pred_vers='sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
+                    ''', 'Simulation')
     
     pred = pd.merge(pred, df, on=['player', 'week', 'year'])
-    pred['good_avg_proj_points'] = pred[['etr_proj_points', 'fpts_proj_points', 'vegas_proj_points', 
-                                         'fdta_proj_points', 'projected_points', 'nf_proj_points', 
-                                         ]].mean(axis=1)
+    good_cols = [
+                 'etr_proj_points', 
+                 'fpts_proj_points', 
+                 'vegas_proj_points', 
+                 'fdta_proj_points', 
+                 'projected_points', 
+                 #'nf_proj_points'
+                 ]
+    pred['good_avg_proj_points'] = pred[[c for c in good_cols if c in pred.columns]].mean(axis=1)
     # pred = pred.loc[(pred.year<=2024) & (pred.week!=WEEK)].reset_index(drop=True)
     pts_cols.append('pred_fp_per_game')
     for c in pts_cols:
-        
-        rsq = r2_score(pred.y_act, pred[c])
-        msq = np.sqrt(mean_squared_error(pred.y_act, pred[c]))
-        accuracy.append([pos, c, rsq, msq])
+        try:
+            rsq = r2_score(pred.y_act, pred[c])
+            msq = np.sqrt(mean_squared_error(pred.y_act, pred[c]))
+            accuracy.append([pos, c, rsq, msq])
+        except:
+            rsq = r2_score(pred.y_act, pred.good_avg_proj_points)
+            msq = np.sqrt(mean_squared_error(pred.y_act, pred.good_avg_proj_points))
+            accuracy.append([pos, c, rsq, msq])
 
 accuracy = pd.DataFrame(accuracy).sort_values(by=1, ascending=False)
 accuracy.columns = ['pos', 'pred_source', 'r2', 'rmse']
@@ -2864,7 +2579,7 @@ print(accuracy.groupby('pred_source')['r2'].sum().sort_values(ascending=False))
 print(accuracy.groupby('pred_source')['rmse'].sum().sort_values(ascending=True))
 
 accuracy = accuracy.sort_values(by=['pos', 'r2'], ascending=[True, False])
-accuracy
+accuracy.iloc[:75]
 #%%
 
 from skmodel import SciKitModel

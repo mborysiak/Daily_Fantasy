@@ -50,12 +50,12 @@ def load_data(model_type, set_pos, run_params):
 
     # load data and filter down
     if model_type=='full_model': df = dm.read(f'''SELECT * 
-                                                  FROM {set_pos}_Data{run_params['rush_pass']}_Week{run_params['set_week']}
+                                                  FROM {run_params['full_model_table']}
                                                 ''', f"Model_Features_{run_params['set_year']}")
+        
     elif model_type=='backfill': df = dm.read(f'''SELECT * 
-                                                  FROM Backfill_{set_pos}_Week{run_params['set_week']}
-                                                  WHERE pos='{set_pos}' 
-                                                  ''', 
+                                                  FROM {run_params['backfill_table']}
+                                                  WHERE pos='{set_pos}' ''', 
                                                   f"Model_Features_{run_params['set_year']}")
 
     if df.shape[1]==2000:
@@ -97,7 +97,9 @@ def train_predict_split(df, run_params):
     df_train = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 
-    df_predict = df[(df.game_date == run_params['train_time_split']) & (df.week<17)].reset_index(drop=True)
+    df_predict = df[(df.game_date == run_params['train_time_split'])# & \
+                    # (df.week<17)
+                    ].reset_index(drop=True)
     output_start = df_predict[['player', 'team', 'week', 'year', 'dk_salary']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
@@ -111,7 +113,8 @@ def get_class_data(df, cut, run_params):
 
     # set up the training and prediction datasets for the classification 
     df_train_class = df[df.game_date < run_params['train_time_split']].reset_index(drop=True)
-    df_predict_class = df[(df.game_date == run_params['train_time_split']) & (df.week<17)].reset_index(drop=True)
+    df_predict_class = df[(df.game_date == run_params['train_time_split'])# & (df.week<17)
+                          ].reset_index(drop=True)
 
     # set up the target variable to be categorical based on Xth percentile
     cut_perc = df_train_class.groupby('game_date')['y_act'].apply(lambda x: np.percentile(x, cut))
@@ -972,7 +975,7 @@ def get_proba_adp_coef(model_obj, final_m, run_params):
     else: proba = False
 
     if model_obj in ('class', 'quantile'): run_adp = False
-    else: run_adp = True
+    else: run_adp = False
 
     if ('gbmh' in final_m 
         or 'knn' in final_m 
@@ -1041,7 +1044,7 @@ def rename_existing(old_study_db, new_study_db, study_name):
 
     import datetime as dt
     new_study_name = study_name + '_' + dt.datetime.now().strftime('%Y%m%d%H%M%S')
-    optuna.copy_study(from_study_name=study_name, from_storage=old_study_db, to_storage=new_study_db, to_study_name=new_study_name)
+    optuna.copy_study(from_study_name=study_name, from_storage=new_study_db, to_storage=new_study_db, to_study_name=new_study_name)
     optuna.delete_study(study_name=study_name, storage=new_study_db)
 
 
@@ -1136,9 +1139,10 @@ def run_stack_models(fname, final_m, i, model_obj, alpha, X_stack, y_stack, run_
 def get_func_params(model_obj, alpha):
 
     model_list = {
-        'reg': ['rf', 'gbm', 'gbmh', 'mlp', 'cb', 'huber', 'xgb', 'lgbm', 'knn', 'ridge', 'lasso', 'bridge', 'enet'],
+        'reg': ['rf', 'gbm', 'gbmh', 'mlp', 'cb', 'huber', 'xgb', 'lgbm', 'knn', 'ridge', 'lasso', 
+                'bridge', 'enet'],
         'class': ['rf_c', 'gbm_c', 'gbmh_c', 'xgb_c','lgbm_c', 'knn_c', 'lr_c', 'mlp_c', 'cb_c'],
-        'quantile': ['qr_q', 'gbm_q', 'lgbm_q', 'gbmh_q', 'rf_q', 'cb_q']#, 'knn_q']
+        'quantile': ['qr_q', 'gbm_q', 'lgbm_q', 'gbmh_q', 'rf_q', 'cb_q']
     }
 
     func_params = [[m, i, model_obj, alpha] for i, m  in enumerate(model_list[model_obj])]
@@ -1298,7 +1302,7 @@ def display_output(output, show_plot=True):
      
     try:  
         output = add_actual(output)
-        output = output[~output.week.isin([17,18])].reset_index(drop=True)
+        # output = output[~output.week.isin([18])].reset_index(drop=True)
         print('Showing Actual Results')
         print(output.loc[:50, ['player', 'week', 'year', 'dk_salary', 'dk_rank', 'pred_fp_per_game', 'pred_fp_per_game_class',
                                 'pred_fp_per_game_quantile', 'actual_pts', 'std_dev', 'min_score', 'max_score']])
@@ -1442,9 +1446,12 @@ class_cut = 80
 # set_weeks = [5,6,7,8]
 # set_weeks = [9,10,11,12]
 # set_weeks = [13,14,15,16]
-set_weeks = [14]
+set_weeks = [18]
+
+quick_table = True
 
 pred_vers = 'sera0_rsq0_mse1_brier1_matt0_optuna_tpe_numtrials100_higherkb'
+if quick_table: pred_vers += '_quick'
 reg_ens_vers = f"{s_mod}_sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_include{min_inc}_kfold{kfold}"
 quant_ens_vers = f"{s_mod}_q{alpha}_include{min_inc}_kfold{kfold}"
 class_ens_vers = f"{s_mod}_c{class_cut}_matt{matt_wt}_brier{brier_wt}_include{min_inc}_kfold{kfold}"
@@ -1491,6 +1498,14 @@ with keep.running() as m:
 
             backfill_runs = {}
             for set_pos in ['QB', 'RB', 'WR', 'TE']:
+
+                if quick_table:
+                    run_params['full_model_table'] = f'{set_pos}_Data_Quick_Week{w}'
+                    run_params['backfill_table'] = f'Backfill_{set_pos}_Data_Quick_Week{w}'
+
+                else:
+                    run_params['full_model_table'] = f'{set_pos}_Data_Week{w}'
+                    run_params['backfill_table'] = f"Backfill_{set_pos}_Week{w}"
              
                 # load data and filter down
                 pkey, run_params, model_output_path = create_pkey_output_path(set_pos, run_params, model_type)
@@ -1549,6 +1564,14 @@ with keep.running() as m:
             run_params['rush_pass'] = rush_pass
             run_params['set_pos'] = set_pos
             run_params['model_type'] = model_type
+
+            if quick_table:
+                run_params['full_model_table'] = f'{set_pos}_Data_Quick_Week{w}'
+                run_params['backfill_table'] = f'Backfill_{set_pos}_Data_Quick_Week{w}'
+
+            else:
+                run_params['full_model_table'] = f'{set_pos}_Data_Week{w}'
+                run_params['backfill_table'] = f"Backfill_{set_pos}_Week{w}"
             
             # load data and filter down
             pkey, run_params, model_output_path = create_pkey_output_path(set_pos, run_params, model_type)

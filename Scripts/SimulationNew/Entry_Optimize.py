@@ -109,29 +109,28 @@ entry_type = 'random_sample'
 total_lineups = 25
 sample_lineups = 20
 
-trial_repeat = 126
-model_notes = f'Trial {trial_repeat}, Sample {sample_lineups}, Total {total_lineups}'
-num_rank = None
-manual_adjust = False
-
-if trial_repeat is not None:
-    d = pull_best_params(trial_repeat)
-    pprint.pprint(d)
-
-    model_vers = pull_params_version(trial_repeat).drop('trial_num', axis=1).to_dict()
-    model_vers = {k: v[0] for k,v in model_vers.items()}
-    pprint.pprint(model_vers)
-
+# trial_repeat = None
+# model_notes = f'Trial {trial_repeat}, Sample {sample_lineups}, Total {total_lineups}'
 # num_rank = None
-# # model_notes = 'param_test_v1'
-# model_notes = 'Trial 68 Repeat'
+# manual_adjust = True
 
-# if num_rank is not None: 
-#     model_vers, d = get_top_hyperparams(num_rank, model_notes)
-#     manual_adjust = False
-# else:
+# if trial_repeat is not None:
+#     d = pull_best_params(trial_repeat)
+#     pprint.pprint(d)
 
-#     manual_adjust = True
+#     model_vers = pull_params_version(trial_repeat).drop('trial_num', axis=1).to_dict()
+#     model_vers = {k: v[0] for k,v in model_vers.items()}
+#     pprint.pprint(model_vers)
+
+num_rank = 0
+model_notes = 'param_test_v1'
+model_notes = 'Trial 68 Repeat'
+
+if num_rank is not None: 
+    model_vers, d = get_top_hyperparams(num_rank, model_notes)
+    manual_adjust = False
+else:
+    manual_adjust = True
 
 if manual_adjust:
     model_vers = {'million_ens_vers': 'random_full_stack_newp_matt0_brier1_include2_kfold3',
@@ -144,29 +143,29 @@ if manual_adjust:
                 'no_covar': 0.4,
                 'team_points_trunc': 0.6,
                 'team_points_trunc_avgproj': 0.0},
- 'full_model_rel_weight': {0.2: 0.3, 5: 0.7},
+ 'full_model_rel_weight': {0.2: 0.4, 5: 0.6},
  'lineups_per_param': {1: 1.0},
  'max_overlap': {3: 0.0, 5: 0.0, 7: 0.0, 8: 1.0, 9: 0.0, 11: 0.0, 13: 0.0},
  'max_salary_remain': {500: 0.0, 1000: 1.0},
  'max_teams_lineup': {4: 0.0, 5: 0.0, 6: 0.0, 8: 1.0},
- 'min_opp_team': {0: 0.8, 1: 0.2, 2: 0.0},
- 'num_avg_pts': {10: 0.0, 25: 0.0, 50: 0.0, 100: 0.0, 200: 0.0, 500: 0.5, 1000: 0.5},
+ 'min_opp_team': {0: 1, 1: 0, 2: 0.0},
+ 'num_avg_pts': {10: 0.0, 25: 0.0, 50: 0.0, 100: 0.0, 200: 0.0, 500: 0.7, 1000: 0.3},
  'num_iters': {1: 1.0},
- 'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 0.5, 3000: 0.5},
+ 'num_options': {50: 0.0, 200: 0.0, 500: 0.0, 1000: 0.0, 2000: 0.7, 3000: 0.3},
  'overlap_constraint': {'standard': 1.0},
  'ownership_vers': {'mil_div_standard_ln': 0.0,
                     'mil_only': 0.0,
-                    'mil_times_standard_ln': 0.4,
-                    'standard_ln': 0.6},
+                    'mil_times_standard_ln': 0.5,
+                    'standard_ln': 0.5},
  'ownership_vers_variable': {0: 1.0, 1: 0.0},
  'pos_or_neg': {1: 1.0},
  'prev_def_wt': {1: 1.0},
- 'prev_qb_wt': {1: 1.0, 2: 0.0, 3: 0.0, 5: 0.0, 7: 0.0},
- 'qb_te_stack': {0: 0.4, 1: 0.6},
- 'qb_wr_stack': {0: 0, 1: 1, 2: 0.0},
- 'rb_flex_pct': {0.25: 0.5, 0.35: 0.5, 0.4: 0},
- 'use_ownership': {0: 0.4, 1: 0.6},
- 'wr_flex_pct': {0.5: 0, 0.6: 0.5, 0.65: 0.5, 'auto': 0}}
+ 'prev_qb_wt': {1: 1, 2: 0., 3: 0.0, 5: 0.0, 7: 0.0},
+ 'qb_te_stack': {0: 0.5, 1: 0.5},
+ 'qb_wr_stack': {0: 0, 1: 1, 2: 0},
+ 'rb_flex_pct': {0.3: 0.5, 0.35: 0.5, 0.4: 0},
+ 'use_ownership': {0: 0.6, 1: 0.4},
+ 'wr_flex_pct': {0.5: 0, 0.6: 0.3, 0.65: 0.3, 'auto': 0.4}}
 
 try: del d['num']
 except: pass
@@ -190,13 +189,13 @@ for k,v in d.items():
 set_weeks = [
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 
 ]
 
 set_years = [
       2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022, 2022,
       2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023, 2023,
-      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024
+      2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 2024, 
 ]
 
 # set_weeks=[14]

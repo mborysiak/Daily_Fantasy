@@ -6,6 +6,8 @@ import copy
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
 from joblib import Parallel, delayed
+import warnings
+warnings.filterwarnings("ignore")
 
 root_path = ffgeneral.get_main_path('Daily_Fantasy')
 db_path = f'{root_path}/Data/Databases/'
@@ -17,7 +19,7 @@ conn = dm.db_connect('Simulation')
 #===============
 
 year=2024
-week=14
+week=17
 
 salary_cap = 50000
 pos_require_start = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 1, 'DEF': 1}
@@ -121,6 +123,9 @@ for bt in tuple(best_trials):
     opt_params = pull_best_params(bt)
     try:del opt_params['lineups_per_param']
     except:pass
+
+    # opt_params['use_ownership'] = {0: 1, 1: 0}
+
     pprint.pprint(opt_params)
 
     best_vers = pull_params_version(bt)

@@ -10,7 +10,7 @@ pd.set_option('display.max_columns', 999)
 
 # +
 set_year = 2024
-set_week = 13
+set_week = 16
 
 from ff.db_operations import DataManage
 from ff import general as ffgeneral
@@ -190,7 +190,7 @@ for d, t in zip([def_vs_rb_df, def_vs_wr_df, def_vs_te_df, def_vs_qb_df],
 
 ADV_URL = f'https://www.pro-football-reference.com/years/{set_year}'
 ADV_PASS = f'{ADV_URL}/passing_advanced.htm#ks_passing_detailed_'
-qb_adv = pd.read_html(f'{ADV_PASS}air_yards::none')
+qb_adv = pd.read_html(f'{ADV_PASS}air_yards::none')[0]
 qb = pd.read_html(f'{ADV_URL}/passing.htm#passing::none')[0]
 
 
@@ -208,21 +208,48 @@ def qb_adv_clean(df):
 #------------
 # Advanced QB stats cleanup
 #------------
+qb_adv = qb_adv_clean(qb_adv)
+qb_adv = pd.merge(qb_adv, qb[['Player', 'Yds', 'Sk']].rename(columns={'Player':'player'}), on='player', how='left')
+qb_adv = qb_adv.assign(week=set_week, year=set_year)
+qb_adv.player = qb_adv.player.apply(dc.name_clean)
+qb_adv = qb_adv[qb_adv.player!='League Average'].reset_index(drop=True)
+dm.delete_from_db('Post_PlayerData', 'PFR_Advanced_QB_New', f"year={set_year} AND week={set_week}", create_backup=False)
+dm.write_to_db(qb_adv, 'Post_PlayerData', 'PFR_Advanced_QB_New', 'append')
 
-qb_ay = qb_adv_clean(qb_adv[0])
-qb_acc = qb_adv_clean(qb_adv[1])
-qb_pres = qb_adv_clean(qb_adv[2])
-qb_pt = qb_adv_clean(qb_adv[3])
+#%%
 
-qb_pres.PassingPrss_pct = qb_pres.PassingPrss_pct.apply(fix_pct)
+qb_adv = qb_adv.rename(columns={
+                                'Team': 'team', 
+                                'G': 'GamesG',
+                                'GS': 'GamesGS', 
+                                'Cmp': 'PassingCmp', 
+                                'Att': 'PassingAtt', 
+                                'Yds': 'PassingYds',
+                                'Sk': 'PassingSk',
+                            })
 
-for c in ['PassingDrop_pct', 'PassingBad_pct', 'PassingOnTgt_pct']:
-    qb_acc[c] = qb_acc[c].apply(fix_pct)
+qb_adv.columns = [c.replace('Air Yards', 'Passing') \
+                   .replace('Accuracy', 'Passing') \
+                   .replace('Pressure', 'Passing') \
+                    for c in qb_adv.columns]
 
-# +
-#------------
-# Standard QB stats cleanup
-#------------
+qb_ay = dm.read("SELECT * FROM PFR_Advanced_QB_AirYards", 'Post_PlayerData').columns
+qb_ay = qb_adv[[c for c in qb_ay]].copy()
+
+qb_acc = dm.read("SELECT * FROM PFR_Advanced_QB_Accuracy", 'Post_PlayerData').columns
+qb_acc = qb_adv[[c for c in qb_acc]].copy()
+
+qb_pres = dm.read("SELECT * FROM PFR_Advanced_QB_Pressure", 'Post_PlayerData').columns
+qb_pres = qb_adv[[c for c in qb_pres]].copy()
+
+qb_pt = dm.read("SELECT * FROM PFR_Advanced_QB_PlayType", 'Post_PlayerData').columns
+qb_pt = qb_adv[[c for c in qb_pt]].copy()
+
+#%%
+
+# #------------
+# # Standard QB stats cleanup
+# #------------
 
 qb = qb_adv_clean(qb)
 
@@ -277,10 +304,6 @@ trade_fix = [['Joshua Dobbs', 'MIN'],
 
 for p, t in trade_fix:
     qb.loc[qb.player==p, 'team'] = t
-    qb_ay.loc[qb_ay.player==p, 'team'] = t
-    qb_acc.loc[qb_acc.player==p, 'team'] = t
-    qb_pres.loc[qb_pres.player==p, 'team'] = t
-    qb_pt.loc[qb_pt.player==p, 'team'] = t
     rb.loc[rb.player==p, 'team'] = t
     rec.loc[rec.player==p, 'team'] = t
 
@@ -550,6 +573,9 @@ for stat_type in ['passing', 'rushing', 'receiving']:
         df = df.drop(['TEAM', 'REC', 'YDS', 'TD', 'TAR'], axis=1)
 
     df.player = df.player.apply(dc.name_clean)
+    for c in df.columns:
+        try:df[c] = df[c].apply(lambda x: float(str(x).replace('--', '0')))
+        except:pass
 
     dm.delete_from_db('Post_PlayerData', f'NextGen_{stat_type.title()}', f"year={set_year} AND week={set_week}")
     dm.write_to_db(df, 'Post_PlayerData', f'NextGen_{stat_type.title()}', 'append')
@@ -608,4 +634,16 @@ for stat_type in ['passing', 'rushing', 'receiving']:
 #     # dm.write_to_db(next_gen, 'Post_PlayerData', f'NextGen_{stat_type.title()}', 'append')
    
 
+# %%
+ay = dm.read("SELECT * FROM PFR_Advanced_QB_Pressure ", 'Post_PlayerData')
+df = dm.read("SELECT * FROM PFR_Advanced_QB_New ", 'Post_PlayerData')
+
+
+# df[[c for c in ay.columns if c!= 'PassingYds']]
+# %%
+#'QB_AirYards', 'QB_Accuracy', 'QB_Pressure', 'QB_PlayType', 
+
+# %%
+print(ay.columns)
+print(df.columns)
 # %%

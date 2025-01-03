@@ -37,8 +37,11 @@ dm = DataManage(db_path)
 # Settings
 #---------------
 
-run_weeks = [14]
+run_weeks = [18]
 verbosity = 50
+
+quick_table = True
+
 run_params = {
     
     # set year and week to analyze
@@ -89,6 +92,7 @@ brier_wt = 1
 
 # set version and iterations
 vers = f"sera{sera_wt}_rsq{r2_wt}_mse{mse_wt}_brier{brier_wt}_matt{matt_wt}_{run_params['opt_type']}_{run_params['hp_algo']}_numtrials{run_params['num_past_trials']}_higherkb"
+if quick_table: vers = vers + '_quick'
 
 #----------------
 # Data Loading
@@ -117,11 +121,11 @@ def load_data(model_type, set_pos, run_params):
 
     # load data and filter down
     if model_type=='full_model': df = dm.read(f'''SELECT * 
-                                                  FROM {set_pos}_Data{run_params['rush_pass']}_Week{run_params['set_week']}
+                                                  FROM {run_params['full_model_table']}
                                                 ''', f"Model_Features_{run_params['set_year']}")
         
     elif model_type=='backfill': df = dm.read(f'''SELECT * 
-                                                  FROM Backfill_{set_pos}_Week{run_params['set_week']}
+                                                  FROM {run_params['backfill_table']}
                                                   WHERE pos='{set_pos}' ''', 
                                                   f"Model_Features_{run_params['set_year']}")
 
@@ -189,7 +193,7 @@ def train_predict_split(df, run_params):
     df_train = df_train.dropna(subset=['y_act']).reset_index(drop=True)
 
     df_predict = df[df.game_date == run_params['train_time_split']].reset_index(drop=True)
-    output_start = df_predict[['player', 'dk_salary', 'fantasyPoints', 'projected_points', 'ProjPts']].copy().drop_duplicates()
+    output_start = df_predict[['player', 'dk_salary', 'projected_points']].copy().drop_duplicates()
 
     # get the minimum number of training samples for the initial datasets
     min_samples = int(df_train[df_train.game_date < run_params['cv_time_input']].shape[0] / 4)  
@@ -236,11 +240,11 @@ def get_last_run_week(w, run_params):
     return run_params
 
 
-def rename_existing(old_study_db, new_study_db, study_name):
+def rename_existing(new_study_db, study_name):
 
     import datetime as dt
     new_study_name = study_name + '_' + dt.datetime.now().strftime('%Y%m%d%H%M%S')
-    optuna.copy_study(from_study_name=study_name, from_storage=old_study_db, to_storage=new_study_db, to_study_name=new_study_name)
+    optuna.copy_study(from_study_name=study_name, from_storage=new_study_db, to_storage=new_study_db, to_study_name=new_study_name)
     optuna.delete_study(study_name=study_name, storage=new_study_db)
 
 
@@ -275,7 +279,7 @@ def get_new_study(old_db, new_db, old_name, new_name, num_trials):
         )
 
     except:
-        rename_existing(old_storage, new_storage, new_name)
+        rename_existing(new_storage, new_name)
         next_study = optuna.create_study(
             study_name=new_name, 
             storage=new_storage, 
@@ -329,7 +333,7 @@ def calc_num_trials(time_per_trial, run_params):
     return {k:v for k,v in zip(time_per_trial.model, time_per_trial.num_trials)}
 
 def reg_params(df_train, min_samples, num_trials, run_params, set_pos, model_type):
-    model_list = ['adp', 'knn','mlp', 'bridge', 'ridge', 'svr', 'lasso', 'enet','xgb', 'cb', 'gbm', 'gbmh', 'lgbm', 'rf']
+    model_list = ['knn','mlp', 'bridge', 'ridge', 'svr', 'lasso', 'enet','xgb', 'cb', 'gbm', 'gbmh', 'lgbm', 'rf']
     label = 'reg'
     func_params_reg = []
     for i, m  in enumerate(model_list):
@@ -463,9 +467,10 @@ def get_full_pipe(skm, m, alpha=None, stack_model=False, min_samples=10, bayes_r
     params = skm.default_params(pipe, bayes_rand, min_samples=min_samples)
     if m=='adp': 
         params['feature_select__cols'] = [
-                                           ['game_date', 'year', 'week', 'ProjPts', 'dk_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
-                                           ['year', 'week',  'ProjPts', 'dk_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
-                                           ['ProjPts', 'dk_salary','projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
+                                           ['game_date', 'year', 'week', 'avg_vegas_proj_points','good_avg_proj_points', 'dk_salary', 'avg_proj_rank', 'etr_proj_points',
+                                            'fpts_proj_points', 'projected_points', 'nf_ranks_pos', 'avg_proj_points', 'vegas_proj_points'],
+                                        #    ['year', 'week',  'ProjPts', 'dk_salary', 'projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
+                                        #    ['ProjPts', 'dk_salary','projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank'],
                                         #    ['ProjPts', 'dk_salary','projected_points', 'fantasyPoints', 'ffa_points', 'avg_proj_points', 'fc_proj_fantasy_pts_fc', 'log_fp_rank', 'log_avg_proj_rank',
                                         #     'fdta_proj_points', 'nf_proj_points', 'etr_proj_points', 'fpts_proj_points', 'vegas_proj_points', 'avg_vegas_proj_points', 'good_avg_proj_points']
                                         ]
@@ -724,10 +729,13 @@ adp_result_dict = {}
 trial_times = pd.DataFrame()
 all_model_output_path = {}
 
-set_pos = 'QB'
+set_pos = 'Defense'
 run_params['rush_pass'] = ''
 run_params['n_splits'] = 5
 run_params['model_type'] = 'full_model'
+if quick_table:
+    run_params['full_model_table'] = f'{set_pos}_Data_Quick_Week{w}'
+    run_params['backfill_table'] = f'Backfill_{set_pos}_Quick_Week{w}'
 print(f"\n==================\n{set_pos} {model_type} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
 
 #==========
@@ -788,6 +796,15 @@ with keep.running() as m:
             run_params['rush_pass'] = rush_pass
             run_params['n_splits'] = n_splits
             run_params['model_type'] = model_type
+            
+            if quick_table:
+                run_params['full_model_table'] = f'{set_pos}_Data_Quick_Week{w}'
+                run_params['backfill_table'] = f'Backfill_{set_pos}_Data_Quick_Week{w}'
+
+            else:
+                run_params['full_model_table'] = f'{set_pos}_Data_Week{w}'
+                run_params['backfill_table'] = f"Backfill_{set_pos}_Week{w}"
+
             print(f"\n==================\n{set_pos} {model_type} {rush_pass} {run_params['set_year']} {run_params['set_week']} {vers}\n====================")
 
             #==========
